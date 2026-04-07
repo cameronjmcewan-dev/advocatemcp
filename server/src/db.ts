@@ -1,0 +1,73 @@
+import Database from "better-sqlite3";
+import "dotenv/config";
+
+const DB_PATH = process.env.DATABASE_PATH ?? "./dev.db";
+
+let _db: Database.Database | undefined;
+
+export function getDb(): Database.Database {
+  if (_db) return _db;
+
+  _db = new Database(DB_PATH);
+  _db.pragma("journal_mode = WAL");
+  _db.pragma("foreign_keys = ON");
+  _initSchema(_db);
+  return _db;
+}
+
+function _initSchema(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS businesses (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      slug         TEXT UNIQUE NOT NULL,
+      name         TEXT NOT NULL,
+      description  TEXT NOT NULL,
+      services     TEXT NOT NULL,          -- JSON array of service strings
+      pricing      TEXT,
+      location     TEXT,
+      phone        TEXT,
+      website      TEXT,
+      referral_url TEXT,                   -- the CTA link to send AI searchers to
+      tone         TEXT DEFAULT 'friendly',-- friendly | professional | luxury
+      api_key      TEXT UNIQUE NOT NULL,
+      created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS queries (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      business_slug    TEXT NOT NULL,
+      crawler_agent    TEXT,               -- e.g. "PerplexityBot"
+      query_text       TEXT NOT NULL,
+      response_text    TEXT NOT NULL,
+      referral_clicked INTEGER DEFAULT 0,
+      timestamp        DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+}
+
+/** Type that mirrors the businesses table row. */
+export interface BusinessRow {
+  id: number;
+  slug: string;
+  name: string;
+  description: string;
+  services: string;      // raw JSON string
+  pricing: string | null;
+  location: string | null;
+  phone: string | null;
+  website: string | null;
+  referral_url: string | null;
+  tone: string;
+  api_key: string;
+  created_at: string;
+}
+
+export interface QueryRow {
+  id: number;
+  business_slug: string;
+  crawler_agent: string | null;
+  query_text: string;
+  response_text: string;
+  referral_clicked: number;
+  timestamp: string;
+}
