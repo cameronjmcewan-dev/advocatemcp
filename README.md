@@ -20,7 +20,7 @@ Cloudflare Worker (edge)
               ▼
     AdvocateMCP Server (Node.js)
       ├─ builds Claude system prompt from business profile
-      ├─ calls claude-3-5-haiku-20241022
+      ├─ calls claude-sonnet-4-6
       ├─ logs query + response to SQLite
       └─ returns { response, referral_url, business, powered_by }
               │

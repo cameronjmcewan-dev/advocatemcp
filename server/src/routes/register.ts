@@ -98,8 +98,8 @@ registerRouter.post("/register", (req: Request, res: Response) => {
       mcp_endpoint: `${base}/mcp`,
       wellknown_url: `https://<your-domain>/.well-known/ai-agent.json`,
       instructions: {
-        query_agent: `POST ${base}/agents/${slug}/query\n  Body: { "query": "...", "crawler": "YourBotName" }`,
-        view_analytics: `GET ${base}/analytics/${slug}\n  Header: Authorization: Bearer ${apiKey}`,
+        query_agent: `POST ${base}/agents/${slug}/query — body: { "query": "...", "crawler": "YourBotName" }`,
+        view_analytics: `GET ${base}/analytics/${slug} — header: Authorization: Bearer ${apiKey}`,
         connect_mcp: `Add ${base}/mcp to your MCP client (Claude Desktop, Cursor, etc.)`,
         install_worker: `Deploy the Cloudflare Worker and add "${slug}" to your BUSINESS_MAP KV store with your domain as the key`,
       },

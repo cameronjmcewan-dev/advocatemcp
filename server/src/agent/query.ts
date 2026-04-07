@@ -24,7 +24,7 @@ export async function queryAgent(
   const systemPrompt = buildSystemPrompt(business);
 
   const message = await anthropic.messages.create({
-    model: "claude-3-5-haiku-20241022",
+    model: "claude-sonnet-4-6",
     max_tokens: 512,
     system: systemPrompt,
     messages: [{ role: "user", content: query }],
