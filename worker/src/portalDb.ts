@@ -162,6 +162,13 @@ export async function deleteSession(db: D1Database, token: string): Promise<void
 
 // ── Businesses ─────────────────────────────────────────────────────────────
 
+export async function getAllBusinesses(db: D1Database): Promise<Business[]> {
+  const result = await db
+    .prepare("SELECT * FROM businesses ORDER BY business_name")
+    .all<Business>();
+  return result.results;
+}
+
 export async function getUserBusinesses(db: D1Database, userId: string): Promise<Business[]> {
   const result = await db
     .prepare(

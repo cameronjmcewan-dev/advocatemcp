@@ -8,10 +8,25 @@ import {
 } from "../auth";
 import {
   getUserByEmail, createUser, updateUserPassword, createSession, getSessionByToken,
-  deleteSession, getUserBusinesses, getBusinessBySlug, createBusiness,
-  grantAccess, checkRateLimit, recordLoginAttempt,
+  deleteSession, getUserBusinesses, getAllBusinesses, getBusinessBySlug, createBusiness,
+  grantAccess, checkRateLimit, recordLoginAttempt, updateBusinessApiKey,
 } from "../portalDb";
 import type { Business, User, SessionWithUser } from "../portalDb";
+import { buildDashboard, type AnalyticsData } from "./dashboard";
+import { handleActivateDomain, handleDomainStatus } from "./domains";
+import {
+  handleOnboard, handleOnboardStatus, handleOnboardList,
+  handleVerifyDomain, handleVerifyAll, handleDisableTenant,
+  getTenant,
+} from "./onboard";
+import { handleOnboardPage } from "./onboardPage";
+import {
+  handleBasicOnboard,
+  handlePublicOnboard,
+  handlePublicOnboardPreflight,
+  handleStripeWebhook,
+  handleSessionStatus,
+} from "./stripe";
 
 // ── Public route dispatcher ────────────────────────────────────────────────
 // Returns a Response if this is a portal path, or null to fall through to
@@ -27,9 +42,45 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/dashboard"           && method === "GET")  return dashboard(request, env);
   if (pathname === "/api/client/me"       && method === "GET")  return apiMe(request, env);
   if (pathname === "/api/client/metrics"  && method === "GET")  return apiMetrics(request, env);
-  if (pathname === "/api/client/activity" && method === "GET")  return apiActivity(request, env);
-  if (pathname === "/admin/create-client" && method === "POST") return adminCreateClient(request, env);
-  if (pathname === "/status"              && method === "GET")  return statusPage(request, env);
+  if (pathname === "/api/client/activity"   && method === "GET")  return apiActivity(request, env);
+  if (pathname === "/api/client/rotate-key" && method === "POST") return apiRotateKey(request, env);
+  if (pathname === "/admin/create-client"      && method === "POST") return adminCreateClient(request, env);
+  if (pathname === "/admin/domains/activate"   && method === "POST") return handleActivateDomain(request, env);
+  if (pathname === "/status"                   && method === "GET")  return statusPage(request, env);
+  if (pathname === "/onboard"                  && method === "GET")  return handleOnboardPage(request, env);
+
+  // ── Stripe / new onboarding API ──────────────────────────────────────────
+  if (pathname === "/api/onboard/basic"     && method === "POST") return handleBasicOnboard(request, env);
+  if (pathname === "/api/stripe/webhook"    && method === "POST") return handleStripeWebhook(request, env);
+
+  // Public wizard endpoint (advocatemcp.com → customers.advocatemcp.com)
+  if (pathname === "/api/onboard/public"    && method === "OPTIONS") return handlePublicOnboardPreflight(request);
+  if (pathname === "/api/onboard/public"    && method === "POST")    return handlePublicOnboard(request, env);
+
+  // GET /api/onboard/session/:session_id (CORS; public for skipDns tenants)
+  const sessionMatch = pathname.match(/^\/api\/onboard\/session\/([^/]+)$/);
+  if (sessionMatch && method === "OPTIONS") return handlePublicOnboardPreflight(request);
+  if (sessionMatch && method === "GET") return handleSessionStatus(request, env, sessionMatch[1]);
+
+  // ── Onboarding API (legacy + admin) ────────────────────────────────────
+  if (pathname === "/api/onboard"           && method === "POST") return handleOnboard(request, env);
+  if (pathname === "/api/onboard/list"      && method === "GET")  return handleOnboardList(request, env);
+  if (pathname === "/api/onboard/verify-all" && method === "POST") return handleVerifyAll(request, env);
+
+  // /api/onboard/:domain/status | /verify | /disable
+  const onboardMatch = pathname.match(/^\/api\/onboard\/([^/]+)\/(status|verify|disable)$/);
+  if (onboardMatch) {
+    const [, rawDomain, action] = onboardMatch;
+    if (action === "status"  && method === "GET")  return handleOnboardStatus(request, env, rawDomain);
+    if (action === "verify"  && method === "POST") return handleVerifyDomain(request, env, rawDomain);
+    if (action === "disable" && method === "POST") return handleDisableTenant(request, env, rawDomain);
+  }
+
+  // GET /admin/domains/:slug/status (legacy endpoint)
+  const domainStatusMatch = pathname.match(/^\/admin\/domains\/([^/]+)\/status$/);
+  if (domainStatusMatch && method === "GET") {
+    return handleDomainStatus(request, env, domainStatusMatch[1]);
+  }
 
   return null;
 }
@@ -116,13 +167,29 @@ async function dashboard(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   if (!session) return redirect("/login?error=expired");
 
-  const businesses = await getUserBusinesses(env.DB, session.user_id);
+  const businesses = session.user.role === "admin"
+    ? await getAllBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, session.user_id);
+
+  // Dashboard gating: redirect non-admin users whose tenant isn't active yet
+  if (session.user.role !== "admin" && businesses.length > 0) {
+    const biz = businesses[0];
+    if (biz.domain) {
+      const tenant = await getTenant(env, biz.domain);
+      if (tenant) {
+        const gatedStatuses = ["pending_payment", "paid_pending_dns", "free_pending_dns", "pending_verification"];
+        if (gatedStatuses.includes(tenant.status)) {
+          return redirect("/onboard");
+        }
+      }
+    }
+  }
+
   const slug = new URL(request.url).searchParams.get("slug");
   const selected = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
-
   const analytics = selected ? await fetchAnalytics(selected, env) : null;
 
-  return html(dashboardHtml(session.user, businesses, selected, analytics));
+  return html(buildDashboard(session.user, businesses, selected, analytics));
 }
 
 // ── GET /api/client/me ─────────────────────────────────────────────────────
@@ -139,7 +206,9 @@ async function apiMetrics(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   if (!session) return jsonErr(401, "Unauthorized");
 
-  const businesses = await getUserBusinesses(env.DB, session.user_id);
+  const businesses = session.user.role === "admin"
+    ? await getAllBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, session.user_id);
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return jsonErr(404, "No business found for this account");
@@ -154,13 +223,45 @@ async function apiActivity(request: Request, env: Env): Promise<Response> {
   const session = await requireSession(request, env);
   if (!session) return jsonErr(401, "Unauthorized");
 
-  const businesses = await getUserBusinesses(env.DB, session.user_id);
+  const businesses = session.user.role === "admin"
+    ? await getAllBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, session.user_id);
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return jsonErr(404, "No business found for this account");
 
   const data = await fetchAnalytics(biz, env);
   return jsonOk(data?.recent_queries ?? []);
+}
+
+// ── POST /api/client/rotate-key ───────────────────────────────────────────
+
+async function apiRotateKey(request: Request, env: Env): Promise<Response> {
+  const session = await requireSession(request, env);
+  if (!session) return jsonErr(401, "Unauthorized");
+
+  const businesses = await getUserBusinesses(env.DB, session.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return jsonErr(404, "No business found for this account");
+
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  let rotateRes: Response;
+  try {
+    rotateRes = await fetch(`${base}/agents/${biz.slug}/rotate-key`, {
+      method: "POST",
+      headers: { ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}) },
+    });
+  } catch (err) {
+    return jsonErr(502, `Backend unreachable: ${String(err)}`);
+  }
+
+  if (!rotateRes.ok) return jsonErr(502, "Backend failed to rotate key");
+  const data = await rotateRes.json() as { ok: boolean; new_api_key: string };
+  if (!data.ok || !data.new_api_key) return jsonErr(502, "Invalid response from backend");
+
+  await updateBusinessApiKey(env.DB, biz.slug, data.new_api_key);
+  return jsonOk({ ok: true, new_api_key: data.new_api_key });
 }
 
 // ── POST /admin/create-client ──────────────────────────────────────────────
@@ -185,38 +286,45 @@ async function adminCreateClient(request: Request, env: Env): Promise<Response> 
   try { body = await request.json() as Record<string, unknown>; }
   catch { return jsonErr(400, "Body must be valid JSON"); }
 
-  const { email, password, full_name, slug, business_name, api_key } = body as {
+  const { email, password, full_name, slug, business_name, api_key, role: rawRole } = body as {
     email?: string; password?: string; full_name?: string;
-    slug?: string; business_name?: string; api_key?: string;
+    slug?: string; business_name?: string; api_key?: string; role?: string;
   };
 
-  const missing = ["email","password","slug","business_name","api_key"].filter(
-    (k) => !body[k] || typeof body[k] !== "string"
-  );
+  const userRole = rawRole === "admin" ? "admin" : "client";
+
+  // email + password always required; slug/business_name/api_key only for clients
+  const baseMissing  = ["email", "password"].filter((k) => !body[k] || typeof body[k] !== "string");
+  const bizMissing   = userRole === "client"
+    ? ["slug", "business_name", "api_key"].filter((k) => !body[k] || typeof body[k] !== "string")
+    : [];
+  const missing = [...baseMissing, ...bizMissing];
   if (missing.length > 0) {
     return jsonErr(400, `Missing or invalid fields: ${missing.join(", ")}`);
   }
 
   try {
     const salt         = generateSalt();
-    const passwordHash = await hashPassword(password, salt);
+    const passwordHash = await hashPassword(password!, salt);
 
-    let user = await getUserByEmail(env.DB, email);
+    let user = await getUserByEmail(env.DB, email!);
     if (!user) {
-      user = await createUser(env.DB, email, passwordHash, salt, full_name);
+      user = await createUser(env.DB, email!, passwordHash, salt, full_name, userRole);
     } else {
       await updateUserPassword(env.DB, user.id, passwordHash, salt);
     }
 
-    let biz = await getBusinessBySlug(env.DB, slug);
-    if (!biz) biz = await createBusiness(env.DB, slug, business_name, api_key);
-
-    await grantAccess(env.DB, user.id, biz.id);
+    let biz: Awaited<ReturnType<typeof getBusinessBySlug>> = null;
+    if (userRole === "client" && slug && business_name && api_key) {
+      biz = await getBusinessBySlug(env.DB, slug);
+      if (!biz) biz = await createBusiness(env.DB, slug, business_name, api_key);
+      await grantAccess(env.DB, user.id, biz.id);
+    }
 
     return jsonOk({
       message:  "Client created. They can log in at /login.",
-      user:     { id: user.id, email: user.email, full_name: user.full_name },
-      business: { id: biz.id, slug: biz.slug, business_name: biz.business_name },
+      user:     { id: user.id, email: user.email, full_name: user.full_name, role: user.role },
+      business: biz ? { id: biz.id, slug: biz.slug, business_name: biz.business_name } : null,
     });
   } catch (err) {
     return jsonErr(500, String(err));
@@ -319,15 +427,10 @@ function statusHtml(
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Platform Status — AdvocateMCP</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{--text:#111827;--sub:#6b7280;--muted:#9ca3af;--border:#e5e7eb;--page:#f9fafb;--card:#fff;--accent:#111827;--al:#f3f4f6}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--page);color:var(--text);font-size:.875rem;line-height:1.5}
-h1,h2,h3,h4,h5,h6{font-family:'Poppins',sans-serif}
 .header{background:var(--accent);color:#fff;padding:1.25rem 2rem;display:flex;align-items:center;gap:.75rem}
 .hlogo{width:28px;height:28px;background:rgba(255,255,255,.15);border-radius:5px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.8125rem}
 .hname{font-size:.9375rem;font-weight:600}
@@ -429,20 +532,6 @@ tr:last-child td{border-bottom:none}
 
 // ── Analytics proxy ────────────────────────────────────────────────────────
 
-interface AnalyticsData {
-  slug: string;
-  total_queries: number;
-  referral_clicks: number;
-  queries_by_crawler: Record<string, number>;
-  top_queries: string[];
-  queries_last_7_days: Array<{ date: string; count: number }>;
-  recent_queries: Array<{
-    id: number; crawler_agent: string | null;
-    query_text: string; response_text: string;
-    referral_clicked: number; timestamp: string;
-  }>;
-}
-
 async function fetchAnalytics(biz: Business, env: Env): Promise<AnalyticsData | null> {
   const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
   try {
@@ -487,37 +576,12 @@ function esc(s: string): string {
 
 // ── Template helpers ───────────────────────────────────────────────────────
 
-function topBot(byCrawler: Record<string, number>): string {
-  const entries = Object.entries(byCrawler).sort((a, b) => b[1] - a[1]);
-  return entries[0]?.[0] ?? "—";
-}
-
 function fmtDate(iso: string): string {
   try {
     return new Date(iso).toLocaleString("en-US", {
       month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
     });
   } catch { return iso; }
-}
-
-function summary(a: AnalyticsData | null): string {
-  if (!a || a.total_queries === 0) {
-    return "Your business is set up and ready for AI traffic. Once AI search engines start visiting your site, referral data will appear here automatically.";
-  }
-  const week  = a.queries_last_7_days.reduce((s, d) => s + d.count, 0);
-  const bot   = topBot(a.queries_by_crawler);
-  const click = a.referral_clicks;
-  return `This week, AI systems requested your business profile ${week} time${week !== 1 ? "s" : ""} — ${esc(bot)} was the most active crawler. You've received ${a.total_queries.toLocaleString()} total AI requests and ${click} tracked referral click${click !== 1 ? "s" : ""} to your website.`;
-}
-
-function trendBars(days: Array<{ date: string; count: number }>): string {
-  if (!days.length) return `<p class="empty-sub">No trend data yet — activity will appear as AI bots visit.</p>`;
-  const max = Math.max(...days.map((d) => d.count), 1);
-  return `<div class="bars">${days.map((d) => {
-    const pct = Math.max(Math.round((d.count / max) * 100), 4);
-    const lbl = new Date(d.date + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short" });
-    return `<div class="bar-col"><div class="bar" style="height:${pct}%" title="${esc(d.date)}: ${d.count}"></div><span class="bar-lbl">${esc(lbl)}</span></div>`;
-  }).join("")}</div>`;
 }
 
 // ── Login page HTML ────────────────────────────────────────────────────────
@@ -528,14 +592,9 @@ function loginHtml(errorMsg: string | null): string {
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Sign in — AdvocateMCP</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#f4f5f7;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem}
-h1,h2,h3,h4,h5,h6{font-family:'Poppins',sans-serif}
 .card{background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08),0 4px 24px rgba(0,0,0,.07);padding:2.5rem 2rem;width:100%;max-width:400px}
 .logo{display:flex;align-items:center;gap:.5rem;margin-bottom:2rem}
 .logo-icon{width:30px;height:30px;background:#111;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.875rem}
@@ -574,199 +633,3 @@ button:hover{background:#333}
 </html>`;
 }
 
-// ── Dashboard HTML ─────────────────────────────────────────────────────────
-
-function dashboardHtml(
-  user: User,
-  businesses: Business[],
-  selected: Business | null,
-  analytics: AnalyticsData | null
-): string {
-  const displayName = user.full_name ?? user.email.split("@")[0];
-  const total   = analytics?.total_queries ?? 0;
-  const clicks  = analytics?.referral_clicks ?? 0;
-  const bot     = analytics ? topBot(analytics.queries_by_crawler) : "—";
-  const lastAt  = analytics?.recent_queries?.[0]?.timestamp
-    ? fmtDate(analytics.recent_queries[0].timestamp)
-    : "No activity yet";
-
-  const bizSelector = businesses.length > 1
-    ? `<form id="sf" method="GET" action="/dashboard" style="display:inline">
-         <select name="slug" onchange="document.getElementById('sf').submit()" style="border:1px solid #e5e7eb;border-radius:6px;padding:.3rem .5rem;font-size:.8125rem;background:#fff;cursor:pointer">
-           ${businesses.map((b) => `<option value="${esc(b.slug)}"${b.slug === selected?.slug ? " selected" : ""}>${esc(b.business_name)}</option>`).join("")}
-         </select>
-       </form>`
-    : "";
-
-  const actRows = (analytics?.recent_queries ?? []).slice(0, 25).map((q) =>
-    `<tr>
-      <td class="ts">${esc(fmtDate(q.timestamp))}</td>
-      <td><span class="badge">${esc(q.crawler_agent ?? "Unknown")}</span></td>
-      <td class="qt">${esc(q.query_text.length > 90 ? q.query_text.slice(0, 90) + "…" : q.query_text)}</td>
-      <td class="${q.referral_clicked ? "yes" : "no"}">${q.referral_clicked ? "Clicked" : "—"}</td>
-    </tr>`
-  ).join("");
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${selected ? esc(selected.business_name) : "Dashboard"} — AdvocateMCP</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--text:#111827;--sub:#6b7280;--muted:#9ca3af;--border:#e5e7eb;--page:#f9fafb;--card:#fff;--accent:#111827;--al:#f3f4f6}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--page);color:var(--text);font-size:.875rem;line-height:1.5}
-h1,h2,h3,h4,h5,h6{font-family:'Poppins',sans-serif}
-a{color:inherit;text-decoration:none}
-/* Layout */
-.layout{display:flex;min-height:100vh}
-.sidebar{width:216px;background:var(--accent);color:#fff;display:flex;flex-direction:column;position:fixed;inset:0 auto 0 0;overflow-y:auto}
-.main{margin-left:216px;flex:1;display:flex;flex-direction:column}
-/* Sidebar */
-.sb-logo{display:flex;align-items:center;gap:.5rem;padding:1.25rem 1rem;border-bottom:1px solid rgba(255,255,255,.1)}
-.sb-icon{width:26px;height:26px;background:rgba(255,255,255,.15);border-radius:5px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.8125rem}
-.sb-name{font-size:.875rem;font-weight:600}
-.sb-nav{padding:.75rem 0;flex:1}
-.nav-a{display:flex;align-items:center;gap:.5rem;padding:.4375rem 1rem;color:rgba(255,255,255,.65);font-size:.8125rem;border-left:3px solid transparent;transition:all .1s}
-.nav-a:hover,.nav-a.on{background:rgba(255,255,255,.08);color:#fff;border-left-color:rgba(255,255,255,.4)}
-.sb-foot{padding:1rem;border-top:1px solid rgba(255,255,255,.1)}
-.sb-uname{font-size:.8125rem;font-weight:500;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sb-email{font-size:.75rem;color:rgba(255,255,255,.45);margin-bottom:.625rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.logout{display:block;width:100%;background:rgba(255,255,255,.07);border:none;border-radius:5px;color:rgba(255,255,255,.65);font-size:.75rem;padding:.375rem;cursor:pointer;transition:background .1s;text-align:center}
-.logout:hover{background:rgba(255,255,255,.14);color:#fff}
-/* Top bar */
-.topbar{background:var(--card);border-bottom:1px solid var(--border);padding:.875rem 1.5rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:9}
-.tb-title{font-size:.9375rem;font-weight:600}
-/* Content */
-.content{padding:1.5rem;flex:1}
-/* Insight */
-.insight{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:.875rem 1.125rem;font-size:.8125rem;color:#1d4ed8;line-height:1.6;margin-bottom:1.25rem}
-/* KPI grid */
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(185px,1fr));gap:1rem;margin-bottom:1.25rem}
-.kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:1.125rem}
-.kpi-lbl{font-size:.6875rem;font-weight:600;color:var(--sub);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.375rem}
-.kpi-val{font-size:1.625rem;font-weight:700;color:var(--text);line-height:1}
-.kpi-val.sm{font-size:1.125rem}
-.kpi-hint{font-size:.6875rem;color:var(--muted);margin-top:.25rem}
-/* Section card */
-.sec{background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:1.25rem}
-.sec-hd{padding:.875rem 1.125rem;border-bottom:1px solid var(--border);font-weight:600;font-size:.875rem}
-.sec-bd{padding:1.125rem}
-/* Trend */
-.bars{display:flex;align-items:flex-end;gap:6px;height:72px}
-.bar-col{display:flex;flex-direction:column;align-items:center;gap:3px;flex:1}
-.bar{background:var(--accent);border-radius:3px 3px 0 0;width:100%;min-height:4px;opacity:.85;transition:opacity .1s}
-.bar:hover{opacity:1}
-.bar-lbl{font-size:.625rem;color:var(--muted)}
-.empty-sub{font-size:.8125rem;color:var(--muted);text-align:center;padding:1.5rem}
-/* Table */
-.tw{overflow-x:auto}
-table{width:100%;border-collapse:collapse}
-th{text-align:left;font-size:.6875rem;font-weight:600;color:var(--sub);text-transform:uppercase;letter-spacing:.06em;padding:.5rem 1rem;border-bottom:1px solid var(--border)}
-td{padding:.5625rem 1rem;border-bottom:1px solid #f3f4f6;vertical-align:top}
-tr:last-child td{border-bottom:none}
-.ts{color:var(--muted);white-space:nowrap;font-size:.8125rem}
-.badge{background:var(--al);border-radius:4px;padding:.1rem .4rem;font-size:.75rem;font-weight:500;white-space:nowrap}
-.qt{color:var(--sub);max-width:300px;font-size:.8125rem}
-.yes{color:#059669;font-weight:500;font-size:.8125rem}
-.no{color:var(--muted);font-size:.8125rem}
-/* Empty */
-.empty{text-align:center;padding:3rem 1rem;color:var(--sub)}
-.empty h3{font-size:.9375rem;font-weight:600;color:var(--text);margin-bottom:.375rem}
-.empty p{font-size:.8125rem;max-width:300px;margin:0 auto}
-/* Responsive */
-@media(max-width:720px){
-  .sidebar{display:none}
-  .main{margin-left:0}
-  .kpis{grid-template-columns:1fr 1fr}
-}
-</style>
-</head>
-<body>
-<div class="layout">
-  <!-- Sidebar -->
-  <nav class="sidebar">
-    <div class="sb-logo">
-      <div class="sb-icon">A</div>
-      <div class="sb-name">AdvocateMCP</div>
-    </div>
-    <div class="sb-nav">
-      <a href="/dashboard" class="nav-a on">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
-        Dashboard
-      </a>
-    </div>
-    <div class="sb-foot">
-      <div class="sb-uname">${esc(displayName)}</div>
-      <div class="sb-email">${esc(user.email)}</div>
-      <form method="POST" action="/auth/logout">
-        <button type="submit" class="logout">Sign out</button>
-      </form>
-    </div>
-  </nav>
-
-  <!-- Main -->
-  <div class="main">
-    <div class="topbar">
-      <div class="tb-title">${selected ? esc(selected.business_name) : "Dashboard"}</div>
-      ${bizSelector}
-    </div>
-    <div class="content">
-      <!-- Insight -->
-      <div class="insight">${summary(analytics)}</div>
-
-      <!-- KPIs -->
-      <div class="kpis">
-        <div class="kpi">
-          <div class="kpi-lbl">Total AI Requests</div>
-          <div class="kpi-val">${total.toLocaleString()}</div>
-          <div class="kpi-hint">All time</div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-lbl">Referral Clicks</div>
-          <div class="kpi-val">${clicks.toLocaleString()}</div>
-          <div class="kpi-hint">Tracked site visits</div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-lbl">Top AI Bot</div>
-          <div class="kpi-val sm">${esc(bot)}</div>
-          <div class="kpi-hint">Most active crawler</div>
-        </div>
-        <div class="kpi">
-          <div class="kpi-lbl">Last Activity</div>
-          <div class="kpi-val sm">${esc(lastAt)}</div>
-          <div class="kpi-hint">Most recent request</div>
-        </div>
-      </div>
-
-      <!-- 7-Day Trend -->
-      <div class="sec">
-        <div class="sec-hd">7-Day AI Request Trend</div>
-        <div class="sec-bd">${trendBars(analytics?.queries_last_7_days ?? [])}</div>
-      </div>
-
-      <!-- Activity Table -->
-      <div class="sec">
-        <div class="sec-hd">Recent Activity</div>
-        ${total > 0 ? `
-        <div class="tw">
-          <table>
-            <thead><tr><th>Time</th><th>Bot</th><th>Query</th><th>Referral</th></tr></thead>
-            <tbody>${actRows}</tbody>
-          </table>
-        </div>` : `
-        <div class="empty">
-          <h3>No activity yet</h3>
-          <p>AI search engines will appear here when they start indexing your business through AdvocateMCP.</p>
-        </div>`}
-      </div>
-    </div>
-  </div>
-</div>
-</body>
-</html>`;
-}
