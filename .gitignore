@@ -1,4 +1,15 @@
-server/.env
+# Environment files — all directories
+.env
+.env.local
+.env.development
+.env.production
+.env.staging
+**/.env
+**/.env.local
+**/.env.development
+**/.env.production
+**/.env.staging
+
 server/node_modules/
 server/dist/
 server/*.db
