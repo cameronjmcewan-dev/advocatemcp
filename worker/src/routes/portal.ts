@@ -29,6 +29,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/metrics"  && method === "GET")  return apiMetrics(request, env);
   if (pathname === "/api/client/activity" && method === "GET")  return apiActivity(request, env);
   if (pathname === "/admin/create-client" && method === "POST") return adminCreateClient(request, env);
+  if (pathname === "/status"              && method === "GET")  return statusPage(request, env);
 
   return null;
 }
@@ -220,6 +221,205 @@ async function adminCreateClient(request: Request, env: Env): Promise<Response> 
   } catch (err) {
     return jsonErr(500, String(err));
   }
+}
+
+// ── GET /status ─────────────────────────────────────────────────────────────
+// Public dashboard: all active SMBs + global recent crawler hits.
+
+interface GlobalAnalytics {
+  total_queries: number;
+  total_referral_clicks: number;
+  queries_by_crawler: Record<string, number>;
+  recent_hits: Array<{
+    id: number;
+    business_slug: string;
+    business_name: string | null;
+    crawler_agent: string | null;
+    query_text: string;
+    intent: string | null;
+    referral_clicked: number;
+    timestamp: string;
+  }>;
+}
+
+interface RegistryBusiness {
+  slug: string;
+  name: string;
+  description: string;
+  category: string | null;
+  location: string | null;
+  website: string | null;
+  star_rating: number | null;
+  review_count: number | null;
+  pricing_tier: string | null;
+  availability: string | null;
+  differentiator: string | null;
+  created_at: string;
+  agent_endpoint: string;
+  profile_endpoint: string;
+}
+
+async function statusPage(_request: Request, env: Env): Promise<Response> {
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+
+  const [registryRes, analyticsRes] = await Promise.allSettled([
+    fetch(`${base}/registry`),
+    fetch(`${base}/analytics`),
+  ]);
+
+  const registry = registryRes.status === "fulfilled" && registryRes.value.ok
+    ? (await registryRes.value.json() as { count: number; businesses: RegistryBusiness[] })
+    : { count: 0, businesses: [] };
+
+  const analytics = analyticsRes.status === "fulfilled" && analyticsRes.value.ok
+    ? (await analyticsRes.value.json() as GlobalAnalytics)
+    : null;
+
+  return html(statusHtml(registry, analytics));
+}
+
+function statusHtml(
+  registry: { count: number; businesses: RegistryBusiness[] },
+  analytics: GlobalAnalytics | null
+): string {
+  const total   = analytics?.total_queries ?? 0;
+  const clicks  = analytics?.total_referral_clicks ?? 0;
+  const topBot  = analytics
+    ? Object.entries(analytics.queries_by_crawler).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—"
+    : "—";
+
+  const smbRows = registry.businesses.map((b) => `
+    <tr>
+      <td><strong>${esc(b.name)}</strong>${b.category ? `<br><span class="ts">${esc(b.category)}</span>` : ""}</td>
+      <td class="ts">${esc(b.location ?? "—")}</td>
+      <td>${b.pricing_tier ? `<span class="badge">${esc(b.pricing_tier)}</span>` : "—"}</td>
+      <td class="ts">${esc(b.availability ?? "—")}</td>
+      <td><a href="${esc(b.website ?? "#")}" target="_blank" rel="noopener" style="color:#2563eb">${esc(b.slug)}</a></td>
+    </tr>`).join("");
+
+  const hitRows = (analytics?.recent_hits ?? []).map((h) => `
+    <tr>
+      <td class="ts">${esc(fmtDate(h.timestamp))}</td>
+      <td><strong>${esc(h.business_name ?? h.business_slug)}</strong></td>
+      <td><span class="badge">${esc(h.crawler_agent ?? "unknown")}</span></td>
+      <td>${h.intent ? `<span class="badge">${esc(h.intent)}</span>` : "<span class='ts'>—</span>"}</td>
+      <td class="qt">${esc(h.query_text.length > 80 ? h.query_text.slice(0, 80) + "…" : h.query_text)}</td>
+      <td class="${h.referral_clicked ? "yes" : "no"}">${h.referral_clicked ? "✓" : "—"}</td>
+    </tr>`).join("");
+
+  const crawlerBadges = analytics
+    ? Object.entries(analytics.queries_by_crawler)
+        .sort((a, b) => b[1] - a[1])
+        .map(([bot, n]) => `<span class="badge" style="margin:.2rem">${esc(bot)}: ${n}</span>`)
+        .join(" ")
+    : "<span class='ts'>No data yet</span>";
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Platform Status — AdvocateMCP</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--text:#111827;--sub:#6b7280;--muted:#9ca3af;--border:#e5e7eb;--page:#f9fafb;--card:#fff;--accent:#111827;--al:#f3f4f6}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:var(--page);color:var(--text);font-size:.875rem;line-height:1.5}
+.header{background:var(--accent);color:#fff;padding:1.25rem 2rem;display:flex;align-items:center;gap:.75rem}
+.hlogo{width:28px;height:28px;background:rgba(255,255,255,.15);border-radius:5px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.8125rem}
+.hname{font-size:.9375rem;font-weight:600}
+.hsub{font-size:.8125rem;color:rgba(255,255,255,.5);margin-left:auto}
+.wrap{max-width:1100px;margin:0 auto;padding:1.5rem}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1rem;margin-bottom:1.5rem}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:1.125rem}
+.kpi-lbl{font-size:.6875rem;font-weight:600;color:var(--sub);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.375rem}
+.kpi-val{font-size:1.625rem;font-weight:700;color:var(--text);line-height:1}
+.kpi-hint{font-size:.6875rem;color:var(--muted);margin-top:.25rem}
+.sec{background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:1.25rem}
+.sec-hd{padding:.875rem 1.125rem;border-bottom:1px solid var(--border);font-weight:600;font-size:.875rem;display:flex;align-items:center;justify-content:space-between}
+.sec-hd .cnt{font-size:.75rem;font-weight:400;color:var(--sub)}
+.sec-bd{padding:1.125rem}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:.6875rem;font-weight:600;color:var(--sub);text-transform:uppercase;letter-spacing:.06em;padding:.5rem 1rem;border-bottom:1px solid var(--border)}
+td{padding:.5625rem 1rem;border-bottom:1px solid #f3f4f6;vertical-align:top}
+tr:last-child td{border-bottom:none}
+.ts{color:var(--muted);white-space:nowrap;font-size:.8125rem}
+.badge{background:var(--al);border-radius:4px;padding:.1rem .4rem;font-size:.75rem;font-weight:500;white-space:nowrap}
+.qt{color:var(--sub);max-width:280px;font-size:.8125rem}
+.yes{color:#059669;font-weight:500;font-size:.8125rem}
+.no{color:var(--muted);font-size:.8125rem}
+.empty{text-align:center;padding:2rem;color:var(--muted);font-size:.8125rem}
+@media(max-width:640px){.kpis{grid-template-columns:1fr 1fr}.hsub{display:none}}
+</style>
+</head>
+<body>
+<header class="header">
+  <div class="hlogo">A</div>
+  <div class="hname">AdvocateMCP</div>
+  <div class="hsub">Platform Status &amp; Activity</div>
+</header>
+<div class="wrap">
+
+  <!-- KPIs -->
+  <div class="kpis">
+    <div class="kpi">
+      <div class="kpi-lbl">Active Businesses</div>
+      <div class="kpi-val">${registry.count}</div>
+      <div class="kpi-hint">Registered SMBs</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-lbl">Total AI Requests</div>
+      <div class="kpi-val">${total.toLocaleString()}</div>
+      <div class="kpi-hint">All time</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-lbl">Referral Clicks</div>
+      <div class="kpi-val">${clicks.toLocaleString()}</div>
+      <div class="kpi-hint">Tracked site visits</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-lbl">Top Crawler</div>
+      <div class="kpi-val" style="font-size:1rem;margin-top:.25rem">${esc(topBot)}</div>
+      <div class="kpi-hint">Most active bot</div>
+    </div>
+  </div>
+
+  <!-- Crawler breakdown -->
+  <div class="sec">
+    <div class="sec-hd">Crawler Breakdown</div>
+    <div class="sec-bd">${crawlerBadges}</div>
+  </div>
+
+  <!-- Active SMBs -->
+  <div class="sec">
+    <div class="sec-hd">Active Businesses <span class="cnt">${registry.count} registered</span></div>
+    <div class="tw">
+      ${registry.businesses.length ? `
+      <table>
+        <thead><tr>
+          <th>Business</th><th>Location</th><th>Tier</th><th>Availability</th><th>Slug</th>
+        </tr></thead>
+        <tbody>${smbRows}</tbody>
+      </table>` : `<div class="empty">No businesses registered yet.</div>`}
+    </div>
+  </div>
+
+  <!-- Recent hits -->
+  <div class="sec">
+    <div class="sec-hd">Recent Crawler Hits <span class="cnt">last 50</span></div>
+    <div class="tw">
+      ${hitRows ? `
+      <table>
+        <thead><tr>
+          <th>Time</th><th>Business</th><th>Crawler</th><th>Intent</th><th>Query</th><th>Referral</th>
+        </tr></thead>
+        <tbody>${hitRows}</tbody>
+      </table>` : `<div class="empty">No crawler activity yet.</div>`}
+    </div>
+  </div>
+
+</div>
+</body>
+</html>`;
 }
 
 // ── Analytics proxy ────────────────────────────────────────────────────────

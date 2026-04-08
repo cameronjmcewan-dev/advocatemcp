@@ -100,32 +100,41 @@ function jsonError(status: number, message: string, detail?: unknown): Response 
   );
 }
 
-function buildWellKnownResponse(slug: string | null, env: Env): Response {
+function buildWellKnownResponse(
+  slug: string | null,
+  env: Env,
+  profile: Record<string, unknown> | null = null
+): Response {
   const base = apiBase(env);
-  return new Response(
-    JSON.stringify(
-      {
-        spec_version: "1.0",
-        agent_endpoint: slug ? `${base}/agents/${slug}/query` : `${base}/agents/{slug}/query`,
-        mcp_endpoint: `${base}/mcp`,
-        protocol: "advocatemcp-v1",
-        capabilities: ["answer_queries", "referral", "availability"],
-        crawler_instructions: slug
-          ? `POST to agent_endpoint with JSON body { "query": string } instead of scraping this page.`
-          : `POST to agent_endpoint with JSON body { "query": string }.`,
-        powered_by: "AdvocateMCP",
-      },
-      null,
-      2
-    ),
-    {
-      headers: {
-        "Content-Type": "application/json",
-        "Cache-Control": "public, max-age=3600",
-        "Access-Control-Allow-Origin": "*",
-      },
-    }
-  );
+  const body: Record<string, unknown> = {
+    spec_version: "1.0",
+    spec_name: "ai-agent-discovery",
+    agent_endpoint: slug ? `${base}/agents/${slug}/query` : `${base}/agents/{slug}/query`,
+    profile_endpoint: slug ? `${base}/agents/${slug}/profile` : null,
+    mcp_endpoint: `${base}/mcp`,
+    protocol: "advocatemcp-v1",
+    capabilities: ["answer_queries", "referral", "availability"],
+    crawler_instructions: slug
+      ? `POST to agent_endpoint with JSON body { "query": string, "crawler": string } instead of scraping this page.`
+      : `POST to agent_endpoint with JSON body { "query": string, "crawler": string }.`,
+    powered_by: "AdvocateMCP",
+  };
+  if (profile) {
+    body.business_name    = profile.name;
+    body.business_category = profile.category;
+    body.location         = profile.location;
+    body.description      = profile.description;
+    body.services         = profile.services;
+    body.referral_url     = profile.referral_url;
+    body.availability     = profile.availability;
+  }
+  return new Response(JSON.stringify(body, null, 2), {
+    headers: {
+      "Content-Type": "application/json",
+      "Cache-Control": "public, max-age=3600",
+      "Access-Control-Allow-Origin": "*",
+    },
+  });
 }
 
 // ── Main fetch handler ─────────────────────────────────────────────────────
@@ -169,12 +178,23 @@ export default {
     // ── 2. AI discovery file ──────────────────────────────────────────────
     if (url.pathname === "/.well-known/ai-agent.json") {
       const slug = await env.BUSINESS_MAP.get(domain);
+      // Fetch rich profile from backend if slug is known (best-effort, short timeout)
+      let profile: Record<string, unknown> | null = null;
+      if (slug) {
+        try {
+          const pr = await Promise.race([
+            fetch(`${apiBase(env)}/agents/${slug}/profile`),
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 2000)),
+          ]) as Response;
+          if (pr.ok) profile = await pr.json() as Record<string, unknown>;
+        } catch { /* best-effort */ }
+      }
       ctx.waitUntil(
         Promise.resolve(
           logEvent({ ...baseEvent, slug, status: 200, referralUrl: null, taggedReferralUrl: null, latencyMs: Date.now() - startMs, error: null })
         )
       );
-      return buildWellKnownResponse(slug, env);
+      return buildWellKnownResponse(slug, env, profile);
     }
 
     // ── 3. Non-crawler traffic ────────────────────────────────────────────

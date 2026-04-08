@@ -70,6 +70,61 @@ agentRouter.get("/agents/:slug/profile", (req: Request, res: Response) => {
   });
 });
 
+/**
+ * PATCH /agents/:slug/profile
+ *
+ * Update mutable profile fields for an existing business.
+ * Requires `Authorization: Bearer <api_key>` for the slug.
+ * Only fields explicitly provided in the body are updated.
+ */
+agentRouter.patch("/agents/:slug/profile", (req: Request, res: Response) => {
+  const { slug } = req.params;
+  const authHeader = req.headers.authorization ?? "";
+  if (!authHeader.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Missing Authorization header" });
+    return;
+  }
+  const apiKey = authHeader.slice(7).trim();
+  const db = getDb();
+  const biz = db
+    .prepare("SELECT id FROM businesses WHERE slug = ? AND api_key = ?")
+    .get(slug, apiKey) as { id: number } | undefined;
+  if (!biz) {
+    res.status(401).json({ error: "Invalid API key for this slug" });
+    return;
+  }
+
+  const allowed = [
+    "description","services","pricing","location","phone","website","referral_url","tone",
+    "category","star_rating","review_count","years_in_business","top_services","availability",
+    "differentiator","service_radius_miles","certifications","pricing_tier","service_area_keywords",
+  ] as const;
+
+  const updates: string[] = [];
+  const values: unknown[] = [];
+
+  for (const field of allowed) {
+    if (!(field in req.body)) continue;
+    let val = (req.body as Record<string, unknown>)[field];
+    if (field === "services" && Array.isArray(val)) val = JSON.stringify(val);
+    if (field === "top_services" && Array.isArray(val)) val = (val as string[]).join(", ");
+    if (field === "certifications" && Array.isArray(val)) val = (val as string[]).join(", ");
+    if (field === "service_area_keywords" && Array.isArray(val)) val = (val as string[]).join(", ");
+    updates.push(`${field} = ?`);
+    values.push(val);
+  }
+
+  if (updates.length === 0) {
+    res.status(400).json({ error: "No updatable fields provided" });
+    return;
+  }
+
+  values.push(slug);
+  db.prepare(`UPDATE businesses SET ${updates.join(", ")} WHERE slug = ?`).run(...values);
+
+  res.json({ ok: true, slug, updated: updates.map((u) => u.split(" ")[0]) });
+});
+
 agentRouter.post("/agents/:slug/query", async (req: Request, res: Response) => {
   const { slug } = req.params;
   const { query, crawler } = req.body as {

@@ -116,6 +116,57 @@ analyticsRouter.get(
 );
 
 /**
+ * GET /analytics
+ *
+ * Global feed — last 50 crawler hits across all businesses.
+ * No auth required (query text and business name are non-sensitive).
+ */
+analyticsRouter.get("/analytics", (_req: Request, res: Response) => {
+  const db = getDb();
+
+  const hits = db
+    .prepare(
+      `SELECT q.id, q.business_slug, b.name AS business_name,
+              q.crawler_agent, q.query_text, q.intent,
+              q.referral_clicked, q.timestamp
+       FROM queries q
+       LEFT JOIN businesses b ON b.slug = q.business_slug
+       ORDER BY q.timestamp DESC
+       LIMIT 50`
+    )
+    .all() as Array<{
+      id: number;
+      business_slug: string;
+      business_name: string | null;
+      crawler_agent: string | null;
+      query_text: string;
+      intent: string | null;
+      referral_clicked: number;
+      timestamp: string;
+    }>;
+
+  const { total_queries } = db
+    .prepare("SELECT COUNT(*) AS total_queries FROM queries")
+    .get() as { total_queries: number };
+
+  const { total_referral_clicks } = db
+    .prepare("SELECT COALESCE(SUM(referral_clicked),0) AS total_referral_clicks FROM queries")
+    .get() as { total_referral_clicks: number };
+
+  const crawlerRows = db
+    .prepare(
+      `SELECT COALESCE(crawler_agent,'unknown') AS crawler, COUNT(*) AS count
+       FROM queries GROUP BY crawler_agent ORDER BY count DESC`
+    )
+    .all() as { crawler: string; count: number }[];
+
+  const queries_by_crawler: Record<string, number> = {};
+  for (const r of crawlerRows) queries_by_crawler[r.crawler] = r.count;
+
+  res.json({ total_queries, total_referral_clicks, queries_by_crawler, recent_hits: hits });
+});
+
+/**
  * POST /analytics/:slug/referral-click
  *
  * Called by the Cloudflare Worker (or any client) when a user actually
