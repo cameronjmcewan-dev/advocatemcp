@@ -301,6 +301,7 @@ a{color:inherit;text-decoration:none}
 .ba{color:#30363d}
 .bd{color:#8b949e;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bk{color:#3fb950;font-weight:500;white-space:nowrap}
+.sim-note{font-size:.75rem;color:#484f58;padding:.75rem 1rem;border-top:1px solid #21262d;font-style:italic}
 /* Stats */
 .stats-ttl{font-size:.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:#484f58;margin-bottom:.75rem}
 .stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.5rem}
@@ -574,7 +575,7 @@ ${hdr(`${profile.name} — AI Visibility Demo`)}
     <div class="panel panel-after">
       <div class="panel-hd">
         <span class="dot dot-g"></span>What AI crawlers see with AdvocateMCP
-        ${hasRealData ? '<span class="badge badge-live">Live</span>' : '<span class="badge">Preview</span>'}
+        <span class="badge">Preview</span>
       </div>
       <div class="panel-bd">
         <pre class="json-view">${syntaxHighlight(jsonStr)}</pre>
@@ -592,10 +593,11 @@ ${hdr(`${profile.name} — AI Visibility Demo`)}
     <div class="sim-term">
       <div class="term-bar">
         <span class="tb-dot tb-r"></span><span class="tb-dot tb-y"></span><span class="tb-dot tb-g"></span>
-        <span class="term-label">advocatemcp — live request log</span>
+        <span class="term-label">simulated preview — deploy to go live</span>
       </div>
       ${botRows}
     </div>
+    <p class="sim-note">This is a preview of what AI crawlers will receive once AdvocateMCP is deployed on ${esc(domain)}</p>
   </div>
 
   <!-- Stats -->
