@@ -23,8 +23,10 @@ export async function queryAgent(
 ): Promise<AgentQueryResult> {
   const systemPrompt = buildSystemPrompt(business);
 
+  const model = process.env.MODEL ?? "claude-sonnet-4-6";
+
   const message = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    model,
     max_tokens: 512,
     system: systemPrompt,
     messages: [{ role: "user", content: query }],
