@@ -206,6 +206,17 @@ export async function createBusiness(
   return biz;
 }
 
+export async function updateBusinessApiKey(
+  db: D1Database,
+  slug: string,
+  newApiKey: string
+): Promise<void> {
+  await db
+    .prepare("UPDATE businesses SET api_key = ? WHERE slug = ?")
+    .bind(newApiKey, slug)
+    .run();
+}
+
 export async function updateUserPassword(
   db: D1Database,
   userId: string,

@@ -54,26 +54,46 @@ analyticsRouter.get(
 
     const topQueries = topQueryRows.map((r) => r.query_text);
 
-    // ── Daily counts for last 7 days ──
-    const last7Days = db
+    // ── Daily counts for last 30 days ──
+    const last30Days = db
       .prepare(
         `SELECT DATE(timestamp) AS date, COUNT(*) AS count
          FROM queries
          WHERE business_slug = ?
-           AND timestamp >= DATE('now', '-6 days')
+           AND timestamp >= DATE('now', '-29 days')
          GROUP BY DATE(timestamp)
          ORDER BY date ASC`
       )
       .all(slug) as { date: string; count: number }[];
 
-    // ── 10 most recent queries ──
+    // ── Referral clicks in last 30 days ──
+    const { clicks30 } = db
+      .prepare(
+        `SELECT COUNT(*) AS clicks30 FROM click_events
+         WHERE business_slug = ? AND timestamp >= DATE('now', '-29 days')`
+      )
+      .get(slug) as { clicks30: number };
+
+    // ── Activity by day-of-week and hour (UTC) ──
+    const dowHourRows = db
+      .prepare(
+        `SELECT CAST(strftime('%w', timestamp) AS INTEGER) AS dow,
+                CAST(strftime('%H', timestamp) AS INTEGER) AS hour,
+                COUNT(*) AS count
+         FROM queries
+         WHERE business_slug = ?
+         GROUP BY dow, hour`
+      )
+      .all(slug) as { dow: number; hour: number; count: number }[];
+
+    // ── 50 most recent queries ──
     const recentQueries = db
       .prepare(
-        `SELECT id, crawler_agent, query_text, response_text, referral_clicked, timestamp
+        `SELECT id, crawler_agent, query_text, response_text, referral_clicked, timestamp, intent
          FROM queries
          WHERE business_slug = ?
          ORDER BY timestamp DESC
-         LIMIT 10`
+         LIMIT 50`
       )
       .all(slug) as Omit<QueryRow, "business_slug">[];
 
@@ -104,10 +124,12 @@ analyticsRouter.get(
       slug,
       total_queries: totalQueries,
       referral_clicks: referralClicks,
+      referral_clicks_last_30_days: clicks30,
       queries_by_crawler: queriesByCrawler,
       queries_by_intent: queriesByIntent,
       top_queries: topQueries,
-      queries_last_7_days: last7Days,
+      queries_last_30_days: last30Days,
+      activity_by_dow_hour: dowHourRows,
       recent_queries: recentQueries,
     });
   }
@@ -189,5 +211,37 @@ analyticsRouter.post(
     ).run(slug, ref ?? null, user_agent ?? null, ip_hash ?? null);
 
     res.json({ ok: true });
+  }
+);
+
+/**
+ * GET /analytics/:slug/clicks
+ *
+ * Returns the 50 most recent referral click events for a business.
+ * Requires Authorization: Bearer <api_key> for the slug.
+ */
+analyticsRouter.get(
+  "/analytics/:slug/clicks",
+  requireSlugApiKey,
+  (req: Request, res: Response) => {
+    const { slug } = req.params;
+    const db = getDb();
+
+    const clicks = db
+      .prepare(
+        `SELECT id, ref, user_agent, timestamp
+         FROM click_events
+         WHERE business_slug = ?
+         ORDER BY timestamp DESC
+         LIMIT 50`
+      )
+      .all(slug) as Array<{
+        id: number;
+        ref: string | null;
+        user_agent: string | null;
+        timestamp: string;
+      }>;
+
+    res.json({ slug, clicks });
   }
 );
