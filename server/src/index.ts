@@ -46,7 +46,7 @@ app.use(cors({
 }));
 
 // ── Body parsing + rate limiting ──
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 app.use(rateLimitMiddleware);
 
 // ── Initialize DB (creates tables + runs migrations) ──
