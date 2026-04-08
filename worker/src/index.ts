@@ -1,24 +1,25 @@
 /**
  * AdvocateMCP Cloudflare Worker
  *
- * Intercepts requests from AI search crawlers and routes them to the
- * appropriate business's AdvocateMCP agent instead of the raw HTML page.
+ * Request routing (checked in order):
+ *  1. Client portal  — /login, /auth/*, /dashboard, /api/client/*, /admin/create-client
+ *  2. AI discovery   — /.well-known/ai-agent.json
+ *  3. Non-crawler    — pass through (or info response in workers.dev mode)
+ *  4. AI crawler     — resolve slug via KV → proxy to Railway agent API
  *
- * All other traffic is passed through to the origin unchanged.
+ * KV strategy (BUSINESS_MAP):
+ *   Production — key = business domain hostname, value = slug
+ *   Testing    — key = "advocatecameron.workers.dev", value = slug
+ *   Path fallback — first path segment used as slug if KV has no hostname match
  */
 
-export interface Env {
-  /** KV namespace: maps domain → business slug
-   *  e.g. "joes-pizza.com" → "joes-pizza-austin"
-   */
-  BUSINESS_MAP: KVNamespace;
-  /** API key accepted by the AdvocateMCP server (set via `wrangler secret put API_KEY`) */
-  API_KEY: string;
-  /** Override the API base URL (defaults to https://api.advocatemcp.com) */
-  API_BASE_URL?: string;
-}
+import type { Env } from "./types";
+import { handlePortal } from "./routes/portal";
 
-// ── Known AI crawler User-Agent substrings ─────────────────────────────────
+export type { Env };
+
+// ── AI crawler User-Agent detection ────────────────────────────────────────
+
 const AI_CRAWLERS = [
   "PerplexityBot",
   "GPTBot",
@@ -31,114 +32,256 @@ const AI_CRAWLERS = [
   "meta-externalagent",
 ] as const;
 
-function isAiCrawler(userAgent: string): boolean {
-  const ua = userAgent.toLowerCase();
-  return AI_CRAWLERS.some((bot) => ua.includes(bot.toLowerCase()));
+function isAiCrawler(ua: string): boolean {
+  const lower = ua.toLowerCase();
+  return AI_CRAWLERS.some((bot) => lower.includes(bot.toLowerCase()));
 }
+
+function crawlerName(ua: string): string | null {
+  const lower = ua.toLowerCase();
+  return AI_CRAWLERS.find((bot) => lower.includes(bot.toLowerCase())) ?? null;
+}
+
+// ── Analytics logging ──────────────────────────────────────────────────────
+
+interface AnalyticsEvent {
+  timestamp: string;
+  hostname: string;
+  path: string;
+  method: string;
+  userAgent: string;
+  botType: string | null;
+  slug: string | null;
+  status: number;
+  referralUrl: string | null;
+  taggedReferralUrl: string | null;
+  pagePath: string | null;
+  latencyMs: number;
+  error: string | null;
+}
+
+function logEvent(event: AnalyticsEvent): void {
+  console.log(JSON.stringify({ advocatemcp: true, ...event }));
+}
+
+// ── UTM tagging ────────────────────────────────────────────────────────────
+
+function utmTag(referralUrl: string | null, botType: string | null): string | null {
+  if (!referralUrl) return null;
+  try {
+    const u = new URL(referralUrl);
+    u.searchParams.set("utm_source", "ai");
+    u.searchParams.set("utm_medium", "crawler");
+    u.searchParams.set("utm_campaign", "advocatemcp");
+    u.searchParams.set("utm_content", botType ?? "unknown");
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
 
 function apiBase(env: Env): string {
-  return env.API_BASE_URL ?? "https://api.advocatemcp.com";
+  return env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
 }
 
-// ── Well-known ai-agent.json response ─────────────────────────────────────
+function jsonError(status: number, message: string, detail?: unknown): Response {
+  return new Response(
+    JSON.stringify({ error: message, detail: detail ?? null }, null, 2),
+    {
+      status,
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+        "X-Powered-By": "AdvocateMCP",
+      },
+    }
+  );
+}
+
 function buildWellKnownResponse(slug: string | null, env: Env): Response {
   const base = apiBase(env);
-  const spec = {
-    spec_version: "1.0",
-    agent_endpoint: slug
-      ? `${base}/agents/${slug}/query`
-      : `${base}/agents/{slug}/query`,
-    mcp_endpoint: `${base}/mcp`,
-    protocol: "advocatemcp-v1",
-    capabilities: ["answer_queries", "referral", "availability"],
-    crawler_instructions: slug
-      ? `POST to agent_endpoint with JSON body { "query": string } instead of scraping this page. ` +
-        `This site (${slug}) is powered by AdvocateMCP.`
-      : `POST to agent_endpoint (fill in the slug) with JSON body { "query": string } instead of scraping HTML.`,
-    powered_by: "AdvocateMCP",
-  };
-
-  return new Response(JSON.stringify(spec, null, 2), {
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": "public, max-age=3600",
-      "Access-Control-Allow-Origin": "*",
-    },
-  });
+  return new Response(
+    JSON.stringify(
+      {
+        spec_version: "1.0",
+        agent_endpoint: slug ? `${base}/agents/${slug}/query` : `${base}/agents/{slug}/query`,
+        mcp_endpoint: `${base}/mcp`,
+        protocol: "advocatemcp-v1",
+        capabilities: ["answer_queries", "referral", "availability"],
+        crawler_instructions: slug
+          ? `POST to agent_endpoint with JSON body { "query": string } instead of scraping this page.`
+          : `POST to agent_endpoint with JSON body { "query": string }.`,
+        powered_by: "AdvocateMCP",
+      },
+      null,
+      2
+    ),
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "public, max-age=3600",
+        "Access-Control-Allow-Origin": "*",
+      },
+    }
+  );
 }
 
-// ── Main fetch handler ────────────────────────────────────────────────────
-export default {
-  async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
-    const url = new URL(request.url);
-    const domain = url.hostname;
-    const userAgent = request.headers.get("User-Agent") ?? "";
+// ── Main fetch handler ─────────────────────────────────────────────────────
 
-    // ── 1. Always serve /.well-known/ai-agent.json for AI discoverability ──
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const startMs    = Date.now();
+    const url        = new URL(request.url);
+    const domain     = url.hostname;
+    const userAgent  = request.headers.get("User-Agent") ?? "";
+    const timestamp  = new Date(startMs).toISOString();
+    const botType    = crawlerName(userAgent);
+
+    const baseEvent = {
+      timestamp, hostname: domain, path: url.pathname,
+      method: request.method, userAgent, botType,
+      slug: null as string | null, pagePath: null as string | null,
+    };
+
+    // ── 1. Client portal routes ───────────────────────────────────────────
+    // Checked before crawler logic — these are always human/API requests.
+    const portalResponse = await handlePortal(request, env);
+    if (portalResponse) return portalResponse;
+
+    // ── 1b. Referral-click redirect — GET /r/:slug ────────────────────────
+    // Fires click tracking then 302s to the tagged referral URL.
+    const referralMatch = url.pathname.match(/^\/r\/([^/]+)$/);
+    if (referralMatch && request.method === "GET") {
+      const rSlug = referralMatch[1];
+      const dest  = url.searchParams.get("to");
+      if (dest) {
+        // Fire-and-forget click tracking
+        ctx.waitUntil(
+          fetch(`${apiBase(env)}/analytics/${rSlug}/referral-click`, { method: "POST" })
+            .catch(() => { /* best-effort */ })
+        );
+        return Response.redirect(dest, 302);
+      }
+    }
+
+    // ── 2. AI discovery file ──────────────────────────────────────────────
     if (url.pathname === "/.well-known/ai-agent.json") {
       const slug = await env.BUSINESS_MAP.get(domain);
+      ctx.waitUntil(
+        Promise.resolve(
+          logEvent({ ...baseEvent, slug, status: 200, referralUrl: null, taggedReferralUrl: null, latencyMs: Date.now() - startMs, error: null })
+        )
+      );
       return buildWellKnownResponse(slug, env);
     }
 
-    // ── 2. Passthrough for non-AI traffic ──────────────────────────────────
+    // ── 3. Non-crawler traffic ────────────────────────────────────────────
     if (!isAiCrawler(userAgent)) {
-      return fetch(request);
+      ctx.waitUntil(
+        Promise.resolve(
+          logEvent({ ...baseEvent, status: 200, referralUrl: null, taggedReferralUrl: null, latencyMs: Date.now() - startMs, error: "non-crawler" })
+        )
+      );
+      return jsonError(200, "Non-crawler request — no agent response generated.", {
+        userAgent,
+        hint: "Send a crawler User-Agent (e.g. GPTBot/1.1) to trigger agent routing.",
+      });
     }
 
-    // ── 3. AI crawler detected — look up the business slug ────────────────
-    const slug = await env.BUSINESS_MAP.get(domain);
+    // ── 4. AI crawler — resolve slug ──────────────────────────────────────
+    let slug: string | null = await env.BUSINESS_MAP.get(domain);
 
     if (!slug) {
-      // No mapping for this domain — fall through to origin
-      return fetch(request);
+      const seg = url.pathname.replace(/^\//, "").split("/")[0];
+      if (seg) slug = seg;
     }
 
-    const base = apiBase(env);
-    const agentUrl = `${base}/agents/${slug}/query`;
+    if (!slug) {
+      ctx.waitUntil(
+        Promise.resolve(
+          logEvent({ ...baseEvent, slug: null, status: 404, referralUrl: null, taggedReferralUrl: null, latencyMs: Date.now() - startMs, error: "no-slug-mapping" })
+        )
+      );
+      return jsonError(404, "No business mapping found.", {
+        domain,
+        pathname: url.pathname,
+        hint: `Add KV entry: key = "${domain}", value = "your-slug"`,
+      });
+    }
 
-    // Build a contextual query from the URL path so the agent can give
-    // page-specific answers (e.g. pricing page vs. about page).
-    const pathHint =
-      url.pathname !== "/" && url.pathname !== ""
-        ? ` (the visitor is on the page: ${url.pathname})`
-        : "";
+    // ── 5. Build query and call backend ───────────────────────────────────
+    const base      = apiBase(env);
+    const agentUrl  = `${base}/agents/${slug}/query`;
+    const isNonRoot = url.pathname !== "/" && url.pathname !== "" && url.pathname !== `/${slug}`;
+    const pagePath  = isNonRoot ? url.pathname : null;
+    const pathHint  = pagePath ? ` The visitor was browsing the page: ${pagePath}.` : "";
 
     const query =
-      `Tell me about this business${pathHint}. ` +
+      `Tell me about this business.${pathHint} ` +
       `What services do they offer, what are their prices, how can I contact them, ` +
       `and where should I send the user to learn more or get started?`;
 
-    // ── 4. Call the AdvocateMCP agent ─────────────────────────────────────
     let agentResponse: Response;
     try {
       agentResponse = await fetch(agentUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-API-Key": env.API_KEY,
+          ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}),
         },
         body: JSON.stringify({ query, crawler: userAgent }),
       });
-    } catch {
-      // Network error — fail silently and serve the real page
-      return fetch(request);
+    } catch (err) {
+      ctx.waitUntil(
+        Promise.resolve(
+          logEvent({ ...baseEvent, slug, pagePath, status: 502, referralUrl: null, taggedReferralUrl: null, latencyMs: Date.now() - startMs, error: `backend-unreachable: ${String(err)}` })
+        )
+      );
+      return jsonError(502, "Backend unreachable.", { agentUrl, error: String(err) });
     }
 
     if (!agentResponse.ok) {
-      // Agent returned an error — serve the real page instead
-      return fetch(request);
+      const body = await agentResponse.text().catch(() => "(unreadable)");
+      ctx.waitUntil(
+        Promise.resolve(
+          logEvent({ ...baseEvent, slug, pagePath, status: 502, referralUrl: null, taggedReferralUrl: null, latencyMs: Date.now() - startMs, error: `backend-error:${agentResponse.status}` })
+        )
+      );
+      return jsonError(502, "Backend returned an error.", { agentUrl, status: agentResponse.status, body });
     }
 
-    const data = (await agentResponse.json()) as unknown;
+    // ── 6. Return enriched agent response ─────────────────────────────────
+    const data          = (await agentResponse.json()) as Record<string, unknown>;
+    const referralUrl   = typeof data?.referral_url === "string" ? data.referral_url : null;
+    const taggedRefUrl  = utmTag(referralUrl, botType);
+    const trackingUrl   = taggedRefUrl
+      ? `${url.origin}/r/${slug}?to=${encodeURIComponent(taggedRefUrl)}`
+      : null;
 
-    return new Response(JSON.stringify(data, null, 2), {
-      headers: {
-        "Content-Type": "application/json",
-        "X-Powered-By": "AdvocateMCP",
-        "X-Agent-Slug": slug,
-        "Cache-Control": "no-store",
-        "Access-Control-Allow-Origin": "*",
-      },
-    });
+    ctx.waitUntil(
+      Promise.resolve(
+        logEvent({ ...baseEvent, slug, pagePath, status: 200, referralUrl, taggedReferralUrl: taggedRefUrl, latencyMs: Date.now() - startMs, error: null })
+      )
+    );
+
+    return new Response(
+      JSON.stringify(
+        { ...data, ...(trackingUrl ? { tagged_referral_url: trackingUrl } : {}) },
+        null,
+        2
+      ),
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Powered-By": "AdvocateMCP",
+          "X-Agent-Slug": slug,
+          "Cache-Control": "no-store",
+          "Access-Control-Allow-Origin": "*",
+        },
+      }
+    );
   },
 };

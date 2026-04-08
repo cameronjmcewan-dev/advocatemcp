@@ -114,24 +114,24 @@ function createMcpServer(): McpServer {
         const loc = `%${location}%`;
         rows = db
           .prepare(
-            `SELECT slug, name, description, location, website
+            `SELECT slug, name, description, category, location, website, star_rating, review_count, pricing_tier
              FROM businesses
-             WHERE (name LIKE ? OR description LIKE ? OR services LIKE ?)
+             WHERE (name LIKE ? OR description LIKE ? OR services LIKE ? OR category LIKE ?)
                AND location LIKE ?
              ORDER BY name
              LIMIT 20`
           )
-          .all(term, term, term, loc);
+          .all(term, term, term, term, loc);
       } else {
         rows = db
           .prepare(
-            `SELECT slug, name, description, location, website
+            `SELECT slug, name, description, category, location, website, star_rating, review_count, pricing_tier
              FROM businesses
-             WHERE name LIKE ? OR description LIKE ? OR services LIKE ?
+             WHERE name LIKE ? OR description LIKE ? OR services LIKE ? OR category LIKE ?
              ORDER BY name
              LIMIT 20`
           )
-          .all(term, term, term);
+          .all(term, term, term, term);
       }
 
       const results = (
@@ -139,8 +139,12 @@ function createMcpServer(): McpServer {
           slug: string;
           name: string;
           description: string;
+          category: string | null;
           location: string | null;
           website: string | null;
+          star_rating: number | null;
+          review_count: number | null;
+          pricing_tier: string | null;
         }[]
       ).map((b) => ({
         ...b,

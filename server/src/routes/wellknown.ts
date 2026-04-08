@@ -48,7 +48,8 @@ wellknownRouter.get("/registry", (_req: Request, res: Response) => {
 
   const businesses = db
     .prepare(
-      `SELECT slug, name, description, location, website, created_at
+      `SELECT slug, name, description, category, location, website, star_rating,
+              review_count, pricing_tier, availability, differentiator, created_at
        FROM businesses
        ORDER BY created_at DESC`
     )
@@ -56,8 +57,14 @@ wellknownRouter.get("/registry", (_req: Request, res: Response) => {
     slug: string;
     name: string;
     description: string;
+    category: string | null;
     location: string | null;
     website: string | null;
+    star_rating: number | null;
+    review_count: number | null;
+    pricing_tier: string | null;
+    availability: string | null;
+    differentiator: string | null;
     created_at: string;
   }[];
 
@@ -67,6 +74,7 @@ wellknownRouter.get("/registry", (_req: Request, res: Response) => {
     businesses: businesses.map((b) => ({
       ...b,
       agent_endpoint: `${base}/agents/${b.slug}/query`,
+      profile_endpoint: `${base}/agents/${b.slug}/profile`,
     })),
   });
 });

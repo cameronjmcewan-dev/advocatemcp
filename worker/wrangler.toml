@@ -1,37 +1,35 @@
-name            = "advocatemcp-worker"
-main            = "src/index.ts"
-compatibility_date = "2024-09-23"
-compatibility_flags = ["nodejs_compat"]
+name               = "advocatemcp-worker"
+main               = "src/index.ts"
+compatibility_date = "2026-04-07"
 
-# ── KV Namespace ──────────────────────────────────────────────────────────
-# Maps domain names → business slugs.
-# Add entries with:
-#   wrangler kv:key put --binding=BUSINESS_MAP "example.com" "my-business-slug"
+# ── Observability ───────────────────────────────────────────────────────────
+[observability]
+enabled = true
+
+# ── KV Namespace ────────────────────────────────────────────────────────────
+# Maps domain hostnames → business slugs for AI crawler routing.
 [[kv_namespaces]]
-binding    = "BUSINESS_MAP"
-id         = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
-preview_id = "REPLACE_WITH_YOUR_KV_PREVIEW_NAMESPACE_ID"
+binding = "BUSINESS_MAP"
+id      = "c6fa872c9bcc4b4390c30ac102888920"
 
-# ── Secrets ───────────────────────────────────────────────────────────────
-# Set these with:
-#   wrangler secret put API_KEY
-# Do NOT put real secrets in this file.
-#
-# Available secrets:
-#   API_KEY        — forwarded to the AdvocateMCP server for auth
-#
-# ── Environment Variables ─────────────────────────────────────────────────
+# ── D1 Database ─────────────────────────────────────────────────────────────
+# Auth data: users, sessions, user_business_access, businesses.
+[[d1_databases]]
+binding       = "DB"
+database_name = "advocatemcp-auth"
+database_id   = "1247938a-cf98-4c66-8588-5c9d71699094"
+
+# ── Environment Variables ───────────────────────────────────────────────────
 [vars]
-API_BASE_URL = "https://api.advocatemcp.com"
+API_BASE_URL = "https://advocate-production-2887.up.railway.app"
 
-# ── Routes ───────────────────────────────────────────────────────────────
-# Uncomment and configure once you have a Cloudflare zone set up.
-# Add one [[routes]] block per domain you want to intercept.
+# ── Secrets ─────────────────────────────────────────────────────────────────
+# Set with wrangler secret put <NAME>
 #
+#   API_KEY       — forwarded to Railway as X-API-Key on crawler proxy requests
+#   ADMIN_SECRET  — protects POST /admin/create-client (use a long random string)
+
+# ── Routes (production — uncomment per business domain) ─────────────────────
 # [[routes]]
-# pattern = "example.com/*"
-# zone_name = "example.com"
-#
-# [[routes]]
-# pattern = "www.example.com/*"
+# pattern   = "example.com/*"
 # zone_name = "example.com"

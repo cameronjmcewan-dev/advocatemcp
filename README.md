@@ -330,6 +330,127 @@ Worker secrets (set via `wrangler secret put`):
 
 ---
 
+## Client Portal
+
+The Cloudflare Worker includes a multi-tenant client dashboard at `/login` and `/dashboard`. Each client logs in and sees only analytics for their own businesses.
+
+### Environment variables and secrets needed
+
+| Name | Where | Description |
+|---|---|---|
+| `DB` | `wrangler.toml` D1 binding | D1 database for auth data |
+| `API_BASE_URL` | `wrangler.toml` [vars] | Railway backend URL |
+| `ADMIN_SECRET` | Wrangler secret | Protects `POST /admin/create-client` |
+| `API_KEY` | Wrangler secret | Optional — forwarded to backend as `X-API-Key` |
+
+### Running migrations
+
+```bash
+cd worker
+npx wrangler d1 execute advocatemcp-auth --remote --file=migrations/0001_init.sql
+```
+
+### How login works
+
+1. Client submits email + password to `POST /auth/login`
+2. Worker validates credentials against D1 (PBKDF2-SHA256, 100k iterations)
+3. On success: random 32-byte session token generated, SHA-256 hash stored in D1, raw token set in `HttpOnly; Secure; SameSite=Lax` cookie
+4. On failure: rate-limited (5 attempts per 15 min per email), generic 302 to `/login?error=invalid`
+5. Every protected route validates the cookie token hash against D1 and checks expiry
+
+### How authorization works
+
+- `getUserBusinesses(userId)` always filters by `user_id` via `user_business_access` JOIN — no client can access another client's data by changing URL parameters
+- `/dashboard?slug=other-slug` silently ignores slugs the user has no access to (falls back to their first business)
+- API endpoints (`/api/client/*`) do the same server-side check before proxying to Railway
+
+### Smoke testing after deploy
+
+```bash
+cd worker
+bash scripts/smoke-test.sh \
+  --email    "you@example.com" \
+  --password "YourPassword!" \
+  --url      "https://advocatecameron.workers.dev"
+```
+
+The script runs 8 test groups (18 assertions) and prints a pass/fail summary. Exit code is 0 only if every assertion passes.
+
+**Pass/fail checklist**
+
+| # | What is checked | Expected |
+|---|---|---|
+| 1 | `GET /login` | HTTP 200 |
+| 2 | `GET /dashboard` (no cookie) | 302, Location contains `/login`, `error=expired` |
+| 3 | `POST /auth/login` wrong creds | 302, Location contains `/login`, `error=invalid` |
+| 4 | `POST /auth/login` valid creds | 302, Location `/dashboard`, `amcp_session` cookie with HttpOnly + Secure + SameSite=Lax |
+| 5 | `GET /dashboard` (with cookie) | HTTP 200 |
+| 6a | `GET /api/client/me` (no cookie) | 401 + `Unauthorized` body |
+| 6b | `GET /api/client/me` (with cookie) | 200, email in body |
+| 7a | `POST /admin/create-client` no Content-Type | 415 |
+| 7b | `POST /admin/create-client` no auth header | 401 |
+| 7c | `POST /admin/create-client` wrong secret | 401 |
+| 8 | `POST /auth/logout` | 302 to `/login`, `Max-Age=0` on cookie, subsequent `/dashboard` is 302 |
+
+### Creating a client
+
+```bash
+cd worker
+./scripts/create-client.sh \
+  --email        "client@example.com" \
+  --password     "SecurePassword!" \
+  --name         "Client Name" \
+  --slug         "austin-ace-plumbing" \
+  --biz-name     "Austin Ace Plumbing" \
+  --api-key      "<Railway api_key for that slug>" \
+  --admin-secret "<ADMIN_SECRET value>"
+```
+
+The `api_key` for a slug is returned by `POST /register` and is also available in your Railway SQLite DB (`businesses.api_key`).
+
+**Temporary production URL:** `https://advocatecameron.workers.dev/login`
+
+This is the live URL until `advocatemcp.com` is configured as a Cloudflare zone. When that is done, uncomment and populate the `[[routes]]` block in `worker/wrangler.toml` and the URL becomes `https://advocatemcp.com/login`. No code changes are needed — only the Cloudflare zone and route config.
+
+---
+
+## Rollback
+
+To disable portal routes without touching crawler functionality:
+
+**Option A — one-line code change (30 second deploy):**
+
+In `worker/src/index.ts`, comment out the portal dispatch:
+
+```typescript
+// const portalResponse = await handlePortal(request, env);
+// if (portalResponse) return portalResponse;
+```
+
+Then redeploy:
+
+```bash
+cd worker && npx wrangler deploy
+```
+
+All existing routes (`/.well-known/ai-agent.json`, AI crawler proxy, KV lookup) continue working unchanged. The portal routes (`/login`, `/dashboard`, `/api/client/*`) return the crawler's normal response (non-crawler info message or passthrough).
+
+**Option B — environment flag (no redeploy needed):**
+
+Add `PORTAL_DISABLED = "true"` to `[vars]` in `wrangler.toml` and check it at the top of `handlePortal`:
+
+```typescript
+if (env.PORTAL_DISABLED === "true") return null;
+```
+
+This lets you toggle the portal off via a Wrangler deploy of only config changes.
+
+**Option C — Cloudflare dashboard:**
+
+In Workers & Pages → advocatemcp-worker → Settings → Variables, set `PORTAL_DISABLED = true` and re-deploy. No code change required if you have the flag check in place.
+
+---
+
 ## License
 
 MIT

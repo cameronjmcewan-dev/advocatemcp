@@ -86,11 +86,28 @@ analyticsRouter.get(
       )
       .get(slug) as { clicks: number };
 
+    // ── Breakdown by intent ──
+    const intentRows = db
+      .prepare(
+        `SELECT COALESCE(intent, 'unknown') AS intent, COUNT(*) AS count
+         FROM queries
+         WHERE business_slug = ?
+         GROUP BY COALESCE(intent, 'unknown')
+         ORDER BY count DESC`
+      )
+      .all(slug) as { intent: string; count: number }[];
+
+    const queriesByIntent: Record<string, number> = {};
+    for (const row of intentRows) {
+      queriesByIntent[row.intent] = row.count;
+    }
+
     res.json({
       slug,
       total_queries: totalQueries,
       referral_clicks: referralClicks,
       queries_by_crawler: queriesByCrawler,
+      queries_by_intent: queriesByIntent,
       top_queries: topQueries,
       queries_last_7_days: last7Days,
       recent_queries: recentQueries,

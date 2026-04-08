@@ -47,6 +47,7 @@ app.get("/", (_req, res) => {
     endpoints: {
       "POST /register": "Register a new business agent",
       "POST /agents/:slug/query": "Query a business agent",
+      "GET  /agents/:slug/profile": "Public structured business profile",
       "GET  /analytics/:slug": "View analytics (requires API key)",
       "POST /mcp": "MCP server endpoint (Streamable HTTP)",
       "GET  /mcp": "MCP server info + SSE handshake",

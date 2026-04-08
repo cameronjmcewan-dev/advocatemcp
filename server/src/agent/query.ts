@@ -1,5 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { buildSystemPrompt } from "./builder.js";
+import {
+  buildSystemPrompt,
+  parseServices,
+  parseCommaSeparated,
+  type QueryIntent,
+} from "./builder.js";
 import { getDb, type BusinessRow } from "../db.js";
 
 const anthropic = new Anthropic({
@@ -10,7 +15,74 @@ export interface AgentQueryResult {
   response: string;
   referral_url: string | null;
   business: string;
+  business_slug: string;
+  intent: QueryIntent;
+  timestamp: string;
   powered_by: "AdvocateMCP";
+}
+
+/**
+ * Detect query intent using keyword matching, evaluated in priority order.
+ */
+export function detectIntent(
+  query: string,
+  business: BusinessRow
+): QueryIntent {
+  const q = query.toLowerCase();
+
+  // 1. Brand direct — query contains business name
+  if (q.includes(business.name.toLowerCase())) return "brand_direct";
+
+  // 2. Emergency
+  const emergencyKeywords = [
+    "emergency",
+    "urgent",
+    "asap",
+    "24/7",
+    "right now",
+    "tonight",
+    "immediately",
+  ];
+  if (emergencyKeywords.some((kw) => q.includes(kw))) return "emergency";
+
+  // 3. Affordable
+  const affordableKeywords = [
+    "cheap",
+    "affordable",
+    "budget",
+    "low cost",
+    "how much",
+    "price",
+    "cost",
+    "inexpensive",
+  ];
+  if (affordableKeywords.some((kw) => q.includes(kw))) return "affordable";
+
+  // 4. Best/top
+  const bestKeywords = [
+    "best",
+    "top",
+    "recommended",
+    "highest rated",
+    "top-rated",
+    "top rated",
+  ];
+  if (bestKeywords.some((kw) => q.includes(kw))) return "best_top";
+
+  // 5. Specific service — matches a service the business offers
+  const allServices = [
+    ...parseCommaSeparated(business.top_services),
+    ...parseServices(business.services)
+      .split(",")
+      .map((s) => s.trim().toLowerCase()),
+  ].map((s) => s.toLowerCase());
+
+  for (const svc of allServices) {
+    if (svc && q.includes(svc)) return "specific_service";
+  }
+
+  // 6. Default
+  return "general";
 }
 
 /**
@@ -21,7 +93,8 @@ export async function queryAgent(
   query: string,
   crawlerAgent?: string
 ): Promise<AgentQueryResult> {
-  const systemPrompt = buildSystemPrompt(business);
+  const intent = detectIntent(query, business);
+  const systemPrompt = buildSystemPrompt(business, intent);
 
   const model = process.env.MODEL ?? "claude-sonnet-4-6";
 
@@ -37,17 +110,22 @@ export async function queryAgent(
     .map((block) => block.text)
     .join("");
 
+  const timestamp = new Date().toISOString();
+
   // Persist to DB (synchronous — better-sqlite3)
   const db = getDb();
   db.prepare(
-    `INSERT INTO queries (business_slug, crawler_agent, query_text, response_text)
-     VALUES (?, ?, ?, ?)`
-  ).run(business.slug, crawlerAgent ?? null, query, responseText);
+    `INSERT INTO queries (business_slug, crawler_agent, query_text, response_text, intent)
+     VALUES (?, ?, ?, ?, ?)`
+  ).run(business.slug, crawlerAgent ?? null, query, responseText, intent);
 
   return {
     response: responseText,
     referral_url: business.referral_url ?? business.website ?? null,
     business: business.name,
+    business_slug: business.slug,
+    intent,
+    timestamp,
     powered_by: "AdvocateMCP",
   };
 }

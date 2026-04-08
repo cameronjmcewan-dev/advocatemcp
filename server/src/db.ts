@@ -15,6 +15,19 @@ export function getDb(): Database.Database {
   return _db;
 }
 
+function _addColumnIfNotExists(
+  db: Database.Database,
+  table: string,
+  column: string,
+  type: string
+): void {
+  try {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+}
+
 function _initSchema(db: Database.Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS businesses (
@@ -43,6 +56,27 @@ function _initSchema(db: Database.Database): void {
       timestamp        DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  // ── Section 1 migrations: rich SMB profile columns ──
+  const bizCols: [string, string][] = [
+    ["category", "TEXT"],
+    ["star_rating", "REAL"],
+    ["review_count", "INTEGER"],
+    ["years_in_business", "INTEGER"],
+    ["top_services", "TEXT"],
+    ["availability", "TEXT"],
+    ["differentiator", "TEXT"],
+    ["service_radius_miles", "INTEGER"],
+    ["certifications", "TEXT"],
+    ["pricing_tier", "TEXT"],
+    ["service_area_keywords", "TEXT"],
+  ];
+  for (const [col, type] of bizCols) {
+    _addColumnIfNotExists(db, "businesses", col, type);
+  }
+
+  // ── Section 2 migration: intent column on queries ──
+  _addColumnIfNotExists(db, "queries", "intent", "TEXT");
 }
 
 /** Type that mirrors the businesses table row. */
@@ -60,6 +94,18 @@ export interface BusinessRow {
   tone: string;
   api_key: string;
   created_at: string;
+  // Section 1: rich profile fields
+  category: string | null;
+  star_rating: number | null;
+  review_count: number | null;
+  years_in_business: number | null;
+  top_services: string | null;
+  availability: string | null;
+  differentiator: string | null;
+  service_radius_miles: number | null;
+  certifications: string | null;
+  pricing_tier: string | null;
+  service_area_keywords: string | null;
 }
 
 export interface QueryRow {
@@ -70,4 +116,5 @@ export interface QueryRow {
   response_text: string;
   referral_clicked: number;
   timestamp: string;
+  intent: string | null;
 }
