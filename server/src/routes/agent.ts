@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import { getDb, type BusinessRow } from "../db.js";
 import { queryAgent } from "../agent/query.js";
 import { requireApiKey } from "../middleware/auth.js";
+import crypto from "crypto";
 
 export const agentRouter = Router();
 
@@ -124,6 +125,36 @@ agentRouter.patch("/agents/:slug/profile", (req: Request, res: Response) => {
   db.prepare(`UPDATE businesses SET ${updates.join(", ")} WHERE slug = ?`).run(...values);
 
   res.json({ ok: true, slug, updated: updates.map((u) => u.split(" ")[0]) });
+});
+
+/**
+ * POST /agents/:slug/rotate-key
+ *
+ * Generates a new api_key for the business, immediately invalidating the old one.
+ * Protected by server-level API key only (not business key — caller cannot auth
+ * with the key they are trying to invalidate).
+ */
+agentRouter.post("/agents/:slug/rotate-key", (req: Request, res: Response) => {
+  const serverKey = process.env.API_KEY;
+  const provided =
+    req.headers["x-api-key"] ??
+    req.headers.authorization?.replace(/^Bearer\s+/, "");
+  if (!serverKey || provided !== serverKey) {
+    res.status(401).json({ error: "Server API key required" });
+    return;
+  }
+
+  const { slug } = req.params;
+  const db = getDb();
+  const exists = db.prepare("SELECT id FROM businesses WHERE slug = ?").get(slug);
+  if (!exists) {
+    res.status(404).json({ error: `No business registered with slug: ${slug}` });
+    return;
+  }
+
+  const newKey = crypto.randomUUID();
+  db.prepare("UPDATE businesses SET api_key = ? WHERE slug = ?").run(newKey, slug);
+  res.json({ ok: true, slug, new_api_key: newKey });
 });
 
 agentRouter.post("/agents/:slug/query", requireApiKey, async (req: Request, res: Response) => {
