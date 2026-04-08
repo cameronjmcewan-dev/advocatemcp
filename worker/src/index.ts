@@ -15,6 +15,7 @@
 
 import type { Env } from "./types";
 import { handlePortal } from "./routes/portal";
+import { handleDemo } from "./routes/demo";
 
 export type { Env };
 
@@ -168,7 +169,11 @@ export default {
     const portalResponse = await handlePortal(request, env);
     if (portalResponse) return portalResponse;
 
-    // ── 1b. Referral-click redirect — GET /track ─────────────────────────
+    // ── 1b. Public demo pages — /demo, /demo/search, /demo/:slug ─────────
+    const demoResponse = await handleDemo(request, env);
+    if (demoResponse) return demoResponse;
+
+    // ── 1c. Referral-click redirect — GET /track ─────────────────────────
     // Bot-filtered: only logs clicks from non-crawler User-Agents.
     // URL format: /track?to=<dest>&ref=<botName>&client=<slug>
     if (url.pathname === "/track" && request.method === "GET") {
