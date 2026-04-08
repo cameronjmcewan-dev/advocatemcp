@@ -1,1 +1,6 @@
 server/.env
+server/node_modules/
+server/dist/
+server/*.db
+server/*.db-shm
+server/*.db-wal
