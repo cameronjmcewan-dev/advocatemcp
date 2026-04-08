@@ -1,7 +1,12 @@
 import Database from "better-sqlite3";
 import "dotenv/config";
+import fs   from "fs";
+import path from "path";
 
-const DB_PATH = process.env.DATABASE_PATH ?? "./dev.db";
+const DB_PATH = process.env.DATABASE_PATH ?? "/app/data/dev.db";
+
+// Ensure the parent directory exists (Railway persistent volume or local)
+fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
 let _db: Database.Database | undefined;
 

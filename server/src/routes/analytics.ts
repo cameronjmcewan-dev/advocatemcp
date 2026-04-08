@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { requireSlugApiKey } from "../middleware/auth.js";
+import { requireSlugApiKey, requireApiKey } from "../middleware/auth.js";
 import { getDb, type QueryRow } from "../db.js";
 
 export const analyticsRouter = Router();
@@ -121,7 +121,7 @@ analyticsRouter.get(
  * Global feed — last 50 crawler hits across all businesses.
  * No auth required (query text and business name are non-sensitive).
  */
-analyticsRouter.get("/analytics", (_req: Request, res: Response) => {
+analyticsRouter.get("/analytics", requireApiKey, (_req: Request, res: Response) => {
   const db = getDb();
 
   const hits = db

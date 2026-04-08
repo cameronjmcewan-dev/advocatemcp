@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import { getDb, type BusinessRow } from "../db.js";
 import { queryAgent } from "../agent/query.js";
+import { requireApiKey } from "../middleware/auth.js";
 
 export const agentRouter = Router();
 
@@ -19,7 +20,7 @@ export const agentRouter = Router();
  * Public structured profile for a registered business.
  * Consumed by the Cloudflare Worker and MCP clients.
  */
-agentRouter.get("/agents/:slug/profile", (req: Request, res: Response) => {
+agentRouter.get("/agents/:slug/profile", requireApiKey, (req: Request, res: Response) => {
   const { slug } = req.params;
   const db = getDb();
   const row = db
@@ -125,7 +126,7 @@ agentRouter.patch("/agents/:slug/profile", (req: Request, res: Response) => {
   res.json({ ok: true, slug, updated: updates.map((u) => u.split(" ")[0]) });
 });
 
-agentRouter.post("/agents/:slug/query", async (req: Request, res: Response) => {
+agentRouter.post("/agents/:slug/query", requireApiKey, async (req: Request, res: Response) => {
   const { slug } = req.params;
   const { query, crawler } = req.body as {
     query?: string;

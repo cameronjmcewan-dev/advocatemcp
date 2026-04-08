@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import { getDb } from "../db.js";
 import crypto from "crypto";
+import { requireApiKey } from "../middleware/auth.js";
 
 export const registerRouter = Router();
 
@@ -21,7 +22,7 @@ function slugify(name: string): string {
  * Onboard a new business. Auto-generates a slug and API key.
  * Returns the slug, API key, and all endpoint URLs.
  */
-registerRouter.post("/register", (req: Request, res: Response) => {
+registerRouter.post("/register", requireApiKey, (req: Request, res: Response) => {
   const {
     name,
     description,
