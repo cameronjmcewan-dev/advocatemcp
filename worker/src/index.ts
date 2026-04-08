@@ -64,6 +64,15 @@ function logEvent(event: AnalyticsEvent): void {
   console.log(JSON.stringify({ advocatemcp: true, ...event }));
 }
 
+// ── IP hashing (SHA-256, Web Crypto — no node dep) ─────────────────────────
+
+async function hashIp(ip: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(ip));
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 // ── UTM tagging ────────────────────────────────────────────────────────────
 
 function utmTag(referralUrl: string | null, botType: string | null): string | null {
@@ -159,20 +168,32 @@ export default {
     const portalResponse = await handlePortal(request, env);
     if (portalResponse) return portalResponse;
 
-    // ── 1b. Referral-click redirect — GET /r/:slug ────────────────────────
-    // Fires click tracking then 302s to the tagged referral URL.
-    const referralMatch = url.pathname.match(/^\/r\/([^/]+)$/);
-    if (referralMatch && request.method === "GET") {
-      const rSlug = referralMatch[1];
-      const dest  = url.searchParams.get("to");
-      if (dest) {
-        // Fire-and-forget click tracking
-        ctx.waitUntil(
-          fetch(`${apiBase(env)}/analytics/${rSlug}/referral-click`, { method: "POST" })
-            .catch(() => { /* best-effort */ })
+    // ── 1b. Referral-click redirect — GET /track ─────────────────────────
+    // Bot-filtered: only logs clicks from non-crawler User-Agents.
+    // URL format: /track?to=<dest>&ref=<botName>&client=<slug>
+    if (url.pathname === "/track" && request.method === "GET") {
+      const dest   = url.searchParams.get("to");
+      const ref    = url.searchParams.get("ref") ?? "unknown";
+      const client = url.searchParams.get("client");
+      const target = dest ?? apiBase(env);
+      if (dest && client && !isAiCrawler(userAgent)) {
+        // Human click — log event with IP hash for deduplication
+        const ip = (
+          request.headers.get("cf-connecting-ip") ??
+          request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+          ""
         );
-        return Response.redirect(dest, 302);
+        ctx.waitUntil(
+          hashIp(ip).then((ip_hash) =>
+            fetch(`${apiBase(env)}/analytics/${client}/referral-click`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ref, user_agent: userAgent, ip_hash }),
+            }).catch(() => { /* best-effort */ })
+          )
+        );
       }
+      return Response.redirect(target, 302);
     }
 
     // ── 2. AI discovery file ──────────────────────────────────────────────
@@ -277,7 +298,7 @@ export default {
     const referralUrl   = typeof data?.referral_url === "string" ? data.referral_url : null;
     const taggedRefUrl  = utmTag(referralUrl, botType);
     const trackingUrl   = taggedRefUrl
-      ? `${url.origin}/r/${slug}?to=${encodeURIComponent(taggedRefUrl)}`
+      ? `${url.origin}/track?to=${encodeURIComponent(taggedRefUrl)}&ref=${encodeURIComponent(botType ?? "unknown")}&client=${encodeURIComponent(slug)}`
       : null;
 
     ctx.waitUntil(

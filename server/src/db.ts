@@ -82,6 +82,18 @@ function _initSchema(db: Database.Database): void {
 
   // ── Section 2 migration: intent column on queries ──
   _addColumnIfNotExists(db, "queries", "intent", "TEXT");
+
+  // ── Section 3: click events log ──
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS click_events (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      business_slug TEXT NOT NULL,
+      ref           TEXT,        -- bot name that sourced the response (e.g. "PerplexityBot")
+      user_agent    TEXT,        -- UA of the human who clicked
+      ip_hash       TEXT,        -- SHA-256(IP) for deduplication
+      timestamp     DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
 }
 
 /** Type that mirrors the businesses table row. */

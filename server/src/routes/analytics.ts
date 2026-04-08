@@ -77,12 +77,10 @@ analyticsRouter.get(
       )
       .all(slug) as Omit<QueryRow, "business_slug">[];
 
-    // ── Referral click count ──
+    // ── Referral click count (from deduplicated click_events log) ──
     const { clicks: referralClicks } = db
       .prepare(
-        `SELECT COALESCE(SUM(referral_clicked), 0) AS clicks
-         FROM queries
-         WHERE business_slug = ?`
+        `SELECT COUNT(*) AS clicks FROM click_events WHERE business_slug = ?`
       )
       .get(slug) as { clicks: number };
 
@@ -150,7 +148,7 @@ analyticsRouter.get("/analytics", requireApiKey, (_req: Request, res: Response) 
     .get() as { total_queries: number };
 
   const { total_referral_clicks } = db
-    .prepare("SELECT COALESCE(SUM(referral_clicked),0) AS total_referral_clicks FROM queries")
+    .prepare("SELECT COUNT(*) AS total_referral_clicks FROM click_events")
     .get() as { total_referral_clicks: number };
 
   const crawlerRows = db
@@ -169,34 +167,27 @@ analyticsRouter.get("/analytics", requireApiKey, (_req: Request, res: Response) 
 /**
  * POST /analytics/:slug/referral-click
  *
- * Called by the Cloudflare Worker (or any client) when a user actually
- * follows the referral link. Increments `referral_clicked` on the latest
- * query for this session (best-effort; takes the most recent query).
+ * Called by the Cloudflare Worker /track endpoint after confirming the
+ * request came from a non-bot User-Agent. Logs a rich click event row.
+ *
+ * Body (all optional): { ref?: string, user_agent?: string, ip_hash?: string }
  */
 analyticsRouter.post(
   "/analytics/:slug/referral-click",
   (req: Request, res: Response) => {
     const { slug } = req.params;
+    const { ref, user_agent, ip_hash } = (req.body ?? {}) as {
+      ref?: string;
+      user_agent?: string;
+      ip_hash?: string;
+    };
     const db = getDb();
 
-    const latest = db
-      .prepare(
-        `SELECT id FROM queries
-         WHERE business_slug = ?
-         ORDER BY timestamp DESC
-         LIMIT 1`
-      )
-      .get(slug) as { id: number } | undefined;
-
-    if (!latest) {
-      res.status(404).json({ error: "No queries found for this slug" });
-      return;
-    }
-
     db.prepare(
-      "UPDATE queries SET referral_clicked = 1 WHERE id = ?"
-    ).run(latest.id);
+      `INSERT INTO click_events (business_slug, ref, user_agent, ip_hash)
+       VALUES (?, ?, ?, ?)`
+    ).run(slug, ref ?? null, user_agent ?? null, ip_hash ?? null);
 
-    res.json({ ok: true, query_id: latest.id });
+    res.json({ ok: true });
   }
 );
