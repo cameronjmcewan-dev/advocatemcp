@@ -246,7 +246,7 @@ This bit us during the `workman-copy-co` dry-run cleanup on 2026-04-10: a `d1 ex
 
 ## What is in progress
 
-Phase 3 spine shipped with partial E2E verification. Next priority: architecture audit and dashboard-first consolidation to unblock real customer onboarding, followed by happy-path E2E verification on a real cross-host-redirecting domain.
+Phase 3 spine shipped with partial E2E verification. Entering rearchitecture planning phase — target state is advocatemcp.com as the single customer-facing hostname, customers.advocatemcp.com as pure backend. Design language stays as the current advocatemcp.com brand identity; structural and layout inspiration taken from conduit.ai. See docs/rearchitecture-plan-2026-04-10.md for the full plan.
 
 ## What is next on the roadmap (priority order)
 
