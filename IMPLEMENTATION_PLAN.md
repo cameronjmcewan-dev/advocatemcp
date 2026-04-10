@@ -74,15 +74,50 @@ Sessions must be completed in order. Session 1 is non-negotiable as first becaus
 
 ---
 
+## Session 1.5 — customers.advocatemcp.com Proxy Cleanup
+
+**Scope:** Fix the two documented proxy bugs in the `customers.advocatemcp.com/agents/:slug/query` path before any Stripe self-serve customer onboards and hits them. Half-day session. See `docs/attribution.md` for full bug descriptions.
+
+**Bug 1 — Doubled-slug URL** (`/agents/agents/:slug/query`): locate the path construction in the Worker that handles the `customers.advocatemcp.com` integration surface and fix the slug interpolation so the downstream Railway URL is `/agents/:slug/query`.
+
+**Bug 2 — Missing `X-API-Key` forwarding**: the same proxy path does not forward `env.API_KEY` as `X-API-Key` to Railway. Add the header forwarding to match the bot-detection path at `worker/src/index.ts` line ~328.
+
+### Acceptance criteria
+
+- [ ] `curl -X POST https://customers.advocatemcp.com/agents/dmre/query -H "X-API-Key: $API_KEY" ...` returns a valid agent response (not 401, not 502)
+- [ ] The downstream Railway request URL is `/agents/dmre/query` (not `/agents/agents/dmre/query` or any variant)
+- [ ] A smoke test is added to `worker/scripts/smoke-test.sh` that covers both bugs — direct proxy path returns 200 with expected shape, catches future regressions
+- [ ] No change to the bot-detection path or KV routing
+
+---
+
 ## Session 2 — Per-Bot Response Tuning
 
 **Scope:** Branch the Claude system prompt by detected crawler. Each bot family gets a structurally different response optimized for how that crawler surfaces content to end users.
 
+### Prep (do before writing any code)
+
+Run three real customer queries (DMRE, Workman Copy Co, Bamboo Brace) against the live UIs of Perplexity, ChatGPT, Claude, and Gemini. Screenshot how each AI structures its answers — citations, bullet points, conversational tone, freshness emphasis, ordering. Save screenshots to `docs/session-2-research/`. Per-bot prompts get designed by reverse-engineering observed structure, not by intuition.
+
+### Design decisions (pre-made)
+
+- **Default fallback prompt**: a copy of today's single prompt — stable and known-good — not a deliberately generic version. Add one-line logging to the prompt dispatcher that records which crawler triggered the default path so we can identify new bots worth adding explicit prompts for over time.
+- **Intent signal**: `detectIntent` is unchanged — it feeds the same six-category signal into each per-bot prompt as an input, not something to branch on independently.
+
+### Implementation
+
 - One prompt file per bot family in `server/src/prompts/` (e.g. `perplexity.ts`, `gpt.ts`, `claude.ts`, `google.ts`, `default.ts`)
 - `buildSystemPrompt()` in `builder.ts` gains a `crawlerFamily` parameter and selects the appropriate prompt module
-- Intent classifier (`detectIntent`) is unchanged — it feeds the same intent signal into each per-bot prompt
 - Prompt files are the only new thing; routing, logging, and response shape are unchanged
 - Update `docs/response-generation.md` after shipping
+
+### Acceptance criteria
+
+- [ ] Each supported crawler family gets a structurally distinct system prompt verified against the session-2-research screenshots
+- [ ] Unknown/new crawlers fall through to `default.ts` (copy of pre-Session-2 prompt); the prompt dispatcher logs `prompt_default_fallback` with the raw crawler UA so new bots are visible in logs
+- [ ] `GET /analytics/:slug/by-crawler` endpoint returns citation conversion rate per crawler over the last 30 days, computed from existing `queries.crawler_agent` and `queries.referral_clicked` columns — this is the eval harness that confirms whether per-bot tuning is working post-deploy
+- [ ] Snapshot regression test: captures the response for one canonical query against one canonical business on the `default.ts` path and asserts the post-Session-2 default produces the same response — prevents silent quality regressions for unmatched crawlers
+- [ ] All existing tests pass; typecheck clean
 
 ---
 
