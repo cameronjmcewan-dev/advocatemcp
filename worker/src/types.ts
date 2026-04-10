@@ -12,6 +12,9 @@ export interface Env {
   /** Railway backend base URL */
   API_BASE_URL?: string;
 
+  /** HMAC-SHA256 signing key for attribution tokens — must match Railway TOKEN_SIGNING_KEY */
+  TOKEN_SIGNING_KEY?: string;
+
   // ── Auth portal bindings ─────────────────────────────────────────────────
   /** D1 database for users, sessions, business access */
   DB: D1Database;

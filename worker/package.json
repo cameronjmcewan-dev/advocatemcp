@@ -7,11 +7,13 @@
     "deploy": "wrangler deploy",
     "kv:add": "wrangler kv:key put --binding=BUSINESS_MAP",
     "typecheck": "tsc --noEmit",
-    "check:design": "node scripts/check-design.mjs"
+    "check:design": "node scripts/check-design.mjs",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241022.0",
     "typescript": "^5.6.0",
+    "vitest": "^4.1.4",
     "wrangler": "^3.80.0"
   }
 }

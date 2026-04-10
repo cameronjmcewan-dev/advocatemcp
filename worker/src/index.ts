@@ -16,6 +16,7 @@
 import type { Env } from "./types";
 import { handlePortal } from "./routes/portal";
 import { handleDemo } from "./routes/demo";
+import { verifyToken, base64urlToBytes } from "./lib/tracked-url";
 
 export type { Env };
 
@@ -91,6 +92,23 @@ function utmTag(referralUrl: string | null, botType: string | null): string | nu
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Best-effort: decode the payload half of a signed token to extract dest.
+ * Used only on verification failure so the user still gets a 302.
+ * Falls back to apiBase if the token is too malformed to decode.
+ */
+function safeFallbackDest(token: string, env: Env): string {
+  try {
+    const encodedPayload = token.slice(0, token.lastIndexOf("."));
+    const json = new TextDecoder().decode(base64urlToBytes(encodedPayload));
+    const parsed = JSON.parse(json) as { dest?: unknown };
+    if (typeof parsed.dest === "string" && parsed.dest.startsWith("https://")) {
+      return parsed.dest;
+    }
+  } catch { /* fall through */ }
+  return apiBase(env);
+}
 
 function apiBase(env: Env): string {
   return env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
@@ -174,29 +192,66 @@ export default {
     if (demoResponse) return demoResponse;
 
     // ── 1c. Referral-click redirect — GET /track ─────────────────────────
-    // Bot-filtered: only logs clicks from non-crawler User-Agents.
-    // URL format: /track?to=<dest>&ref=<botName>&client=<slug>
+    // Dual-path: signed token (?t=) preferred, legacy cleartext (?to=) fallback.
+    // Bot-filtered: click logging only fires for non-crawler User-Agents.
     if (url.pathname === "/track" && request.method === "GET") {
+      const ip = (
+        request.headers.get("cf-connecting-ip") ??
+        request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+        ""
+      );
+
+      const tokenParam = url.searchParams.get("t");
+      if (tokenParam && env.TOKEN_SIGNING_KEY) {
+        // ── Signed-token path ───────────────────────────────────────────────
+        try {
+          const payload = await verifyToken(tokenParam, env.TOKEN_SIGNING_KEY);
+          if (!isAiCrawler(userAgent)) {
+            ctx.waitUntil(
+              hashIp(ip).then((ip_hash) =>
+                fetch(`${apiBase(env)}/analytics/${payload.slug}/referral-click`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    ref: payload.ref,
+                    user_agent: userAgent,
+                    ip_hash,
+                    destination: payload.dest,
+                    query_id: payload.query_id,
+                    legacy: 0,
+                  }),
+                }).catch(() => { /* best-effort */ })
+              )
+            );
+            console.log(JSON.stringify({ metric: "track_signed_click", slug: payload.slug, query_id: payload.query_id, ts: payload.ts }));
+          }
+          return Response.redirect(payload.dest, 302);
+        } catch (err) {
+          // err is TokenError ("malformed" | "bad_signature" | "expired")
+          // User still gets a redirect; no click is logged for bad tokens.
+          console.log(JSON.stringify({ metric: "track_verification_failure", reason: String(err) }));
+          return Response.redirect(safeFallbackDest(tokenParam, env), 302);
+        }
+      }
+
+      // ── Legacy path (?to=&ref=&client=) ────────────────────────────────────
+      // Pre-Session-1 Worker tokens use cleartext params. Kept until signed-token
+      // traffic reaches ~100% and legacy=1 rows decay to zero.
       const dest   = url.searchParams.get("to");
       const ref    = url.searchParams.get("ref") ?? "unknown";
       const client = url.searchParams.get("client");
       const target = dest ?? apiBase(env);
       if (dest && client && !isAiCrawler(userAgent)) {
-        // Human click — log event with IP hash for deduplication
-        const ip = (
-          request.headers.get("cf-connecting-ip") ??
-          request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-          ""
-        );
         ctx.waitUntil(
           hashIp(ip).then((ip_hash) =>
             fetch(`${apiBase(env)}/analytics/${client}/referral-click`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ ref, user_agent: userAgent, ip_hash }),
+              body: JSON.stringify({ ref, user_agent: userAgent, ip_hash, legacy: 1 }),
             }).catch(() => { /* best-effort */ })
           )
         );
+        console.log(JSON.stringify({ metric: "track_legacy_click", slug: client }));
       }
       return Response.redirect(target, 302);
     }
@@ -350,11 +405,16 @@ export default {
 
     // ── 6. Return enriched agent response ─────────────────────────────────
     const data          = (await agentResponse.json()) as Record<string, unknown>;
-    const referralUrl   = typeof data?.referral_url === "string" ? data.referral_url : null;
-    const taggedRefUrl  = utmTag(referralUrl, botType);
-    const trackingUrl   = taggedRefUrl
-      ? `${url.origin}/track?to=${encodeURIComponent(taggedRefUrl)}&ref=${encodeURIComponent(botType ?? "unknown")}&client=${encodeURIComponent(slug)}`
-      : null;
+    const referralUrl      = typeof data?.referral_url === "string" ? data.referral_url : null;
+    const taggedRefUrl     = utmTag(referralUrl, botType);
+    const attributionToken = typeof data?.attribution_token === "string" ? data.attribution_token : null;
+    // Prefer signed token from agent response; fall back to legacy cleartext URL
+    // if attribution_token is absent (should not happen in normal operation).
+    const trackingUrl = attributionToken
+      ? `${url.origin}/track?t=${encodeURIComponent(attributionToken)}`
+      : taggedRefUrl
+        ? `${url.origin}/track?to=${encodeURIComponent(taggedRefUrl)}&ref=${encodeURIComponent(botType ?? "unknown")}&client=${encodeURIComponent(slug)}`
+        : null;
 
     ctx.waitUntil(
       Promise.resolve(
