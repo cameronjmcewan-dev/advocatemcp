@@ -24,8 +24,16 @@
  * Set-Cookie entries intact.
  */
 
-/** Hostnames owned by this Worker. Any origin_url pointing here is a loop. */
-const WORKER_HOSTNAMES = new Set([
+/**
+ * Hostnames owned by this Worker. Any origin_url pointing here is a loop.
+ *
+ * Exported so `worker/src/lib/origin-discovery.ts` can reuse the same set for
+ * the Phase 2 auto-discovery loop check — we never want two independent lists
+ * of Worker hostnames drifting out of sync. Add new Worker hostnames (preview
+ * deployments, additional SaaS zones) here and both the runtime proxy check
+ * and activation-time discovery pick them up together.
+ */
+export const WORKER_HOSTNAMES: ReadonlySet<string> = new Set([
   "customers.advocatemcp.com",
   "advocatecameron.workers.dev",
 ]);

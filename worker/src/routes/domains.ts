@@ -11,6 +11,7 @@ import {
   extractCfData,
   type TenantRecord,
 } from "./onboard";
+import { discoverOriginUrl } from "../lib/origin-discovery.js";
 
 const CNAME_TARGET = "customers.advocatemcp.com";
 
@@ -204,12 +205,32 @@ export async function handleActivateDomain(
     }));
   }
 
-  // ── origin_url validation ──────────────────────────────────────────────────
-  // Optional. If provided, must be a well-formed HTTPS URL that is reachable
-  // (2xx, 3xx, or 401 accepted — anything except a connection failure or 5xx).
-  // Accepting 401 because many origins require auth but are still "up".
+  // ── origin_url: explicit validation (Phase 1) OR auto-discovery (Phase 2) ──
+  // Two paths:
+  //
+  //   1. `origin_url` is present in the body — Phase 1 behavior, unchanged:
+  //      parse as URL, require HTTPS, HEAD reachability check (2xx/3xx/4xx
+  //      accepted, 5xx + connection failure rejected).
+  //
+  //   2. `origin_url` is absent — Phase 2 auto-discovery: fetch the domain
+  //      with redirect following, use the final URL's origin. Rejects if
+  //      the domain is its own origin (self_loop), if the final URL is a
+  //      Worker hostname (worker_loop), if the redirect downgrades to HTTP,
+  //      or if the origin is unreachable / 5xx / timing out.
+  //
+  // Known limitation on the auto-discovery path: if the domain is already
+  // CNAMEd to customers.advocatemcp.com from a prior (possibly failed)
+  // activation attempt, the discovery fetch will hit this Worker itself and
+  // either return worker_loop (if the response URL resolves to our host) or
+  // return an odd error from the non-bot info response. The CF "already
+  // exists" short-circuit at the CF API call below catches the happy case
+  // of a true double-activate on a working tenant, but an in-between
+  // half-configured state may produce a confusing discovery error. We're
+  // leaving ordering as-is intentionally — fixing this requires a Phase 1
+  // flow change that's out of scope for Phase 2.
   const rawOriginUrl = typeof body.origin_url === "string" ? body.origin_url.trim() : null;
   let validatedOriginUrl: string | null = null;
+  let originUrlSource: "explicit" | "discovered" | "none" = "none";
 
   if (rawOriginUrl) {
     let parsedOrigin: URL;
@@ -235,12 +256,36 @@ export async function handleActivateDomain(
         );
       }
       validatedOriginUrl = rawOriginUrl;
+      originUrlSource = "explicit";
     } catch {
       return jsonErr(
         400,
         "origin_url is unreachable — verify the URL is publicly accessible over HTTPS and retry.",
       );
     }
+  } else {
+    // Phase 2 auto-discovery
+    const discovery = await discoverOriginUrl(domain);
+    if (!discovery.ok) {
+      console.warn(JSON.stringify({
+        domains: true,
+        event: "origin_discovery_reject",
+        domain,
+        slug,
+        reason: discovery.reason,
+      }));
+      return jsonErr(discovery.status, discovery.error, discovery.detail);
+    }
+    console.log(JSON.stringify({
+      domains: true,
+      event: "origin_discovery_success",
+      domain,
+      slug,
+      finalHostname: discovery.finalHostname,
+      originUrl: discovery.originUrl,
+    }));
+    validatedOriginUrl = discovery.originUrl;
+    originUrlSource = "discovered";
   }
 
   // ── Call Cloudflare for SaaS API ───────────────────────────────────────────
@@ -267,6 +312,8 @@ export async function handleActivateDomain(
           slug,
           domain,
           cf_hostname_id: null,
+          origin_url: validatedOriginUrl,
+          origin_url_source: originUrlSource,
           warning: "CF_API_TOKEN/CF_ZONE_ID not configured — KV entry created but Cloudflare for SaaS not activated. Set secrets then re-call this endpoint.",
           cname_record: { type: "CNAME", host: domain, target: CNAME_TARGET },
           txt_record: null,
@@ -282,11 +329,11 @@ export async function handleActivateDomain(
     const existing = results?.[0];
     if (!existing) return jsonErr(502, "Hostname already exists in CF but could not be retrieved", data);
     // continue with existing record data — idempotent success
-    return buildActivateResponse(env, domain, slug, existing, validatedOriginUrl, /* alreadyExisted */ true);
+    return buildActivateResponse(env, domain, slug, existing, validatedOriginUrl, originUrlSource, /* alreadyExisted */ true);
   }
 
   const result = data.result as Record<string, unknown>;
-  return buildActivateResponse(env, domain, slug, result, validatedOriginUrl);
+  return buildActivateResponse(env, domain, slug, result, validatedOriginUrl, originUrlSource);
 }
 
 async function buildActivateResponse(
@@ -295,6 +342,7 @@ async function buildActivateResponse(
   slug: string,
   cfResult: Record<string, unknown>,
   validatedOriginUrl: string | null,
+  originUrlSource: "explicit" | "discovered" | "none",
   alreadyExisted = false
 ): Promise<Response> {
   const cfHostnameId = cfResult.id as string | null;
@@ -335,6 +383,8 @@ async function buildActivateResponse(
     slug,
     domain,
     cf_hostname_id: cfHostnameId,
+    origin_url: validatedOriginUrl,
+    origin_url_source: originUrlSource,
     cname_record: {
       type: "CNAME",
       host: domain,
