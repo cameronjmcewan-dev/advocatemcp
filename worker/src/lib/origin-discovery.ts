@@ -182,6 +182,36 @@ export async function discoverOriginUrl(
     };
   }
 
+  // Three-way split on (cross-host redirect × 5xx status), in this order:
+  //
+  //   same-host  +  5xx   → fetch_failed (synthetic Workers response — DNS or
+  //                         network failure; Workers does NOT throw TypeError
+  //                         on unresolvable domains, it returns a 5xx-ish
+  //                         response with the input URL preserved)
+  //   same-host  +  <5xx  → self_loop    (real site responding at its own
+  //                         hostname with no cross-host redirect)
+  //   cross-host +  5xx   → origin_5xx   (real origin reached but sick)
+  //   cross-host +  <5xx  → success (handled below)
+  //
+  // The same-host 5xx check MUST come before the self_loop check, otherwise
+  // unresolvable domains get misreported as self_loop. See the regression
+  // tests in origin-discovery.test.ts for the exact reproduction.
+  if (finalHostname === normalizedDomain && response.status >= 500) {
+    return {
+      ok: false,
+      status: 400,
+      reason: "fetch_failed",
+      error: `Auto-discovery could not reach ${normalizedDomain} — verify the domain is live, publicly resolvable, and responding to HTTPS requests, or provide origin_url explicitly.`,
+      detail: {
+        reason: "fetch_failed",
+        domain: normalizedDomain,
+        finalHostname,
+        httpStatus: response.status,
+        note: "same-host 5xx indicates a synthetic Cloudflare Workers error response (DNS or network failure), not an origin incident",
+      },
+    };
+  }
+
   if (finalHostname === normalizedDomain) {
     return {
       ok: false,
