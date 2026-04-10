@@ -91,6 +91,31 @@ Sessions must be completed in order. Session 1 is non-negotiable as first becaus
 
 ---
 
+## Phase 1 — Origin Passthrough
+
+**Status: SHIPPED 2026-04-10** — worker commit: `18c3848`, deploy version: `9728448b-cf1a-4c1f-a099-fbcfc4243f09`
+
+**Summary:** Added a `proxyToOrigin` helper (`worker/src/lib/proxy.ts`) that transparently streams human traffic to a customer's real website, with loop detection returning 508 if the origin hostname matches any known Worker hostname or the incoming request's own hostname, WebSocket upgrade rejection (501), 30-second AbortController timeout returning 502 on failure, `redirect: "manual"` to pass 3xx through to the browser, and `Cache-Control: no-store` override on all proxied responses. The non-crawler branch in `index.ts` was rewritten to look up the tenant's `origin_url` from `TENANT_DATA` via `getTenant` and proxy if present, falling through to the existing info response if not configured. `handleActivateDomain` in `domains.ts` now validates that the slug exists in Railway before writing any KV or CF records, and validates `origin_url` as HTTPS with a HEAD reachability check (5s timeout, accepts 2xx/3xx/401, rejects 5xx or connection failure). The `origin_url` field was added to `TenantRecord` and threaded through `handleOnboard` so Phase 2 auto-discovery can update it without another code change. The stale commented `workmancopyco.com` route block was removed from `wrangler.toml`.
+
+### Production verification (2026-04-10)
+
+| Check | Result |
+|---|---|
+| Test tenant seeded (TENANT_DATA KV write) | PASS |
+| Human UA → Squarespace HTML with `cache-control: no-store` | PASS — HTTP/2 200, `<!DOCTYPE html>`, `set-cookie: SS_MID` confirmed origin reached |
+| PerplexityBot UA → bot detection branch (not proxy branch) | PASS — HTTP 404 JSON from no-slug path, no Squarespace HTML |
+| Cleanup delete succeeded | PASS — `customers.advocatemcp.com` removed from TENANT_DATA |
+
+---
+
+## Phase 2 — Origin Auto-Discovery
+
+**Status: NEXT UP**
+
+**Scope:** Build on Phase 1 by making the activation flow discover the customer's origin URL automatically instead of requiring the admin to pass `origin_url` explicitly. When a domain is activated via `POST /admin/domains/activate` without an `origin_url`, the Worker should attempt to resolve the domain's pre-CNAME destination (e.g. by reading the registrar's DNS or a provided fallback hint) and populate `origin_url` in `TENANT_DATA` automatically. Removes the manual step from the onboarding checklist and makes the passthrough work out of the box for self-serve customers.
+
+---
+
 ## Session 2 — Per-Bot Response Tuning
 
 **Scope:** Branch the Claude system prompt by detected crawler. Each bot family gets a structurally different response optimized for how that crawler surfaces content to end users.

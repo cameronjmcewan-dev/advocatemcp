@@ -234,7 +234,7 @@ All Worker HTML pages must use `sharedLayout.ts` for tokens, header, footer, and
 
 ## What is in progress
 
-Nothing — Session 1 shipped. Session 2 (per-bot response tuning) is next.
+Phase 1 origin passthrough shipped (commit `18c3848`, deploy `9728448b-cf1a-4c1f-a099-fbcfc4243f09`). Phase 2 auto-discovery is next.
 
 ## What is next on the roadmap (priority order)
 
