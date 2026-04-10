@@ -39,6 +39,16 @@ payload = { dest: string, ref: string, slug: string, qid: number, iat: number }
 
 HMAC is computed over the raw base64url payload string using HMAC-SHA256 with `TOKEN_SIGNING_KEY`. The Worker verifies the HMAC before trusting any payload field. Token lifetime is 90 days (`iat` checked at verification time).
 
+## Known issues — deferred from Session 1
+
+These two bugs were discovered during Session 1 final verification when testing `customers.advocatemcp.com/agents/:slug/query` directly. They are **not** regressions introduced by Session 1. They do not affect the primary bot-detection flow (customer domain → KV lookup → Railway agent), which was not directly testable without DNS. Both bugs live in the Worker proxy path used when `customers.advocatemcp.com` is the integration surface.
+
+**Bug 1 — Malformed proxy URL (`/agents/agents/query` instead of `/agents/:slug/query`).**
+When a request hits `customers.advocatemcp.com/agents/dmre/query`, the Worker's path rewriting produces a doubled-path URL (`/agents/agents/dmre/query` or similar) on the downstream Railway request. The slug is lost in path construction. Reproducible by curling the Worker URL directly. Does not affect the bot-detection path where the slug is resolved from KV and the Railway URL is constructed explicitly.
+
+**Bug 2 — Missing `X-API-Key` forwarding on the proxy path.**
+The same `customers.advocatemcp.com/agents/:slug/query` proxy path does not forward `env.API_KEY` as `X-API-Key` to Railway, resulting in 401 responses. The bot-detection path at `worker/src/index.ts` line 328 adds the header correctly. A different code path serving the proxy is missing the same logic. Both bugs should be fixed together in a dedicated worker proxy cleanup session before any customer onboards via `customers.advocatemcp.com` as their primary integration surface.
+
 ## Updating this doc
 
 Update this file at the end of any session that touches `/track`, `click_events`, `tracked-url.ts`, or the `referral-click` endpoint.
