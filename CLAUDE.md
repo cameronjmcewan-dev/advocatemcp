@@ -31,7 +31,7 @@ advocatemcp/
 │   │   ├── routes/            # Express routes (agent, analytics, mcp, register, wellknown)
 │   │   ├── agent/             # Claude prompt builder and query runner
 │   │   ├── middleware/        # Auth, rate limiting
-│   │   ├── lib/               # Shared helpers (crypto, tracked-url — to be added in Session 1)
+│   │   ├── lib/               # Shared helpers (crypto, tracked-url)
 │   │   └── prompts/           # Per-bot system prompts (to be added in Session 2)
 │   ├── dev.db                 # SQLite — DO NOT commit
 │   └── package.json
@@ -41,7 +41,7 @@ advocatemcp/
 │   │   ├── routes/            # portal, demo, onboard, stripe, domains, sharedLayout
 │   │   ├── auth.ts            # PBKDF2 auth helpers
 │   │   ├── portalDb.ts        # D1 query helpers
-│   │   └── lib/               # Worker helpers (tracked-url — to be added in Session 1)
+│   │   └── lib/               # Worker helpers (tracked-url)
 │   ├── migrations/            # D1 migrations (0001_init, 0002_cf_hostname, 0003_stripe)
 │   ├── scripts/               # smoke-test.sh, create-client.sh, check-design.mjs
 │   └── wrangler.toml          # ONLY wrangler config — root wrangler.toml.orphan-do-not-use is deleted
@@ -221,7 +221,7 @@ All Worker HTML pages must use `sharedLayout.ts` for tokens, header, footer, and
 - **Agent endpoint**: `POST /agents/:slug/query` on Railway powered by `claude-sonnet-4-6`, max 512 tokens, profile-aware system prompt
 - **Intent classification**: six categories — `brand_direct`, `emergency`, `affordable`, `best_top`, `specific_service`, `general` — running on every query, stored in `queries.intent` column. **Do not duplicate.**
 - **Response generation**: intent-tuned system prompt via `server/src/agent/builder.ts` with emphasis blocks per intent
-- **Attribution (partial)**: Worker wraps referral URLs in `/track?to=...&ref=...&client=...`, UTM-tags the destination, logs human clicks server-side to Railway `click_events` table. **Do not rebuild — Session 1 hardens the four gaps.**
+- **Attribution — signed tokens** *(Session 1 — server: `80358b9`, worker: `ce36cdf`, docs: `edbaad6`)*: Railway generates a HMAC-SHA256 signed token per response (`server/src/lib/tracked-url.ts`, `buildToken`); Worker verifies it before logging (`worker/src/lib/tracked-url.ts`, `verifyToken`); `/track` handler dual-paths on `?t=` (signed) vs `?to=` (legacy); `click_events` stores `destination`, `query_id`, `legacy`; `queries.referral_clicked` updated on click; cross-tenant guard rejects mismatched slug/query_id; three structured log metrics (`track_signed_click`, `track_legacy_click`, `track_verification_failure`). Legacy cleartext path remains live until `legacy=1` traffic decays to zero.
 - **Analytics**: `GET /analytics/:slug` with bearer auth — surfaces query counts, clicks, intent breakdown, crawler breakdown, daily trend, recent queries
 - **Click detail**: `GET /analytics/:slug/clicks` — 50 most recent click events
 - **MCP server**: `POST /mcp` and `GET /mcp` exposing `search_businesses` and `query_business_agent` tools via `@modelcontextprotocol/sdk`
@@ -234,7 +234,7 @@ All Worker HTML pages must use `sharedLayout.ts` for tokens, header, footer, and
 
 ## What is in progress
 
-Session 1 — attribution hardening (see IMPLEMENTATION_PLAN.md)
+Nothing — Session 1 shipped. Session 2 (per-bot response tuning) is next.
 
 ## What is next on the roadmap (priority order)
 

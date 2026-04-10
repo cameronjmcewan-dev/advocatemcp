@@ -6,6 +6,8 @@ Sessions must be completed in order. Session 1 is non-negotiable as first becaus
 
 ## Session 1 — Attribution Hardening
 
+**Status: SHIPPED 2026-04-10** — server: `80358b9`, worker: `ce36cdf`, docs: `edbaad6`
+
 **Scope:** Harden the existing `/track` + `click_events` attribution system by closing four specific gaps. Do NOT rebuild what already works. The Worker `/track` wrapper, UTM tagging, `click_events` table, and `POST /analytics/:slug/referral-click` endpoint all exist and function — the skeleton is complete.
 
 **Background:** Intent classification (six categories: brand_direct, emergency, affordable, best_top, specific_service, general) already runs on every query and is stored in `queries.intent`. Server-side click logging already fires via the Worker `/track` endpoint. Neither should be duplicated or replaced.
@@ -62,13 +64,13 @@ Sessions must be completed in order. Session 1 is non-negotiable as first becaus
 
 ### Acceptance criteria
 
-- [ ] A bot query response contains a `/track?t=<signed-token>` URL (not cleartext params)
-- [ ] Clicking that link logs a row in `click_events` with `destination` and `query_id` populated
-- [ ] `queries.referral_clicked` is updated to 1 for the originating query row
-- [ ] A token with a tampered HMAC is rejected with a 400 (no click logged, redirect still happens)
-- [ ] A token older than 90 days is rejected
-- [ ] A legacy cleartext `/track?to=...` URL still works and logs `legacy = 1`
-- [ ] `GET /analytics/:slug` still returns correct `referral_clicks` count
+- [x] A bot query response contains a `/track?t=<signed-token>` URL (not cleartext params)
+- [x] Clicking that link logs a row in `click_events` with `destination` and `query_id` populated
+- [x] `queries.referral_clicked` is updated to 1 for the originating query row
+- [x] A token with a tampered HMAC is rejected (no click logged, redirect still happens)
+- [x] A token older than 90 days is rejected
+- [x] A legacy cleartext `/track?to=...` URL still works and logs `legacy = 1`
+- [x] `GET /analytics/:slug` still returns correct `referral_clicks` count
 
 ---
 
