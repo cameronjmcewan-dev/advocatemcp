@@ -21,7 +21,7 @@ export const BASE_TOKENS_CSS = `<style>
   --green:#238636;--green2:#2ea043;--green3:#3fb950;
   --blue:#388bfd;--blue-bg:rgba(56,139,253,.12);--blue-border:rgba(56,139,253,.25);
   --red:#f85149;--yellow:#d29922;--orange:#ffa657;
-  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  --font:'Poppins',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
   --mono:'SF Mono','Fira Code',Consolas,monospace;
 }
 html.light{
@@ -94,6 +94,12 @@ function escAttr(s: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+export function googleFontsLink(): string {
+  return `<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">`;
 }
 
 export function renderHeader(opts: HeaderOptions = {}): string {
