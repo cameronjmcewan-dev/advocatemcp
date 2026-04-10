@@ -196,6 +196,18 @@ CREATE TABLE login_attempts (
 
 All Worker HTML pages must use `sharedLayout.ts` for tokens, header, footer, and theme toggle. No hardcoded hex colors in page-specific styles — use CSS variables. See `worker/CLAUDE.md` for the full UI rules.
 
+## Wrangler CLI gotchas
+
+Wrangler's local-vs-remote defaults are **inconsistent across subcommands**. This has bitten us in production cleanup work — assume nothing, pass the flag.
+
+- `wrangler kv:key put|get|delete|list` defaults to **remote** (production KV namespaces). No flag needed to touch prod.
+- `wrangler d1 execute` defaults to **local** (`.wrangler/state/v3/d1`). You must pass `--remote` to hit the production D1 database. Running a SELECT without `--remote` will silently query an empty local DB and look like the row is missing.
+- `wrangler secret list|put|delete` is remote-only — there is no local mode.
+
+Rule of thumb: for any D1 command that needs to see or modify production data, always add `--remote` explicitly. For KV, the default is already remote, but passing no flag is still a footgun if you're mentally expecting symmetry with D1.
+
+This bit us during the `workman-copy-co` dry-run cleanup on 2026-04-10: a `d1 execute SELECT` without `--remote` returned `no such table: businesses` because it hit empty local state, masking whether the dry-run actually wrote `cf_hostname_id` to prod. It had.
+
 ## Do not
 
 - Do not modify bot detection logic in `worker/src/index.ts` (the `AI_CRAWLERS` array and the user-agent matching) without explicit instruction
