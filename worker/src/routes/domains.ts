@@ -150,29 +150,61 @@ async function upsertTenantData(
   await putTenant(env, tenant);
 }
 
-// ── POST /admin/domains/activate ──────────────────────────────────────────
+// ── Core activation logic — callable without HTTP ───────────────────────────
+//
+// Phase 3 surgical refactor: the entire activation flow (slug validation →
+// origin URL resolution → Cloudflare for SaaS API call → KV/D1/TENANT_DATA
+// persistence → success response assembly) lives in `activateDomain`, which
+// takes plain params and returns a typed `ActivateDomainResult`.
+//
+// `handleActivateDomain` (below) is now a thin HTTP wrapper that handles
+// admin-secret auth, JSON body parsing, and Response assembly. The Phase 3
+// customer-facing flow at `worker/src/routes/activate.ts` calls
+// `activateDomain` directly, reuses the same core logic, and wraps the
+// result with customer-facing error messages.
+//
+// Zero semantic change to the admin endpoint — the Response shape and
+// status codes are identical to before the refactor.
 
-export async function handleActivateDomain(
-  request: Request,
-  env: Env
-): Promise<Response> {
-  if (!requireAdminSecret(request, env)) {
-    return jsonErr(401, "Unauthorized — X-Admin-Secret header required");
-  }
+/**
+ * Reasons `activateDomain` can fail. Stable identifiers used by callers to
+ * map to endpoint-specific error responses (e.g. customer-facing messages
+ * in /api/activate).
+ */
+export type ActivateFailReason =
+  | "slug_not_registered"
+  | "origin_url_invalid"
+  | "origin_url_http"
+  | "origin_url_unreachable"
+  | "fetch_failed"
+  | "fetch_timeout"
+  | "self_loop"
+  | "worker_loop"
+  | "http_scheme"
+  | "origin_5xx"
+  | "cf_api_error";
 
-  let body: Record<string, unknown>;
-  try {
-    body = (await request.json()) as Record<string, unknown>;
-  } catch {
-    return jsonErr(400, "Invalid JSON body");
-  }
+export interface ActivateDomainResult {
+  ok: boolean;
+  status: number;
+  body: Record<string, unknown>;
+  /** Present only when `ok === false`. Stable identifier for error mapping. */
+  reason?: ActivateFailReason;
+}
 
-  const domain = typeof body.domain === "string" ? body.domain.toLowerCase().trim() : "";
-  const slug   = typeof body.slug   === "string" ? body.slug.toLowerCase().trim()   : "";
+export interface ActivateDomainParams {
+  domain: string;
+  slug: string;
+  /** Explicit origin URL. Omit to trigger Phase 2 auto-discovery. */
+  originUrl?: string | null;
+}
 
-  if (!domain || !slug) {
-    return jsonErr(400, "Both 'domain' and 'slug' are required");
-  }
+export async function activateDomain(
+  env: Env,
+  params: ActivateDomainParams,
+): Promise<ActivateDomainResult> {
+  const { domain, slug } = params;
+  const rawOriginUrl = params.originUrl ?? null;
 
   // ── Slug validation ────────────────────────────────────────────────────────
   // Verify the slug is registered in Railway before writing any KV or CF
@@ -190,10 +222,12 @@ export async function handleActivateDomain(
       },
     );
     if (profileCheck.status === 404) {
-      return jsonErr(
-        404,
-        `Slug "${slug}" is not registered in Railway. Run POST /register first, then retry activation.`,
-      );
+      return {
+        ok: false,
+        status: 404,
+        reason: "slug_not_registered",
+        body: { error: `Slug "${slug}" is not registered in Railway. Run POST /register first, then retry activation.` },
+      };
     }
   } catch {
     // Railway unreachable or timed out — log and continue rather than blocking.
@@ -208,27 +242,18 @@ export async function handleActivateDomain(
   // ── origin_url: explicit validation (Phase 1) OR auto-discovery (Phase 2) ──
   // Two paths:
   //
-  //   1. `origin_url` is present in the body — Phase 1 behavior, unchanged:
-  //      parse as URL, require HTTPS, HEAD reachability check (2xx/3xx/4xx
-  //      accepted, 5xx + connection failure rejected).
+  //   1. `originUrl` is present — Phase 1 behavior: parse as URL, require
+  //      HTTPS, HEAD reachability check (2xx/3xx/4xx accepted, 5xx + connection
+  //      failure rejected).
   //
-  //   2. `origin_url` is absent — Phase 2 auto-discovery: fetch the domain
-  //      with redirect following, use the final URL's origin. Rejects if
-  //      the domain is its own origin (self_loop), if the final URL is a
-  //      Worker hostname (worker_loop), if the redirect downgrades to HTTP,
-  //      or if the origin is unreachable / 5xx / timing out.
+  //   2. `originUrl` is absent — Phase 2 auto-discovery: fetch the domain with
+  //      redirect following, use the final URL's origin. Six possible reject
+  //      reasons mapped from discoverOriginUrl.
   //
   // Known limitation on the auto-discovery path: if the domain is already
-  // CNAMEd to customers.advocatemcp.com from a prior (possibly failed)
-  // activation attempt, the discovery fetch will hit this Worker itself and
-  // either return worker_loop (if the response URL resolves to our host) or
-  // return an odd error from the non-bot info response. The CF "already
-  // exists" short-circuit at the CF API call below catches the happy case
-  // of a true double-activate on a working tenant, but an in-between
-  // half-configured state may produce a confusing discovery error. We're
-  // leaving ordering as-is intentionally — fixing this requires a Phase 1
-  // flow change that's out of scope for Phase 2.
-  const rawOriginUrl = typeof body.origin_url === "string" ? body.origin_url.trim() : null;
+  // CNAMEd to customers.advocatemcp.com from a prior half-activated state,
+  // the discovery fetch may hit this Worker itself and produce a confusing
+  // error. See Phase 2 docs in docs/attribution.md for context.
   let validatedOriginUrl: string | null = null;
   let originUrlSource: "explicit" | "discovered" | "none" = "none";
 
@@ -237,10 +262,20 @@ export async function handleActivateDomain(
     try {
       parsedOrigin = new URL(rawOriginUrl);
     } catch {
-      return jsonErr(400, "origin_url is not a valid URL");
+      return {
+        ok: false,
+        status: 400,
+        reason: "origin_url_invalid",
+        body: { error: "origin_url is not a valid URL" },
+      };
     }
     if (parsedOrigin.protocol !== "https:") {
-      return jsonErr(400, "origin_url must use HTTPS");
+      return {
+        ok: false,
+        status: 400,
+        reason: "origin_url_http",
+        body: { error: "origin_url must use HTTPS" },
+      };
     }
 
     try {
@@ -250,18 +285,22 @@ export async function handleActivateDomain(
         signal: AbortSignal.timeout(5000),
       });
       if (reach.status >= 500) {
-        return jsonErr(
-          400,
-          `origin_url returned HTTP ${reach.status} — origin appears to be down. Verify it is publicly accessible and retry.`,
-        );
+        return {
+          ok: false,
+          status: 400,
+          reason: "origin_url_unreachable",
+          body: { error: `origin_url returned HTTP ${reach.status} — origin appears to be down. Verify it is publicly accessible and retry.` },
+        };
       }
       validatedOriginUrl = rawOriginUrl;
       originUrlSource = "explicit";
     } catch {
-      return jsonErr(
-        400,
-        "origin_url is unreachable — verify the URL is publicly accessible over HTTPS and retry.",
-      );
+      return {
+        ok: false,
+        status: 400,
+        reason: "origin_url_unreachable",
+        body: { error: "origin_url is unreachable — verify the URL is publicly accessible over HTTPS and retry." },
+      };
     }
   } else {
     // Phase 2 auto-discovery
@@ -274,7 +313,12 @@ export async function handleActivateDomain(
         slug,
         reason: discovery.reason,
       }));
-      return jsonErr(discovery.status, discovery.error, discovery.detail);
+      return {
+        ok: false,
+        status: discovery.status,
+        reason: discovery.reason,
+        body: { error: discovery.error, detail: discovery.detail },
+      };
     }
     console.log(JSON.stringify({
       domains: true,
@@ -307,44 +351,61 @@ export async function handleActivateDomain(
       if (cfMissing) {
         await env.BUSINESS_MAP.put(domain, slug);
         await upsertTenantData(env, domain, slug, null, validatedOriginUrl);
-        return jsonOk({
+        return {
           ok: true,
-          slug,
-          domain,
-          cf_hostname_id: null,
-          origin_url: validatedOriginUrl,
-          origin_url_source: originUrlSource,
-          warning: "CF_API_TOKEN/CF_ZONE_ID not configured — KV entry created but Cloudflare for SaaS not activated. Set secrets then re-call this endpoint.",
-          cname_record: { type: "CNAME", host: domain, target: CNAME_TARGET },
-          txt_record: null,
-          status: "kv_only",
-          instructions: generateDnsInstructions(domain, null),
-        });
+          status: 200,
+          body: {
+            ok: true,
+            slug,
+            domain,
+            cf_hostname_id: null,
+            origin_url: validatedOriginUrl,
+            origin_url_source: originUrlSource,
+            warning: "CF_API_TOKEN/CF_ZONE_ID not configured — KV entry created but Cloudflare for SaaS not activated. Set secrets then re-call this endpoint.",
+            cname_record: { type: "CNAME", host: domain, target: CNAME_TARGET },
+            txt_record: null,
+            status: "kv_only",
+            instructions: generateDnsInstructions(domain, null),
+          },
+        };
       }
-      return jsonErr(502, "Cloudflare API error", data);
+      return {
+        ok: false,
+        status: 502,
+        reason: "cf_api_error",
+        body: { error: "Cloudflare API error", detail: data },
+      };
     }
     // hostname already exists — look it up by hostname
     const listRes = await cfRequest(env, "GET", `?hostname=${encodeURIComponent(domain)}`);
     const results = listRes.data.result as Array<Record<string, unknown>> | undefined;
     const existing = results?.[0];
-    if (!existing) return jsonErr(502, "Hostname already exists in CF but could not be retrieved", data);
-    // continue with existing record data — idempotent success
-    return buildActivateResponse(env, domain, slug, existing, validatedOriginUrl, originUrlSource, /* alreadyExisted */ true);
+    if (!existing) {
+      return {
+        ok: false,
+        status: 502,
+        reason: "cf_api_error",
+        body: { error: "Hostname already exists in CF but could not be retrieved", detail: data },
+      };
+    }
+    // Idempotent success — reuse existing CF hostname record
+    return buildActivateSuccess(env, domain, slug, existing, validatedOriginUrl, originUrlSource, /* alreadyExisted */ true);
   }
 
-  const result = data.result as Record<string, unknown>;
-  return buildActivateResponse(env, domain, slug, result, validatedOriginUrl, originUrlSource);
+  const cfResult = data.result as Record<string, unknown>;
+  return buildActivateSuccess(env, domain, slug, cfResult, validatedOriginUrl, originUrlSource);
 }
 
-async function buildActivateResponse(
+/** Internal helper — persists state and assembles the success body. */
+async function buildActivateSuccess(
   env: Env,
   domain: string,
   slug: string,
   cfResult: Record<string, unknown>,
   validatedOriginUrl: string | null,
   originUrlSource: "explicit" | "discovered" | "none",
-  alreadyExisted = false
-): Promise<Response> {
+  alreadyExisted = false,
+): Promise<ActivateDomainResult> {
   const cfHostnameId = cfResult.id as string | null;
 
   // Persist cf_hostname_id to D1
@@ -378,23 +439,62 @@ async function buildActivateResponse(
 
   await upsertTenantData(env, domain, slug, cfResult, validatedOriginUrl);
 
-  return jsonOk({
+  return {
     ok: true,
-    slug,
-    domain,
-    cf_hostname_id: cfHostnameId,
-    origin_url: validatedOriginUrl,
-    origin_url_source: originUrlSource,
-    cname_record: {
-      type: "CNAME",
-      host: domain,
-      target: CNAME_TARGET,
+    status: 200,
+    body: {
+      ok: true,
+      slug,
+      domain,
+      cf_hostname_id: cfHostnameId,
+      origin_url: validatedOriginUrl,
+      origin_url_source: originUrlSource,
+      cname_record: {
+        type: "CNAME",
+        host: domain,
+        target: CNAME_TARGET,
+      },
+      txt_record: verificationTxt
+        ? { type: "TXT", host: verificationTxt.host, value: verificationTxt.value }
+        : null,
+      status: alreadyExisted ? "already_exists" : "pending_verification",
+      instructions: generateDnsInstructions(domain, verificationTxt),
     },
-    txt_record: verificationTxt
-      ? { type: "TXT", host: verificationTxt.host, value: verificationTxt.value }
-      : null,
-    status: alreadyExisted ? "already_exists" : "pending_verification",
-    instructions: generateDnsInstructions(domain, verificationTxt),
+  };
+}
+
+// ── POST /admin/domains/activate ──────────────────────────────────────────
+// Thin HTTP wrapper around activateDomain. Checks admin secret, parses the
+// JSON body, delegates, and serializes the result. Phase 3 refactor preserves
+// exact response shape and status codes of the pre-refactor admin endpoint.
+
+export async function handleActivateDomain(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  if (!requireAdminSecret(request, env)) {
+    return jsonErr(401, "Unauthorized — X-Admin-Secret header required");
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = (await request.json()) as Record<string, unknown>;
+  } catch {
+    return jsonErr(400, "Invalid JSON body");
+  }
+
+  const domain = typeof body.domain === "string" ? body.domain.toLowerCase().trim() : "";
+  const slug   = typeof body.slug   === "string" ? body.slug.toLowerCase().trim()   : "";
+  const rawOriginUrl = typeof body.origin_url === "string" ? body.origin_url.trim() : null;
+
+  if (!domain || !slug) {
+    return jsonErr(400, "Both 'domain' and 'slug' are required");
+  }
+
+  const result = await activateDomain(env, { domain, slug, originUrl: rawOriginUrl });
+  return new Response(JSON.stringify(result.body, null, 2), {
+    status: result.status,
+    headers: { "Content-Type": "application/json" },
   });
 }
 

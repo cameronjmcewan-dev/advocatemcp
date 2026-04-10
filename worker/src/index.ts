@@ -406,7 +406,7 @@ export default {
       // route at (2c) is ever removed, the first-path-segment fallback can't
       // silently re-introduce Phase 1.5 Bug 1 (slug resolved as "agents",
       // downstream URL becomes /agents/agents/query on Railway).
-      const RESERVED = new Set(["mcp", "admin", "login", "auth", "dashboard", "api", "track", "demo", "status", "onboard", "agents", ".well-known"]);
+      const RESERVED = new Set(["mcp", "admin", "login", "auth", "dashboard", "api", "track", "demo", "status", "onboard", "activate", "agents", ".well-known"]);
       const seg = url.pathname.replace(/^\//, "").split("/")[0];
       if (seg && !RESERVED.has(seg)) slug = seg;
     }

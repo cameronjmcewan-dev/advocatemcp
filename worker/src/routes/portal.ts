@@ -20,6 +20,8 @@ import {
   getTenant,
 } from "./onboard";
 import { handleOnboardPage } from "./onboardPage";
+import { handleActivatePage } from "./activatePage";
+import { handleActivate, handleActivationToken } from "./activate";
 import {
   handleBasicOnboard,
   handlePublicOnboard,
@@ -48,6 +50,13 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/admin/domains/activate"   && method === "POST") return handleActivateDomain(request, env);
   if (pathname === "/status"                   && method === "GET")  return statusPage(request, env);
   if (pathname === "/onboard"                  && method === "GET")  return handleOnboardPage(request, env);
+
+  // ── Phase 3 self-serve activation (post-payment, token-gated) ──────────
+  // Separate flow from the existing /onboard wizard. See feat(worker):
+  // phase 3 spine commit for the full design rationale.
+  if (pathname === "/activate"                 && method === "GET")  return handleActivatePage(request, env);
+  if (pathname === "/api/activate"             && method === "POST") return handleActivate(request, env);
+  if (pathname === "/admin/activation-token"   && method === "POST") return handleActivationToken(request, env);
 
   // ── Stripe / new onboarding API ──────────────────────────────────────────
   if (pathname === "/api/onboard/basic"     && method === "POST") return handleBasicOnboard(request, env);

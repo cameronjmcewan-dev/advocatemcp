@@ -15,6 +15,15 @@ export interface Env {
   /** HMAC-SHA256 signing key for attribution tokens — must match Railway TOKEN_SIGNING_KEY */
   TOKEN_SIGNING_KEY?: string;
 
+  /**
+   * HMAC-SHA256 signing key for Phase 3 self-serve activation tokens.
+   * Isolated from TOKEN_SIGNING_KEY by purpose — a leak of one key should
+   * not compromise the other. Used by worker/src/lib/activation-token.ts
+   * and the POST /api/activate + POST /admin/activation-token endpoints.
+   * Set via: `cd worker && npx wrangler secret put ACTIVATION_SIGNING_KEY`
+   */
+  ACTIVATION_SIGNING_KEY?: string;
+
   // ── Auth portal bindings ─────────────────────────────────────────────────
   /** D1 database for users, sessions, business access */
   DB: D1Database;
