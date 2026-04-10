@@ -246,7 +246,7 @@ This bit us during the `workman-copy-co` dry-run cleanup on 2026-04-10: a `d1 ex
 
 ## What is in progress
 
-Phase 1.5 customers.advocatemcp.com proxy cleanup shipped. Session 2 (per-bot prompt tuning) and Phase 3 (self-serve onboarding UI) are next.
+Phase 3 spine shipped with partial E2E verification. Next priority: architecture audit and dashboard-first consolidation to unblock real customer onboarding, followed by happy-path E2E verification on a real cross-host-redirecting domain.
 
 ## What is next on the roadmap (priority order)
 

@@ -154,6 +154,64 @@ Post-deploy curl against the new platform route confirmed:
 
 ---
 
+## Phase 3 — Self-Serve Activation Flow (Spine)
+
+**Status: SHIPPED 2026-04-10** — worker deploy version: `2e6760be-ed7e-4f06-8706-e154b0ec8519`. Commit: `c6042ba`.
+
+**Scope:** Ship the spine for token-gated, post-payment domain activation. Future sessions will layer registrar-specific instructions, WHOIS-based registrar detection, Cloudflare verification polling, synthetic tests on completion, Stripe webhook token minting, rate limiting, and a Resend email sequence on top of this spine. None of that is in this phase — only the foundation those features will sit on. Spine is an intentional word: enough to be useful and exercisable end-to-end, deliberately incomplete on polish and automation.
+
+The new flow lives at `/activate` (NOT `/onboard`). The existing `/onboard` wizard (`onboardPage.ts` ~1034 lines + `stripe.ts` ~1000 lines + `onboard.ts` ~904 lines) is a fully-shipped Stripe-wired 4-step funnel and was NOT touched — code archaeology during Phase 3 proposal caught a collision that would have fired if `/activate` had been implemented at the `/onboard` URL. The two flows are conceptually different customer journeys (marketing funnel vs post-payment activation) and deserve separate handlers. Future consolidation is a separate session.
+
+### What shipped
+
+- **`worker/src/lib/activation-token.ts`** — HMAC-SHA256 signed activation tokens. Same wire format as `tracked-url.ts` (base64url payload + `.` + base64url HMAC digest, HMAC computed over ASCII bytes of the encoded payload string) with a different payload shape (`{ slug, iat, exp }`) and a different signing key (`ACTIVATION_SIGNING_KEY`, isolated from `TOKEN_SIGNING_KEY` by purpose). Default TTL 24 hours. 8 unit tests in `activation-token.test.ts` covering round-trip, wrong-key rejection, tampered-signature rejection, malformed shapes, expired rejection, missing-fields rejection, iat/exp correctness, and default TTL constant.
+- **`POST /api/activate`** (`worker/src/routes/activate.ts`) — customer-facing, token-authenticated. Accepts JSON body or form-encoded. Token via `X-Activation-Token` header, body field `token`, or query param `t=` (header preferred to minimize referer leak risk). Verifies token, normalizes + validates the domain, cross-tenant guards against `BUSINESS_MAP` entries owned by a different slug, delegates to the extracted `activateDomain` core, and wraps the success/failure result with customer-facing error codes and messages. 16 customer-facing error messages drafted in a deliberate voice (plain English, empathetic, action-oriented, no jargon, no exclamation marks).
+- **`POST /admin/activation-token`** — temporary admin helper that mints an activation token + `activate_url` + `expires_at` for a given slug. X-Admin-Secret protected. **Explicitly temporary** pending Stripe webhook integration — the inline TODO comment marks it clearly, and this phase document calls it out as deferred (see below).
+- **`GET /activate`** (`worker/src/routes/activatePage.ts`) — HTML page with five rendered states: State 0 (missing token, server-rendered short-circuit), State 1 (entry form), State 2 (submitting with spinner), State 3 (DNS instructions with per-field Copy buttons), State 4 (pending verification acknowledgment). Uses `sharedLayout.ts` for all chrome and tokens — no hardcoded hex colors. Vanilla JS state machine under 5kb. Native form POST fallback for no-JS clients.
+- **Surgical refactor of `worker/src/routes/domains.ts`**: extracted the core activation logic (slug validation → origin URL resolution → Cloudflare API → KV/D1/TENANT_DATA persistence) into a new exported function `activateDomain(env, { domain, slug, originUrl? })` that returns a typed `ActivateDomainResult` with a stable `ActivateFailReason` tag on failure. `handleActivateDomain` is now a thin HTTP wrapper that checks admin secret, parses JSON body, and delegates. Zero semantic change to the admin endpoint — response shape and status codes are identical byte-for-byte. Both `handleActivateDomain` and the new `handleActivate` call the same core.
+- **`worker/src/types.ts`** — new `ACTIVATION_SIGNING_KEY?: string` field on `Env` with an inline comment explaining purpose and how to set it via wrangler secret.
+- **`worker/src/routes/portal.ts`** — three new route registrations (`GET /activate`, `POST /api/activate`, `POST /admin/activation-token`) inserted additively in the existing dispatch block. Zero modification to any existing route.
+- **`worker/src/index.ts`** — `"activate"` added to the RESERVED set in the bot-detection slug fallback. Defense-in-depth against a future removal of the `/activate` route silently re-introducing the route through the first-path-segment fallback. Same pattern as Phase 1.5's `"agents"` addition.
+
+### Production verification (2026-04-10)
+
+Partial E2E verification in browser after deploy. The happy path was not fully exercised — see the gap note below.
+
+| Check | Result |
+|---|---|
+| State 0 (missing token) renders correctly | PASS — verified earlier, screenshotted |
+| State 1 (entry form) renders with sharedLayout chrome, correct typography, working form interactions, Continue button triggers submit | PASS |
+| Error path end-to-end: `dmre.com` auto-discovered as self-loop, returns `origin_unknown_need_host`, renders the full `customer_message` error banner in the exact drafted wording, preserves form context | PASS |
+| Voice and copy match the Phase 3 proposal drafts byte-for-byte in the live HTTP response | PASS |
+| `POST /admin/activation-token` with real admin secret mints a valid token | PASS (verified indirectly via the error-path flow using a minted token) |
+| State 3 (DNS instructions with Copy buttons) rendered against a real cross-host-redirecting domain | NOT VERIFIED — partial coverage gap |
+| State 4 (pending verification) transition via "I've added the records" button | NOT VERIFIED — partial coverage gap |
+
+**Gap acknowledgment**: the happy path (State 3 DNS records render → Copy buttons → State 4 pending verification) was not exercised in Phase 3 verification. The `dmre.com` self-loop behavior is the expected Phase 2 limitation (documented in `docs/attribution.md`): `dmre.com` either isn't redirecting cross-host or has residual KV state from earlier E2E sessions, and in either case Phase 3 is correctly surfacing the error — which validates the error path end-to-end but not the success path. The happy path code is a mechanical rendering of the same response shape `/admin/domains/activate` has returned successfully across multiple prior phases (Phase 1, Phase 2, Phase 1.5 all exercised it post-deploy), so confidence the happy path will work when exercised is high. Full State 3 → State 4 E2E will be exercised either on the first real cross-host-redirecting customer domain to run through the flow, or during a dedicated post-consolidation test session with a purpose-built test domain.
+
+### Deferred — explicitly out of Phase 3 spine scope
+
+These are intentional, approved cuts from the Phase 3 proposal, captured here so a future session doesn't have to re-derive them:
+
+- **Registrar-specific instructions** per platform (GoDaddy, Namecheap, Squarespace, etc.). Generic help text only tonight — "your domain registrar, whoever that is" with three illustrative examples inline.
+- **WHOIS-based registrar detection** — out of scope. Tie-in to registrar-specific instructions once both exist.
+- **Cloudflare verification polling** on State 4. Manual refresh only tonight. Auto-polling is additive for a future session.
+- **Synthetic test on completion** — no post-activation smoke call to prove the tenant is fully live. Customer has to manually refresh.
+- **Stripe webhook integration** for automatic token minting on successful payment. `POST /admin/activation-token` exists as the manual stopgap with an inline `TODO(stripe-webhook)` comment. **This endpoint is explicitly temporary** — it should be removed or re-scoped to ops-only testing when the webhook lands.
+- **Resend email sequence** — no email is sent when a customer completes State 4. State 4 copy is honest about this ("we're working on the automatic email") rather than misleading.
+- **Rate limiting** on `/api/activate` or `GET /activate`. 24-hour token expiry is the only limiter. Bad actor with a leaked token could submit arbitrary domains until the token expires.
+- **GET-side token verification** on `GET /activate`. Verification happens on POST only. Trade-off: ~1 second of delay between form submission and bad-token error surfacing, in exchange for one place token logic lives. Approved.
+- **No-JS HTML response path** on the backend. `POST /api/activate` returns JSON only. Without JavaScript, the native form POST lands the customer on a raw JSON response page. Functional but ugly. HTML response negotiation deferred.
+- **Integration test for `/api/activate`** — deferred to a future testing-infrastructure session, same precedent as Phase 1.5 and Phase 2. Unit tests on the token layer plus manual E2E are sufficient coverage for the Phase 3 spine.
+- **Real cross-host-redirecting domain happy-path E2E verification** — see the gap note above. Will land in a follow-up.
+- **Visual polish** beyond sharedLayout defaults. Typography, spacing, the Copy button micro-interaction — all intentionally minimal. Polish is a design session, not a spine session.
+
+### Placeholder to swap in a future session
+
+All customer-facing error states and the missing-token short-circuit link to `mailto:hello@advocatemcp.com` as the support contact. This is a placeholder — the real support address (or form URL, Discord link, whatever channel is chosen) gets swapped in a follow-up. `grep -rn "hello@advocatemcp.com" worker/src/routes/` finds every occurrence.
+
+---
+
 ## Session 2 — Per-Bot Response Tuning
 
 **Scope:** Branch the Claude system prompt by detected crawler. Each bot family gets a structurally different response optimized for how that crawler surfaces content to end users.
