@@ -192,24 +192,68 @@ analyticsRouter.get("/analytics", requireApiKey, (_req: Request, res: Response) 
  * Called by the Cloudflare Worker /track endpoint after confirming the
  * request came from a non-bot User-Agent. Logs a rich click event row.
  *
- * Body (all optional): { ref?: string, user_agent?: string, ip_hash?: string }
+ * Body:
+ *   ref?         : string  — bot name that generated the response
+ *   user_agent?  : string  — human visitor UA
+ *   ip_hash?     : string  — SHA-256(IP) for deduplication
+ *   destination? : string  — URL the visitor was redirected to (Session 1)
+ *   query_id?    : number  — queries.id that generated this token (Session 1)
+ *   legacy?      : 0 | 1  — 1 if token was cleartext (Session 1 fallback path)
  */
 analyticsRouter.post(
   "/analytics/:slug/referral-click",
   (req: Request, res: Response) => {
     const { slug } = req.params;
-    const { ref, user_agent, ip_hash } = (req.body ?? {}) as {
+    const { ref, user_agent, ip_hash, destination, query_id, legacy } = (req.body ?? {}) as {
       ref?: string;
       user_agent?: string;
       ip_hash?: string;
+      destination?: string;
+      query_id?: number;
+      legacy?: 0 | 1;
     };
     const db = getDb();
 
-    db.prepare(
-      `INSERT INTO click_events (business_slug, ref, user_agent, ip_hash)
-       VALUES (?, ?, ?, ?)`
-    ).run(slug, ref ?? null, user_agent ?? null, ip_hash ?? null);
+    // Cross-tenant guard: if query_id is provided, verify the query row
+    // belongs to this slug before touching anything. Rejects forged
+    // slug+query_id combinations without leaking whether the row exists
+    // under a different slug.
+    if (query_id !== undefined) {
+      const qRow = db
+        .prepare("SELECT business_slug FROM queries WHERE id = ?")
+        .get(query_id) as { business_slug: string } | undefined;
 
+      if (!qRow || qRow.business_slug !== slug) {
+        res.status(400).json({ error: "query_id does not belong to this slug" });
+        return;
+      }
+    }
+
+    // Transactional: INSERT click + UPDATE referral_clicked atomically so
+    // analytics counts are always consistent even if the process crashes
+    // between the two writes.
+    const transaction = db.transaction(() => {
+      db.prepare(
+        `INSERT INTO click_events (business_slug, ref, user_agent, ip_hash, destination, query_id, legacy)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        slug,
+        ref ?? null,
+        user_agent ?? null,
+        ip_hash ?? null,
+        destination ?? null,
+        query_id ?? null,
+        legacy ?? 0
+      );
+
+      if (query_id !== undefined) {
+        db.prepare(
+          "UPDATE queries SET referral_clicked = 1 WHERE id = ? AND business_slug = ?"
+        ).run(query_id, slug);
+      }
+    });
+
+    transaction();
     res.json({ ok: true });
   }
 );

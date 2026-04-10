@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import { getDb, type BusinessRow } from "../db.js";
 import { queryAgent } from "../agent/query.js";
 import { requireApiKey } from "../middleware/auth.js";
+import { buildToken } from "../lib/tracked-url.js";
 import crypto from "crypto";
 
 export const agentRouter = Router();
@@ -187,7 +188,28 @@ agentRouter.post("/agents/:slug/query", requireApiKey, async (req: Request, res:
 
   try {
     const result = await queryAgent(business, query.trim(), crawler);
-    res.json(result);
+
+    // Build signed attribution token if TOKEN_SIGNING_KEY is configured.
+    // Additive — omitted gracefully when key is absent so existing callers
+    // are unaffected until the Worker is updated to consume it.
+    const signingKey = process.env.TOKEN_SIGNING_KEY;
+    const attributionToken = signingKey && result.referral_url
+      ? buildToken(
+          {
+            dest: result.referral_url,
+            ref: crawler ?? "unknown",
+            slug: result.business_slug,
+            query_id: result.query_id,
+            ts: Math.floor(Date.now() / 1000),
+          },
+          signingKey
+        )
+      : undefined;
+
+    res.json({
+      ...result,
+      ...(attributionToken !== undefined ? { attribution_token: attributionToken } : {}),
+    });
   } catch (err) {
     console.error(`[agent] Error querying ${slug}:`, err);
     res.status(500).json({

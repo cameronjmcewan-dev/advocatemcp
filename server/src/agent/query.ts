@@ -19,6 +19,7 @@ export interface AgentQueryResult {
   intent: QueryIntent;
   timestamp: string;
   powered_by: "AdvocateMCP";
+  query_id: number;
 }
 
 /**
@@ -114,7 +115,7 @@ export async function queryAgent(
 
   // Persist to DB (synchronous — better-sqlite3)
   const db = getDb();
-  db.prepare(
+  const { lastInsertRowid } = db.prepare(
     `INSERT INTO queries (business_slug, crawler_agent, query_text, response_text, intent)
      VALUES (?, ?, ?, ?, ?)`
   ).run(business.slug, crawlerAgent ?? null, query, responseText, intent);
@@ -127,5 +128,6 @@ export async function queryAgent(
     intent,
     timestamp,
     powered_by: "AdvocateMCP",
+    query_id: Number(lastInsertRowid),
   };
 }

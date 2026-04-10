@@ -94,6 +94,11 @@ function _initSchema(db: Database.Database): void {
       timestamp     DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  // ── Session 1 migrations: attribution hardening columns on click_events ──
+  _addColumnIfNotExists(db, "click_events", "destination", "TEXT");
+  _addColumnIfNotExists(db, "click_events", "query_id", "INTEGER");
+  _addColumnIfNotExists(db, "click_events", "legacy", "INTEGER NOT NULL DEFAULT 0");
 }
 
 /** Type that mirrors the businesses table row. */
