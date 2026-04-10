@@ -17,6 +17,8 @@ import type { Env } from "./types";
 import { handlePortal } from "./routes/portal";
 import { handleDemo } from "./routes/demo";
 import { verifyToken, base64urlToBytes } from "./lib/tracked-url";
+import { getTenant } from "./routes/onboard";
+import { proxyToOrigin } from "./lib/proxy";
 
 export type { Env };
 
@@ -303,7 +305,22 @@ export default {
     }
 
     // ── 3. Non-crawler traffic ────────────────────────────────────────────
+    // If the tenant has configured an origin_url, proxy the request there so
+    // human visitors see the real website. Otherwise return an info response.
     if (!isAiCrawler(userAgent)) {
+      try {
+        const tenant = await getTenant(env, domain);
+        if (tenant?.origin_url) {
+          const proxyRes = await proxyToOrigin(request, tenant.origin_url, domain);
+          ctx.waitUntil(
+            Promise.resolve(
+              logEvent({ ...baseEvent, status: proxyRes.status, referralUrl: null, taggedReferralUrl: null, latencyMs: Date.now() - startMs, error: null })
+            )
+          );
+          return proxyRes;
+        }
+      } catch { /* best-effort — fall through to info response */ }
+
       ctx.waitUntil(
         Promise.resolve(
           logEvent({ ...baseEvent, status: 200, referralUrl: null, taggedReferralUrl: null, latencyMs: Date.now() - startMs, error: "non-crawler" })

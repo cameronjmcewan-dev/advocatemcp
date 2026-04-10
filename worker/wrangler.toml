@@ -46,11 +46,3 @@ API_BASE_URL = "https://advocate-production-2887.up.railway.app"
 pattern   = "customers.advocatemcp.com/*"
 zone_name = "advocatemcp.com"
 
-# workmancopyco.com — add after domain is added to Cloudflare
-# [[routes]]
-# pattern   = "workmancopyco.com/*"
-# zone_name = "workmancopyco.com"
-#
-# [[routes]]
-# pattern   = "www.workmancopyco.com/*"
-# zone_name = "workmancopyco.com"

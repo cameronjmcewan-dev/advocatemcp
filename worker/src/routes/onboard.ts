@@ -64,6 +64,16 @@ export interface TenantRecord {
    * `active` on payment confirmation.
    */
   skipDns?: boolean;
+  /**
+   * HTTPS URL of the customer's real origin server. When set, non-bot human
+   * traffic is proxied here transparently by the Worker. Set via:
+   *   - Phase 1: handleActivateDomain (admin API, caller provides the URL)
+   *   - Phase 2: auto-discovery (system infers it from the domain)
+   *   - handleOnboard (optional field, no reachability check — Phase 2 adds that)
+   * The proxy code in worker/src/lib/proxy.ts reads this field and does not
+   * care which path set it.
+   */
+  origin_url?: string;
   statusLog: Array<{ status: string; timestamp: string; detail: string }>;
   createdAt: string;
   updatedAt: string;
@@ -394,6 +404,14 @@ export async function handleOnboard(request: Request, env: Env): Promise<Respons
   const slug = (body.slug as string).toLowerCase().trim();
   const now = new Date().toISOString();
 
+  // Optional origin_url — accepted here so Phase 2 auto-discovery can call
+  // handleOnboard with it already set without a second code change. No
+  // reachability check at this layer; validation lives in handleActivateDomain
+  // (admin path) and will be added to the auto-discovery path in Phase 2.
+  const originUrl = typeof body.origin_url === "string" && body.origin_url.trim().startsWith("https://")
+    ? body.origin_url.trim()
+    : undefined;
+
   console.log(JSON.stringify({
     onboarding: true,
     event: "onboard_start",
@@ -474,6 +492,10 @@ export async function handleOnboard(request: Request, env: Env): Promise<Respons
     tenant.website = (body.website as string ?? "").trim();
     tenant.notes = (body.notes as string ?? existing.notes).trim();
   }
+
+  // Thread origin_url through for both new and re-onboard paths. Only set if
+  // provided — a re-onboard without origin_url preserves the existing value.
+  if (originUrl) tenant.origin_url = originUrl;
 
   addStatusLog(tenant, "onboard_started", `Onboarding initiated for ${domain}`);
 

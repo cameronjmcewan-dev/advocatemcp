@@ -5,6 +5,12 @@
 //   GET  /admin/domains/:slug/status   — poll verification/SSL status from CF API
 
 import type { Env } from "../types";
+import {
+  getTenant,
+  putTenant,
+  extractCfData,
+  type TenantRecord,
+} from "./onboard";
 
 const CNAME_TARGET = "customers.advocatemcp.com";
 
@@ -91,6 +97,58 @@ function requireAdminSecret(request: Request, env: Env): boolean {
   return !!env.ADMIN_SECRET && provided === env.ADMIN_SECRET;
 }
 
+// ── TENANT_DATA upsert helper ─────────────────────────────────────────────
+// Called by both activation paths (CF success and KV-only fallback) so that
+// any domain passing through handleActivateDomain always has a TENANT_DATA
+// record the non-crawler passthrough branch in index.ts can read.
+
+async function upsertTenantData(
+  env: Env,
+  domain: string,
+  slug: string,
+  cfResult: Record<string, unknown> | null,
+  validatedOriginUrl: string | null,
+): Promise<void> {
+  const now = new Date().toISOString();
+  const existing = await getTenant(env, domain);
+  const tenant: TenantRecord = existing ?? {
+    domain,
+    slug,
+    name: "",
+    phone: "",
+    email: "",
+    address: "",
+    city: "",
+    state: "",
+    postalCode: "",
+    country: "US",
+    services: [],
+    website: "",
+    notes: "",
+    // "active" because handleActivateDomain is admin-secret protected and the
+    // caller is explicitly activating the domain. Contrast with handleOnboard
+    // which uses "pending_verification" because it waits on CF verification.
+    status: "active",
+    cloudflare: {
+      customHostnameId: null,
+      verificationMethod: "txt",
+      verificationStatus: "pending",
+      sslStatus: "pending",
+      txtName: null,
+      txtValue: null,
+      ownershipTxtName: null,
+      ownershipTxtValue: null,
+    },
+    statusLog: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  if (validatedOriginUrl) tenant.origin_url = validatedOriginUrl;
+  if (cfResult) extractCfData(tenant, cfResult);
+  await putTenant(env, tenant);
+}
+
 // ── POST /admin/domains/activate ──────────────────────────────────────────
 
 export async function handleActivateDomain(
@@ -115,7 +173,77 @@ export async function handleActivateDomain(
     return jsonErr(400, "Both 'domain' and 'slug' are required");
   }
 
-  // Call Cloudflare for SaaS API
+  // ── Slug validation ────────────────────────────────────────────────────────
+  // Verify the slug is registered in Railway before writing any KV or CF
+  // records. A 404 here means the business doesn't exist yet — the domain
+  // would activate but every bot request would return a 502 from Railway.
+  // Non-404 errors (network, 500) warn but don't block — Railway downtime
+  // shouldn't prevent legitimate domain activation.
+  const railwayBase = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  try {
+    const profileCheck = await fetch(
+      `${railwayBase}/agents/${encodeURIComponent(slug)}/profile`,
+      {
+        headers: env.API_KEY ? { "X-API-Key": env.API_KEY } : {},
+        signal: AbortSignal.timeout(5000),
+      },
+    );
+    if (profileCheck.status === 404) {
+      return jsonErr(
+        404,
+        `Slug "${slug}" is not registered in Railway. Run POST /register first, then retry activation.`,
+      );
+    }
+  } catch {
+    // Railway unreachable or timed out — log and continue rather than blocking.
+    console.warn(JSON.stringify({
+      domains: true,
+      event: "slug_validation_skipped",
+      slug,
+      reason: "Railway profile check failed — proceeding with activation",
+    }));
+  }
+
+  // ── origin_url validation ──────────────────────────────────────────────────
+  // Optional. If provided, must be a well-formed HTTPS URL that is reachable
+  // (2xx, 3xx, or 401 accepted — anything except a connection failure or 5xx).
+  // Accepting 401 because many origins require auth but are still "up".
+  const rawOriginUrl = typeof body.origin_url === "string" ? body.origin_url.trim() : null;
+  let validatedOriginUrl: string | null = null;
+
+  if (rawOriginUrl) {
+    let parsedOrigin: URL;
+    try {
+      parsedOrigin = new URL(rawOriginUrl);
+    } catch {
+      return jsonErr(400, "origin_url is not a valid URL");
+    }
+    if (parsedOrigin.protocol !== "https:") {
+      return jsonErr(400, "origin_url must use HTTPS");
+    }
+
+    try {
+      const reach = await fetch(rawOriginUrl, {
+        method: "HEAD",
+        redirect: "manual",
+        signal: AbortSignal.timeout(5000),
+      });
+      if (reach.status >= 500) {
+        return jsonErr(
+          400,
+          `origin_url returned HTTP ${reach.status} — origin appears to be down. Verify it is publicly accessible and retry.`,
+        );
+      }
+      validatedOriginUrl = rawOriginUrl;
+    } catch {
+      return jsonErr(
+        400,
+        "origin_url is unreachable — verify the URL is publicly accessible over HTTPS and retry.",
+      );
+    }
+  }
+
+  // ── Call Cloudflare for SaaS API ───────────────────────────────────────────
   const { ok, data } = await cfRequest(env, "POST", "", {
     hostname: domain,
     ssl: {
@@ -133,6 +261,7 @@ export async function handleActivateDomain(
       const cfMissing = (data.error as string | undefined)?.includes("CF_API_TOKEN");
       if (cfMissing) {
         await env.BUSINESS_MAP.put(domain, slug);
+        await upsertTenantData(env, domain, slug, null, validatedOriginUrl);
         return jsonOk({
           ok: true,
           slug,
@@ -153,11 +282,11 @@ export async function handleActivateDomain(
     const existing = results?.[0];
     if (!existing) return jsonErr(502, "Hostname already exists in CF but could not be retrieved", data);
     // continue with existing record data — idempotent success
-    return buildActivateResponse(env, domain, slug, existing, true);
+    return buildActivateResponse(env, domain, slug, existing, validatedOriginUrl, /* alreadyExisted */ true);
   }
 
   const result = data.result as Record<string, unknown>;
-  return buildActivateResponse(env, domain, slug, result);
+  return buildActivateResponse(env, domain, slug, result, validatedOriginUrl);
 }
 
 async function buildActivateResponse(
@@ -165,6 +294,7 @@ async function buildActivateResponse(
   domain: string,
   slug: string,
   cfResult: Record<string, unknown>,
+  validatedOriginUrl: string | null,
   alreadyExisted = false
 ): Promise<Response> {
   const cfHostnameId = cfResult.id as string | null;
@@ -197,6 +327,8 @@ async function buildActivateResponse(
       value: ownershipVerification.value as string,
     };
   }
+
+  await upsertTenantData(env, domain, slug, cfResult, validatedOriginUrl);
 
   return jsonOk({
     ok: true,
