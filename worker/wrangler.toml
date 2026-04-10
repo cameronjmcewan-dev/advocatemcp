@@ -12,6 +12,12 @@ enabled = true
 binding = "BUSINESS_MAP"
 id      = "c6fa872c9bcc4b4390c30ac102888920"
 
+# Tenant onboarding data — full JSON records for each onboarded domain.
+# Create with: wrangler kv namespace create TENANT_DATA
+[[kv_namespaces]]
+binding = "TENANT_DATA"
+id      = "8409a70d4c9c40fcbaf3e0ea697151e4"
+
 # ── D1 Database ─────────────────────────────────────────────────────────────
 # Auth data: users, sessions, user_business_access, businesses.
 [[d1_databases]]
@@ -26,10 +32,25 @@ API_BASE_URL = "https://advocate-production-2887.up.railway.app"
 # ── Secrets ─────────────────────────────────────────────────────────────────
 # Set with wrangler secret put <NAME>
 #
-#   API_KEY       — forwarded to Railway as X-API-Key on crawler proxy requests
-#   ADMIN_SECRET  — protects POST /admin/create-client (use a long random string)
+#   API_KEY                — forwarded to Railway as X-API-Key on crawler proxy requests
+#   ADMIN_SECRET           — protects POST /admin/create-client (use a long random string)
+#   STRIPE_SECRET_KEY      — Stripe secret key (sk_test_... or sk_live_...)
+#   STRIPE_WEBHOOK_SECRET  — Stripe webhook signing secret (whsec_...)
+#   STRIPE_PRICE_ID_BASE   — Stripe Price ID for $100/mo base plan
+#   STRIPE_PRICE_ID_PRO    — Stripe Price ID for $250/mo pro plan
 
-# ── Routes (production — uncomment per business domain) ─────────────────────
+# ── Routes ──────────────────────────────────────────────────────────────────
+# customers.advocatemcp.com — fallback origin for Cloudflare for SaaS custom hostnames.
+# All client domains CNAME to this subdomain; the worker handles routing via KV lookup.
+[[routes]]
+pattern   = "customers.advocatemcp.com/*"
+zone_name = "advocatemcp.com"
+
+# workmancopyco.com — add after domain is added to Cloudflare
 # [[routes]]
-# pattern   = "example.com/*"
-# zone_name = "example.com"
+# pattern   = "workmancopyco.com/*"
+# zone_name = "workmancopyco.com"
+#
+# [[routes]]
+# pattern   = "www.workmancopyco.com/*"
+# zone_name = "workmancopyco.com"

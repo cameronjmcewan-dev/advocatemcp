@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "kv:add": "wrangler kv:key put --binding=BUSINESS_MAP"
+    "kv:add": "wrangler kv:key put --binding=BUSINESS_MAP",
+    "typecheck": "tsc --noEmit",
+    "check:design": "node scripts/check-design.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241022.0",

@@ -201,7 +201,31 @@ export default {
       return Response.redirect(target, 302);
     }
 
-    // ── 2. AI discovery file ──────────────────────────────────────────────
+    // ── 2. Platform MCP endpoint — proxy directly to backend ─────────────
+    // Must be checked before crawler/slug logic so "/mcp" is never treated
+    // as a business slug.
+    if (url.pathname === "/mcp" || url.pathname.startsWith("/mcp/")) {
+      const base = apiBase(env);
+      const target = `${base}${url.pathname}${url.search}`;
+      try {
+        const resp = await fetch(target, {
+          method: request.method,
+          headers: {
+            ...Object.fromEntries(request.headers),
+            ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}),
+          },
+          body: request.method !== "GET" && request.method !== "HEAD" ? request.body : undefined,
+        });
+        return new Response(resp.body, {
+          status: resp.status,
+          headers: resp.headers,
+        });
+      } catch (err) {
+        return jsonError(502, "Platform MCP endpoint unreachable.", { target, error: String(err) });
+      }
+    }
+
+    // ── 2b. AI discovery file ─────────────────────────────────────────────
     if (url.pathname === "/.well-known/ai-agent.json") {
       const slug = await env.BUSINESS_MAP.get(domain);
       // Fetch rich profile from backend if slug is known (best-effort, short timeout)
@@ -239,9 +263,19 @@ export default {
     // ── 4. AI crawler — resolve slug ──────────────────────────────────────
     let slug: string | null = await env.BUSINESS_MAP.get(domain);
 
+    // Cloudflare for SaaS injects cf-custom-hostname with the original client
+    // domain. Use it as a secondary KV key when the primary lookup misses
+    // (e.g. during a brief KV propagation lag).
     if (!slug) {
+      const cfHost = request.headers.get("cf-custom-hostname");
+      if (cfHost) slug = await env.BUSINESS_MAP.get(cfHost);
+    }
+
+    if (!slug) {
+      // Reserved platform paths must never become business slugs.
+      const RESERVED = new Set(["mcp", "admin", "login", "auth", "dashboard", "api", "track", "demo", "status", "onboard", ".well-known"]);
       const seg = url.pathname.replace(/^\//, "").split("/")[0];
-      if (seg) slug = seg;
+      if (seg && !RESERVED.has(seg)) slug = seg;
     }
 
     if (!slug) {
@@ -256,6 +290,22 @@ export default {
         hint: `Add KV entry: key = "${domain}", value = "your-slug"`,
       });
     }
+
+    // ── 4b. Check tenant status — block disabled/failed tenants ────────────
+    try {
+      const tenantRaw = await env.TENANT_DATA.get(domain);
+      if (tenantRaw) {
+        const tenantData = JSON.parse(tenantRaw) as { status?: string };
+        if (tenantData.status === "disabled" || tenantData.status === "failed") {
+          ctx.waitUntil(
+            Promise.resolve(
+              logEvent({ ...baseEvent, slug, status: 503, referralUrl: null, taggedReferralUrl: null, latencyMs: Date.now() - startMs, error: `tenant-${tenantData.status}` })
+            )
+          );
+          return jsonError(503, "This business agent is temporarily unavailable.");
+        }
+      }
+    } catch { /* best-effort — continue if TENANT_DATA read fails */ }
 
     // ── 5. Build query and call backend ───────────────────────────────────
     const base      = apiBase(env);
@@ -314,7 +364,12 @@ export default {
 
     return new Response(
       JSON.stringify(
-        { ...data, ...(trackingUrl ? { tagged_referral_url: trackingUrl } : {}) },
+        {
+          ai_generated: true,
+          disclosure: "This response was generated automatically by AI. It may not reflect real-time business information.",
+          ...data,
+          ...(trackingUrl ? { tagged_referral_url: trackingUrl } : {}),
+        },
         null,
         2
       ),

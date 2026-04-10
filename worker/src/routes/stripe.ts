@@ -1,0 +1,822 @@
+// Stripe integration for tenant onboarding — payment gating via Checkout Sessions.
+//
+// Routes:
+//   POST /api/onboard/basic              — admin-auth'd DNS flow (worker /onboard wizard)
+//   POST /api/onboard/public             — no-auth wizard flow (advocatemcp.com wizard, no DNS)
+//   OPTIONS /api/onboard/public          — CORS preflight for the public endpoint
+//   POST /api/stripe/webhook             — Stripe webhook (checkout.session.completed)
+//   GET  /api/onboard/session/:session_id — poll payment status after Stripe redirect (CORS)
+
+import type { Env } from "../types";
+import {
+  CNAME_TARGET,
+  type TenantRecord,
+  type TenantStatus,
+  normalizeDomain,
+  getTenant,
+  putTenant,
+  addStatusLog,
+  transitionStatus,
+  buildDnsInstructions,
+  createCfHostnameForTenant,
+  jsonOk,
+  jsonErr,
+  requireAdmin,
+} from "./onboard";
+
+// ── CORS helper for the public wizard endpoint ───────────────────────────────
+// Only the marketing site is trusted. Everything else gets the default origin
+// so stray `fetch` from unknown origins cannot read the response.
+
+const ALLOWED_ORIGINS = new Set<string>([
+  "https://advocatemcp.com",
+  "https://www.advocatemcp.com",
+]);
+
+function corsHeaders(request: Request): Record<string, string> {
+  const origin = request.headers.get("Origin") ?? "";
+  const allowed = ALLOWED_ORIGINS.has(origin) ? origin : "https://advocatemcp.com";
+  return {
+    "Access-Control-Allow-Origin": allowed,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Max-Age": "86400",
+    "Vary": "Origin",
+  };
+}
+
+function withCors(resp: Response, request: Request): Response {
+  const headers = new Headers(resp.headers);
+  for (const [k, v] of Object.entries(corsHeaders(request))) headers.set(k, v);
+  return new Response(resp.body, { status: resp.status, statusText: resp.statusText, headers });
+}
+
+export function handlePublicOnboardPreflight(request: Request): Response {
+  return new Response(null, { status: 204, headers: corsHeaders(request) });
+}
+
+// ── Stripe API helpers ───────────────────────────────────────────────────────
+
+async function stripeApi(
+  secretKey: string,
+  method: string,
+  path: string,
+  params?: Record<string, string>,
+): Promise<{ ok: boolean; data: Record<string, unknown> }> {
+  const url = `https://api.stripe.com/v1${path}`;
+  const headers: Record<string, string> = {
+    Authorization: `Basic ${btoa(secretKey + ":")}`,
+  };
+
+  let body: string | undefined;
+  if (params) {
+    headers["Content-Type"] = "application/x-www-form-urlencoded";
+    body = new URLSearchParams(params).toString();
+  }
+
+  const resp = await fetch(url, { method, headers, body });
+  const data = (await resp.json()) as Record<string, unknown>;
+  return { ok: resp.ok, data };
+}
+
+// ── Stripe webhook signature verification (Workers-compatible) ───────────────
+
+async function verifyStripeSignature(
+  rawBody: string,
+  sigHeader: string,
+  secret: string,
+): Promise<boolean> {
+  const parts = Object.fromEntries(
+    sigHeader.split(",").map((p) => {
+      const [k, v] = p.split("=");
+      return [k, v];
+    }),
+  );
+  const timestamp = parts["t"];
+  const signature = parts["v1"];
+  if (!timestamp || !signature) return false;
+
+  // Reject signatures older than 5 minutes
+  if (Math.abs(Date.now() / 1000 - parseInt(timestamp)) > 300) return false;
+
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(`${timestamp}.${rawBody}`),
+  );
+  const expected = Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  return expected === signature;
+}
+
+// ── POST /api/onboard/basic ──────────────────────────────────────────────────
+// Accepts business info + plan choice. Creates tenant in KV, then either
+// redirects to Stripe Checkout (base/pro) or kicks off free DNS flow.
+
+export async function handleBasicOnboard(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  if (!requireAdmin(request, env)) {
+    return jsonErr(401, "unauthorized", "Authentication required — provide X-Admin-Secret header");
+  }
+
+  const ct = request.headers.get("Content-Type") ?? "";
+  if (!ct.includes("application/json")) {
+    return jsonErr(415, "invalid_content_type", "Content-Type must be application/json");
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = (await request.json()) as Record<string, unknown>;
+  } catch {
+    return jsonErr(400, "invalid_json", "Request body must be valid JSON");
+  }
+
+  // Validate required fields
+  const required = ["name", "domain", "slug", "phone", "email"] as const;
+  const missing: string[] = [];
+  for (const field of required) {
+    const val = body[field];
+    if (typeof val !== "string" || val.trim().length === 0) missing.push(field);
+  }
+  if (typeof body.email === "string" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) {
+    missing.push("email (invalid format)");
+  }
+  if (missing.length > 0) {
+    return jsonErr(400, "validation_error", `Missing or invalid fields: ${missing.join(", ")}`);
+  }
+
+  // Validate plan
+  const plan = (body.plan as string ?? "base").toLowerCase();
+  if (!["free", "base", "pro"].includes(plan)) {
+    return jsonErr(400, "invalid_plan", "Plan must be 'free', 'base', or 'pro'");
+  }
+
+  // Normalize domain
+  const domain = normalizeDomain(body.domain as string);
+  if (!domain) {
+    return jsonErr(400, "invalid_domain", "Domain is invalid or belongs to a reserved namespace");
+  }
+
+  const slug = (body.slug as string).toLowerCase().trim();
+  const now = new Date().toISOString();
+
+  // Check for existing tenant
+  const existing = await getTenant(env, domain);
+  if (existing && existing.status === "active") {
+    return jsonOk({
+      ok: true,
+      action: "already_active",
+      domain,
+      slug: existing.slug,
+      status: existing.status,
+      message: `Tenant ${domain} is already active.`,
+    });
+  }
+
+  // Build tenant record
+  const tenant: TenantRecord = existing ?? {
+    domain,
+    name: (body.name as string).trim(),
+    slug,
+    phone: (body.phone as string ?? "").trim(),
+    email: (body.email as string).trim().toLowerCase(),
+    address: (body.address as string ?? "").trim(),
+    city: (body.city as string ?? "").trim(),
+    state: (body.state as string ?? "").trim(),
+    postalCode: (body.postalCode as string ?? "").trim(),
+    country: (body.country as string ?? "US").trim().toUpperCase(),
+    services: [],
+    website: (body.website as string ?? "").trim(),
+    notes: "",
+    status: "pending_payment" as TenantStatus,
+    cloudflare: {
+      customHostnameId: null,
+      verificationMethod: "txt",
+      verificationStatus: "pending",
+      sslStatus: "pending",
+      txtName: null,
+      txtValue: null,
+      ownershipTxtName: null,
+      ownershipTxtValue: null,
+    },
+    stripe: {
+      customerId: null,
+      subscriptionId: null,
+      checkoutSessionId: null,
+      plan: plan as "free" | "base" | "pro",
+    },
+    statusLog: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  // Update mutable fields if re-onboarding
+  if (existing) {
+    tenant.name = (body.name as string).trim();
+    tenant.phone = (body.phone as string ?? "").trim();
+    tenant.email = (body.email as string).trim().toLowerCase();
+    if (!tenant.stripe) {
+      tenant.stripe = { customerId: null, subscriptionId: null, checkoutSessionId: null, plan: plan as "free" | "base" | "pro" };
+    }
+    tenant.stripe.plan = plan as "free" | "base" | "pro";
+  }
+
+  // ── Free path ──────────────────────────────────────────────────────────────
+  if (plan === "free") {
+    transitionStatus(tenant, "free_pending_dns", "Free plan selected — skipping payment");
+
+    // Create CF hostname immediately
+    await createCfHostnameForTenant(env, tenant);
+
+    // Write KV
+    await env.BUSINESS_MAP.put(domain, slug);
+    await putTenant(env, tenant);
+
+    // Register in D1
+    await registerBusinessInD1(env, tenant, plan, now);
+
+    return jsonOk({
+      ok: true,
+      domain,
+      slug,
+      status: tenant.status,
+      plan: "free",
+      dns: buildDnsInstructions(tenant),
+    }, 201);
+  }
+
+  // ── Paid path (base or pro) ────────────────────────────────────────────────
+  if (!env.STRIPE_SECRET_KEY) {
+    return jsonErr(500, "stripe_not_configured", "STRIPE_SECRET_KEY is not set");
+  }
+
+  const priceId = plan === "pro" ? env.STRIPE_PRICE_ID_PRO : env.STRIPE_PRICE_ID_BASE;
+  if (!priceId) {
+    return jsonErr(500, "stripe_price_missing", `STRIPE_PRICE_ID_${plan.toUpperCase()} is not set`);
+  }
+
+  // Determine success/cancel URLs from request origin
+  const origin = new URL(request.url).origin;
+  const successUrl = `${origin}/onboard?session_id={CHECKOUT_SESSION_ID}`;
+  const cancelUrl = `${origin}/onboard?cancelled=true`;
+
+  // Create Stripe Checkout Session
+  const stripeResult = await stripeApi(env.STRIPE_SECRET_KEY, "POST", "/checkout/sessions", {
+    mode: "subscription",
+    "line_items[0][price]": priceId,
+    "line_items[0][quantity]": "1",
+    success_url: successUrl,
+    cancel_url: cancelUrl,
+    client_reference_id: domain,
+    "metadata[domain]": domain,
+    "metadata[slug]": slug,
+    "metadata[plan]": plan,
+    customer_email: tenant.email,
+  });
+
+  if (!stripeResult.ok) {
+    console.log(JSON.stringify({
+      onboarding: true,
+      event: "stripe_checkout_error",
+      domain,
+      error: stripeResult.data,
+    }));
+    return jsonErr(502, "stripe_error", "Failed to create Stripe Checkout Session", stripeResult.data);
+  }
+
+  const checkoutUrl = stripeResult.data.url as string;
+  const sessionId = stripeResult.data.id as string;
+
+  // Update tenant with Stripe session info
+  tenant.stripe!.checkoutSessionId = sessionId;
+  transitionStatus(tenant, "pending_payment", `Stripe Checkout created: ${sessionId}`);
+
+  // Write KV (routing not active yet — just storing the record)
+  await putTenant(env, tenant);
+
+  // Register in D1 (with pending status)
+  await registerBusinessInD1(env, tenant, plan, now);
+
+  console.log(JSON.stringify({
+    onboarding: true,
+    event: "stripe_checkout_created",
+    domain,
+    slug,
+    plan,
+    sessionId,
+  }));
+
+  return jsonOk({
+    ok: true,
+    domain,
+    slug,
+    status: "pending_payment",
+    plan,
+    checkoutUrl,
+  }, 201);
+}
+
+// ── POST /api/onboard/public ─────────────────────────────────────────────────
+// Public, no-auth onboarding used by the marketing wizard on advocatemcp.com.
+//
+// Accepts a small payload: { slug, name, email, plan, referral_url? }
+// Does NOT require/accept a domain — it synthesizes one in our own namespace
+// for tenant keying only. Does NOT create a Cloudflare custom hostname. On
+// payment success, webhook transitions skip-dns tenants straight to `active`.
+
+export async function handlePublicOnboard(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  // Content-Type guard
+  const ct = request.headers.get("Content-Type") ?? "";
+  if (!ct.includes("application/json")) {
+    return withCors(
+      jsonErr(415, "invalid_content_type", "Content-Type must be application/json"),
+      request,
+    );
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = (await request.json()) as Record<string, unknown>;
+  } catch {
+    return withCors(jsonErr(400, "invalid_json", "Request body must be valid JSON"), request);
+  }
+
+  // Validate + sanitize required fields. PAID-ONLY: free is not accepted.
+  const rawSlug = (body.slug as string ?? "").toLowerCase().trim();
+  const name = (body.name as string ?? "").trim();
+  const email = (body.email as string ?? "").trim().toLowerCase();
+  const plan = ((body.plan as string ?? "base").toLowerCase()) as "base" | "pro";
+  const referralUrl = (body.referral_url as string ?? "").trim();
+  // Optional full business profile — persisted on the tenant and pushed to
+  // Railway server-side (best-effort, non-blocking). Keeps the browser on a
+  // single origin so Railway's broken CORS preflight can never break checkout.
+  const profilePayload = (body.profile && typeof body.profile === "object")
+    ? (body.profile as Record<string, unknown>)
+    : null;
+
+  const errors: string[] = [];
+  if (!rawSlug || !/^[a-z0-9][a-z0-9-]*[a-z0-9]?$/.test(rawSlug) || rawSlug.length > 60) {
+    errors.push("slug (lowercase alphanumeric + hyphens, 2-60 chars)");
+  }
+  if (!name) errors.push("name");
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push("email (invalid format)");
+  if (!["base", "pro"].includes(plan)) errors.push("plan (must be 'base' or 'pro' — free tier removed)");
+  if (errors.length > 0) {
+    return withCors(
+      jsonErr(400, "validation_error", `Missing or invalid fields: ${errors.join(", ")}`),
+      request,
+    );
+  }
+
+  // Synthesize a tenant key under our own namespace. This is NEVER used for DNS.
+  // The skipDns flag prevents any custom hostname creation path from running.
+  const slug = rawSlug;
+  const domain = `${slug}.hosted.advocatemcp.com`;
+  const now = new Date().toISOString();
+
+  // ── TEMPORARY DIAGNOSTIC: Stripe key mode probe ────────────────────────────
+  // Logs only the first ~12 chars of each key. Stripe treats the `sk_test_` /
+  // `sk_live_` / `whsec_test_` / `price_` prefixes as non-secret mode
+  // indicators, and 12 chars is not enough entropy to compromise the secret.
+  // This log exists to definitively answer "is the deployed worker in test
+  // mode or live mode?" — watch via `wrangler tail`. Remove in a follow-up
+  // deploy once the test-mode flow is verified end-to-end.
+  console.log(JSON.stringify({
+    onboarding: true,
+    event: "stripe_key_probe",
+    slug,
+    plan,
+    secret_prefix:         env.STRIPE_SECRET_KEY?.slice(0, 12)     ?? "MISSING",
+    base_price_prefix:     env.STRIPE_PRICE_ID_BASE?.slice(0, 10)  ?? "MISSING",
+    pro_price_prefix:      env.STRIPE_PRICE_ID_PRO?.slice(0, 10)   ?? "MISSING",
+    webhook_secret_prefix: env.STRIPE_WEBHOOK_SECRET?.slice(0, 10) ?? "MISSING",
+  }));
+
+  // Idempotent lookup — if already paid + active, short-circuit. Otherwise
+  // we always re-issue a fresh Stripe Checkout session (safer than reusing
+  // an expired one).
+  const existing = await getTenant(env, domain);
+  if (existing && existing.status === "active" && existing.stripe?.subscriptionId) {
+    return withCors(
+      jsonOk({
+        ok: true,
+        action: "already_active",
+        slug: existing.slug,
+        status: existing.status,
+        plan: existing.stripe?.plan ?? plan,
+        message: `${slug} already has an active subscription.`,
+      }),
+      request,
+    );
+  }
+
+  // Build tenant record
+  const tenant: TenantRecord = existing ?? {
+    domain,
+    name,
+    slug,
+    phone: "",
+    email,
+    address: "",
+    city: "",
+    state: "",
+    postalCode: "",
+    country: "US",
+    services: [],
+    website: referralUrl,
+    notes: "Created via marketing wizard (advocatemcp.com/onboarding)",
+    status: "pending_payment" as TenantStatus,
+    cloudflare: {
+      customHostnameId: null,
+      verificationMethod: "none",
+      verificationStatus: "not_applicable",
+      sslStatus: "not_applicable",
+      txtName: null,
+      txtValue: null,
+      ownershipTxtName: null,
+      ownershipTxtValue: null,
+    },
+    stripe: {
+      customerId: null,
+      subscriptionId: null,
+      checkoutSessionId: null,
+      plan,
+    },
+    skipDns: true,
+    statusLog: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  if (existing) {
+    tenant.name = name;
+    tenant.email = email;
+    tenant.website = referralUrl || tenant.website;
+    tenant.skipDns = true;
+    if (!tenant.stripe) {
+      tenant.stripe = { customerId: null, subscriptionId: null, checkoutSessionId: null, plan };
+    }
+    tenant.stripe.plan = plan;
+  }
+
+  // Attach the full profile payload to the tenant (if provided) so the webhook
+  // handler has everything it needs to push to Railway once payment succeeds.
+  if (profilePayload) {
+    (tenant as unknown as { profile?: Record<string, unknown> }).profile = profilePayload;
+  }
+
+  console.log(JSON.stringify({
+    onboarding: true,
+    event: "public_onboard_started",
+    slug,
+    plan,
+    hasExisting: !!existing,
+    hasProfile: !!profilePayload,
+  }));
+
+  // ── Paid path (base or pro only — free tier removed) ──────────────────────
+  if (!env.STRIPE_SECRET_KEY) {
+    return withCors(
+      jsonErr(500, "stripe_not_configured", "STRIPE_SECRET_KEY is not set"),
+      request,
+    );
+  }
+
+  const priceId = plan === "pro" ? env.STRIPE_PRICE_ID_PRO : env.STRIPE_PRICE_ID_BASE;
+  if (!priceId) {
+    return withCors(
+      jsonErr(500, "stripe_price_missing", `STRIPE_PRICE_ID_${plan.toUpperCase()} is not set`),
+      request,
+    );
+  }
+
+  // Fixed success/cancel URLs — always land back on the marketing brand.
+  const successUrl = "https://advocatemcp.com/onboarding/complete.html?session_id={CHECKOUT_SESSION_ID}";
+  const cancelUrl  = "https://advocatemcp.com/onboarding.html?cancelled=true";
+
+  const stripeResult = await stripeApi(env.STRIPE_SECRET_KEY, "POST", "/checkout/sessions", {
+    mode: "subscription",
+    "line_items[0][price]": priceId,
+    "line_items[0][quantity]": "1",
+    success_url: successUrl,
+    cancel_url: cancelUrl,
+    client_reference_id: domain,
+    "metadata[domain]": domain,
+    "metadata[slug]": slug,
+    "metadata[plan]": plan,
+    "metadata[skip_dns]": "true",
+    customer_email: email,
+  });
+
+  if (!stripeResult.ok) {
+    console.log(JSON.stringify({
+      onboarding: true,
+      event: "public_checkout_error",
+      slug,
+      error: stripeResult.data,
+    }));
+    return withCors(
+      jsonErr(502, "stripe_error", "Failed to create Stripe Checkout Session", stripeResult.data),
+      request,
+    );
+  }
+
+  const checkoutUrl = stripeResult.data.url as string;
+  const sessionId = stripeResult.data.id as string;
+
+  tenant.stripe!.checkoutSessionId = sessionId;
+  transitionStatus(tenant, "pending_payment", `Stripe Checkout created via wizard: ${sessionId}`);
+  await putTenant(env, tenant);
+  await registerBusinessInD1(env, tenant, plan, now);
+
+  console.log(JSON.stringify({
+    onboarding: true,
+    event: "public_checkout_created",
+    slug,
+    plan,
+    sessionId,
+  }));
+
+  return withCors(
+    jsonOk({
+      ok: true,
+      slug,
+      status: "pending_payment",
+      plan,
+      checkoutUrl,
+      sessionId,
+    }, 201),
+    request,
+  );
+}
+
+// ── D1 business registration helper ──────────────────────────────────────────
+
+async function registerBusinessInD1(
+  env: Env,
+  tenant: TenantRecord,
+  plan: string,
+  now: string,
+): Promise<void> {
+  try {
+    const existingBiz = await env.DB
+      .prepare("SELECT slug FROM businesses WHERE slug = ? LIMIT 1")
+      .bind(tenant.slug)
+      .first<{ slug: string }>();
+
+    if (!existingBiz) {
+      const bizId = crypto.randomUUID().replace(/-/g, "");
+      await env.DB
+        .prepare(
+          `INSERT INTO businesses (id, slug, business_name, api_key, created_at, plan, domain)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(bizId, tenant.slug, tenant.name, "pending", now, plan, tenant.domain)
+        .run();
+    } else {
+      // Update plan and domain on re-onboard
+      await env.DB
+        .prepare("UPDATE businesses SET plan = ?, domain = ? WHERE slug = ?")
+        .bind(plan, tenant.domain, tenant.slug)
+        .run();
+    }
+  } catch (err) {
+    console.log(JSON.stringify({
+      onboarding: true,
+      event: "d1_write_warning",
+      domain: tenant.domain,
+      error: String(err),
+    }));
+    addStatusLog(tenant, "d1_write_warning", String(err));
+  }
+}
+
+// ── POST /api/stripe/webhook ─────────────────────────────────────────────────
+// Stripe calls this when checkout.session.completed fires.
+
+export async function handleStripeWebhook(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  if (!env.STRIPE_WEBHOOK_SECRET) {
+    return new Response("Webhook secret not configured", { status: 500 });
+  }
+
+  const rawBody = await request.text();
+  const sigHeader = request.headers.get("Stripe-Signature") ?? "";
+
+  const valid = await verifyStripeSignature(rawBody, sigHeader, env.STRIPE_WEBHOOK_SECRET);
+  if (!valid) {
+    console.log(JSON.stringify({ onboarding: true, event: "stripe_webhook_invalid_sig" }));
+    return new Response("Invalid signature", { status: 400 });
+  }
+
+  let event: Record<string, unknown>;
+  try {
+    event = JSON.parse(rawBody) as Record<string, unknown>;
+  } catch {
+    return new Response("Invalid JSON", { status: 400 });
+  }
+
+  const eventType = event.type as string;
+
+  console.log(JSON.stringify({
+    onboarding: true,
+    event: "stripe_webhook_received",
+    type: eventType,
+  }));
+
+  // We only care about checkout.session.completed
+  if (eventType !== "checkout.session.completed") {
+    return new Response("OK", { status: 200 });
+  }
+
+  const session = (event.data as Record<string, unknown>)?.object as Record<string, unknown>;
+  if (!session) {
+    return new Response("OK", { status: 200 });
+  }
+
+  const domain = session.client_reference_id as string;
+  if (!domain) {
+    console.log(JSON.stringify({
+      onboarding: true,
+      event: "stripe_webhook_no_domain",
+      sessionId: session.id,
+    }));
+    return new Response("OK", { status: 200 });
+  }
+
+  const tenant = await getTenant(env, domain);
+  if (!tenant) {
+    console.log(JSON.stringify({
+      onboarding: true,
+      event: "stripe_webhook_tenant_not_found",
+      domain,
+    }));
+    return new Response("OK", { status: 200 });
+  }
+
+  // Update Stripe fields
+  if (!tenant.stripe) {
+    tenant.stripe = { customerId: null, subscriptionId: null, checkoutSessionId: null, plan: "base" };
+  }
+  tenant.stripe.customerId = (session.customer as string) ?? null;
+  tenant.stripe.subscriptionId = (session.subscription as string) ?? null;
+  tenant.stripe.checkoutSessionId = (session.id as string) ?? null;
+
+  // Detect plan from metadata or line items
+  const metadata = session.metadata as Record<string, string> | undefined;
+  if (metadata?.plan) {
+    tenant.stripe.plan = metadata.plan as "free" | "base" | "pro";
+  }
+
+  // Transition status based on whether this tenant needs a DNS step.
+  // Wizard flow (skipDns) → straight to active, no Cloudflare custom hostname.
+  // Admin/Pro flow (default) → paid_pending_dns, then the /onboard DNS wizard.
+  if (tenant.skipDns === true) {
+    transitionStatus(tenant, "active", "Payment received — wizard flow, no DNS needed");
+    console.log(JSON.stringify({
+      onboarding: true,
+      event: "public_onboard_paid_active",
+      domain,
+      slug: tenant.slug,
+    }));
+  } else {
+    transitionStatus(tenant, "paid_pending_dns", "Payment received via Stripe Checkout");
+    // Create CF custom hostname now that payment is confirmed
+    await createCfHostnameForTenant(env, tenant);
+  }
+
+  // Write KV — routing slug for BUSINESS_MAP
+  await env.BUSINESS_MAP.put(domain, tenant.slug);
+  await putTenant(env, tenant);
+
+  // Update D1 with Stripe IDs
+  try {
+    await env.DB
+      .prepare(
+        `UPDATE businesses
+         SET stripe_customer_id = ?, stripe_subscription_id = ?, plan = ?
+         WHERE slug = ?`,
+      )
+      .bind(
+        tenant.stripe.customerId,
+        tenant.stripe.subscriptionId,
+        tenant.stripe.plan,
+        tenant.slug,
+      )
+      .run();
+  } catch (err) {
+    console.log(JSON.stringify({
+      onboarding: true,
+      event: "d1_stripe_update_warning",
+      domain,
+      error: String(err),
+    }));
+  }
+
+  console.log(JSON.stringify({
+    onboarding: true,
+    event: "stripe_webhook_processed",
+    domain,
+    slug: tenant.slug,
+    plan: tenant.stripe.plan,
+    status: tenant.status,
+  }));
+
+  return new Response("OK", { status: 200 });
+}
+
+// ── GET /api/onboard/session/:session_id ─────────────────────────────────────
+// Frontend polls this after returning from Stripe Checkout to detect when
+// the webhook has fired and the tenant status has progressed.
+
+export async function handleSessionStatus(
+  request: Request,
+  env: Env,
+  sessionId: string,
+): Promise<Response> {
+  if (!env.STRIPE_SECRET_KEY) {
+    return withCors(
+      jsonErr(500, "stripe_not_configured", "STRIPE_SECRET_KEY is not set"),
+      request,
+    );
+  }
+
+  // Fetch session from Stripe to get the domain
+  const stripeResult = await stripeApi(
+    env.STRIPE_SECRET_KEY,
+    "GET",
+    `/checkout/sessions/${encodeURIComponent(sessionId)}`,
+  );
+
+  if (!stripeResult.ok) {
+    return withCors(
+      jsonErr(404, "session_not_found", "Stripe session not found", stripeResult.data),
+      request,
+    );
+  }
+
+  const domain = stripeResult.data.client_reference_id as string;
+  if (!domain) {
+    return withCors(
+      jsonErr(404, "no_domain", "No domain associated with this session"),
+      request,
+    );
+  }
+
+  const tenant = await getTenant(env, domain);
+  if (!tenant) {
+    return withCors(
+      jsonErr(404, "tenant_not_found", `No tenant record for ${domain}`),
+      request,
+    );
+  }
+
+  const paymentStatus = stripeResult.data.payment_status as string;
+
+  // Wizard (skipDns) tenants: return a minimal public shape. No DNS, no PII.
+  if (tenant.skipDns === true) {
+    return withCors(
+      jsonOk({
+        sessionId,
+        slug: tenant.slug,
+        status: tenant.status,
+        plan: tenant.stripe?.plan ?? "base",
+        paymentStatus,
+      }),
+      request,
+    );
+  }
+
+  // Admin/Pro (DNS) tenants: require X-Admin-Secret for the full response.
+  if (!requireAdmin(request, env)) {
+    return jsonErr(401, "unauthorized", "Authentication required");
+  }
+
+  return jsonOk({
+    sessionId,
+    domain,
+    slug: tenant.slug,
+    status: tenant.status,
+    plan: tenant.stripe?.plan ?? "base",
+    paymentStatus,
+    dns: tenant.status === "paid_pending_dns" || tenant.status === "free_pending_dns"
+      ? buildDnsInstructions(tenant)
+      : undefined,
+  });
+}

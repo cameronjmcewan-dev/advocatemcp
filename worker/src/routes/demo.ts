@@ -5,9 +5,20 @@
  *   GET /demo              — search landing
  *   GET /demo/search?q=    — fuzzy match → redirect to /demo/:slug or show nomatch
  *   GET /demo/:slug        — side-by-side comparison + bot simulation (deep-linkable)
+ *
+ * Design system: imports tokens and header chrome from ./sharedLayout.ts.
+ * Do NOT add hardcoded hex colors to styles in this file — use var(--bg),
+ * var(--text), var(--green), etc. See sharedLayout.ts for the full palette.
  */
 
 import type { Env } from "../types";
+import {
+  BASE_TOKENS_CSS,
+  BASE_LAYOUT_CSS,
+  renderHeader,
+  renderFooter,
+  themeToggleScript,
+} from "./sharedLayout";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -237,104 +248,93 @@ function htmlResp(body: string): Response {
   });
 }
 
-// ── Shared CSS (result + nomatch pages) ───────────────────────────────────
+// ── Page-specific styles for /demo/:slug and nomatch ──────────────────────
+// All rules use var(--...) from sharedLayout.ts. No hardcoded hex.
+// Header chrome (.hdr, .logo, .hdr-sub, .btn-sm) lives in BASE_LAYOUT_CSS.
 
 function demoStyles(): string {
   return `<style>
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#e6edf3;line-height:1.5;font-size:.875rem}
-h1,h2,h3,h4,h5,h6{font-family:'Poppins',sans-serif}
-a{color:inherit;text-decoration:none}
-/* Header */
-.hdr{padding:.875rem 1.5rem;display:flex;align-items:center;gap:1rem;border-bottom:1px solid #21262d;position:sticky;top:0;background:#0d1117;z-index:10}
-.logo{display:flex;align-items:center;gap:.5rem;font-weight:600;font-size:.9375rem;color:#e6edf3;flex-shrink:0}
-.logo-icon{width:26px;height:26px;background:#238636;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;color:#fff}
-.hdr-sub{flex:1;color:#8b949e;font-size:.8125rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.btn-sm{background:#238636;color:#fff;border-radius:6px;padding:.375rem .875rem;font-size:.8125rem;font-weight:500;white-space:nowrap}
-.btn-sm:hover{background:#2ea043}
 /* Wrap */
-.wrap{max-width:1100px;margin:0 auto;padding:1.5rem}
+.wrap{max-width:1100px;margin:0 auto;padding:1.5rem;flex:1;width:100%}
 /* Biz hero */
 .biz-hero{margin-bottom:1.5rem}
-.back{color:#8b949e;font-size:.8125rem;display:inline-block;margin-bottom:.75rem}
-.back:hover{color:#e6edf3}
-.biz-name{font-size:1.75rem;font-weight:700;letter-spacing:-.02em;margin-bottom:.375rem}
+.back{color:var(--sub);font-size:.8125rem;display:inline-block;margin-bottom:.75rem;transition:color .15s}
+.back:hover{color:var(--text)}
+.biz-name{font-size:1.75rem;font-weight:700;letter-spacing:-.02em;margin-bottom:.375rem;color:var(--text)}
 .biz-meta{display:flex;gap:.75rem;align-items:center;flex-wrap:wrap}
-.biz-tag{background:rgba(56,139,253,.12);border:1px solid rgba(56,139,253,.25);color:#388bfd;border-radius:20px;padding:.15rem .625rem;font-size:.75rem;font-weight:500}
-.biz-loc{color:#8b949e;font-size:.8125rem}
-.biz-sub{color:#8b949e;font-size:.9375rem;margin-top:.25rem;max-width:600px}
+.biz-tag{background:var(--blue-bg);border:1px solid var(--blue-border);color:var(--blue);border-radius:20px;padding:.15rem .625rem;font-size:.75rem;font-weight:500}
+.biz-loc{color:var(--sub);font-size:.8125rem}
+.biz-sub{color:var(--sub);font-size:.9375rem;margin-top:.25rem;max-width:600px}
 /* Compare */
 .cmp{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem}
 @media(max-width:700px){.cmp{grid-template-columns:1fr}}
-.panel{border-radius:10px;overflow:hidden;border:1px solid #21262d;display:flex;flex-direction:column}
-.panel-hd{display:flex;align-items:center;gap:.5rem;padding:.75rem 1rem;font-size:.8125rem;font-weight:600;border-bottom:1px solid #21262d;background:#161b22}
+.panel{border-radius:10px;overflow:hidden;border:1px solid var(--border);display:flex;flex-direction:column}
+.panel-hd{display:flex;align-items:center;gap:.5rem;padding:.75rem 1rem;font-size:.8125rem;font-weight:600;border-bottom:1px solid var(--border);background:var(--bg2)}
 .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
-.dot-r{background:#f85149}.dot-g{background:#3fb950}
-.badge{margin-left:auto;font-size:.625rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:.15rem .4rem;border-radius:4px;background:rgba(63,185,80,.15);color:#3fb950;border:1px solid rgba(63,185,80,.3)}
+.dot-r{background:var(--red)}.dot-g{background:var(--green3)}
+.badge{margin-left:auto;font-size:.625rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:.15rem .4rem;border-radius:4px;background:rgba(63,185,80,.15);color:var(--green3);border:1px solid rgba(63,185,80,.3)}
 .badge-live{animation:pulse 2s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
-.panel-before .panel-hd{color:#8b949e}
-.panel-after .panel-hd{color:#e6edf3}
-.panel-before{background:#161b22}
-.panel-after{background:#0d1117}
+.panel-before .panel-hd{color:var(--sub)}
+.panel-after .panel-hd{color:var(--text)}
+.panel-before{background:var(--bg2)}
+.panel-after{background:var(--bg)}
 .panel-bd{padding:1rem;flex:1;display:flex;flex-direction:column;gap:.75rem}
 /* Content */
-.raw-text{font-family:'SF Mono','Fira Code',Consolas,monospace;font-size:.75rem;color:#8b949e;line-height:1.6;white-space:pre-wrap;word-break:break-word;background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:.75rem;max-height:260px;overflow:hidden;flex:1}
-.fetch-fail{color:#6e7681;font-size:.8125rem;font-style:italic;background:#161b22;border:1px solid #21262d;border-radius:6px;padding:1rem 1.125rem;flex:1;line-height:1.6}
-.fetch-fail code{background:#21262d;border-radius:3px;padding:0 .25rem;font-size:.8125rem;font-style:normal;color:#a5d6ff}
-.json-view{font-family:'SF Mono','Fira Code',Consolas,monospace;font-size:.75rem;color:#e6edf3;line-height:1.65;white-space:pre-wrap;word-break:break-word;background:#161b22;border:1px solid #21262d;border-radius:6px;padding:.75rem;max-height:260px;overflow-y:auto;flex:1}
-.jk{color:#79c0ff}.js{color:#a5d6ff}.jb{color:#ffa657}.jn{color:#79c0ff}
+.raw-text{font-family:var(--mono);font-size:.75rem;color:var(--sub);line-height:1.6;white-space:pre-wrap;word-break:break-word;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:.75rem;max-height:260px;overflow:hidden;flex:1}
+.fetch-fail{color:var(--muted);font-size:.8125rem;font-style:italic;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:1rem 1.125rem;flex:1;line-height:1.6}
+.fetch-fail code{background:var(--border);border-radius:3px;padding:0 .25rem;font-size:.8125rem;font-style:normal;color:var(--blue)}
+.json-view{font-family:var(--mono);font-size:.75rem;color:var(--text);line-height:1.65;white-space:pre-wrap;word-break:break-word;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:.75rem;max-height:260px;overflow-y:auto;flex:1}
+/* JSON syntax highlight — keep as literals since they're semantic, not theme */
+.jk{color:#79c0ff}.js{color:#a5d6ff}.jb{color:var(--orange)}.jn{color:#79c0ff}
+html.light .jk{color:#0969da}html.light .js{color:#0a3069}html.light .jn{color:#0969da}
 .plbl{font-size:.6875rem;font-weight:500;letter-spacing:.04em}
-.plbl-neg{color:#6e7681}.plbl-pos{color:#3fb950}
+.plbl-neg{color:var(--muted)}.plbl-pos{color:var(--green3)}
 /* Bot sim */
-.sim{background:#161b22;border:1px solid #21262d;border-radius:10px;margin-bottom:1.5rem;overflow:hidden}
-.sim-hd{padding:.875rem 1rem;border-bottom:1px solid #21262d}
-.sim-title{font-weight:600;font-size:.9375rem;margin-bottom:.125rem}
-.sim-sub{color:#8b949e;font-size:.8125rem}
-.sim-term{background:#0d1117;padding:.75rem 1rem}
-.term-bar{display:flex;align-items:center;gap:.4rem;margin-bottom:.75rem;padding-bottom:.75rem;border-bottom:1px solid #21262d}
+.sim{background:var(--bg2);border:1px solid var(--border);border-radius:10px;margin-bottom:1.5rem;overflow:hidden}
+.sim-hd{padding:.875rem 1rem;border-bottom:1px solid var(--border)}
+.sim-title{font-weight:600;font-size:.9375rem;margin-bottom:.125rem;color:var(--text)}
+.sim-sub{color:var(--sub);font-size:.8125rem}
+.sim-term{background:var(--bg);padding:.75rem 1rem}
+.term-bar{display:flex;align-items:center;gap:.4rem;margin-bottom:.75rem;padding-bottom:.75rem;border-bottom:1px solid var(--border)}
 .tb-dot{width:10px;height:10px;border-radius:50%}
-.tb-r{background:#f85149}.tb-y{background:#d29922}.tb-g{background:#3fb950}
-.term-label{color:#484f58;font-size:.75rem;margin-left:.5rem}
-.bot-row{display:flex;align-items:center;gap:.625rem;padding:.4375rem 0;font-family:'SF Mono','Fira Code',Consolas,monospace;font-size:.8125rem;transition:opacity .45s ease,transform .45s ease;opacity:0;transform:translateY(8px)}
-.bt{color:#484f58;width:5.5rem;flex-shrink:0;font-size:.75rem}
-.bn{color:#388bfd;font-weight:600;width:7.5rem;flex-shrink:0}
-.ba{color:#30363d}
-.bd{color:#8b949e;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bk{color:#3fb950;font-weight:500;white-space:nowrap}
-.sim-note{font-size:.75rem;color:#484f58;padding:.75rem 1rem;border-top:1px solid #21262d;font-style:italic}
+.tb-r{background:var(--red)}.tb-y{background:var(--yellow)}.tb-g{background:var(--green3)}
+.term-label{color:var(--muted);font-size:.75rem;margin-left:.5rem}
+.bot-row{display:flex;align-items:center;gap:.625rem;padding:.4375rem 0;font-family:var(--mono);font-size:.8125rem;transition:opacity .45s ease,transform .45s ease;opacity:0;transform:translateY(8px)}
+.bt{color:var(--muted);width:5.5rem;flex-shrink:0;font-size:.75rem}
+.bn{color:var(--blue);font-weight:600;width:7.5rem;flex-shrink:0}
+.ba{color:var(--border2)}
+.bd{color:var(--sub);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bk{color:var(--green3);font-weight:500;white-space:nowrap}
+.sim-note{font-size:.75rem;color:var(--muted);padding:.75rem 1rem;border-top:1px solid var(--border);font-style:italic}
 /* Stats */
-.stats-ttl{font-size:.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:#484f58;margin-bottom:.75rem}
+.stats-ttl{font-size:.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.75rem}
 .stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.5rem}
 @media(max-width:520px){.stats-grid{grid-template-columns:1fr 1fr}}
-.stat{background:#161b22;border:1px solid #21262d;border-radius:10px;padding:1rem}
-.sv{font-size:1.5rem;font-weight:700;color:#e6edf3;line-height:1;margin-bottom:.25rem}
-.sl{font-size:.75rem;font-weight:600;color:#8b949e;margin-bottom:.125rem}
-.sh{font-size:.6875rem;color:#484f58}
+.stat{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:1rem}
+.sv{font-size:1.5rem;font-weight:700;color:var(--text);line-height:1;margin-bottom:.25rem}
+.sl{font-size:.75rem;font-weight:600;color:var(--sub);margin-bottom:.125rem}
+.sh{font-size:.6875rem;color:var(--muted)}
 /* CTA */
-.cta{background:linear-gradient(135deg,#161b22 0%,#1c2128 100%);border:1px solid #30363d;border-radius:10px;padding:1.5rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap}
-.cta-copy{font-size:1rem;font-weight:500;color:#e6edf3;line-height:1.4;flex:1}
-.cta-btn{background:#238636;color:#fff;border-radius:8px;padding:.625rem 1.25rem;font-size:.9375rem;font-weight:500;white-space:nowrap}
-.cta-btn:hover{background:#2ea043}
+.cta{background:linear-gradient(135deg,var(--bg2) 0%,var(--bg3) 100%);border:1px solid var(--border2);border-radius:10px;padding:1.5rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap}
+.cta-copy{font-size:1rem;font-weight:500;color:var(--text);line-height:1.4;flex:1}
+.cta-btn{background:var(--green);color:#fff;border-radius:8px;padding:.625rem 1.25rem;font-size:.9375rem;font-weight:500;white-space:nowrap;transition:background .15s}
+.cta-btn:hover{background:var(--green2)}
 /* Share */
 .share{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;margin-bottom:1.5rem}
-.share-url{background:#161b22;border:1px solid #21262d;border-radius:5px;padding:.25rem .5rem;font-size:.75rem;color:#8b949e;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'SF Mono','Fira Code',Consolas,monospace}
-.copy-btn{background:transparent;border:1px solid #30363d;border-radius:5px;color:#8b949e;font-size:.75rem;padding:.25rem .625rem;cursor:pointer;transition:all .15s;white-space:nowrap}
-.copy-btn:hover{border-color:#8b949e;color:#e6edf3}
-.try-others{color:#8b949e;font-size:.8125rem;text-align:center;padding:.75rem 0}
-.try-others a{color:#388bfd}
+.share-label{color:var(--muted);font-size:.8125rem;white-space:nowrap}
+.share-url{background:var(--bg2);border:1px solid var(--border);border-radius:5px;padding:.25rem .5rem;font-size:.75rem;color:var(--sub);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono)}
+.copy-btn{background:transparent;border:1px solid var(--border2);border-radius:5px;color:var(--sub);font-size:.75rem;padding:.25rem .625rem;cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit}
+.copy-btn:hover{border-color:var(--sub);color:var(--text)}
+.try-others{color:var(--sub);font-size:.8125rem;text-align:center;padding:.75rem 0}
+.try-others a{color:var(--blue)}
 </style>`;
 }
 
 // ── Shared fragments ───────────────────────────────────────────────────────
 
 function hdr(subtitle: string): string {
-  return `<header class="hdr">
-  <a href="/demo" class="logo"><div class="logo-icon">A</div>AdvocateMCP</a>
-  <div class="hdr-sub">${esc(subtitle)}</div>
-  <a href="/onboard" class="btn-sm">Get Started →</a>
-</header>`;
+  return renderHeader({ subtitle, showCta: true, activeNav: "demo" });
 }
 
 function ctaSection(): string {
@@ -356,55 +356,40 @@ function landingHtml(registry: RegistryEntry[], error: string | null): string {
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AdvocateMCP — AI Visibility Demo</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta name="theme-color" content="#0d1117" media="(prefers-color-scheme:dark)">
+<meta name="theme-color" content="#f9fafb" media="(prefers-color-scheme:light)">
+${BASE_TOKENS_CSS}
+${BASE_LAYOUT_CSS}
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#e6edf3;min-height:100vh;display:flex;flex-direction:column}
-h1,h2,h3,h4,h5,h6{font-family:'Poppins',sans-serif}
-a{color:inherit;text-decoration:none}
-.hdr{padding:1rem 1.5rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #21262d}
-.logo{display:flex;align-items:center;gap:.5rem;font-weight:600;font-size:.9375rem}
-.logo-icon{width:26px;height:26px;background:#238636;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;color:#fff}
-.nav{display:flex;gap:1.25rem;align-items:center}
-.nav a{color:#8b949e;font-size:.8125rem}
-.nav a:hover{color:#e6edf3}
+/* Landing-specific */
 .hero{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3rem 1.5rem;text-align:center}
-.tag{font-size:.6875rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#388bfd;background:rgba(56,139,253,.1);border:1px solid rgba(56,139,253,.2);border-radius:20px;padding:.25rem .75rem;display:inline-block;margin-bottom:1.5rem}
-h1{font-size:clamp(1.75rem,5vw,3rem);font-weight:700;line-height:1.2;max-width:660px;margin-bottom:1rem;letter-spacing:-.02em;color:#e6edf3}
-h1 em{font-style:normal;color:#3fb950}
-.sub{font-size:1rem;color:#8b949e;max-width:500px;line-height:1.65;margin-bottom:2.5rem}
-.err{background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.3);border-radius:6px;color:#f85149;font-size:.8125rem;padding:.625rem 1rem;margin-bottom:1.25rem;max-width:520px}
+.tag{font-size:.6875rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--blue);background:var(--blue-bg);border:1px solid var(--blue-border);border-radius:20px;padding:.25rem .75rem;display:inline-block;margin-bottom:1.5rem}
+h1{font-size:clamp(1.75rem,5vw,3rem);font-weight:700;line-height:1.2;max-width:660px;margin-bottom:1rem;letter-spacing:-.02em;color:var(--text)}
+h1 em{font-style:normal;color:var(--green3)}
+.sub{font-size:1rem;color:var(--sub);max-width:500px;line-height:1.65;margin-bottom:2.5rem}
+.err{background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.3);border-radius:6px;color:var(--red);font-size:.8125rem;padding:.625rem 1rem;margin-bottom:1.25rem;max-width:520px}
 .form{display:flex;gap:.5rem;width:100%;max-width:520px}
-.inp{flex:1;background:#161b22;border:1px solid #30363d;border-radius:8px;padding:.75rem 1rem;font-size:.9375rem;color:#e6edf3;outline:none;transition:border-color .15s}
-.inp::placeholder{color:#484f58}
-.inp:focus{border-color:#388bfd}
-.sbtn{background:#238636;color:#fff;border:none;border-radius:8px;padding:.75rem 1.25rem;font-size:.9375rem;font-weight:500;cursor:pointer;white-space:nowrap}
-.sbtn:hover{background:#2ea043}
+.inp{flex:1;background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:.75rem 1rem;font-size:.9375rem;color:var(--text);outline:none;transition:border-color .15s;font-family:inherit}
+.inp::placeholder{color:var(--muted)}
+.inp:focus{border-color:var(--blue)}
+.sbtn{background:var(--green);color:#fff;border:none;border-radius:8px;padding:.75rem 1.25rem;font-size:.9375rem;font-weight:500;cursor:pointer;white-space:nowrap;transition:background .15s;font-family:inherit}
+.sbtn:hover{background:var(--green2)}
 .chips{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center;margin-top:.875rem}
-.chip-label{color:#484f58;font-size:.75rem;line-height:2}
-.chip{background:#161b22;border:1px solid #30363d;border-radius:20px;padding:.25rem .75rem;font-size:.8125rem;color:#8b949e;transition:all .15s}
-.chip:hover{border-color:#388bfd;color:#e6edf3}
-.how{background:#161b22;border-top:1px solid #21262d;padding:2.5rem 1.5rem}
+.chip-label{color:var(--muted);font-size:.75rem;line-height:2}
+.chip{background:var(--bg2);border:1px solid var(--border2);border-radius:20px;padding:.25rem .75rem;font-size:.8125rem;color:var(--sub);transition:all .15s}
+.chip:hover{border-color:var(--blue);color:var(--text)}
+.how{background:var(--bg2);border-top:1px solid var(--border);padding:2.5rem 1.5rem}
 .how-inner{max-width:780px;margin:0 auto}
-.how h2{font-size:.9375rem;font-weight:600;color:#e6edf3;margin-bottom:1.25rem;text-align:center}
+.how h2{font-size:.9375rem;font-weight:600;color:var(--text);margin-bottom:1.25rem;text-align:center}
 .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:1rem}
-.step{background:#0d1117;border:1px solid #21262d;border-radius:8px;padding:1rem}
-.step-n{font-size:.6875rem;font-weight:700;color:#3fb950;letter-spacing:.08em;margin-bottom:.375rem}
-.step-t{font-size:.875rem;font-weight:600;color:#e6edf3;margin-bottom:.25rem}
-.step-d{font-size:.8125rem;color:#8b949e;line-height:1.5}
+.step{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:1rem}
+.step-n{font-size:.6875rem;font-weight:700;color:var(--green3);letter-spacing:.08em;margin-bottom:.375rem}
+.step-t{font-size:.875rem;font-weight:600;color:var(--text);margin-bottom:.25rem}
+.step-d{font-size:.8125rem;color:var(--sub);line-height:1.5}
 </style>
 </head>
 <body>
-<header class="hdr">
-  <div class="logo"><div class="logo-icon">A</div>AdvocateMCP</div>
-  <nav class="nav">
-    <a href="/status">Platform Status</a>
-    <a href="/login">Client Login</a>
-  </nav>
-</header>
+${renderHeader({ showCta: false, activeNav: "demo" })}
 <div class="hero">
   <div class="tag">Live Demo</div>
   <h1>See what AI searches say<br>about <em>your business</em></h1>
@@ -426,6 +411,8 @@ h1 em{font-style:normal;color:#3fb950}
     </div>
   </div>
 </section>
+${renderFooter()}
+${themeToggleScript()}
 </body>
 </html>`;
 }
@@ -460,9 +447,10 @@ function nomatchHtml(
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AdvocateMCP Demo — ${esc(q)}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta name="theme-color" content="#0d1117" media="(prefers-color-scheme:dark)">
+<meta name="theme-color" content="#f9fafb" media="(prefers-color-scheme:light)">
+${BASE_TOKENS_CSS}
+${BASE_LAYOUT_CSS}
 ${demoStyles()}
 </head>
 <body>
@@ -489,6 +477,8 @@ ${hdr("Not registered yet")}
   ${tryLinks ? `<div class="try-others">See live examples: ${tryLinks}</div>` : ""}
   ${ctaSection()}
 </div>
+${renderFooter()}
+${themeToggleScript()}
 </body>
 </html>`;
 }
@@ -558,9 +548,10 @@ function resultHtml(
 <title>AI Visibility Demo — ${esc(profile.name)}</title>
 <meta property="og:title" content="AI Visibility Demo — ${esc(profile.name)}">
 <meta property="og:description" content="See exactly what GPTBot, PerplexityBot &amp; ClaudeBot receive when they query ${esc(profile.name)}.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta name="theme-color" content="#0d1117" media="(prefers-color-scheme:dark)">
+<meta name="theme-color" content="#f9fafb" media="(prefers-color-scheme:light)">
+${BASE_TOKENS_CSS}
+${BASE_LAYOUT_CSS}
 ${demoStyles()}
 </head>
 <body>
@@ -622,12 +613,12 @@ ${hdr(`${profile.name} — AI Visibility Demo`)}
 
   <!-- Share -->
   <div class="share">
-    <span style="color:#484f58;font-size:.8125rem;white-space:nowrap">Share this demo:</span>
+    <span class="share-label">Share this demo:</span>
     <code class="share-url">${esc(shareUrl)}</code>
     <button class="copy-btn" onclick="navigator.clipboard.writeText(${JSON.stringify(shareUrl)}).then(()=>{this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000)})">Copy</button>
   </div>
 </div>
-
+${renderFooter()}
 <script>
 (function(){
   var rows=document.querySelectorAll('.bot-row');
@@ -637,6 +628,7 @@ ${hdr(`${profile.name} — AI Visibility Demo`)}
   });
 })();
 </script>
+${themeToggleScript()}
 </body>
 </html>`;
 }

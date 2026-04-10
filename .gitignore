@@ -15,3 +15,12 @@ server/dist/
 server/*.db
 server/*.db-shm
 server/*.db-wal
+
+# Worker build artifacts
+.wrangler/
+worker/.wrangler/
+worker/dist/
+worker/node_modules/
+
+# Logs
+*.log

@@ -20,6 +20,10 @@ export interface Business {
   business_name: string;
   api_key: string;
   created_at: string;
+  domain?: string;
+  plan?: string;
+  stripe_customer_id?: string;
+  stripe_subscription_id?: string;
 }
 
 export interface Session {
