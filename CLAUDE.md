@@ -246,7 +246,7 @@ This bit us during the `workman-copy-co` dry-run cleanup on 2026-04-10: a `d1 ex
 
 ## What is in progress
 
-Phase 1 origin passthrough shipped (commit `18c3848`, deploy `9728448b-cf1a-4c1f-a099-fbcfc4243f09`). Phase 2 auto-discovery is next.
+Phase 2 origin auto-discovery shipped. Phase 1.5 proxy cleanup is next, then Phase 3 self-serve onboarding UI.
 
 ## What is next on the roadmap (priority order)
 

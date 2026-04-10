@@ -110,9 +110,34 @@ Sessions must be completed in order. Session 1 is non-negotiable as first becaus
 
 ## Phase 2 — Origin Auto-Discovery
 
-**Status: NEXT UP**
+**Status: SHIPPED 2026-04-10** — worker deploy version: `500f081e-73cb-4507-a605-e04112f7c2d6`. Commits: `894529c` (implementation), `1f4c94e` (regression tests for unresolvable domains misreported as self_loop), `d5b1ba7` (semantic fix distinguishing unreachable domains from self-loop). Built directly on Phase 1 (`18c3848`).
 
-**Scope:** Build on Phase 1 by making the activation flow discover the customer's origin URL automatically instead of requiring the admin to pass `origin_url` explicitly. When a domain is activated via `POST /admin/domains/activate` without an `origin_url`, the Worker should attempt to resolve the domain's pre-CNAME destination (e.g. by reading the registrar's DNS or a provided fallback hint) and populate `origin_url` in `TENANT_DATA` automatically. Removes the manual step from the onboarding checklist and makes the passthrough work out of the box for self-serve customers.
+**Scope:** Build on Phase 1 by making the activation flow discover the customer's origin URL automatically instead of requiring the admin to pass `origin_url` explicitly. When `POST /admin/domains/activate` is called without an `origin_url`, the Worker fetches `https://{domain}` with `redirect: "follow"` and a 10-second `AbortSignal.timeout`, then uses the final URL's scheme + host as the origin. Explicit `origin_url` in the request body still runs the Phase 1 validation path unchanged. The success response now surfaces `origin_url` and `origin_url_source: "explicit" | "discovered"` so the admin can see what was picked.
+
+### Implementation details
+
+- New `worker/src/lib/origin-discovery.ts` with `discoverOriginUrl(domain)` — GET with `redirect: "follow"`, body cancelled after response, identifies itself via `User-Agent: AdvocateMCP-Discovery/1.0 (+https://advocatemcp.com)`.
+- Rejection reasons: `fetch_failed` (network error, DNS failure, or synthetic Cloudflare 5xx response on the same hostname — all indicate "domain is unreachable"), `fetch_timeout` (AbortError), `origin_5xx` (cross-host redirect + 5xx — real origin incident), `http_scheme` (redirect downgraded to HTTP), `self_loop` (cross-host check: same hostname + non-5xx), `worker_loop` (final hostname is a known AdvocateMCP Worker host). All return HTTP 400 with a structured `detail` payload.
+- `WORKER_HOSTNAMES` is now exported from `worker/src/lib/proxy.ts` as a shared `ReadonlySet<string>` and imported by `origin-discovery.ts` — the runtime proxy loop check and the activation-time discovery check share one source of truth and can never drift.
+- `handleActivateDomain` in `worker/src/routes/domains.ts` gains an `else` branch on `rawOriginUrl`: absent → call `discoverOriginUrl` → thread the result into `validatedOriginUrl` the same way an explicit value would be. Phase 1 explicit path runs byte-for-byte unchanged when `origin_url` is present.
+- 17 unit tests in `worker/src/lib/origin-discovery.test.ts` cover single-hop redirect success, multi-hop redirect, self-loop rejection (case-insensitive), HTTPS→HTTP rejection, worker-hostname rejection, 5xx rejection, network error, AbortError timeout, 4xx final status acceptance, body-cancel verification, User-Agent header check, start URL construction, and four regression tests for the unresolvable-domain semantic boundary (same-host + 5xx → `fetch_failed`, same-host + 4xx/499 → `self_loop`, TypeError throw → `fetch_failed`, synthetic 530 → `fetch_failed`).
+- **Semantic boundary note**: Cloudflare Workers' `fetch()` does NOT throw a TypeError on DNS resolution failure — it returns a synthetic Cloudflare error response (5xx status with the input URL preserved in `response.url`). Phase 2's initial implementation (commit `894529c`) hit `self_loop` on this path because the check order was `self_loop` before `origin_5xx`, and the synthetic response had `finalHostname === normalizedDomain`. Fixed in `d5b1ba7` by inserting a same-host 5xx check that maps to `fetch_failed` BEFORE the `self_loop` check. Regression tests in `1f4c94e` lock in the behavior.
+
+### Production verification (2026-04-10)
+
+| Test | Result |
+|---|---|
+| Test A — happy path, cross-host redirect auto-discovery | PASS — discovered origin matches the expected post-redirect hostname, `origin_url_source: "discovered"` |
+| Test B — self-loop rejection for a site serving at its own hostname with no cross-host redirect | PASS — `reason: "self_loop"`, clear actionable error message with Cloudflare-challenge workaround hint |
+| Test C — unreachable domain rejection for a nonexistent TLD | FAILED on first run, caught a real bug in initial Phase 2 implementation, fixed in `d5b1ba7`, re-ran → PASS with `reason: "fetch_failed"` |
+| Test D — Phase 1 explicit `origin_url` path preserved unchanged | PASS — `origin_url_source: "explicit"`, same response shape as pre-Phase-2 |
+
+### Known limitations (documented, not blocking)
+
+- Sites fronted by Cloudflare with Under Attack Mode or a JS challenge page will return 200 from the customer's own hostname and trigger `self_loop` rejection. The error message explicitly calls out this case and tells customers to provide `origin_url` explicitly. Header-sniffing detection deferred — fragile on a maybe-problem.
+- Discovery currently runs a fresh fetch on every activation call. No caching. Revisit if repeated activations for the same domain become a measurable cost.
+- Integration test for `handleActivateDomain` itself deferred to a future testing-infrastructure session — the 17 discovery-level unit tests plus manual E2E are sufficient coverage for Phase 2.
+- If a domain is already CNAMEd to `customers.advocatemcp.com` from a prior half-activated state, the discovery fetch may hit the Worker itself and produce a confusing error. Ordering the CF "already exists" short-circuit before discovery would fix it but is a Phase 1 flow change — out of scope for Phase 2.
 
 ---
 
