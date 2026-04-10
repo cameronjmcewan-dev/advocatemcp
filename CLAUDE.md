@@ -12,15 +12,15 @@ Static GEO tools (Scrunch, Profound, Peec, Otterly, Athena HQ) monitor citations
 
 ## Stack — do not deviate without explicit approval
 
-- **Edge**: Cloudflare Worker (TypeScript, strict mode), deployed via wrangler
+- **Edge**: Cloudflare Worker (TypeScript, strict mode), deployed via wrangler from `worker/` directory only
 - **Backend**: Node.js + Express on Railway (`server/`), TypeScript
-- **Databases**: SQLite for analytics and business data (`server/dev.db`), Cloudflare D1 for portal auth and edge-side data, KV namespace `BUSINESS_MAP` for domain→slug routing
+- **Databases**: SQLite for analytics and full business data (`server/dev.db`), Cloudflare D1 for portal auth and edge-side data (`advocatemcp-auth`), KV namespace `BUSINESS_MAP` for domain→slug routing, KV namespace `TENANT_DATA` for tenant onboarding records
 - **AI**: Anthropic Claude API, model `claude-sonnet-4-6`, prompt caching enabled on system prompts
 - **Auth (portal)**: PBKDF2-SHA256 100k iterations, session tokens hashed with SHA-256, HttpOnly+Secure+SameSite=Lax cookies
 - **Email**: Resend (use this, not Postmark)
+- **Payments**: Stripe (secrets stored as Wrangler secrets — all four must be same mode: all test OR all live)
 - **Testing**: bash smoke test at `worker/scripts/smoke-test.sh`, vitest for new code
-- **Crypto**: HMAC-SHA256 for signed tokens — helpers go in `server/src/lib/crypto.ts` and `worker/src/lib/crypto.ts` with identical signing logic
-- **Routing**: Worker uses native fetch handler dispatch, Express uses standard Express routers
+- **Crypto**: HMAC-SHA256 for signed tokens — helpers go in `server/src/lib/` and `worker/src/lib/` with identical signing logic
 
 ## Repository layout
 
@@ -28,20 +28,24 @@ Static GEO tools (Scrunch, Profound, Peec, Otterly, Athena HQ) monitor citations
 advocatemcp/
 ├── server/                    # Node/Express backend on Railway
 │   ├── src/
-│   │   ├── routes/            # Express routes (agents, analytics, mcp, register)
-│   │   ├── lib/               # Shared helpers
-│   │   └── prompts/           # (to be created in session 2) per-bot system prompts
+│   │   ├── routes/            # Express routes (agent, analytics, mcp, register, wellknown)
+│   │   ├── agent/             # Claude prompt builder and query runner
+│   │   ├── middleware/        # Auth, rate limiting
+│   │   ├── lib/               # Shared helpers (crypto, tracked-url — to be added in Session 1)
+│   │   └── prompts/           # Per-bot system prompts (to be added in Session 2)
 │   ├── dev.db                 # SQLite — DO NOT commit
 │   └── package.json
 ├── worker/                    # Cloudflare Worker (edge)
 │   ├── src/
 │   │   ├── index.ts           # Main entrypoint, bot detection, dispatch
-│   │   ├── portal/            # Multi-tenant client portal (login, dashboard)
-│   │   └── lib/               # Worker helpers
-│   ├── migrations/            # D1 migrations
-│   ├── scripts/               # smoke-test.sh, create-client.sh
-│   ├── public/                # (to be created) static assets served by worker
-│   └── wrangler.toml
+│   │   ├── routes/            # portal, demo, onboard, stripe, domains, sharedLayout
+│   │   ├── auth.ts            # PBKDF2 auth helpers
+│   │   ├── portalDb.ts        # D1 query helpers
+│   │   └── lib/               # Worker helpers (tracked-url — to be added in Session 1)
+│   ├── migrations/            # D1 migrations (0001_init, 0002_cf_hostname, 0003_stripe)
+│   ├── scripts/               # smoke-test.sh, create-client.sh, check-design.mjs
+│   └── wrangler.toml          # ONLY wrangler config — root wrangler.toml.orphan-do-not-use is deleted
+├── site/                      # Static HTML (index, terms, privacy, DPA, onboarding)
 ├── docs/                      # Subsystem documentation — read before touching
 │   ├── attribution.md
 │   ├── bot-detection.md
@@ -52,18 +56,129 @@ advocatemcp/
 
 ## Data model — current
 
-### SQLite (server/dev.db)
-[FILL IN: run `sqlite3 server/dev.db ".schema"` and paste output here. This single section saves hours.]
+### ⚠️ Two separate `businesses` tables — NEVER merge them
 
-Tables in use today: `businesses`, `queries`, `referral_clicks` (likely — confirm by running the schema dump).
+There are two `businesses` tables by design:
 
-### D1 (advocatemcp-auth)
-[FILL IN: paste contents of `worker/migrations/0001_init.sql` here]
+1. **SQLite on Railway** — full business profile, source of truth for all business data and agent responses
+2. **D1 on the Worker** — thin auth lookup only (`id, slug, business_name, api_key, cf_hostname_id, stripe_customer_id, stripe_subscription_id, plan, domain`)
 
-Tables today: `users`, `sessions`, `user_business_access`, login attempt rate limiting.
+They must never be merged. The Worker D1 table exists solely so the portal can authenticate clients and proxy analytics requests without a round-trip to Railway for auth. The Railway SQLite table is the only place business profile data lives.
 
-### KV
-- `BUSINESS_MAP`: domain string → slug string
+### SQLite (server/dev.db) — Railway
+
+```sql
+CREATE TABLE businesses (
+  id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug                 TEXT UNIQUE NOT NULL,
+  name                 TEXT NOT NULL,
+  description          TEXT NOT NULL,
+  services             TEXT NOT NULL,          -- JSON array of service strings
+  pricing              TEXT,
+  location             TEXT,
+  phone                TEXT,
+  website              TEXT,
+  referral_url         TEXT,                   -- the CTA link to send AI searchers to
+  tone                 TEXT DEFAULT 'friendly',-- friendly | professional | luxury
+  api_key              TEXT UNIQUE NOT NULL,
+  created_at           DATETIME DEFAULT CURRENT_TIMESTAMP,
+  -- Rich SMB profile (added via ALTER TABLE migrations):
+  category             TEXT,
+  star_rating          REAL,
+  review_count         INTEGER,
+  years_in_business    INTEGER,
+  top_services         TEXT,
+  availability         TEXT,
+  differentiator       TEXT,
+  service_radius_miles INTEGER,
+  certifications       TEXT,
+  pricing_tier         TEXT,
+  service_area_keywords TEXT
+);
+
+CREATE TABLE queries (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  business_slug    TEXT NOT NULL,
+  crawler_agent    TEXT,               -- e.g. "PerplexityBot"
+  query_text       TEXT NOT NULL,
+  response_text    TEXT NOT NULL,
+  referral_clicked INTEGER DEFAULT 0,  -- updated to 1 when /track click arrives
+  intent           TEXT,               -- brand_direct|emergency|affordable|best_top|specific_service|general
+  timestamp        DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE click_events (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  business_slug TEXT NOT NULL,
+  ref           TEXT,        -- bot name that sourced the response (e.g. "PerplexityBot")
+  user_agent    TEXT,        -- UA of the human who clicked
+  ip_hash       TEXT,        -- SHA-256(IP) for deduplication
+  timestamp     DATETIME DEFAULT CURRENT_TIMESTAMP
+  -- destination TEXT column added in Session 1 migration
+  -- query_id INTEGER column added in Session 1 migration
+  -- legacy INTEGER DEFAULT 0 column added in Session 1 migration
+);
+```
+
+### D1 (advocatemcp-auth) — Cloudflare Worker
+
+```sql
+-- users: portal accounts
+CREATE TABLE users (
+  id            TEXT PRIMARY KEY,
+  email         TEXT UNIQUE NOT NULL,
+  password_hash TEXT NOT NULL,
+  salt          TEXT NOT NULL,
+  full_name     TEXT,
+  role          TEXT NOT NULL DEFAULT 'client',
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- businesses: thin auth lookup only (NOT the source of truth for profile data)
+CREATE TABLE businesses (
+  id                    TEXT PRIMARY KEY,
+  slug                  TEXT UNIQUE NOT NULL,
+  business_name         TEXT NOT NULL,
+  api_key               TEXT NOT NULL,
+  cf_hostname_id        TEXT,                -- added in 0002_cf_hostname.sql
+  stripe_customer_id    TEXT,               -- added in 0003_stripe.sql
+  stripe_subscription_id TEXT,              -- added in 0003_stripe.sql
+  plan                  TEXT DEFAULT 'free',-- added in 0003_stripe.sql
+  domain                TEXT,               -- added in 0003_stripe.sql
+  created_at            TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- user_business_access: JOIN table for portal auth
+CREATE TABLE user_business_access (
+  id          TEXT PRIMARY KEY,
+  user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(user_id, business_id)
+);
+
+-- sessions: hashed tokens only (raw token lives in HttpOnly cookie only)
+CREATE TABLE sessions (
+  id           TEXT PRIMARY KEY,
+  user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash   TEXT UNIQUE NOT NULL,
+  expires_at   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  last_seen_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- login_attempts: rate limiting (5 attempts per 15 min per email)
+CREATE TABLE login_attempts (
+  id           TEXT PRIMARY KEY,
+  identifier   TEXT NOT NULL,
+  attempted_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+```
+
+### KV namespaces
+- `BUSINESS_MAP`: domain hostname → slug string
+- `TENANT_DATA`: domain hostname → full JSON tenant record (status, onboarding state)
 
 ## Conventions
 
@@ -71,15 +186,20 @@ Tables today: `users`, `sessions`, `user_business_access`, login attempt rate li
 - Errors: throw typed errors, never return error objects, never swallow exceptions silently
 - All routes validate input with zod schemas
 - All SQL is parameterized — no string interpolation
-- All Claude API calls go through a single helper that handles retries, prompt caching, and cost logging
+- All Claude API calls go through the `queryAgent` helper in `server/src/agent/query.ts`
 - Tests live next to code in `*.test.ts` files
 - Conventional commits (`feat:`, `fix:`, `chore:`, etc.)
 - Branch naming: `feature/short-name`, `fix/short-name`
+- All `wrangler` commands run from `worker/` directory only — never from repo root
+
+## UI conventions (Worker pages)
+
+All Worker HTML pages must use `sharedLayout.ts` for tokens, header, footer, and theme toggle. No hardcoded hex colors in page-specific styles — use CSS variables. See `worker/CLAUDE.md` for the full UI rules.
 
 ## Do not
 
 - Do not modify bot detection logic in `worker/src/index.ts` (the `AI_CRAWLERS` array and the user-agent matching) without explicit instruction
-- Do not refactor the Worker portal code in `worker/src/portal/` without explicit instruction — auth code is load-bearing
+- Do not refactor the Worker portal code in `worker/src/routes/portal.ts` without explicit instruction — auth code is load-bearing
 - Do not change the shape of existing Express route responses without approval — clients depend on them
 - Do not move logic between Worker and Railway without approval
 - Do not add new dependencies without proposing them and getting approval first
@@ -91,6 +211,50 @@ Tables today: `users`, `sessions`, `user_business_access`, login attempt rate li
 - Do not use React, Next, Vite, or any SPA framework.
 - Do not log PII to long-term analytics. Raw events with PII go to R2 only.
 - Do not commit `.env`, `dev.db`, or any secret.
+- Do not duplicate the intent classifier — it already exists in `server/src/agent/query.ts` (`detectIntent`)
+- Do not rebuild the `/track` + `click_events` attribution skeleton — it already exists
+
+## What is shipped today
+
+- **Bot detection**: Cloudflare Worker edge detection for PerplexityBot, GPTBot, OAI-SearchBot, ClaudeBot, Google-Extended, Googlebot, anthropic-ai, cohere-ai, meta-externalagent
+- **KV routing**: domain→slug lookup via `BUSINESS_MAP`; Cloudflare for SaaS `cf-custom-hostname` fallback; first-path-segment fallback for testing
+- **Agent endpoint**: `POST /agents/:slug/query` on Railway powered by `claude-sonnet-4-6`, max 512 tokens, profile-aware system prompt
+- **Intent classification**: six categories — `brand_direct`, `emergency`, `affordable`, `best_top`, `specific_service`, `general` — running on every query, stored in `queries.intent` column. **Do not duplicate.**
+- **Response generation**: intent-tuned system prompt via `server/src/agent/builder.ts` with emphasis blocks per intent
+- **Attribution (partial)**: Worker wraps referral URLs in `/track?to=...&ref=...&client=...`, UTM-tags the destination, logs human clicks server-side to Railway `click_events` table. **Do not rebuild — Session 1 hardens the four gaps.**
+- **Analytics**: `GET /analytics/:slug` with bearer auth — surfaces query counts, clicks, intent breakdown, crawler breakdown, daily trend, recent queries
+- **Click detail**: `GET /analytics/:slug/clicks` — 50 most recent click events
+- **MCP server**: `POST /mcp` and `GET /mcp` exposing `search_businesses` and `query_business_agent` tools via `@modelcontextprotocol/sdk`
+- **AI discovery**: `/.well-known/ai-agent.json` served by Worker with optional rich profile from Railway
+- **Business registration**: `POST /register` returning slug + api_key
+- **Profile management**: `GET/PATCH /agents/:slug/profile` and `POST /agents/:slug/rotate-key`
+- **Client portal**: multi-tenant login/dashboard in the Worker with PBKDF2 auth, D1-backed sessions, rate limiting (5 attempts/15 min), smoke tests (18 assertions)
+- **Onboarding flow**: `/onboard` page with Stripe payment integration
+- **Rollback playbook**: three options documented in README
+
+## What is in progress
+
+Session 1 — attribution hardening (see IMPLEMENTATION_PLAN.md)
+
+## What is next on the roadmap (priority order)
+
+See IMPLEMENTATION_PLAN.md for the full seven-session plan.
+
+## Performance and cost guardrails
+
+- Bot response p95 latency target: under 1500ms end-to-end
+- Claude API cost per bot response: target under $0.02
+- Daily Claude spend per customer: alert if over $5/day
+- If a change pushes any of these over budget, stop and flag it
+
+## Security
+
+- All signed tokens use HMAC-SHA256 with the secret in `TOKEN_SIGNING_KEY` env var (Wrangler secret + Railway env var, must be identical) — added in Session 1
+- Customer data is isolated by slug at every query — never write a query that touches business data without a slug filter
+- Bot detection results are never trusted as auth — they're routing signals only
+- Never log auth tokens, signing keys, or full Claude API requests with system prompts to permanent storage
+- Portal session tokens are SHA-256 hashed in D1, raw tokens only in HttpOnly cookies
+- Stripe secrets: all four must be the same mode (all test OR all live) — never mix
 
 ## How to work on a task
 
@@ -99,7 +263,7 @@ Every non-trivial task follows the same loop:
 1. Read this file and the relevant `docs/` file for the subsystem you're touching.
 2. Read the existing files you'll be modifying.
 3. Propose a plan: data model changes, new files, modified files, function/route contracts, test strategy. Wait for explicit approval before writing code.
-4. Implement exactly as approved. If the plan was wrong mid-implementation, stop and ask, do not improvise.
+4. Implement exactly as approved. If the plan was wrong mid-implementation, stop and ask — do not improvise.
 5. Write tests as part of implementation, not after.
 6. Run tests and the type checker. Fix everything before declaring done.
 7. Update the relevant `docs/` file with what changed.
@@ -107,60 +271,13 @@ Every non-trivial task follows the same loop:
 
 If a task takes more than ~20 tool calls, stop and checkpoint. Summarize, commit what works, wait for me to continue or start fresh.
 
-## What is shipped today
-
-- Cloudflare Worker with edge bot detection for: PerplexityBot, GPTBot, OAI-SearchBot, ClaudeBot, Google-Extended, Googlebot, anthropic-ai, cohere-ai, meta-externalagent
-- KV-based domain→slug routing in the Worker
-- Express agent API at `POST /agents/:slug/query` powered by `claude-sonnet-4-6`
-- Business registration at `POST /register` returning slug + api_key
-- Analytics at `GET /analytics/:slug` with bearer auth
-- Referral click tracking at `POST /analytics/:slug/referral-click`
-- Central MCP server at `POST /mcp` and `GET /mcp` exposing `search_businesses` and `query_business_agent` tools
-- `/.well-known/ai-agent.json` discovery file served by the Worker
-- Multi-tenant client portal in the Worker with PBKDF2 auth, D1-backed sessions, rate limiting, smoke tests (18 assertions)
-- Rollback playbook with three options
-- API key rotation at `POST /agents/:slug/rotate-key`
-
-## What is in progress
-
-[FILL IN if anything]
-
-## What is next on the roadmap (priority order)
-
-1. **Session 1 — Signed-token attribution redirect.** Replace bare `referral_url` with tracked `/r/:token` redirects logged in D1. Foundation for everything.
-2. **Session 2 — Per-bot response tuning.** Branch the system prompt by detected crawler so each bot gets a structurally optimized response.
-3. **Session 3 — MCP server distribution.** Make `/mcp` submission-ready, add manifest endpoint, rate limiting, structured logging. Submit to public directories.
-4. **Session 4 — Competitor radar.** Weekly cron prompts the major AIs with category questions, emails Monday morning summary.
-5. **Session 5 — AI handoff.** Tracked landing page context script so customer sites can read decoded intent client-side.
-6. **Session 6 — ai-agent.json standard.** Formalize as a published standard with public spec page and separate spec repo.
-7. **Session 7 — Off-site authority kit.** Per-customer authority report identifying citation opportunities on Reddit, Wikidata, review platforms, YouTube.
-
-## Performance and cost guardrails
-
-- Bot response p95 latency target: under 1500ms end-to-end (currently higher due to Worker→Railway→Claude hop, will be addressed in a future latency session)
-- Claude API cost per bot response: target under $0.02
-- Daily Claude spend per customer: alert if over $5/day
-- If a change pushes any of these over budget, stop and flag it.
-
-## Security
-
-- All signed tokens use HMAC-SHA256 with the secret in `TOKEN_SIGNING_KEY` env var (Worker secret + Railway env var, must be identical)
-- Customer data is isolated by slug at every query — never write a query that touches business data without a slug filter
-- Bot detection results are never trusted as auth — they're routing signals only
-- Never log auth tokens, signing keys, or full Claude API requests with system prompts to permanent storage
-- Portal session tokens are SHA-256 hashed in D1, raw tokens only in HttpOnly cookies
-
 ## When you are unsure
 
 Ask. Specifically ask before:
 - Adding any new dependency
 - Changing any database schema
 - Modifying bot detection
-- Touching the attribution token format once it exists
+- Touching the attribution token format once it exists (after Session 1)
 - Refactoring code outside the immediate task
 - Introducing any new pattern not already in the codebase
 - Moving logic between Worker and Railway
-
-## Cutting edge — what it means here
-
-The cutting edge that matters in this codebase lives in three places: bot detection accuracy, per-bot response generation quality, and attribution loop completeness. Innovate aggressively in those layers. Everywhere else — routing, dashboards, email, auth, testing — use the most boring stable option that works. Boring infrastructure plus innovative core is how this company wins.
