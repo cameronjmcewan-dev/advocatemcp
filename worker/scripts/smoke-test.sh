@@ -154,6 +154,44 @@ check "POST /auth/logout → Set-Cookie clears session" "Max-Age=0" "$HEADERS"
 STATUS=$(curl -s -o /dev/null -w "%{http_code}" -b "$COOKIE_JAR" "$BASE/dashboard")
 check "GET /dashboard (after logout) → 302 (session invalidated)" "302" "$STATUS"
 
+hdr "9. Direct agent proxy (Phase 1.5 regression)"
+# Real end-to-end POST against the platform-scoped /agents/:slug/query
+# route. Catches both Phase 1.5 bugs as regression:
+#   - Bug 1: doubled-slug URL (/agents/agents/query) → Railway 404 → Worker 502
+#   - Bug 2: missing X-API-Key forwarding → Railway 401 → Worker 502
+#
+# Crawler UA is REQUIRED. The non-crawler short-circuit at
+# worker/src/index.ts dispatch step (3) returns a 200 info response for
+# any non-bot UA, which would silently pass a status-code-only assertion
+# on a completely broken worker. GPTBot/1.1 forces the request past the
+# short-circuit into the platform-scoped route at step (2c). This trigger
+# condition is documented in docs/attribution.md under Phase 1.5 Bug 1.
+#
+# The body assertions check for "powered_by" (a type-level literal in
+# Railway's AgentQueryResult envelope — see server/src/agent/query.ts)
+# and 'business_slug":"dmre' (proves the slug was threaded through
+# correctly, not rewritten by a path-extraction bug). Both are specific
+# to a genuine Railway agent response — neither appears in any worker
+# error wrapper or the non-crawler info response.
+#
+# Independent of the portal session above — does not use $COOKIE_JAR.
+# Placed after the logout test so the agent test can run whether or not
+# the portal session state is clean.
+#
+# COST: this test triggers a real Claude API call on Railway, roughly
+# $0.02 per smoke-test run. Bounded by deploy cadence — acceptable.
+
+RESP=$(curl -s -w "\n%{http_code}" \
+  -X POST "$BASE/agents/dmre/query" \
+  -A "GPTBot/1.1" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"smoke test — respond with one short sentence","crawler":"smoke-test/1.0"}')
+CODE=$(echo "$RESP" | tail -1)
+BODY=$(echo "$RESP" | sed '$d')
+check "POST /agents/dmre/query → 200 (catches Bug 1 doubled-slug and Bug 2 auth)" "200"             "$CODE"
+check "POST /agents/dmre/query → Railway envelope present (powered_by)"           "powered_by"      "$BODY"
+check "POST /agents/dmre/query → slug threaded correctly (business_slug)"         'business_slug":"dmre' "$BODY"
+
 # ── Summary ────────────────────────────────────────────────────────────────
 
 echo

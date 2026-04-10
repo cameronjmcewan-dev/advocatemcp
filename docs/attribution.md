@@ -62,11 +62,38 @@ Use `track_signed_click` / (`track_signed_click` + `track_legacy_click`) ratio t
 
 These bugs were discovered during Session 1 final verification when testing `customers.advocatemcp.com/agents/:slug/query` directly. They are not regressions introduced by Session 1. They do not affect the primary bot-detection flow (customer domain → KV lookup → Railway agent), which was not directly testable without DNS. Both bugs live in the Worker proxy path used when `customers.advocatemcp.com` is the integration surface.
 
-**Bug 1 — Malformed proxy URL (`/agents/agents/query` instead of `/agents/:slug/query`).**
-When a request hits `customers.advocatemcp.com/agents/dmre/query`, the Worker's path rewriting produces a doubled-path URL on the downstream Railway request. The slug is lost in path construction. Reproducible by curling the Worker URL directly. Does not affect the bot-detection path where the slug is resolved from KV and the Railway URL is constructed explicitly.
+**Bug 1 — Malformed proxy URL (`/agents/agents/query` instead of `/agents/:slug/query`).** [RESOLVED 2026-04-10 — Phase 1.5]
+When a request hits `customers.advocatemcp.com/agents/dmre/query` with a crawler User-Agent, the Worker's first-path-segment slug fallback at `worker/src/index.ts` (previously around line 349) resolved the slug as `"agents"` because `"agents"` was not in the `RESERVED` set. That produced a downstream URL of `https://advocate-production-2887.up.railway.app/agents/agents/query` on Railway, which 404'd. Fixed in Phase 1.5 by adding a dedicated `POST /agents/:slug/query` route at `index.ts` dispatch step (2c), scoped via `WORKER_HOSTNAMES` to platform hostnames only so the bot-detection flow on real customer domains stays unchanged. The slug is now pulled from the URL path explicitly. `"agents"` was also added to the `RESERVED` set as belt-and-suspenders defense against a future removal of the dedicated route silently re-introducing the bug.
 
-**Bug 2 — Missing `X-API-Key` forwarding on the proxy path.**
-The same `customers.advocatemcp.com/agents/:slug/query` proxy path does not forward `env.API_KEY` as `X-API-Key` to Railway, resulting in 401 responses. The bot-detection path at `worker/src/index.ts` line 328 adds the header correctly. A different code path serving the proxy is missing the same logic. Both bugs should be fixed together in a dedicated worker proxy cleanup session before any customer onboards via `customers.advocatemcp.com` as their primary integration surface.
+*Note on trigger conditions discovered during Phase 1.5 verification*: the bug only manifests when the request carries a crawler User-Agent. A non-crawler UA hits the non-crawler short-circuit at `index.ts:310` and returns a 200 "Non-crawler request — no agent response generated" info response before ever reaching the slug fallback. This means any smoke test exercising the proxy path must send a crawler UA (e.g. `GPTBot/1.1`) or the assertion is meaningless. Documented here so future session prep doesn't re-discover this the hard way.
+
+**Bug 2 — Missing `X-API-Key` forwarding on the proxy path.** [RESOLVED — already fixed in code at the time of Phase 1.5 investigation]
+Phase 1.5 investigation on 2026-04-10 found that the `/agents/:slug/query` fetch in `worker/src/index.ts` (at the bot-detection path) **already** forwards `env.API_KEY` as `X-API-Key`:
+
+```typescript
+headers: {
+  "Content-Type": "application/json",
+  ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}),
+}
+```
+
+The original bug description in this doc referred to "a different code path serving the proxy" but no such second code path exists in current `main` — there is only one `/agents/:slug/query` proxy path in the worker and it forwards the header correctly. An exhaustive grep of every `fetch()` call to Railway in `worker/src/` confirmed this (see the Phase 1.5 commit body for the full grep table). Either the bug was silently resolved during Phase 1 or Phase 2 refactoring and nobody updated this doc, or the original bug description was slightly off. Phase 1.5 added a smoke test that exercises the direct-proxy path end-to-end with both Bug 1 and Bug 2 as failure modes, so any regression in either direction will be caught.
+
+## Production state observations — not bugs, flagged for future sessions
+
+**API_KEY runtime drift (discovered and resolved 2026-04-10).**
+During Phase 1.5 pre-commit verification, a live test against the deployed worker revealed that Railway was rejecting the worker's `X-API-Key` with `401 Invalid or missing api_key` — not because the worker code was missing the header (it wasn't), but because the runtime value of `env.API_KEY` on the deployed worker did not match `process.env.API_KEY` on Railway. The drift manifested as every worker → Railway agent query (including the bot-detection fallback path on `customers.advocatemcp.com/dmre`) returning `502 Backend returned an error` with a nested `401` from Railway. The drift did not affect customer onboarding or portal auth — those paths use separate credentials — but it did break every production crawler query from the worker until reconciliation.
+
+The root cause of the drift is unknown — it could have originated from a worker-side rotation that was not propagated to Railway, or a Railway-side rotation that was not propagated to the worker. We are not speculating. The drift was reconciled on 2026-04-10 during Phase 1.5 by setting the same value on both sides and verifying the worker → Railway chain end-to-end.
+
+Lessons and operational guidance:
+
+1. A smoke test that hits the full worker → Railway chain end-to-end would have caught this when it first appeared. Phase 1.5 adds exactly that smoke test — see `worker/scripts/smoke-test.sh` section 9.
+2. Any production state change that involves a shared secret must update both sides (worker wrangler secret AND Railway env var) in the same operation, and must be immediately followed by a cross-check call that exercises the full chain. Unilateral updates silently create drift that is invisible until a specific code path is exercised.
+3. Static code analysis ("the code forwards the header") is necessary but not sufficient — runtime behavior may differ and requires a live call. This applies to any runtime-injected value, not just API keys.
+
+**Missing `X-API-Key` on `/track` → `/analytics/:slug/referral-click`.**
+The `/track` click logger in `worker/src/index.ts` at both the signed-token path and the legacy cleartext path POSTs to `${apiBase(env)}/analytics/:slug/referral-click` **without** forwarding `X-API-Key`. This is intentional as of 2026-04-10 and should not be "fixed" without a dedicated review of the `/track` endpoint's auth model. The `/track` endpoint is designed to be invoked by the end-user's browser during a referral-click redirect, not by a trusted server, so it has historically been public-ish on the Railway side. If a future session decides to lock down `/analytics/:slug/referral-click` behind server auth, the worker's `/track` handler will need to be updated at the same time and every currently-issued tracking URL in customer responses will need to be regenerated. Do not touch this without an explicit session scope — the blast radius is every referral click in flight.
 
 ## Updating this doc
 

@@ -18,7 +18,7 @@ import { handlePortal } from "./routes/portal";
 import { handleDemo } from "./routes/demo";
 import { verifyToken, base64urlToBytes } from "./lib/tracked-url";
 import { getTenant } from "./routes/onboard";
-import { proxyToOrigin } from "./lib/proxy";
+import { proxyToOrigin, WORKER_HOSTNAMES } from "./lib/proxy";
 
 export type { Env };
 
@@ -282,6 +282,63 @@ export default {
       }
     }
 
+    // ── 2c. Platform agent endpoint — POST /agents/:slug/query ────────────
+    // Direct proxy of POST /agents/:slug/query on platform hostnames only
+    // (customers.advocatemcp.com, *.workers.dev). Fixes Phase 1.5 Bug 1:
+    // the downstream bot-detection path's first-path-segment slug fallback
+    // at (4) resolved the slug as "agents" for this URL shape, producing
+    // a malformed /agents/agents/query downstream URL on Railway. Keeping
+    // this as a separate early-dispatch route means the slug is pulled
+    // from the URL path explicitly instead of from the fallback, and the
+    // bot-detection flow on real customer domains (where the slug comes
+    // from KV) is unchanged.
+    //
+    // Scoped via WORKER_HOSTNAMES (shared with proxy.ts loop detection
+    // and origin-discovery.ts) so real customer-domain traffic continues
+    // to flow through the bot-detection path at (4) byte-for-byte
+    // unchanged. Any expansion of this route's reach should be a separate
+    // session, not a Phase 1.5 side effect.
+    //
+    // Body forwarding: `request.body` is a ReadableStream and Workers
+    // runtime passes it through the downstream fetch correctly for POST.
+    // If production observation ever shows the body being lost or
+    // duplicated, the fallback is to `await request.text()` and forward
+    // the string — but that defeats streaming and is strictly a last
+    // resort.
+    {
+      const agentMatch = /^\/agents\/([^/]+)\/query$/.exec(url.pathname);
+      if (
+        agentMatch &&
+        request.method === "POST" &&
+        WORKER_HOSTNAMES.has(domain)
+      ) {
+        const slugFromPath = agentMatch[1]!;
+        const base = apiBase(env);
+        const target = `${base}/agents/${slugFromPath}/query`;
+        try {
+          const resp = await fetch(target, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}),
+            },
+            body: request.body,
+          });
+          return new Response(resp.body, {
+            status: resp.status,
+            headers: resp.headers,
+          });
+        } catch (err) {
+          console.log(JSON.stringify({
+            metric: "platform_agent_proxy_error",
+            target,
+            error: String(err),
+          }));
+          return jsonError(502, "Backend unreachable.", { target, error: String(err) });
+        }
+      }
+    }
+
     // ── 2b. AI discovery file ─────────────────────────────────────────────
     if (url.pathname === "/.well-known/ai-agent.json") {
       const slug = await env.BUSINESS_MAP.get(domain);
@@ -345,7 +402,11 @@ export default {
 
     if (!slug) {
       // Reserved platform paths must never become business slugs.
-      const RESERVED = new Set(["mcp", "admin", "login", "auth", "dashboard", "api", "track", "demo", "status", "onboard", ".well-known"]);
+      // "agents" is included so that if the dedicated POST /agents/:slug/query
+      // route at (2c) is ever removed, the first-path-segment fallback can't
+      // silently re-introduce Phase 1.5 Bug 1 (slug resolved as "agents",
+      // downstream URL becomes /agents/agents/query on Railway).
+      const RESERVED = new Set(["mcp", "admin", "login", "auth", "dashboard", "api", "track", "demo", "status", "onboard", "agents", ".well-known"]);
       const seg = url.pathname.replace(/^\//, "").split("/")[0];
       if (seg && !RESERVED.has(seg)) slug = seg;
     }
