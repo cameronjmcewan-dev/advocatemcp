@@ -241,8 +241,10 @@ function htmlResp(body: string): Response {
 
 function demoStyles(): string {
   return `<style>
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#e6edf3;line-height:1.5;font-size:.875rem}
+h1,h2,h3,h4,h5,h6{font-family:'Poppins',sans-serif}
 a{color:inherit;text-decoration:none}
 /* Header */
 .hdr{padding:.875rem 1.5rem;display:flex;align-items:center;gap:1rem;border-bottom:1px solid #21262d;position:sticky;top:0;background:#0d1117;z-index:10}
@@ -354,9 +356,14 @@ function landingHtml(registry: RegistryEntry[], error: string | null): string {
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AdvocateMCP — AI Visibility Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#0d1117;color:#e6edf3;min-height:100vh;display:flex;flex-direction:column}
+h1,h2,h3,h4,h5,h6{font-family:'Poppins',sans-serif}
 a{color:inherit;text-decoration:none}
 .hdr{padding:1rem 1.5rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #21262d}
 .logo{display:flex;align-items:center;gap:.5rem;font-weight:600;font-size:.9375rem}
@@ -453,6 +460,9 @@ function nomatchHtml(
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>AdvocateMCP Demo — ${esc(q)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 ${demoStyles()}
 </head>
 <body>
@@ -548,6 +558,9 @@ function resultHtml(
 <title>AI Visibility Demo — ${esc(profile.name)}</title>
 <meta property="og:title" content="AI Visibility Demo — ${esc(profile.name)}">
 <meta property="og:description" content="See exactly what GPTBot, PerplexityBot &amp; ClaudeBot receive when they query ${esc(profile.name)}.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 ${demoStyles()}
 </head>
 <body>
