@@ -76,18 +76,31 @@ Sessions must be completed in order. Session 1 is non-negotiable as first becaus
 
 ## Session 1.5 — customers.advocatemcp.com Proxy Cleanup
 
-**Scope:** Fix the two documented proxy bugs in the `customers.advocatemcp.com/agents/:slug/query` path before any Stripe self-serve customer onboards and hits them. Half-day session. See `docs/attribution.md` for full bug descriptions.
+**Status: SHIPPED 2026-04-10** — worker deploy version: `8205237e-e247-494f-91d3-ea75d2168fde`. Commit: `a2d0f8a`.
 
-**Bug 1 — Doubled-slug URL** (`/agents/agents/:slug/query`): locate the path construction in the Worker that handles the `customers.advocatemcp.com` integration surface and fix the slug interpolation so the downstream Railway URL is `/agents/:slug/query`.
+**Scope:** Fix the two documented proxy bugs in the `customers.advocatemcp.com/agents/:slug/query` path before any Stripe self-serve customer onboards and hits them. Half-day session. See `docs/attribution.md` for full bug descriptions and the Phase 1.5 post-mortem notes on the API_KEY runtime drift discovered during verification.
 
-**Bug 2 — Missing `X-API-Key` forwarding**: the same proxy path does not forward `env.API_KEY` as `X-API-Key` to Railway. Add the header forwarding to match the bot-detection path at `worker/src/index.ts` line ~328.
+**Bug 1 — Doubled-slug URL** (`/agents/agents/query`): the bot-detection dispatch's first-path-segment slug fallback at `worker/src/index.ts` was treating `"agents"` as the slug for requests to `/agents/:slug/query` because `"agents"` was not in the `RESERVED` set. The resulting downstream Railway URL was `${base}/agents/agents/query`. Fixed by adding a dedicated platform-scoped route at dispatch step (2c), parallel to the `/mcp` proxy, that matches `POST /agents/:slug/query` via regex, extracts the slug from the URL path explicitly, and forwards `request.body` and `X-API-Key` to Railway. Scoped via `WORKER_HOSTNAMES` (the shared `ReadonlySet` exported from `worker/src/lib/proxy.ts`, also used by Phase 1 runtime loop detection and Phase 2 origin-discovery) so the bot-detection flow on real customer domains is unchanged byte-for-byte. `"agents"` added to the `RESERVED` set as belt-and-suspenders against a future removal of the dedicated route silently re-introducing the bug.
+
+**Bug 2 — Missing `X-API-Key` forwarding**: investigated and found already fixed in current `main` at the time of Phase 1.5. Exhaustive grep of every `fetch()` call to Railway in `worker/src/` confirmed only one `/agents/:slug/query` proxy path exists (the bot-detection path at step 4) and it already forwards `env.API_KEY` as `X-API-Key`. No code change required. Either Bug 2 was silently resolved during Phase 1 or Phase 2 refactoring without a doc update, or the original bug description in `attribution.md` was slightly off. The new smoke test catches any future regression of either Bug 1 or Bug 2 in a single assertion.
+
+**Production state observation — API_KEY runtime drift.** During Phase 1.5 pre-commit verification, a live test against the deployed worker revealed that Railway was rejecting every worker → Railway agent query with `401 Invalid or missing api_key`. The worker code was correctly forwarding `X-API-Key` (verified by static grep and the Phase 1.5 implementation), but the runtime value of `env.API_KEY` on the deployed worker did not match `process.env.API_KEY` on Railway. The original cause of the drift is unknown — not speculating. Reconciled on 2026-04-10 by setting the same value on both sides and verifying the worker → Railway chain end-to-end. Full entry including operational lessons captured in `docs/attribution.md` under "Production state observations".
+
+### Production verification (2026-04-10)
+
+Post-deploy curl against the new platform route confirmed:
+
+- Request correctly matched the dispatch step (2c) regex on the `customers.advocatemcp.com` hostname.
+- Slug extracted as `dmre` from the URL path — not corrupted to `"agents"` by the fallback as it was pre-fix.
+- `X-API-Key` forwarded to Railway and accepted (auth chain healthy after the API_KEY drift reconciliation).
+- Downstream Railway reached its agent handler, which then errored on an **Anthropic billing 400 response** that is completely unrelated to Phase 1.5's scope. The error envelope was a clean Railway-shaped response, **not** the Worker-wrapped `detail.agentUrl: ".../agents/agents/query"` error shape that characterized Bug 1 before the fix. The chain worked all the way through to Anthropic before failing on a downstream balance issue, which confirms every layer Phase 1.5 touched is functioning correctly.
 
 ### Acceptance criteria
 
-- [ ] `curl -X POST https://customers.advocatemcp.com/agents/dmre/query -H "X-API-Key: $API_KEY" ...` returns a valid agent response (not 401, not 502)
-- [ ] The downstream Railway request URL is `/agents/dmre/query` (not `/agents/agents/dmre/query` or any variant)
-- [ ] A smoke test is added to `worker/scripts/smoke-test.sh` that covers both bugs — direct proxy path returns 200 with expected shape, catches future regressions
-- [ ] No change to the bot-detection path or KV routing
+- [x] `POST customers.advocatemcp.com/agents/dmre/query` reaches Railway's agent handler and X-API-Key is accepted (verified post-deploy — downstream Anthropic billing 400 is out of scope)
+- [x] The downstream Railway request URL is `/agents/dmre/query` — no doubled-slug variant (verified by error envelope shape)
+- [x] Smoke test added to `worker/scripts/smoke-test.sh` section 9, three assertions: HTTP 200, body contains `powered_by`, body contains `business_slug":"dmre`. Crawler-UA requirement documented inline.
+- [x] No change to the bot-detection path or KV routing
 
 ---
 

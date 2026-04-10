@@ -246,7 +246,7 @@ This bit us during the `workman-copy-co` dry-run cleanup on 2026-04-10: a `d1 ex
 
 ## What is in progress
 
-Phase 2 origin auto-discovery shipped. Phase 1.5 proxy cleanup is next, then Phase 3 self-serve onboarding UI.
+Phase 1.5 customers.advocatemcp.com proxy cleanup shipped. Session 2 (per-bot prompt tuning) and Phase 3 (self-serve onboarding UI) are next.
 
 ## What is next on the roadmap (priority order)
 
