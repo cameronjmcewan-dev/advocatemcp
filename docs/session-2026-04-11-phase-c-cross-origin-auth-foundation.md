@@ -37,8 +37,8 @@ Phase C originally proposed six commits. During Commit 1 execution a pre-existin
 | # | Scope | Status | Commit |
 |---|---|---|---|
 | 0 | (Sidetrack) Deterministic tampered-signature test fix | shipped | `63f1e30` |
-| 1 | Schema migration + types.ts field + session notes init | *(in progress, resuming)* | — |
-| 2 | Access token library + unit tests | not started | — |
+| 1 | Schema migration + types.ts field + session notes init | shipped | `d016946` |
+| 2 | Access token library + unit tests | *(in progress)* | — |
 | 3 | Shared CORS helper + unit tests | not started | — |
 | 4 | Auth endpoints (login, logout, refresh) + cookie helpers + middleware | not started | — |
 | 5 | Bearer middleware applied to existing endpoints + CORS dispatch lines | not started | — |
@@ -234,6 +234,69 @@ Clean. The new optional `ACCESS_TOKEN_SIGNING_KEY?: string` field on the `Env` i
 
 ---
 
+## Commit 2 — access token library + 10 unit tests
+
+### Files created in this commit
+
+- `worker/src/lib/access-token.ts` — HMAC-SHA256 signed access token library. Mirrors the structural layout of `activation-token.ts` exactly: file header comment explaining wire format + HMAC-over-ASCII rule + why-not-share rationale, `AccessTokenPayload` interface, `AccessTokenError` union, `ACCESS_TOKEN_TTL_SECONDS` constant (900 = 15 minutes), private `bytesToBase64url` helper, exported `base64urlToBytes` helper, `signAccessToken` function, `verifyAccessToken` function. The only structural differences from `activation-token.ts` are the richer payload shape (sub/role/tenant_id/email/full_name in addition to iat/exp), the 15-minute TTL instead of 24-hour, and the function names.
+- `worker/src/lib/access-token.test.ts` — 10 unit tests following the `activation-token.test.ts` pattern. Includes two tests specific to the richer access-token payload shape (test 9 verifying all fields round-trip and test 10 verifying null tenant_id/full_name are accepted for admin users).
+
+### Pattern reuse from activation-token.ts
+
+The following was copied verbatim from `activation-token.ts` with only naming and payload-shape changes:
+
+- base64url codec helpers (`bytesToBase64url`, `base64urlToBytes`) — byte-for-byte identical implementations
+- HMAC-SHA256 import + sign flow via `crypto.subtle.importKey` and `crypto.subtle.sign`
+- The HMAC-over-ASCII-bytes-of-encoded-payload-string rule
+- Error type naming convention: `"malformed" | "bad_signature" | "expired"`
+- Constant-time-ish signature byte comparison loop
+- The shape validation pattern in `verify` — extended with additional field checks for the richer payload
+
+The middle-character tamper pattern from Commit 0 (`63f1e30`) is reused in the test for "rejects tokens with a tampered signature" — same `Math.floor(sigLength / 2)` index calculation and same top-4-bit-flip swap table. The test file header explicitly warns future maintainers against "simplifying" the tamper logic back to a last-character A/B swap with a reference to the Phase C session notes for the full padding-bit analysis.
+
+### Test count delta
+
+- Before Commit 2: 39 tests across 4 test files
+- After Commit 2: 49 tests across 5 test files (+10 tests, +1 file)
+
+### Test suite status
+
+```
+$ cd worker && npm test
+ RUN  v4.1.4 /Users/cameronmcewan/Desktop/advocate/advocatemcp/worker
+ Test Files  5 passed (5)
+      Tests  49 passed (49)
+   Duration  133ms
+```
+
+Second run (cheap determinism confidence check):
+
+```
+ Test Files  5 passed (5)
+      Tests  49 passed (49)
+   Duration  119ms
+```
+
+Both runs 49/49 green. No flakiness.
+
+### Typecheck status
+
+```
+$ cd worker && npx tsc --noEmit
+(no output)
+```
+
+Clean. The new exported symbols (`AccessTokenPayload`, `AccessTokenError`, `ACCESS_TOKEN_TTL_SECONDS`, `base64urlToBytes`, `signAccessToken`, `verifyAccessToken`) compile without errors. Nothing in the existing code imports them yet — that's Commit 4.
+
+### Notes-worthy observations during implementation
+
+- **Shape validation needed an additional pattern for nullable fields.** The `tenant_id` and `full_name` fields are `string | null`. A simple `typeof === "string"` check would reject the admin-user case (where both are null). I added explicit `null`-or-string checks using `(field === null || typeof field === "string")`. This is the only structural divergence from `activation-token.ts`'s simpler all-required-string-or-number check.
+- **The `Omit<AccessTokenPayload, "iat" | "exp">` parameter type** on `signAccessToken` forces callers to supply all five user claims but prevents them from passing `iat`/`exp` (which the sign function computes internally). Cleaner TypeScript than the activation-token approach, where the caller only passed `{slug}` and everything else was internal. Possible future cleanup opportunity in activation-token.ts to use the same `Omit` pattern, but that's a refactor for another session — flagged in the found-during-reading list below.
+
+### Commit hash
+
+*(to be populated after git commit)*
+
 ## Found during reading — not in Phase C scope
 
 Items noticed while reading the codebase for Phase C's proposal that do not belong to Phase C. Logged here for future sessions. None of these are fixed or touched in Phase C.
@@ -243,6 +306,8 @@ Items noticed while reading the codebase for Phase C's proposal that do not belo
 - **`worker/src/routes/onboard.ts` contains five admin-auth'd legacy handlers** (`handleOnboard`, `handleOnboardStatus`, `handleVerifyDomain`, `handleOnboardList`, `handleVerifyAll`, `handleDisableTenant`) whose relationship to the `handleBasicOnboard`/`handlePublicOnboard` endpoints in `stripe.ts` is unclear from reading alone. Flagged in the earlier Phase C audit as "canonical vs legacy unclear." Not in Phase C scope to sort out — belongs in a dedicated cleanup session after Phase E (worker HTML deprecation).
 
 - **`worker/src/routes/portal.ts:99` has a `requireSession` helper that will be deleted during Commit 5** as part of replacing cookie-only auth with `getSessionFromRequest`. This is expected Phase C scope, not a found-during-reading item — noted here only because I noticed it during the proposal reading pass and want the explicit handoff recorded.
+
+- **`worker/src/lib/activation-token.ts`'s `signActivationToken` function takes `payload: { slug: string }` as its parameter type** rather than `Omit<ActivationTokenPayload, "iat" | "exp">`. The `Omit` pattern is cleaner — it future-proofs against adding new required payload fields (the type system would then force callers to supply them) and prevents callers from accidentally passing `iat`/`exp` explicitly. Commit 2's `signAccessToken` uses the `Omit` pattern. A future cleanup session could refactor `activation-token.ts` to match. Low-priority, test-only impact, and the current activation-token code works correctly — this is purely a type-level cleanup opportunity, not a bug.
 
 ---
 
