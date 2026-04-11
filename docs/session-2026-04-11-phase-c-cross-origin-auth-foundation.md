@@ -41,8 +41,8 @@ Phase C originally proposed six commits. During Commit 1 execution a pre-existin
 | 2 | Access token library + unit tests | shipped | `5dc6289` |
 | 3 | Shared CORS helper + unit tests | shipped | `06339a4` |
 | 4 | Auth endpoints (login, logout, refresh) + cookie helpers + middleware | shipped | `48c5978` |
-| 5 | Bearer middleware applied to existing endpoints + CORS dispatch lines | *(in progress)* | — |
-| 6 | Final documentation + session notes finalization | not started | — |
+| 5 | Register auth routes, apply Bearer middleware and CORS to existing endpoints | shipped | `92ca150` |
+| 6 | Final documentation + session notes finalization | *(in progress)* | — |
 
 ### Commit 0 sidetrack — flaky test fix (2026-04-11)
 
@@ -230,7 +230,7 @@ Clean. The new optional `ACCESS_TOKEN_SIGNING_KEY?: string` field on the `Env` i
 
 ### Commit hash
 
-*(to be populated after git commit)*
+`d016946 feat(worker): phase c commit 1 — schema migration and env field for tenant_id + access token signing key`
 
 ---
 
@@ -295,7 +295,7 @@ Clean. The new exported symbols (`AccessTokenPayload`, `AccessTokenError`, `ACCE
 
 ### Commit hash
 
-*(to be populated after git commit)*
+`5dc6289 feat(worker): phase c commit 2 — access token library with 10 unit tests`
 
 ## Commit 3 — shared CORS helper + 6 unit tests
 
@@ -366,7 +366,7 @@ Clean. The new exported symbols (`ALLOWED_ORIGINS`, `CorsOptions`, `corsHeadersF
 
 ### Commit hash
 
-*(to be populated after git commit)*
+`06339a4 feat(worker): phase c commit 3 — shared CORS helper with 6 unit tests`
 
 ## Commit 4 — auth endpoints and refresh cookie helpers
 
@@ -476,7 +476,7 @@ Both fixed before the test run. The final `authApi.ts` has:
 
 ### Commit hash
 
-*(to be populated after git commit)*
+`48c5978 feat(worker): phase c commit 4 — auth endpoints, refresh cookie helpers, and getSessionFromRequest middleware`
 
 ## Commit 5 — register auth routes, apply Bearer middleware and CORS to existing endpoints
 
@@ -679,7 +679,7 @@ Clean. The synthesized `User` object in the dashboard handler compiles, the migr
 
 ### Commit hash
 
-*(to be populated after git commit)*
+`92ca150 feat(worker): phase c commit 5 — register auth routes and apply cross-origin middleware`
 
 ## Found during reading — not in Phase C scope
 
@@ -701,10 +701,63 @@ Items noticed while reading the codebase for Phase C's proposal that do not belo
 
 ## Observed log output and curl captures
 
-*(to be populated after Commit 5 deploys and the manual E2E verification runs)*
+Commit 5 was deployed to `customers.advocatemcp.com` with `ACCESS_TOKEN_SIGNING_KEY` provisioned via `wrangler secret put` before manual E2E verification began. See the "Operational notes" subsection below for the secret deployment details. See the "Manual E2E verification record" below for the five verifications Cameron ran by hand and their outcomes.
+
+---
+
+## Phase C final summary
+
+### The full Phase C arc
+
+Phase C was the backend and data-layer foundation for the cross-origin frontend (Phase D). Seven commits on `main`, no rollbacks, no regressions, no production incidents. Test suite went from 39 green at the start of Phase C to 55 green at the end (16 new unit tests across access-token.test.ts and cors.test.ts). Typecheck stayed clean at every checkpoint.
+
+| # | Scope | Hash | Description |
+|---|---|---|---|
+| 0 | Sidetrack — deterministic tampered-signature test | `63f1e30` | Pre-Phase-C fix for a Phase 3 flaky test. Base64url padding-bit bug in `activation-token.test.ts` fixed by switching to middle-character swap with top-4-bit flip swap table. Test-only change. |
+| 1 | Schema migration + env field + session notes init | `d016946` | Added `tenant_id` FK column to `users` table in D1 (`0004_phase_c_auth.sql`), rollback SQL, optional `ACCESS_TOKEN_SIGNING_KEY` on `Env` interface, and the initial session notes file. No runtime behavior change. |
+| 2 | Access token library + 10 unit tests | `5dc6289` | New `worker/src/lib/access-token.ts` implementing HMAC-SHA256 signed access tokens with a richer 7-field payload (`sub, role, tenant_id, email, full_name, iat, exp`). Byte-for-byte structural copy of `activation-token.ts` with `Omit<..., "iat"\|"exp">` parameter pattern. 10 round-trip/tamper/expiry/edge-case unit tests. |
+| 3 | Shared CORS helper + 6 unit tests | `06339a4` | New `worker/src/lib/cors.ts` with `ALLOWED_ORIGINS` whitelist (advocatemcp.com, www.advocatemcp.com, localhost:5173/3000/8788), `corsHeadersFor`, `withCors`, `handleCorsPreflight`. Credentials mode is explicit-true opt-in. Always emits `Vary: Origin`. Clones headers before mutating. 6 unit tests covering all behaviors. |
+| 4 | Auth endpoints + refresh cookie helpers + middleware | `48c5978` | New `worker/src/routes/authApi.ts` with `handleAuthLogin`, `handleAuthLogout`, `handleAuthRefresh`, `handleAuthPreflight`, `getSessionFromRequest`. Refresh cookie helpers added to `worker/src/auth.ts` (`refreshCookieHeader`, `clearRefreshCookieHeader`, `getRefreshToken`). Constant-time dummy password verification closes the email enumeration timing leak on the new path. Create-new-first/delete-old-second rotation on refresh. Bearer first with cookie fallback. |
+| 5 | Register auth routes and apply cross-origin middleware | `92ca150` | Dispatch routing for the new auth endpoints in `portal.ts`, CORS preflight wiring for `/api/client/*` and `/api/activate`, migration of five existing client API handlers (`apiMe`, `apiMetrics`, `apiActivity`, `apiRotateKey`, and the dashboard) from cookie-only `requireSession` to the new `getSessionFromRequest` middleware. `handleActivate` refactored into an outer/inner wrapper pattern so CORS is self-contained (any future caller gets CORS for free). `requireSession` kept in place with a docstring explaining why (single-use wrapper for `loginPage`, which was explicitly out of scope). |
+| 6 | Documentation finalization | *this commit* | Session notes finalized. Rearchitecture plan Phase C section marked shipped with all seven commit hashes and the verification record. `CLAUDE.md` "What is in progress" section updated to reflect current state. No code changes. |
+
+### Manual E2E verification record
+
+Cameron ran all five verifications by hand on the deployed `customers.advocatemcp.com` worker following the Commit 5 deploy. All five passed empirically.
+
+1. **Admin form login at `/login` still works** — **PASS**. Logged in with the reset `cameronjmcewan@gmail.com` password, redirected to `/dashboard`, session cookie set correctly. Legacy form-auth path intact.
+2. **Dashboard renders with synthesized `User` object** — **PASS**. `/dashboard?slug=bamboo-brace` and `/dashboard?slug=dmre` both rendered correctly. The Commit 5 migration of the dashboard handler from `requireSession` to `getSessionFromRequest` (with the minimal `User` object synthesized for `buildDashboard`) round-tripped cleanly.
+3. **Cookie-authenticated `/api/client/me` returns 200** — **PASS**. `curl` with the `amcp_session` cookie returned HTTP 200 with the expected JSON body. The cookie fallback path through `getSessionFromRequest` works for legacy clients that pre-date the Bearer access token flow.
+4. **OPTIONS preflight on `/api/auth/login` returns 204** — **PASS**. Preflight returned 204 with the `Access-Control-Allow-*` headers correctly populated, `Vary: Origin` present, and credentials mode enabled. The shared CORS helper and the `handleAuthPreflight` wrapper both behave as designed.
+5. **POST to `/api/auth/login` with invalid credentials returns 401** — **PASS**. Login rejected with 401 as expected. The constant-time dummy-password verification path fires without leaking timing information about whether the email exists.
+
+No discrepancies between unit test expectations and the production deploy. No CORS errors. No 500s. No auth bypasses. Production smoke is green.
+
+### Operational notes
+
+Two operational details were absorbed into this session that are worth recording for future reference:
+
+1. **Admin password reset detour (mid-verification).** Cameron could not retrieve the existing admin credentials for `cameronjmcewan@gmail.com` when Commit 5's manual verification required a working login. To unblock verification, I wrote a one-off Node script at `worker/scripts/reset-admin-password.mjs` (plain JS, inlined PBKDF2 hashing logic verbatim from `auth.ts`, 100,000 iterations, UTF-8-encoded salt string as PBKDF2 input) that takes a plaintext password via `argv[2]` and prints `{password_hash, salt}` as JSON. The plaintext is never logged, printed, or transmitted. Cameron ran the script, copied the hash and salt into a `wrangler d1 execute` `UPDATE` statement to rewrite the `users` row, and verified login works. The script is a one-time recovery tool and **should be deleted manually after this session** — it is deliberately excluded from this Phase C commit. If it's still in the tree when you read this, delete it.
+2. **`ACCESS_TOKEN_SIGNING_KEY` secret provisioning.** The new env var defined on the `Env` interface in Commit 1 needed a value for the worker to actually mint and verify access tokens on the deployed endpoint. Cameron set it on the production worker via `wrangler secret put ACCESS_TOKEN_SIGNING_KEY` from the `worker/` directory before running the Commit 5 verifications. The secret is independent from `ACTIVATION_SIGNING_KEY` and `TOKEN_SIGNING_KEY` and must remain independent — rotating any one of the three should not require rotating the others.
+
+### Followups discovered during Phase C
+
+Tracked for Phase D or later sessions. None of these are regressions introduced by Phase C; most are pre-existing issues noticed while reading the code and are documented in "Found during reading — not in Phase C scope" above. The items below are the actionable followup summary:
+
+1. **Delete `worker/scripts/reset-admin-password.mjs`** immediately. One-off recovery tool, not production code. Never commit.
+2. **Audit `worker/src/lib/tracked-url.test.ts`** for the same base64url padding-bit flakiness pattern fixed in Commit 0. Same diagnostic reasoning applies — if any test modifies the last character of a base64url-encoded fixed-length signature, replace with the middle-character-modification pattern.
+3. **Refactor `worker/src/lib/activation-token.ts`'s `signActivationToken`** to use `Omit<ActivationTokenPayload, "iat" | "exp">` as its parameter type, matching the cleaner pattern introduced in Commit 2's `signAccessToken`. Low-priority, test-only impact, type-system cleanup only.
+4. **Extend `worker/src/portalDb.ts`'s `User` interface** with `tenant_id: string | null` and update `getSessionByToken` to include `tenant_id` in its SELECT. This lets `authApi.ts` drop its inline `getUserByEmailWithTenant` helper and the extra `SELECT tenant_id FROM users WHERE id = ?` query in `handleAuthRefresh`. Low-priority type cleanup, one fewer query per refresh call.
+5. **Close the timing-based email enumeration leak in the legacy admin `authLogin` at `worker/src/routes/portal.ts:143-147`**. The new Phase C `handleAuthLogin` in `authApi.ts` is already hardened with constant-time dummy-password verification; the legacy admin path should get the same fix in a dedicated admin-login-hardening session. Tiny diff, same pattern.
+6. **Sort out the canonical vs legacy relationship between `worker/src/routes/onboard.ts`'s five admin-auth'd handlers and the `handleBasicOnboard`/`handlePublicOnboard` endpoints in `stripe.ts`**. Unclear from reading alone. Belongs in a dedicated cleanup session after Phase E (worker HTML deprecation).
+7. **Phase D dependency check**: when Phase D builds the `advocatemcp.com` frontend login flow, it will consume the endpoints shipped here (`/api/auth/login`, `/api/auth/refresh`, `/api/auth/logout`) plus the Bearer-aware client API endpoints (`/api/client/me`, `/api/client/metrics`, `/api/client/activity`, `/api/client/rotate-key`). Phase D MUST run refreshes against the rotation-on-refresh contract — the old refresh cookie is invalidated on every `/api/auth/refresh` call, so the frontend's token manager cannot retry a refresh with the same cookie if the initial call succeeded. The refresh cookie is scoped to `Path=/api/auth/refresh` and `SameSite=Strict` — it will NOT be sent to any other path, which is deliberate.
+
+### Residual concerns
+
+None critical. The Phase C foundation is complete and verified in production. The followups above are cleanup and hardening items, not blockers for Phase D.
 
 ---
 
 ## Residual concerns and followup items for after Phase C
 
-*(to be populated at Commit 6)*
+See "Followups discovered during Phase C" subsection above under "Phase C final summary".

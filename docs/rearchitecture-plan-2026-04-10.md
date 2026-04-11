@@ -670,7 +670,11 @@ Six phases, A through F. Phase A is this planning document (already complete). E
 
 ### Phase C — Cross-origin API and auth foundation
 
-**Scope**: implement the new `POST /api/auth/login` + `POST /api/auth/logout` endpoints. Extend the five existing `/api/client/*` + `/api/activate` endpoints to accept Bearer tokens and allow the `advocatemcp.com` CORS origin. Build a shared `getSessionFromRequest()` helper that checks Authorization header first, then cookie.
+**Status: SHIPPED 2026-04-11.** Commits `63f1e30` (flaky-test sidetrack), `d016946` (schema + env field), `5dc6289` (access token library), `06339a4` (shared CORS helper), `48c5978` (auth endpoint handlers + refresh cookie helpers), `92ca150` (route registration + Bearer middleware + backwards-compat preserved), plus Commit 6 (this doc update). Final implementation ratified the hybrid access-token + refresh-cookie design described in Section 6 and added `POST /api/auth/refresh` as a third endpoint (beyond the two listed in the original Section 7 inventory) so access tokens can be rotated without forcing the user to re-login every 15 minutes. All five manual E2E verifications passed: admin form login preserved, admin dashboard rendered with the synthesized User from AuthContext, cookie-authenticated `/api/client/me` returned 200, OPTIONS preflight on `/api/auth/login` returned 204 with the expected CORS headers, and `POST /api/auth/login` with invalid credentials returned 401 with the customer-friendly error shape. `ACCESS_TOKEN_SIGNING_KEY` secret deployed during the Commit 5 verification phase and is live on the worker.
+
+**For the full execution log**, including the architectural decisions surfaced during implementation (loginPage / requireSession conflict resolved as Option C, `activate.ts` CORS wrapping switched from silent dispatch-site wrap to self-contained inner/outer pattern, and the mid-session admin password reset detour), see `docs/session-2026-04-11-phase-c-cross-origin-auth-foundation.md`.
+
+**Scope** (as originally planned): implement the new `POST /api/auth/login` + `POST /api/auth/logout` endpoints. Extend the five existing `/api/client/*` + `/api/activate` endpoints to accept Bearer tokens and allow the `advocatemcp.com` CORS origin. Build a shared `getSessionFromRequest()` helper that checks Authorization header first, then cookie.
 
 **Files touched**:
 - `worker/src/routes/portal.ts` — add new route lines for `/api/auth/login`, `/api/auth/logout`. Modify existing `apiMe`, `apiMetrics`, `apiActivity`, `apiRotateKey` to use the new helper.

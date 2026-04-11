@@ -246,7 +246,7 @@ This bit us during the `workman-copy-co` dry-run cleanup on 2026-04-10: a `d1 ex
 
 ## What is in progress
 
-Phase 3 spine shipped with partial E2E verification. Entering rearchitecture planning phase — target state is advocatemcp.com as the single customer-facing hostname, customers.advocatemcp.com as pure backend. Design language stays as the current advocatemcp.com brand identity; structural and layout inspiration taken from conduit.ai. See docs/rearchitecture-plan-2026-04-10.md for the full plan.
+Phase C cross-origin auth foundation shipped and verified in production 2026-04-11. Three new auth endpoints (`POST /api/auth/login`, `POST /api/auth/logout`, `POST /api/auth/refresh`) live on customers.advocatemcp.com with the hybrid Bearer access token + refresh cookie design. Five existing `/api/client/*` endpoints now accept Bearer tokens in addition to the legacy admin session cookie. Admin portal login at `customers.advocatemcp.com/login` preserved byte-for-byte. See `docs/session-2026-04-11-phase-c-cross-origin-auth-foundation.md` for the full execution log across seven commits (Commit 0 sidetrack + Commits 1-6), and `docs/rearchitecture-plan-2026-04-10.md` Section 8 Phase C for the original plan. Phase D (frontend dashboard at advocatemcp.com), Phase E (deprecate worker HTML), and Phase F (Stripe webhook → activation token → email wiring) are the next priorities in that order.
 
 ## What is next on the roadmap (priority order)
 
