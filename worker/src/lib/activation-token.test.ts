@@ -31,11 +31,35 @@ describe("activation-token", () => {
   });
 
   // 3. Tampered signature → bad_signature
+  //
+  // Original Phase 3 implementation (commit c6042ba) swapped the LAST
+  // character of the token between "A" and "B". That was flaky: the last
+  // base64url character of an HMAC-SHA256 signature has 2 padding bits
+  // because 256 bits doesn't divide evenly into 6-bit base64 groups
+  // (256 ÷ 6 = 42.67 → 43 chars × 6 bits = 258 bits, 2 unused). "A"
+  // (000000) and "B" (000001) differ only in those padding bits, so an
+  // A→B swap at the last position decoded to identical 32 bytes and the
+  // "tampered" signature still verified. Theoretical failure rate ≈
+  // 6.25% per run; observed ~3 of 8 over a small sample during Phase C
+  // execution on 2026-04-11 when the bug was caught.
+  //
+  // This fix tampers with a MIDDLE character instead. Middle characters
+  // have no padding-bit ambiguity — all 6 bits are real signature bits.
+  // The swap table additionally guarantees a top-4-bit change: any
+  // character in the range A-P (values 0-15, top 4 bits ∈ {0000, 0001,
+  // 0010, 0011}) swaps to "Q" (top 4 bits = 0100); any character outside
+  // A-P swaps to "A" (top 4 bits = 0000). Top 4 bits always differ after
+  // the swap, so the decoded bytes always change, so the signature never
+  // accidentally verifies. Deterministic across all possible signatures.
   it("rejects tokens with a tampered signature", async () => {
     const token = await signActivationToken({ slug: "dmre" }, KEY);
-    const lastChar = token.slice(-1);
-    const swap = lastChar === "A" ? "B" : "A";
-    const tampered = token.slice(0, -1) + swap;
+    const dotIdx = token.lastIndexOf(".");
+    const sigStart = dotIdx + 1;
+    const sigLength = token.length - sigStart;
+    const tamperIdx = sigStart + Math.floor(sigLength / 2);
+    const originalChar = token[tamperIdx]!;
+    const swappedChar = originalChar >= "A" && originalChar <= "P" ? "Q" : "A";
+    const tampered = token.slice(0, tamperIdx) + swappedChar + token.slice(tamperIdx + 1);
     await expect(verifyActivationToken(tampered, KEY)).rejects.toBe("bad_signature");
   });
 
