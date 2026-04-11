@@ -35,6 +35,7 @@ import {
   activateDomain,
   type ActivateFailReason,
 } from "./domains";
+import { withCors } from "../lib/cors";
 
 // ── Customer message catalog ─────────────────────────────────────────────────
 // Every customer-facing string that can appear in an /api/activate response.
@@ -156,7 +157,21 @@ export function isValidDomain(domain: string): boolean {
 // (from the no-JS fallback form). Token may arrive via X-Activation-Token
 // header, JSON/form body field `token`, or query param `t=`.
 
+/**
+ * Exported entry point. Wraps the inner worker's response with CORS headers
+ * (non-credentials mode) so the advocatemcp.com frontend can receive the
+ * response on a cross-origin fetch. Phase C Commit 5 introduced this outer
+ * wrapper; prior to Commit 5, `handleActivate` was the inner function
+ * directly and `/api/activate` was same-origin-only. The self-contained
+ * wrapping pattern means any future caller of `handleActivate` automatically
+ * gets CORS without needing to remember to wrap at the dispatch site.
+ */
 export async function handleActivate(request: Request, env: Env): Promise<Response> {
+  const response = await handleActivateInner(request, env);
+  return withCors(response, request);
+}
+
+async function handleActivateInner(request: Request, env: Env): Promise<Response> {
   if (request.method !== "POST") return jsonErr(405, "unknown");
   if (!env.ACTIVATION_SIGNING_KEY) {
     // Secret missing entirely — treat as a platform error, not a token error,

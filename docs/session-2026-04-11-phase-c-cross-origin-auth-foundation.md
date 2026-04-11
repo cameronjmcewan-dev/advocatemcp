@@ -40,8 +40,8 @@ Phase C originally proposed six commits. During Commit 1 execution a pre-existin
 | 1 | Schema migration + types.ts field + session notes init | shipped | `d016946` |
 | 2 | Access token library + unit tests | shipped | `5dc6289` |
 | 3 | Shared CORS helper + unit tests | shipped | `06339a4` |
-| 4 | Auth endpoints (login, logout, refresh) + cookie helpers + middleware | *(in progress)* | — |
-| 5 | Bearer middleware applied to existing endpoints + CORS dispatch lines | not started | — |
+| 4 | Auth endpoints (login, logout, refresh) + cookie helpers + middleware | shipped | `48c5978` |
+| 5 | Bearer middleware applied to existing endpoints + CORS dispatch lines | *(in progress)* | — |
 | 6 | Final documentation + session notes finalization | not started | — |
 
 ### Commit 0 sidetrack — flaky test fix (2026-04-11)
@@ -473,6 +473,209 @@ Both fixed before the test run. The final `authApi.ts` has:
 - No `createSession` usage (both login and refresh inline the `INSERT` directly because `createSession` generates its own token internally and doesn't let us supply the raw token we need to set on the response cookie)
 - No dynamic imports
 - `createSession` removed from the `portalDb` import list (unused)
+
+### Commit hash
+
+*(to be populated after git commit)*
+
+## Commit 5 — register auth routes, apply Bearer middleware and CORS to existing endpoints
+
+**Phase C's only commit that changes production behavior on deploy.** All prior commits (1-4 plus the Commit 0 sidetrack) shipped pure additive code that was either unreachable at runtime (Commits 2, 3, 4) or invisible to consumers (Commit 1's schema migration). Commit 5 is the one atomic change that flips the new Phase C code path from "code exists but never runs" to "code runs in production." Post-deploy, the three new auth endpoints are live and the five existing `/api/client/*` endpoints accept Bearer tokens in addition to the legacy session cookie.
+
+### Files modified in this commit
+
+- `worker/src/routes/portal.ts` — dispatch additions, `requireSession` docstring, migration of five handlers from `requireSession` to `getSessionFromRequest`. Details below.
+- `worker/src/routes/activate.ts` — refactored `handleActivate` into an outer wrapper + inner worker pattern so CORS is applied at a single exit point via `withCors`. Details below in the "Option A vs Option B deviation" section.
+
+### Files created in this commit
+
+None.
+
+### portal.ts changes
+
+**Imports added**:
+```typescript
+import {
+  getSessionFromRequest,
+  handleAuthLogin,
+  handleAuthLogout,
+  handleAuthRefresh,
+  handleAuthPreflight,
+} from "./authApi";
+import { withCors, handleCorsPreflight } from "../lib/cors";
+```
+
+**Dispatch lines added** (inside `handlePortal`, registered alongside the existing Phase 3 activation routes):
+
+```
+/api/activate        OPTIONS → handleCorsPreflight(request)  (NEW)
+/api/activate        POST    → handleActivate(request, env)  (unchanged; CORS wrapping moved into activate.ts)
+
+/api/auth/login      OPTIONS → handleAuthPreflight(request)
+/api/auth/login      POST    → handleAuthLogin(request, env)
+/api/auth/logout     OPTIONS → handleAuthPreflight(request)
+/api/auth/logout     POST    → handleAuthLogout(request, env)
+/api/auth/refresh    OPTIONS → handleAuthPreflight(request)
+/api/auth/refresh    POST    → handleAuthRefresh(request, env)
+
+/api/client/me          OPTIONS → handleCorsPreflight(request)
+/api/client/metrics     OPTIONS → handleCorsPreflight(request)
+/api/client/activity    OPTIONS → handleCorsPreflight(request)
+/api/client/rotate-key  OPTIONS → handleCorsPreflight(request)
+```
+
+**Eleven new dispatch lines total**: six auth endpoint lines (three OPTIONS + three POST), four OPTIONS preflight lines for the existing `/api/client/*` endpoints, and one OPTIONS line for `/api/activate`. The `/api/activate` POST dispatch stays a simple single-line dispatch — the CORS wrapping is applied inside `activate.ts` via the outer-wrapper/inner-worker pattern described below.
+
+**`requireSession` docstring added** at line 99. Per the ratified Option C resolution of the loginPage vs `requireSession` conflict, the helper is preserved in place (unchanged body) but gets a 6-line JSDoc comment explaining why it's still there, what it's used for, when it's slated for removal, and cross-references to commit `48c5978` (Phase C Commit 4, introducing `getSessionFromRequest`) and the rearchitecture plan Section 8 Phase E.
+
+**`requireSession` body**: unchanged. Returns `SessionWithUser | null` via `getSessionToken` + `getSessionByToken` exactly as before.
+
+**`loginPage`**: unchanged. Still calls `requireSession`. Still has the same redirect-if-session behavior. Byte-for-byte the same code path for admins hitting `GET /login`.
+
+**Handlers migrated from `requireSession` to `getSessionFromRequest`** (five total):
+
+1. **`dashboard`** — uses `ctx.role` and `ctx.user_id` instead of `session.user.role` and `session.user_id`. The `buildDashboard` call previously passed `session.user` (a `User` object from `SessionWithUser`); post-migration it synthesizes a minimal `User` object from `AuthContext` fields with empty strings for the unused `password_hash`/`salt`/`created_at`/`updated_at` fields. This is safe because `buildDashboard` only reads `user.full_name` and `user.email` (verified via `grep "user\." worker/src/routes/dashboard.ts` during Commit 5 implementation — exactly two matches, both on the allowed fields). No extra D1 query, no modification to `dashboard.ts`.
+
+2. **`apiMe`** — uses `ctx.user_id`, `ctx.email`, `ctx.full_name`, `ctx.role`. Wrapped in `withCors` without credentials mode.
+
+3. **`apiMetrics`** — mechanical rename (ctx.role, ctx.user_id), wrapped in `withCors` at every return site.
+
+4. **`apiActivity`** — same as apiMetrics pattern.
+
+5. **`apiRotateKey`** — same pattern. Every return site (success, 401, 404, 502 variants) now wraps with `withCors`.
+
+**Handlers NOT modified**:
+- `authLogin` (POST /auth/login) — legacy admin form login, preserved byte-for-byte
+- `authLogout` (POST /auth/logout) — legacy admin logout, preserved
+- `loginPage` (GET /login) — legacy admin HTML page, preserved (still calls the preserved `requireSession`)
+- `adminCreateClient` — admin-only, untouched
+- `statusPage` — public status page, untouched
+- Any Stripe/onboard/activate page handler
+
+### activate.ts changes
+
+The existing `handleActivate` function had ~13 distinct return sites (401 token errors, 400 domain errors, 409 cross-tenant, 400 mapped activate-core errors, the success path, etc.). Wrapping each individually with `withCors` would have been verbose and error-prone (missing one = silent CORS failure on one error path).
+
+Cleaner approach: **outer wrapper + inner worker pattern**. The exported `handleActivate` becomes a thin outer wrapper that calls an unexported `handleActivateInner` function (the entire previous body of `handleActivate`) and applies `withCors` to its response at a single exit point:
+
+```typescript
+export async function handleActivate(request: Request, env: Env): Promise<Response> {
+  const response = await handleActivateInner(request, env);
+  return withCors(response, request);
+}
+
+async function handleActivateInner(request: Request, env: Env): Promise<Response> {
+  // ... original handleActivate body, unchanged ...
+}
+```
+
+Two advantages over wrapping at each return site:
+
+1. **Single wrap point** — impossible to forget a return site. Every response from `handleActivateInner` flows through the outer wrapper.
+2. **Zero modification of internal return paths** — the 13 return sites inside `handleActivateInner` are byte-for-byte the same as they were before Commit 5. The refactor is strictly additive at the outer layer.
+
+The new import `import { withCors } from "../lib/cors";` is added to `activate.ts`. The existing `handleActivationToken` function (the admin-protected token minting endpoint) is NOT wrapped — it's called from admin tooling (curl/cli), not from the browser frontend, so it doesn't need CORS.
+
+### Option A vs Option B deviation — surfaced before commit
+
+**Institutional memory entry**: during Commit 5 implementation, Claude Code initially made a silent decision to wrap the `handleActivate` response with `withCors` at the `portal.ts` dispatch site instead of modifying `activate.ts` directly. The result was semantically identical (same CORS headers on the wire) but deviated from the Commit 5 prompt's explicit file list (which named `activate.ts` as one of the three files expected to change).
+
+Claude Code caught the deviation at the pre-commit stage-and-verify step — the `git diff --cached --name-only` output showed only two files staged (`portal.ts` and the session notes), not three. Before committing, Claude Code surfaced the deviation with:
+
+- A clear identification of which files were changed vs which were expected to change
+- Two side-by-side code blocks showing the dispatch-site wrap (what was silently done) vs the internal wrap (what the spec intended)
+- An explicit pros/cons comparison of both options
+- A recommendation to switch to Option A for self-containment and pattern consistency with `stripe.ts`'s existing internal `withCors` pattern
+- An acknowledgment that the silent choice was exactly the kind of thing the `handleAuthPreflight` rule was meant to prevent
+
+Cameron ratified Option A. The switch was executed: `activate.ts` gained the outer/inner wrapper refactor, `portal.ts` dispatch reverted to a simple single-line call.
+
+**Lesson re-reinforced**: "surface drift the moment it's noticed, don't bury it in a commit" — same lesson as the `handleAuthPreflight` sidetrack, caught at an earlier stage (pre-commit rather than post-commit). The discipline working correctly and catching drift earlier each time.
+
+### Architectural decision: loginPage / requireSession conflict resolved as Option C
+
+During Commit 5 implementation I discovered that six handlers call `requireSession`, not five — `loginPage` is the sixth. Your Commit 5 prompt said "delete `requireSession`" AND "update every handler that calls `requireSession`" AND "don't modify `loginPage`" — which was internally inconsistent given that `loginPage` calls `requireSession`.
+
+I stopped and surfaced the conflict. You approved Option C: keep `requireSession` in place (unchanged body), update only the five API handlers to use `getSessionFromRequest`, add a docstring above `requireSession` explaining why it's preserved. `loginPage` is literally untouched.
+
+Reasons Option C is the right resolution:
+
+1. **Satisfies "do not modify `loginPage`" literally.** Options A, B, and D would have all touched `loginPage` in some way.
+2. **The underlying consolidation goal is met** for the five handlers where Bearer capability is actually useful. `loginPage` doesn't need Bearer auth — it's an HTML page accessed by browsers via cookie-bearing navigation.
+3. **Lowest-risk option for the highest-risk commit.** Commit 5 is the one commit that makes the backwards-compatibility guarantee load-bearing. Option C removes all risk from the `loginPage` code path by not touching it at all.
+4. **Cosmetic concern about two helpers is addressable via Phase E.** When the legacy admin HTML pages are deprecated per the rearchitecture plan, `loginPage` and `requireSession` can be deleted together cleanly.
+
+### Architectural decision: buildDashboard user synthesis
+
+The `dashboard` handler previously called `buildDashboard(session.user, ...)` passing the `User` object from the `SessionWithUser` return of `requireSession`. After the migration to `getSessionFromRequest`, `AuthContext` is a flat shape without a `.user` field. Three options were considered:
+
+A) Synthesize a minimal `User` object from `AuthContext` fields for the `buildDashboard` call — empty strings for unused fields.
+B) Do a separate `getUserById(env.DB, ctx.user_id)` query to fetch the full User row.
+C) Modify `buildDashboard`'s signature to accept `AuthContext` (dashboard.ts modification — off-limits).
+
+**Option A chosen** because a grep of `dashboard.ts` during implementation showed only two accesses to the `user` parameter: `user.full_name` (line 189) and `user.email` (lines 189, 540). Both fields are in `AuthContext` directly. The synthesized `User` with empty-string placeholders for the unused four fields compiles cleanly and produces byte-identical HTML output compared to the pre-Commit-5 `session.user` pass-through. No extra DB query, no modification to `dashboard.ts`. Option B would have added an unnecessary query on every dashboard page load; Option C would have violated the constraint.
+
+### What this commit does NOT change
+
+- **`worker/src/auth.ts`** — not modified (refresh cookie helpers were added in Commit 4)
+- **`worker/src/portalDb.ts`** — not modified (existing functions preserved)
+- **`worker/src/routes/authApi.ts`** — not modified (all handlers were built in Commit 4)
+- **`worker/src/routes/dashboard.ts`** — not modified (the HTML renderer)
+- **`worker/src/routes/activate.ts`'s `handleActivateInner` body** — not modified. The outer `handleActivate` wrapper is new in Commit 5 and applies CORS at a single exit point, but the business logic of the activation flow is byte-for-byte the same as it was in Phase 3 Commit `c6042ba`. The 13 return sites inside `handleActivateInner` are untouched.
+- **`worker/src/routes/activate.ts`'s `handleActivationToken` function** — not modified. It's called from admin tooling only and doesn't need CORS.
+- **`worker/src/routes/stripe.ts`** — not modified (its local CORS helper still serves `/api/onboard/public`)
+- **All legacy admin handlers** — `authLogin`, `authLogout`, `loginPage`, `adminCreateClient`, `statusPage` — byte-for-byte preserved
+
+### Backwards compatibility guarantee — what a browser with an `amcp_session` cookie experiences post-Commit-5
+
+Three specific guarantees from the Phase C proposal Section 6:
+
+1. **`POST /auth/login` (admin form)** — unchanged. Same form submission, same validation, same 302 redirect to `/dashboard` with `Set-Cookie: amcp_session=...`. `authLogin` function body is byte-for-byte identical.
+
+2. **`GET /dashboard` with `amcp_session` cookie** — still renders the admin dashboard HTML. The handler's body was modified, but the cookie-bearing request flow is:
+   `getSessionFromRequest` → no Bearer header → cookie fallback → `getSessionByToken` → returns `SessionWithUser` → helper translates to `AuthContext` with `tenant_id: null` → handler continues with `ctx.role` (which is `"admin"` for admins) → fetches businesses → renders `buildDashboard` with the synthesized `User`. Result: byte-identical HTML because `buildDashboard` reads the same two fields (`email`, `full_name`) and those fields carry the same values in the synthesized User as they did in the original `session.user`.
+
+3. **All five `/api/client/*` endpoints with `amcp_session` cookie** — still return 200 JSON. The cookie-fallback path in `getSessionFromRequest` replicates the pre-Commit-5 `requireSession` behavior exactly. The additional CORS headers wrapping the response are harmless for same-origin requests — the browser receives them but doesn't use them. No cookie-bearing request is rejected.
+
+### Manual E2E verification plan (after push + 30s propagation)
+
+Claude Code pauses after push. Cameron runs the five-step verification manually:
+
+1. Visit `https://customers.advocatemcp.com/login` in a browser. Submit valid admin credentials via the form.
+2. Verify redirect to `/dashboard` with the existing admin dashboard HTML rendering correctly.
+3. Run `curl -v -b "amcp_session=<cookie-from-step-2>" https://customers.advocatemcp.com/api/client/me` → expect 200 JSON with user info.
+4. Run `curl -v -X OPTIONS -H "Origin: https://advocatemcp.com" -H "Access-Control-Request-Method: POST" https://customers.advocatemcp.com/api/auth/login` → expect 204 with `Access-Control-Allow-Origin: https://advocatemcp.com` and `Access-Control-Allow-Credentials: true`.
+5. Run `curl -v -X POST -H "Content-Type: application/json" -d '{"email":"nosuchuser@example.com","password":"wrong"}' https://customers.advocatemcp.com/api/auth/login` → expect 401 with `{"ok": false, "error_code": "invalid_credentials"}`.
+
+Claude Code does NOT attempt these verifications — steps 1-3 require browser cookie handling that curl-from-context can't do cleanly, and step 5 would trigger rate limiting if run repeatedly.
+
+### Test suite status
+
+```
+$ cd worker && npm test
+ Test Files  6 passed (6)
+      Tests  55 passed (55)
+   Duration  151ms
+```
+
+Second run:
+
+```
+ Test Files  6 passed (6)
+      Tests  55 passed (55)
+   Duration  131ms
+```
+
+Both runs 55/55 green. No regressions from the portal.ts modifications.
+
+### Typecheck status
+
+```
+$ cd worker && npx tsc --noEmit
+(no output)
+```
+
+Clean. The synthesized `User` object in the dashboard handler compiles, the migration from `requireSession` to `getSessionFromRequest` type-checks in all five handlers, and the new dispatch lines all resolve their imports correctly.
 
 ### Commit hash
 

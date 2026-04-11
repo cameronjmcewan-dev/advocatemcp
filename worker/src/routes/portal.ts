@@ -23,6 +23,14 @@ import { handleOnboardPage } from "./onboardPage";
 import { handleActivatePage } from "./activatePage";
 import { handleActivate, handleActivationToken } from "./activate";
 import {
+  getSessionFromRequest,
+  handleAuthLogin,
+  handleAuthLogout,
+  handleAuthRefresh,
+  handleAuthPreflight,
+} from "./authApi";
+import { withCors, handleCorsPreflight } from "../lib/cors";
+import {
   handleBasicOnboard,
   handlePublicOnboard,
   handlePublicOnboardPreflight,
@@ -55,8 +63,31 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   // Separate flow from the existing /onboard wizard. See feat(worker):
   // phase 3 spine commit for the full design rationale.
   if (pathname === "/activate"                 && method === "GET")  return handleActivatePage(request, env);
-  if (pathname === "/api/activate"             && method === "POST") return handleActivate(request, env);
+  if (pathname === "/api/activate"             && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/activate"             && method === "POST")    return handleActivate(request, env);
   if (pathname === "/admin/activation-token"   && method === "POST") return handleActivationToken(request, env);
+
+  // ── Phase C cross-origin auth endpoints ────────────────────────────────
+  // See docs/rearchitecture-plan-2026-04-10.md Section 8 Phase C and the
+  // Phase C session notes in docs/session-2026-04-11-phase-c-*.md for the
+  // full design (hybrid Bearer access + refresh cookie pattern). All three
+  // endpoints use credentials: true on CORS because they read and/or write
+  // the amcp_refresh cookie.
+  if (pathname === "/api/auth/login"   && method === "OPTIONS") return handleAuthPreflight(request);
+  if (pathname === "/api/auth/login"   && method === "POST")    return handleAuthLogin(request, env);
+  if (pathname === "/api/auth/logout"  && method === "OPTIONS") return handleAuthPreflight(request);
+  if (pathname === "/api/auth/logout"  && method === "POST")    return handleAuthLogout(request, env);
+  if (pathname === "/api/auth/refresh" && method === "OPTIONS") return handleAuthPreflight(request);
+  if (pathname === "/api/auth/refresh" && method === "POST")    return handleAuthRefresh(request, env);
+
+  // ── Phase C CORS preflight for the existing /api/client/* endpoints ────
+  // The POST/GET handlers are updated below to wrap their responses with
+  // withCors. OPTIONS preflights need matching treatment so browsers
+  // accept the subsequent Bearer-authenticated request.
+  if (pathname === "/api/client/me"         && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/client/metrics"    && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/client/activity"   && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/client/rotate-key" && method === "OPTIONS") return handleCorsPreflight(request);
 
   // ── Stripe / new onboarding API ──────────────────────────────────────────
   if (pathname === "/api/onboard/basic"     && method === "POST") return handleBasicOnboard(request, env);
@@ -96,6 +127,23 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
 
 // ── Session helper ─────────────────────────────────────────────────────────
 
+/**
+ * Legacy session helper — intentionally preserved from pre-Phase-C as a
+ * single-use wrapper for `loginPage` below. All other auth checks in this
+ * file (dashboard, apiMe, apiMetrics, apiActivity, apiRotateKey) go through
+ * `getSessionFromRequest` from `./authApi`, which supports both the new
+ * Phase C Bearer access token path and the legacy amcp_session cookie.
+ *
+ * This helper exists solely because `loginPage` was explicitly excluded
+ * from modification in the Phase C Commit 5 scope, and updating its one
+ * call site would have counted as a modification. Delete this helper
+ * alongside `loginPage` itself during Phase E when the legacy admin HTML
+ * pages are deprecated per `docs/rearchitecture-plan-2026-04-10.md`
+ * Section 8 Phase E.
+ *
+ * See commit `48c5978` (Phase C Commit 4) for the introduction of
+ * `getSessionFromRequest` and the rationale for the unified auth flow.
+ */
 async function requireSession(request: Request, env: Env): Promise<SessionWithUser | null> {
   const token = getSessionToken(request);
   if (!token) return null;
@@ -173,15 +221,15 @@ async function authLogout(request: Request, env: Env): Promise<Response> {
 // ── GET /dashboard ─────────────────────────────────────────────────────────
 
 async function dashboard(request: Request, env: Env): Promise<Response> {
-  const session = await requireSession(request, env);
-  if (!session) return redirect("/login?error=expired");
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return redirect("/login?error=expired");
 
-  const businesses = session.user.role === "admin"
+  const businesses = ctx.role === "admin"
     ? await getAllBusinesses(env.DB)
-    : await getUserBusinesses(env.DB, session.user_id);
+    : await getUserBusinesses(env.DB, ctx.user_id);
 
   // Dashboard gating: redirect non-admin users whose tenant isn't active yet
-  if (session.user.role !== "admin" && businesses.length > 0) {
+  if (ctx.role !== "admin" && businesses.length > 0) {
     const biz = businesses[0];
     if (biz.domain) {
       const tenant = await getTenant(env, biz.domain);
@@ -198,61 +246,80 @@ async function dashboard(request: Request, env: Env): Promise<Response> {
   const selected = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   const analytics = selected ? await fetchAnalytics(selected, env) : null;
 
-  return html(buildDashboard(session.user, businesses, selected, analytics));
+  // Synthesize a minimal User object for buildDashboard. buildDashboard
+  // (see worker/src/routes/dashboard.ts) only reads user.full_name and
+  // user.email from this parameter — verified via grep during Phase C
+  // Commit 5 implementation. The other User fields (password_hash, salt,
+  // created_at, updated_at) are provided as empty strings to satisfy the
+  // User interface without doing an extra getUserById D1 query.
+  const userForDashboard: User = {
+    id:            ctx.user_id,
+    email:         ctx.email,
+    password_hash: "",
+    salt:          "",
+    full_name:     ctx.full_name,
+    role:          ctx.role,
+    created_at:    "",
+    updated_at:    "",
+  };
+  return html(buildDashboard(userForDashboard, businesses, selected, analytics));
 }
 
 // ── GET /api/client/me ─────────────────────────────────────────────────────
 
 async function apiMe(request: Request, env: Env): Promise<Response> {
-  const session = await requireSession(request, env);
-  if (!session) return jsonErr(401, "Unauthorized");
-  return jsonOk({ id: session.user.id, email: session.user.email, full_name: session.user.full_name, role: session.user.role });
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request);
+  return withCors(
+    jsonOk({ id: ctx.user_id, email: ctx.email, full_name: ctx.full_name, role: ctx.role }),
+    request,
+  );
 }
 
 // ── GET /api/client/metrics ────────────────────────────────────────────────
 
 async function apiMetrics(request: Request, env: Env): Promise<Response> {
-  const session = await requireSession(request, env);
-  if (!session) return jsonErr(401, "Unauthorized");
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request);
 
-  const businesses = session.user.role === "admin"
+  const businesses = ctx.role === "admin"
     ? await getAllBusinesses(env.DB)
-    : await getUserBusinesses(env.DB, session.user_id);
+    : await getUserBusinesses(env.DB, ctx.user_id);
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
-  if (!biz) return jsonErr(404, "No business found for this account");
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request);
 
   const data = await fetchAnalytics(biz, env);
-  return jsonOk(data ?? { message: "No data available yet", slug: biz.slug });
+  return withCors(jsonOk(data ?? { message: "No data available yet", slug: biz.slug }), request);
 }
 
 // ── GET /api/client/activity ───────────────────────────────────────────────
 
 async function apiActivity(request: Request, env: Env): Promise<Response> {
-  const session = await requireSession(request, env);
-  if (!session) return jsonErr(401, "Unauthorized");
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request);
 
-  const businesses = session.user.role === "admin"
+  const businesses = ctx.role === "admin"
     ? await getAllBusinesses(env.DB)
-    : await getUserBusinesses(env.DB, session.user_id);
+    : await getUserBusinesses(env.DB, ctx.user_id);
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
-  if (!biz) return jsonErr(404, "No business found for this account");
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request);
 
   const data = await fetchAnalytics(biz, env);
-  return jsonOk(data?.recent_queries ?? []);
+  return withCors(jsonOk(data?.recent_queries ?? []), request);
 }
 
 // ── POST /api/client/rotate-key ───────────────────────────────────────────
 
 async function apiRotateKey(request: Request, env: Env): Promise<Response> {
-  const session = await requireSession(request, env);
-  if (!session) return jsonErr(401, "Unauthorized");
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request);
 
-  const businesses = await getUserBusinesses(env.DB, session.user_id);
+  const businesses = await getUserBusinesses(env.DB, ctx.user_id);
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
-  if (!biz) return jsonErr(404, "No business found for this account");
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request);
 
   const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
   let rotateRes: Response;
@@ -262,15 +329,15 @@ async function apiRotateKey(request: Request, env: Env): Promise<Response> {
       headers: { ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}) },
     });
   } catch (err) {
-    return jsonErr(502, `Backend unreachable: ${String(err)}`);
+    return withCors(jsonErr(502, `Backend unreachable: ${String(err)}`), request);
   }
 
-  if (!rotateRes.ok) return jsonErr(502, "Backend failed to rotate key");
+  if (!rotateRes.ok) return withCors(jsonErr(502, "Backend failed to rotate key"), request);
   const data = await rotateRes.json() as { ok: boolean; new_api_key: string };
-  if (!data.ok || !data.new_api_key) return jsonErr(502, "Invalid response from backend");
+  if (!data.ok || !data.new_api_key) return withCors(jsonErr(502, "Invalid response from backend"), request);
 
   await updateBusinessApiKey(env.DB, biz.slug, data.new_api_key);
-  return jsonOk({ ok: true, new_api_key: data.new_api_key });
+  return withCors(jsonOk({ ok: true, new_api_key: data.new_api_key }), request);
 }
 
 // ── POST /admin/create-client ──────────────────────────────────────────────
