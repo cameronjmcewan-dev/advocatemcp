@@ -23,6 +23,11 @@ import {
   jsonErr,
   requireAdmin,
 } from "./onboard";
+import { signActivationToken } from "../lib/activation-token";
+import {
+  getActivationRecord,
+  setActivationTokenIfMissing,
+} from "../portalDb";
 
 // ── CORS helper for the public wizard endpoint ───────────────────────────────
 // Only the marketing site is trusted. Everything else gets the default origin
@@ -605,6 +610,60 @@ async function registerBusinessInD1(
   }
 }
 
+// ── Phase F Part 1: activation token provisioning ───────────────────────────
+//
+// Mint an activation token for a business and persist it to D1 with
+// status 'pending_send'. Called from handleStripeWebhook after a
+// successful checkout.session.completed event.
+//
+// Idempotent. First call mints + writes + returns "minted". Subsequent
+// calls (Stripe retry, concurrent webhook) short-circuit on the SELECT
+// and return "existing" without invoking signActivationToken at all —
+// the short-circuit avoids wasted HMAC work on every retry and is
+// explicitly asserted by stripe.test.ts. The underlying write is still
+// atomic (UPDATE ... WHERE activation_token IS NULL) so two calls that
+// both pass the short-circuit concurrently are still safe: one UPDATE
+// wins with meta.changes=1 and the other falls through with
+// meta.changes=0 returning "existing".
+//
+// Returns:
+//   - "minted"   on successful mint-and-write
+//   - "existing" when the row already has an activation_token
+//   - "no_key"   when ACTIVATION_SIGNING_KEY is not configured
+//   - "no_row"   when no businesses row exists for the slug (defensive;
+//                the webhook path guarantees the row was created at
+//                checkout-session creation time, so this branch is for
+//                safety and for logging observability)
+
+export type ProvisionActivationResult =
+  | "minted"
+  | "existing"
+  | "no_key"
+  | "no_row";
+
+export async function provisionActivationToken(
+  env: Env,
+  slug: string,
+  now: string,
+): Promise<ProvisionActivationResult> {
+  if (!env.ACTIVATION_SIGNING_KEY) return "no_key";
+
+  // Short-circuit read — avoids signing a token that would be thrown
+  // away on the no-op path. The race-safe guarantee still comes from
+  // setActivationTokenIfMissing's atomic WHERE IS NULL; this SELECT
+  // is a pure optimization plus the source of the no_row signal.
+  const existing = await getActivationRecord(env.DB, slug);
+  if (existing === null) return "no_row";
+  if (existing.token !== null) return "existing";
+
+  const token = await signActivationToken({ slug }, env.ACTIVATION_SIGNING_KEY);
+  const wrote = await setActivationTokenIfMissing(env.DB, slug, token, now);
+  // If wrote is false here, another concurrent invocation won the race
+  // between our SELECT and UPDATE. The token we just minted is
+  // discarded; the already-stored token is left untouched.
+  return wrote ? "minted" : "existing";
+}
+
 // ── POST /api/stripe/webhook ─────────────────────────────────────────────────
 // Stripe calls this when checkout.session.completed fires.
 
@@ -662,7 +721,11 @@ export async function handleStripeWebhook(
 
   const tenant = await getTenant(env, domain);
   if (!tenant) {
-    console.log(JSON.stringify({
+    // Bumped from console.log → console.warn in Phase F Part 1 so this
+    // operational failure surfaces in wrangler tail filters that only
+    // subscribe to warn/error levels. Still returns 200 so Stripe does
+    // not retry against a situation that will not self-heal.
+    console.warn(JSON.stringify({
       onboarding: true,
       event: "stripe_webhook_tenant_not_found",
       domain,
@@ -729,6 +792,53 @@ export async function handleStripeWebhook(
     }));
   }
 
+  // Phase F Part 1: mint and store the activation token. Non-fatal on
+  // error — a failure here does not revert the Stripe IDs write above
+  // and does not trigger a Stripe retry. The operator can manually
+  // issue a token via POST /admin/activation-token as a backstop.
+  let activationResult: ProvisionActivationResult = "no_key";
+  const nowIso = new Date().toISOString();
+  try {
+    activationResult = await provisionActivationToken(env, tenant.slug, nowIso);
+    if (activationResult === "no_key") {
+      console.warn(JSON.stringify({
+        onboarding: true,
+        event: "stripe_webhook_activation_no_key",
+        domain,
+        slug: tenant.slug,
+      }));
+    } else if (activationResult === "no_row") {
+      console.warn(JSON.stringify({
+        onboarding: true,
+        event: "stripe_webhook_activation_no_row",
+        domain,
+        slug: tenant.slug,
+      }));
+    } else if (activationResult === "existing") {
+      console.log(JSON.stringify({
+        onboarding: true,
+        event: "stripe_webhook_activation_existing",
+        domain,
+        slug: tenant.slug,
+      }));
+    } else {
+      console.log(JSON.stringify({
+        onboarding: true,
+        event: "stripe_webhook_activation_minted",
+        domain,
+        slug: tenant.slug,
+      }));
+    }
+  } catch (err) {
+    console.warn(JSON.stringify({
+      onboarding: true,
+      event: "stripe_webhook_activation_error",
+      domain,
+      slug: tenant.slug,
+      error: String(err),
+    }));
+  }
+
   console.log(JSON.stringify({
     onboarding: true,
     event: "stripe_webhook_processed",
@@ -736,6 +846,7 @@ export async function handleStripeWebhook(
     slug: tenant.slug,
     plan: tenant.stripe.plan,
     status: tenant.status,
+    activation: activationResult,
   }));
 
   return new Response("OK", { status: 200 });

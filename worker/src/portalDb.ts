@@ -24,6 +24,13 @@ export interface Business {
   plan?: string;
   stripe_customer_id?: string;
   stripe_subscription_id?: string;
+  // Phase F Part 1: activation token minted by the Stripe webhook.
+  // All three fields are optional on the TS type because existing
+  // callers of SELECT * from before the 0005 migration do not expect
+  // them. Nullable on D1 where the column allows it.
+  activation_token?: string | null;
+  activation_status?: string;
+  activation_issued_at?: string | null;
 }
 
 export interface Session {
@@ -226,6 +233,83 @@ export async function updateBusinessApiKey(
     .prepare("UPDATE businesses SET api_key = ? WHERE slug = ?")
     .bind(newApiKey, slug)
     .run();
+}
+
+// ── Phase F Part 1: activation token helpers ─────────────────────────────
+
+export interface ActivationRecord {
+  token: string | null;
+  status: string;
+  issued_at: string | null;
+}
+
+/**
+ * Atomically write an activation token for a business, but ONLY if no
+ * token has been issued yet. The idempotency guarantee comes from the
+ * `activation_token IS NULL` guard in the WHERE clause — a second
+ * call after a token has already been stored results in meta.changes
+ * = 0 and leaves the existing token untouched.
+ *
+ * Callers must SELECT first to decide whether to even mint a token (the
+ * mint is HMAC-SHA256 and cheap but not free, and we want to avoid
+ * signing a token that will be thrown away on every Stripe retry). The
+ * SELECT-then-UPDATE pattern would be racy; the atomic WHERE IS NULL
+ * here closes that race so the common-case short-circuit in
+ * provisionActivationToken can be a pure optimization on top.
+ *
+ * Returns true when the UPDATE actually landed (this call minted), or
+ * false when the row was already populated (no-op — another call got
+ * here first). Also returns false if the slug row does not exist; the
+ * webhook code path guarantees the row was created at checkout time so
+ * this should not happen in production, but the helper is defensive.
+ */
+export async function setActivationTokenIfMissing(
+  db: D1Database,
+  slug: string,
+  token: string,
+  issuedAt: string,
+): Promise<boolean> {
+  const result = await db
+    .prepare(
+      `UPDATE businesses
+         SET activation_token = ?, activation_status = ?, activation_issued_at = ?
+         WHERE slug = ? AND activation_token IS NULL`,
+    )
+    .bind(token, "pending_send", issuedAt, slug)
+    .run();
+  return (result.meta?.changes ?? 0) === 1;
+}
+
+/**
+ * Read the activation token record for a business. Returns null when
+ * the businesses row itself does not exist (used by the admin retrieval
+ * endpoint to distinguish 404 from "200 with token=null"). Returns a
+ * record with `token: null` when the row exists but no token has been
+ * minted yet.
+ */
+export async function getActivationRecord(
+  db: D1Database,
+  slug: string,
+): Promise<ActivationRecord | null> {
+  const row = await db
+    .prepare(
+      `SELECT activation_token, activation_status, activation_issued_at
+         FROM businesses
+         WHERE slug = ?
+         LIMIT 1`,
+    )
+    .bind(slug)
+    .first<{
+      activation_token: string | null;
+      activation_status: string | null;
+      activation_issued_at: string | null;
+    }>();
+  if (!row) return null;
+  return {
+    token:     row.activation_token,
+    status:    row.activation_status ?? "none",
+    issued_at: row.activation_issued_at,
+  };
 }
 
 export async function updateUserPassword(

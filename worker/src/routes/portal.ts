@@ -21,7 +21,7 @@ import {
 } from "./onboard";
 import { handleOnboardPage } from "./onboardPage";
 import { handleActivatePage } from "./activatePage";
-import { handleActivate, handleActivationToken } from "./activate";
+import { handleActivate, handleActivationToken, handleGetActivation } from "./activate";
 import {
   getSessionFromRequest,
   handleAuthLogin,
@@ -120,6 +120,14 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   const domainStatusMatch = pathname.match(/^\/admin\/domains\/([^/]+)\/status$/);
   if (domainStatusMatch && method === "GET") {
     return handleDomainStatus(request, env, domainStatusMatch[1]);
+  }
+
+  // GET /admin/businesses/:slug/activation (Phase F Part 1 — read
+  // activation token minted by the Stripe webhook for operator manual
+  // delivery until the email worker ships in a later session).
+  const activationMatch = pathname.match(/^\/admin\/businesses\/([^/]+)\/activation$/);
+  if (activationMatch && method === "GET") {
+    return handleGetActivation(request, env, activationMatch[1]);
   }
 
   return null;

@@ -36,6 +36,7 @@ import {
   type ActivateFailReason,
 } from "./domains";
 import { withCors } from "../lib/cors";
+import { getActivationRecord } from "../portalDb";
 
 // ── Customer message catalog ─────────────────────────────────────────────────
 // Every customer-facing string that can appear in an /api/activate response.
@@ -339,6 +340,62 @@ export async function handleActivationToken(request: Request, env: Env): Promise
       activate_url: activateUrl,
       expires_at: new Date(expSeconds * 1000).toISOString(),
       note: "This endpoint is temporary — it will be replaced by the Stripe webhook in a future session.",
+    }, null, 2),
+    { status: 200, headers: { "Content-Type": "application/json" } },
+  );
+}
+
+// ── GET /admin/businesses/:slug/activation ───────────────────────────────────
+//
+// Operator-facing retrieval endpoint for the activation token minted by
+// the Stripe webhook in Phase F Part 1. Reads the stored token from D1
+// without minting a new one (contrast with POST /admin/activation-token
+// above, which mints on every call). X-Admin-Secret protected.
+//
+// Response shape:
+//   200 { slug, activation_token, activation_status, activation_issued_at }
+//   401 { error }   — X-Admin-Secret missing or invalid
+//   404 { error }   — slug does not exist in the businesses table
+//
+// The token field may be null on a 200 when the businesses row exists
+// but the webhook has not yet fired (or the webhook fired without
+// ACTIVATION_SIGNING_KEY configured). The operator can tell which case
+// they are in from the activation_status field: 'none' means no mint
+// has happened; 'pending_send' means the webhook has minted and the
+// token is ready to deliver.
+
+export async function handleGetActivation(
+  request: Request,
+  env: Env,
+  slug: string,
+): Promise<Response> {
+  if (request.method !== "GET") {
+    return new Response(
+      JSON.stringify({ error: "Method not allowed" }),
+      { status: 405, headers: { "Content-Type": "application/json" } },
+    );
+  }
+  if (!requireAdminSecret(request, env)) {
+    return new Response(
+      JSON.stringify({ error: "Unauthorized — X-Admin-Secret header required" }),
+      { status: 401, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  const record = await getActivationRecord(env.DB, slug);
+  if (record === null) {
+    return new Response(
+      JSON.stringify({ error: `No business found for slug '${slug}'` }),
+      { status: 404, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  return new Response(
+    JSON.stringify({
+      slug,
+      activation_token:     record.token,
+      activation_status:    record.status,
+      activation_issued_at: record.issued_at,
     }, null, 2),
     { status: 200, headers: { "Content-Type": "application/json" } },
   );
