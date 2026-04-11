@@ -39,8 +39,8 @@ Phase C originally proposed six commits. During Commit 1 execution a pre-existin
 | 0 | (Sidetrack) Deterministic tampered-signature test fix | shipped | `63f1e30` |
 | 1 | Schema migration + types.ts field + session notes init | shipped | `d016946` |
 | 2 | Access token library + unit tests | shipped | `5dc6289` |
-| 3 | Shared CORS helper + unit tests | *(in progress)* | — |
-| 4 | Auth endpoints (login, logout, refresh) + cookie helpers + middleware | not started | — |
+| 3 | Shared CORS helper + unit tests | shipped | `06339a4` |
+| 4 | Auth endpoints (login, logout, refresh) + cookie helpers + middleware | *(in progress)* | — |
 | 5 | Bearer middleware applied to existing endpoints + CORS dispatch lines | not started | — |
 | 6 | Final documentation + session notes finalization | not started | — |
 
@@ -368,6 +368,116 @@ Clean. The new exported symbols (`ALLOWED_ORIGINS`, `CorsOptions`, `corsHeadersF
 
 *(to be populated after git commit)*
 
+## Commit 4 — auth endpoints and refresh cookie helpers
+
+### Files created in this commit
+
+- `worker/src/routes/authApi.ts` — new file, ~400 lines. Exports:
+  - `AuthContext` interface — flat shape with `user_id`, `email`, `full_name`, `role`, `tenant_id`, `auth_method`
+  - `getSessionFromRequest(request, env)` — Bearer-first, cookie-fallback resolver (stateless on the Bearer path; DB lookup on the cookie path)
+  - `handleAuthLogin(request, env)` — `POST /api/auth/login` handler with rate-limited constant-time password verification
+  - `handleAuthLogout(request, env)` — `POST /api/auth/logout` handler (idempotent)
+  - `handleAuthRefresh(request, env)` — `POST /api/auth/refresh` handler with create-before-delete refresh rotation
+  - `handleAuthPreflight(request)` — convenience wrapper around `handleCorsPreflight` with `credentials: true` for the auth endpoints' OPTIONS preflights
+
+### Files modified in this commit
+
+- `worker/src/auth.ts` — appended three new exports (constants and helpers for the Phase C refresh cookie). Zero modification to the existing `sessionCookieHeader`, `clearSessionCookieHeader`, or `getSessionToken` functions — the legacy admin session cookie behavior is byte-for-byte preserved.
+  - `REFRESH_COOKIE`, `REFRESH_MAX_AGE`, `REFRESH_PATH` constants (private)
+  - `refreshCookieHeader(token)` — builds a `Set-Cookie` header for the refresh cookie with `HttpOnly; Secure; SameSite=Strict; Path=/api/auth/refresh; Max-Age=30d`
+  - `clearRefreshCookieHeader()` — builds a cookie-clearing `Set-Cookie` header with matching attributes
+  - `getRefreshToken(request)` — reads the `amcp_refresh` cookie from the request
+
+### Architectural decision: not modifying `portalDb.ts`
+
+Per the Phase C Commit 4 constraint "Do not modify any existing function in portalDb.ts", Commit 4 does NOT touch `portalDb.ts`. Two consequences:
+
+1. **`handleAuthLogin` does a direct D1 query for the user** (including `tenant_id`) rather than calling `getUserByEmail` from portalDb.ts. The `getUserByEmail` helper returns the existing `User` interface which doesn't include `tenant_id` (because `tenant_id` was added in Commit 1's migration and the TypeScript type in portalDb.ts wasn't extended). A small `getUserByEmailWithTenant` helper is inlined in `authApi.ts` that does the same query with an explicit column list including `tenant_id`. Small duplication, worth it to preserve the Commit 4 scope boundary.
+2. **`handleAuthRefresh` uses `getSessionByToken` (which returns the existing `User` type without `tenant_id`) and then does a separate `SELECT tenant_id FROM users WHERE id = ?` query** to get the tenant_id for the new access token claims. One extra query per refresh. Cheap.
+
+Alternatives considered:
+- Extending the `User` interface in `portalDb.ts` with `tenant_id: string | null` would eliminate both workarounds but counts as touching `portalDb.ts`. Flagged as a future cleanup opportunity in the found-during-reading list below.
+- Creating a parallel `CustomerUser` interface in authApi.ts would duplicate the type. Cleaner to inline the one function that needs the extra field.
+
+### Architectural decision: cookie-path `tenant_id = null` behavior
+
+`getSessionFromRequest`'s cookie-fallback path unconditionally sets `tenant_id = null` in the returned `AuthContext`, regardless of whether the user actually has a non-null `tenant_id` in D1. Reasoning:
+
+- Customer users (role="client" with non-null tenant_id, created by Phase F's Stripe webhook) will always use the Bearer path. They don't have a legacy session cookie.
+- Admin users (role="admin" with NULL tenant_id) are the only users who currently use the cookie path.
+- Therefore, for the current and immediately-foreseeable system, `tenant_id = null` on the cookie path is correct for every user who might take that path.
+
+If a future system state ever has customer users with legacy session cookies, the cookie path will need a separate query for `tenant_id`. Flagged in the session notes and in the file header comment.
+
+### Critical implementation details (per Cameron's explicit guidance)
+
+1. **Refresh rotation order: create FIRST, then delete.** `handleAuthRefresh` inlines the `INSERT INTO sessions ...` for the new refresh token BEFORE calling `deleteSession` for the old one. If the delete fails after the insert, the user has a valid new refresh cookie and the old row lingers harmlessly (it'll expire on its own). If we had done it the other way around and the insert failed after the delete, the user would be logged out with no valid cookie. Create-first is the more forgiving order.
+
+2. **Logout is idempotent.** `handleAuthLogout` always returns `200 {ok: true}` regardless of whether the refresh cookie was present, whether the session row existed, or whether `deleteSession` succeeded. Wraps the delete in a try/catch that logs warnings but never surfaces errors to the client. This prevents information leakage about whether a session existed (which would help an attacker validate stolen cookies).
+
+3. **Constant-time password verification on "user not found".** `handleAuthLogin` always calls `verifyPassword`, either with the real user's salt/hash or with dummy constants (`DUMMY_SALT`, `DUMMY_HASH` — 32-char and 64-char zero-filled hex strings). This keeps the total login endpoint response time roughly constant regardless of whether the email exists, preventing timing-based email enumeration. The existing legacy admin `authLogin` at `portal.ts:143-147` has this timing leak (early return on "user not found" without running `verifyPassword`). The new Phase C handler fixes it for the Phase C path — the legacy admin path still has the leak and should be hardened in a future session. Logged in the found-during-reading list below.
+
+4. **Rate limit BEFORE any password verification.** `checkRateLimit` runs before the user lookup and before `verifyPassword`. A rate-limited email gets rejected with `429 rate_limited` without any expensive crypto or DB work. Cheap counter query, fast rejection.
+
+### Route registration deliberately deferred to Commit 5
+
+**Commit 4 does NOT register any routes in `portal.ts`.** The three handlers (`handleAuthLogin`, `handleAuthLogout`, `handleAuthRefresh`) plus the `handleAuthPreflight` helper are exported from `authApi.ts` but nothing imports them yet. At Commit 4's deploy, the code is live in the worker bundle but unreachable — production behavior is byte-for-byte unchanged.
+
+Route registration happens in Commit 5 alongside the Bearer middleware wiring for the existing `/api/client/*` endpoints. Keeping both changes in one commit is intentional: Commit 5 is the one atomic change that flips production from "no cross-origin auth" to "cross-origin auth available," which is the right granularity for a behavioral change.
+
+### Tests deferred
+
+Per the Phase C proposal Section 7 ("skip D1 integration tests in Phase C, lean on manual E2E"), Commit 4 adds NO new unit tests. The handlers require D1 mocking infrastructure that the worker's vitest setup doesn't have. Adding that infrastructure would roughly double the Phase C diff size and introduce new testing patterns that the rest of the worker doesn't use. Matches the precedent from Phase 1.5, Phase 2, and Phase 3.
+
+Manual E2E verification of the handlers happens after Commit 5 deploys, following the curl capture plan documented earlier in this session notes file. That verification is the sole way Commit 4's handlers are exercised at runtime — unit tests for the handlers are a future testing-infrastructure session's concern.
+
+### Test count delta
+
+- Before Commit 4: 55 tests across 6 files
+- After Commit 4: **55 tests across 6 files (no change)**
+
+### Test suite status
+
+```
+$ cd worker && npm test
+ Test Files  6 passed (6)
+      Tests  55 passed (55)
+   Duration  140ms
+```
+
+Second run:
+
+```
+ Test Files  6 passed (6)
+      Tests  55 passed (55)
+   Duration  120ms
+```
+
+Both runs 55/55 green. No regressions from the new code.
+
+### Typecheck status
+
+```
+$ cd worker && npx tsc --noEmit
+(no output)
+```
+
+Clean. Every new import resolves, every new function signature compiles, `AuthContext` extends cleanly from the existing `SessionWithUser` field names so Commit 5's rename will be mechanical.
+
+### Implementation bumps during execution
+
+One drafting error caught before commit: the initial version of `handleAuthRefresh` had a nonsensical `createSession(env.DB, session.user_id).then(async () => {})` call followed by a direct `INSERT` — the `createSession` call was creating an extra untracked session row on every refresh, a DB leak. Also the initial version used `await import("../auth")` dynamic imports inside function bodies for `hashToken`, which is wrong — should be a top-level static import.
+
+Both fixed before the test run. The final `authApi.ts` has:
+- `hashToken` at the top-level static import from `../auth`
+- No `createSession` usage (both login and refresh inline the `INSERT` directly because `createSession` generates its own token internally and doesn't let us supply the raw token we need to set on the response cookie)
+- No dynamic imports
+- `createSession` removed from the `portalDb` import list (unused)
+
+### Commit hash
+
+*(to be populated after git commit)*
+
 ## Found during reading — not in Phase C scope
 
 Items noticed while reading the codebase for Phase C's proposal that do not belong to Phase C. Logged here for future sessions. None of these are fixed or touched in Phase C.
@@ -379,6 +489,10 @@ Items noticed while reading the codebase for Phase C's proposal that do not belo
 - **`worker/src/routes/portal.ts:99` has a `requireSession` helper that will be deleted during Commit 5** as part of replacing cookie-only auth with `getSessionFromRequest`. This is expected Phase C scope, not a found-during-reading item — noted here only because I noticed it during the proposal reading pass and want the explicit handoff recorded.
 
 - **`worker/src/lib/activation-token.ts`'s `signActivationToken` function takes `payload: { slug: string }` as its parameter type** rather than `Omit<ActivationTokenPayload, "iat" | "exp">`. The `Omit` pattern is cleaner — it future-proofs against adding new required payload fields (the type system would then force callers to supply them) and prevents callers from accidentally passing `iat`/`exp` explicitly. Commit 2's `signAccessToken` uses the `Omit` pattern. A future cleanup session could refactor `activation-token.ts` to match. Low-priority, test-only impact, and the current activation-token code works correctly — this is purely a type-level cleanup opportunity, not a bug.
+
+- **`worker/src/routes/portal.ts:143-147` — the existing legacy `authLogin` has a timing-based email enumeration leak.** When the posted email is not found in the users table, the function returns immediately without running `verifyPassword`. An attacker can distinguish "user exists, wrong password" (~100k PBKDF2 iterations ≈ 100–200 ms) from "user doesn't exist" (≈5 ms) and enumerate valid emails by measuring response time. The new Phase C `handleAuthLogin` in `authApi.ts` fixes this for the new path by always running `verifyPassword` against either the real user's salt/hash or dummy constants. The legacy admin `authLogin` should get the same fix in a future session — tiny diff, same pattern. Flagged for a dedicated admin-login-hardening session (not Phase C scope).
+
+- **`worker/src/portalDb.ts`'s `User` interface does not include the `tenant_id` column** even though Commit 1's migration added it to the D1 schema. `getUserByEmail` does `SELECT * FROM users` which returns `tenant_id` in the row data, but the TypeScript type narrowing via `.first<User>()` drops the field because it's not declared in the interface. Consequence: Commit 4's `authApi.ts` had to inline a separate `getUserByEmailWithTenant` helper and a separate `SELECT tenant_id FROM users WHERE id = ?` query in `handleAuthRefresh` to access the field. A future cleanup session should extend the `User` interface with `tenant_id: string | null`, update `getSessionByToken` to include `tenant_id` in its SELECT, and let `authApi.ts` drop its inline helper + extra query. Low-priority, type-system cleanup, no runtime impact beyond one extra query per refresh call.
 
 ---
 

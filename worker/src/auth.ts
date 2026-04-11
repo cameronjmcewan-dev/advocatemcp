@@ -117,3 +117,61 @@ export function clearSessionCookieHeader(): string {
     "Max-Age=0",
   ].join("; ");
 }
+
+// ── Phase C refresh cookie helpers ─────────────────────────────────────────
+// The Phase C hybrid auth design uses a separate cookie (amcp_refresh) for
+// long-lived refresh tokens, distinct from the legacy amcp_session cookie
+// above. The refresh cookie is:
+//
+//   - HttpOnly + Secure: inaccessible to JavaScript, TLS-only
+//   - SameSite=Strict:   tightest cross-origin policy; the refresh cookie
+//                        only rides on same-site requests. advocatemcp.com
+//                        and customers.advocatemcp.com are same-site under
+//                        the modern eTLD+1 definition so fetches from
+//                        advocatemcp.com to customers.advocatemcp.com/api/auth/refresh
+//                        DO send the cookie. Non-navigational cross-site
+//                        requests and any unrelated third-party origins
+//                        don't.
+//   - Path=/api/auth/refresh: the cookie is ONLY sent to the refresh
+//                        endpoint. Minimizes exposure — the refresh token
+//                        never travels on any other API call.
+//   - Max-Age=30 days:   matches SESSION_TTL_MS in portalDb.ts so the
+//                        cookie lifetime and the sessions-table row
+//                        lifetime stay in sync.
+//
+// The existing sessionCookieHeader above stays unchanged because it serves
+// the legacy admin portal login at /auth/login, which uses a different
+// SameSite policy (Lax) and a different path scope (/). Admin sessions and
+// customer refresh tokens live in the same D1 sessions table but arrive
+// via different cookies.
+
+const REFRESH_COOKIE  = "amcp_refresh";
+const REFRESH_MAX_AGE = 30 * 24 * 60 * 60; // 30 days in seconds
+const REFRESH_PATH    = "/api/auth/refresh";
+
+export function refreshCookieHeader(token: string): string {
+  return [
+    `${REFRESH_COOKIE}=${encodeURIComponent(token)}`,
+    "HttpOnly",
+    "Secure",
+    "SameSite=Strict",
+    `Path=${REFRESH_PATH}`,
+    `Max-Age=${REFRESH_MAX_AGE}`,
+  ].join("; ");
+}
+
+export function clearRefreshCookieHeader(): string {
+  return [
+    `${REFRESH_COOKIE}=`,
+    "HttpOnly",
+    "Secure",
+    "SameSite=Strict",
+    `Path=${REFRESH_PATH}`,
+    "Max-Age=0",
+  ].join("; ");
+}
+
+export function getRefreshToken(request: Request): string | null {
+  const cookies = parseCookies(request.headers.get("Cookie"));
+  return cookies[REFRESH_COOKIE] ?? null;
+}
