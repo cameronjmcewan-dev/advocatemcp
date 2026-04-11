@@ -935,3 +935,281 @@ None of these gaps block the planning work above. They are enumerated so future 
 ---
 
 **End of document. Saved to working tree, not committed. Cameron to review and tweak before committing in the morning.**
+
+---
+
+## Section 12 — Phase D: Dashboard Consolidation
+
+*Drafted 2026-04-11. Approved by Cameron before commit.*
+
+### 12.0 Critical findings
+
+Four gaps between the Phase C API surface and what a real dashboard needs. Each is flagged with a resolution decision.
+
+**CF-1: Access token does not survive page navigation.**
+Phase C places access tokens in JS memory only (not localStorage). Any navigation event discards the token. Resolution: "refresh on every page load" pattern — `POST /api/auth/refresh` fires immediately on `dashboard.html` load before rendering any data. The persistent `amcp_refresh` cookie (HttpOnly, Secure, SameSite=Strict, Path=/api/auth/refresh, Max-Age=2592000) is included automatically because `advocatemcp.com` and `customers.advocatemcp.com` share the eTLD+1 `advocatemcp.com`, making same-site fetch calls with `credentials: 'include'` send the cookie. Approved: build this pattern into `site/js/dashboard-auth.js`.
+
+**CF-2: No endpoint returns the current api_key.**
+Dashboard B's Settings section shows customers their current api_key (masked, with show/copy/rotate). None of the Phase C endpoints (`GET /api/client/me`, `GET /api/client/metrics`) return `api_key`. `POST /api/client/rotate-key` returns only the new key after rotation. Resolution: Settings section ships as "API key configured" with rotate-only functionality. Adding `api_key` to `GET /api/client/me` requires a worker change outside Phase D scope. Flagged as open question Q2.
+
+**CF-3: No domain status endpoint.**
+Dashboard A's Domains section assumes domain hostname, activation status, and CNAME/TXT records are available. None of the Phase C endpoints return this data. `AnalyticsData` is pure analytics. Resolution: Domains section ships as a static stub in Commit 9. A `GET /api/client/domains` worker endpoint is a Phase E or later concern. Flagged as open question Q3.
+
+**CF-4: "Add Domain" modal is incompatible with activation API.**
+Dashboard A contains a modal collecting `{domain, slug}` that calls `POST /api/activate`. But `handleActivate` requires a signed activation token minted by the Stripe webhook — the modal's direct call cannot satisfy this contract. Resolution: The modal is removed from the consolidated dashboard. Domain activation goes through `site/activate.html` (Commit 8), reached via the Domains stub or the onboarding email.
+
+**CF-5: `GET /api/client/metrics` returns two JSON shapes.**
+When Railway is reachable the response is the full `AnalyticsData` object. When Railway is unreachable the response is `{ message: "No data available yet", slug: biz.slug }`. Dashboard JS must discriminate before rendering. Resolution: guard `typeof data.total_queries === 'number'` before rendering; render an empty-state card otherwise.
+
+---
+
+### 12.1 Current state of both dashboards
+
+**Dashboard A** — `site/index.html #page-dashboard`
+- Domain: `advocatemcp.com` — the right domain for the customer-facing product
+- Visual design: canonical brand tokens (`--bg: #171614`, `--accent: #4f98a3`, `--font-serif: 'Instrument Serif'`, etc.) — the design we want to ship
+- Data: entirely hardcoded — not wired to any API
+- Auth: none — the section is visible to anyone who clicks "Dashboard" in the marketing page nav
+- Sections: 4 (Overview stub, AI Requests stub, Referral Clicks stub, Domains stub with broken "Add Domain" modal)
+- Status: visual prototype only, not a real product page
+
+**Dashboard B** — `worker/src/routes/dashboard.ts` served at `customers.advocatemcp.com/dashboard`
+- Domain: `customers.advocatemcp.com` — the wrong domain; customers land here only after the worker's portal login flow
+- Visual design: cool-gray system-font (`--bg:#f9fafb; --card:#fff; --text:#111827`) — completely off-brand
+- Data: live — powered by `fetchAnalytics` → Railway → `AnalyticsData`
+- Auth: worker session cookie (`amcp_session`) — valid but portal-only, not Phase C Bearer
+- Sections: 6 (Overview with 30-day chart + KPIs, AI Requests with trend + intent, Referral Clicks, Bot Activity with 7×24 heatmap, Recommendations, Settings with API key show/hide/copy/rotate)
+- Status: fully functional, in production, will remain live through all of Phase D
+
+---
+
+### 12.2 Target state
+
+A single dashboard at `advocatemcp.com/dashboard.html` that:
+- Shows the canonical brand design (Dashboard A's CSS tokens, sidebar, topbar)
+- Contains all 6 sections with live data (Dashboard B's logic, ported)
+- Authenticates via Phase C Bearer + refresh cookie (no worker session cookie dependency)
+- Fetches data from `https://customers.advocatemcp.com/api/client/metrics` using `credentials: 'include'`
+- Handles token expiry silently by calling `POST /api/auth/refresh` before each page load
+- Ships alongside (not replacing) Dashboard B — the worker version stays live during Phase D and Phase E
+
+A companion login page at `advocatemcp.com/login.html` that:
+- Accepts email + password
+- Calls `POST /api/auth/login` at `customers.advocatemcp.com`
+- Stores the returned `access_token` in `window.AMCP.token` (JS memory)
+- On success, redirects to `dashboard.html`
+- Handles all error codes: `invalid_credentials`, `rate_limited`, `platform_error`
+
+A companion activation page at `advocatemcp.com/activate.html` that:
+- Accepts a signed activation token from the URL query string (`?t=...`)
+- Calls `POST /api/activate` with the token
+- Shows success/error state
+- On success, redirects to `login.html`
+
+---
+
+### 12.3 Architectural decision
+
+**Dashboard A's visual shell is canonical. Dashboard B's data-display logic ports into it.**
+
+Dashboard B's CSS is discarded entirely — all `--bg:#f9fafb` cool-gray tokens are replaced by Dashboard A's brand tokens. Dashboard B's six sections (HTML structure, JS rendering functions, event handlers) are extracted from the server-rendered TypeScript template and rewritten as client-side JS in plain `.js` files. Dashboard A's sidebar, topbar, and nav structure are extended from 4 to 6 section items.
+
+Shared auth module: `window.AMCP` namespace.
+```
+window.AMCP = {
+  token: null,           // access_token string, set after login or refresh
+  API_BASE: 'https://customers.advocatemcp.com',
+  login(email, password) → Promise<void>,
+  logout() → Promise<void>,
+  refresh() → Promise<boolean>,   // true = got new token, false = no cookie / expired
+  authedFetch(path, opts) → Promise<Response>  // injects Authorization header
+}
+```
+
+All fetch calls use `credentials: 'include'` so the `amcp_refresh` cookie travels cross-origin within the same eTLD+1.
+
+No build tooling. All JS is plain `.js` loaded via `<script src="...">` tags. No TypeScript compilation, no bundler, no package.json in `site/`.
+
+---
+
+### 12.4 Phased execution plan
+
+Ten commits, each proposed and approved individually before execution.
+
+**Commit 1 — Auth layer**
+Files: `site/login.html`, `site/js/dashboard-auth.js`
+Work: Login form with brand tokens. `window.AMCP` module with login, logout, refresh, authedFetch. Error rendering for all four error codes. Redirect to `dashboard.html` on success. No dashboard HTML yet — just the auth infrastructure.
+Estimate: 1–2h
+
+**Commit 2 — Dashboard shell**
+Files: `site/dashboard.html`
+Work: Brand CSS (full token set from `site/index.html`). Sidebar with 6 nav items (Overview, AI Requests, Referral Clicks, Bot Activity, Recommendations, Settings). Topbar with business name + logout button. Main content area with skeleton `<section>` placeholders for each of the 6 sections. Auth gate: on load, call `AMCP.refresh()`; if returns false, redirect to `login.html`. No data wiring yet — all sections show "Loading…" placeholders.
+Estimate: 2–3h
+
+**Commit 3 — Overview section**
+Files: `site/dashboard.html` (section), `site/js/dashboard-overview.js`
+Work: Call `GET /api/client/metrics` via `AMCP.authedFetch`. Discriminate on `typeof data.total_queries === 'number'`. Render: insight text card, 4 KPI cards (total queries, referral clicks, top crawler, top intent), 30-day query trend bar chart (vanilla canvas or inline SVG), bot share horizontal bar chart.
+Estimate: 2–3h
+
+**Commit 4 — AI Requests + Referral Clicks sections**
+Files: `site/js/dashboard-requests.js`, `site/js/dashboard-clicks.js`
+Work: AI Requests: 30-day trend chart, top queries list, intent breakdown bars. Referral Clicks: total clicks KPI, clicks last 30 days KPI, bot source bars, explainer card.
+Estimate: 2–3h
+
+**Commit 5 — Bot Activity + Recommendations sections**
+Files: `site/js/dashboard-bots.js`, `site/js/dashboard-recs.js`
+Work: Bot Activity: crawler table with query counts, intent distribution bars, 7×24 activity heatmap (inline SVG grid). Recommendations: static recommendation cards based on intent data patterns, optimization checklist.
+Estimate: 2–3h
+
+**Commit 6 — Settings section**
+Files: `site/js/dashboard-settings.js`
+Work: Business profile display (name, slug, plan from `GET /api/client/me`). API key section: "API key configured — use Rotate to generate a new key" + Rotate button calling `POST /api/client/rotate-key`. Copy-to-clipboard on new key after rotation. (Full show/copy of current key deferred to Q2 resolution.)
+Estimate: 1–2h
+
+**Commit 7 — Login + auth E2E verification**
+Files: no new files; fixes from manual testing
+Work: Walk the full auth flow: login → dashboard loads → refresh cycle → logout → redirect. Fix any issues found. Verify 401 handling (refresh fails → redirect to login). Verify rate-limit message display.
+Estimate: 1–2h
+
+**Commit 8 — Activation page**
+Files: `site/activate.html`, `site/js/dashboard-activate.js`
+Work: Parse `?t=` from URL. Call `POST /api/activate` with token. Success state: "Your domain is active — sign in to see your dashboard" + link to `login.html`. Error states: expired token, already activated, invalid token.
+Estimate: 2–3h
+
+**Commit 9 — Domains stub + docs update**
+Files: `site/dashboard.html` (Domains nav item + section), `docs/rearchitecture-plan-2026-04-10.md` (this file — update 12.0 CF-3 status)
+Work: Add Domains as 7th nav item. Section content: "Domain routing is configured — contact support to update your domain" static card. No API calls. Note Q3 status.
+Estimate: 1–2h
+
+**Commit 10 — Full E2E verification matrix**
+Files: no new files; fixes from matrix run
+Work: Run full verification matrix from Section 12.6. Fix regressions. Tag the commit as Phase D complete.
+Estimate: 1–2h
+
+---
+
+### 12.5 Integration contract
+
+The frontend will call exactly these endpoints. No other worker or Railway endpoints are called directly from `site/`.
+
+| Endpoint | Method | Auth | Used in |
+|---|---|---|---|
+| `/api/auth/login` | POST | none | `login.html` |
+| `/api/auth/logout` | POST | Bearer | logout button |
+| `/api/auth/refresh` | POST | refresh cookie | every `dashboard.html` load |
+| `/api/client/me` | GET | Bearer | Settings section (name, role) |
+| `/api/client/metrics` | GET | Bearer | all data sections |
+| `/api/client/rotate-key` | POST | Bearer | Settings section |
+| `/api/activate` | POST | signed token in body | `activate.html` |
+
+All calls go to `https://customers.advocatemcp.com` (stored in `window.AMCP.API_BASE`).
+All calls use `credentials: 'include'` (for refresh cookie transport).
+All authenticated calls include `Authorization: Bearer ${window.AMCP.token}` header.
+
+**Request/response shapes (from Phase C contracts):**
+
+Login request: `{ email: string, password: string }`
+Login response (200): `{ access_token, expires_in: 900, user: { id, email, full_name, role, tenant_id } }`
+Login response (401): `{ ok: false, error_code: "invalid_credentials" }`
+Login response (429): `{ ok: false, error_code: "rate_limited" }`
+
+Refresh response (200): `{ access_token, expires_in: 900 }` + rotated cookie
+Refresh response (401): `{ ok: false, error_code: "no_refresh_token" | "refresh_token_expired" }`
+
+Metrics response (200, Railway up): full `AnalyticsData` object (see dashboard.ts interface)
+Metrics response (200, Railway down): `{ message: string, slug: string }` — discriminate with `typeof data.total_queries === 'number'`
+
+---
+
+### 12.6 Verification plan
+
+**Per-commit smoke test (run after every commit before pushing):**
+1. Open `site/login.html` in browser — form renders with brand styles
+2. Submit wrong password — error message appears, no redirect
+3. Submit correct credentials — redirects to `dashboard.html`
+4. `dashboard.html` loads — brand sidebar + topbar visible, all sections render
+5. Open devtools network tab — confirm `POST /api/auth/refresh` fired on load
+6. Hard-refresh `dashboard.html` — confirm still logged in (refresh cookie works)
+7. Click logout — redirects to `login.html`
+8. Navigate directly to `dashboard.html` after logout — redirects to `login.html`
+
+**Full E2E matrix (Commit 10):**
+
+| Scenario | Expected |
+|---|---|
+| Valid login | Redirect to dashboard, data loads |
+| Wrong password | "Invalid email or password" inline error |
+| Rate limit (5 attempts) | "Too many attempts" inline error |
+| Dashboard hard refresh within 30 days | Stays logged in, data reloads |
+| Dashboard hard refresh after 30 days | Redirect to login |
+| Token expires mid-session | `authedFetch` silently calls refresh, retries request |
+| Railway down | Empty-state cards in all data sections, no JS errors |
+| Activate with valid token | "Domain active" success state |
+| Activate with expired token | "Link expired" error state |
+| Activate with already-used token | "Already activated" error state |
+| Logout | Cookie cleared, redirect to login |
+| Direct nav to /dashboard.html while logged out | Redirect to login |
+
+---
+
+### 12.7 Rollback plan
+
+Dashboard B (`customers.advocatemcp.com/dashboard`) remains live throughout Phase D. If any Phase D commit introduces a regression or the new dashboard is unusable:
+
+1. Update the marketing site nav link from `dashboard.html` back to `https://customers.advocatemcp.com/dashboard` — single-line edit in `site/index.html`
+2. Deploy: `wrangler pages deploy site --project-name=advocatemcp-site --branch=main`
+3. Customers retain full access via the worker dashboard
+
+No worker code, D1 schema, or Railway backend changes are made during Phase D, so worker rollback is not needed.
+
+Per-commit rollback: `git revert <commit>` + redeploy. Each commit is self-contained (one page or one section at a time) so reverting is surgical.
+
+---
+
+### 12.8 Open questions
+
+**Q1 (answered): Does `SameSite=Strict` block cross-origin refresh cookie?**
+No. `advocatemcp.com` and `customers.advocatemcp.com` share eTLD+1 `advocatemcp.com`. Per the SameSite spec, requests between subdomains of the same eTLD+1 are "same-site" even when cross-origin. With `credentials: 'include'`, the `amcp_refresh` cookie IS sent on the `POST /api/auth/refresh` call from `advocatemcp.com` to `customers.advocatemcp.com`.
+
+**Q2 (open): Should `GET /api/client/me` return the current api_key?**
+Needed for: Settings section to show customers their current key (masked) with a copy button.
+Requires: A one-line addition to `apiMe` in `worker/src/routes/portal.ts`.
+Constraint: Any worker change is outside Phase D scope.
+Decision needed from Cameron before Commit 6.
+
+**Q3 (open): Should a `GET /api/client/domains` endpoint exist before Phase D ends?**
+Needed for: A real Domains section (activation status, CNAME target, TXT record for verification).
+Requires: New worker route + new Railway query for domain/hostname data.
+Constraint: Worker + Railway changes are outside Phase D scope.
+Decision needed from Cameron before Commit 9 (currently planning static stub).
+
+---
+
+### 12.9 Scope boundaries
+
+**Phase D owns:**
+- `site/login.html`
+- `site/dashboard.html`
+- `site/activate.html`
+- `site/js/dashboard-auth.js`
+- `site/js/dashboard-overview.js`
+- `site/js/dashboard-requests.js`
+- `site/js/dashboard-clicks.js`
+- `site/js/dashboard-bots.js`
+- `site/js/dashboard-recs.js`
+- `site/js/dashboard-settings.js`
+- `site/js/dashboard-activate.js`
+- Minor nav link update in `site/index.html` (pointing to `dashboard.html`)
+
+**Phase D does not touch:**
+- `worker/src/` — any file (portal, authApi, dashboard, routes, index)
+- `server/src/` — any Railway backend file
+- D1 schema, KV namespaces, Wrangler secrets
+- `site/onboarding.html`, `site/onboarding/complete.html`, `site/terms.html`, `site/privacy.html`, `site/dpa.html`
+- Bot detection, attribution token format, MCP server
+
+**Phase E (future, not this session):** Delete `worker/src/routes/dashboard.ts` and update `worker/src/routes/portal.ts` to redirect `/dashboard` to `https://advocatemcp.com/dashboard.html`. Requires Cameron approval and a separate session.
+
+---
+
+*Section 12 added 2026-04-11. Pre-work commit before Phase D implementation begins.*
