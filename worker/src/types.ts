@@ -24,6 +24,21 @@ export interface Env {
    */
   ACTIVATION_SIGNING_KEY?: string;
 
+  /**
+   * HMAC-SHA256 signing key for Phase C cross-origin auth access tokens.
+   * Isolated from TOKEN_SIGNING_KEY and ACTIVATION_SIGNING_KEY by purpose
+   * — the access token is a stateless short-lived (15-minute) bearer
+   * token used for all authenticated customer API calls from
+   * advocatemcp.com. A leak of one key must not compromise the others.
+   * Used by worker/src/lib/access-token.ts and the POST /api/auth/login,
+   * POST /api/auth/refresh endpoints (sign) plus the Bearer middleware
+   * in worker/src/routes/authApi.ts (verify). Refresh tokens are opaque
+   * random values stored in the sessions D1 table and do not use this
+   * key — only access tokens do.
+   * Set via: `cd worker && npx wrangler secret put ACCESS_TOKEN_SIGNING_KEY`
+   */
+  ACCESS_TOKEN_SIGNING_KEY?: string;
+
   // ── Auth portal bindings ─────────────────────────────────────────────────
   /** D1 database for users, sessions, business access */
   DB: D1Database;
