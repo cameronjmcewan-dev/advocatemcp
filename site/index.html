@@ -1,0 +1,2007 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" style="background:#171614">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="dark light" />
+<title>Advocate — Get recommended by every AI, automatically</title>
+<meta name="description" content="Advocate puts your local business inside AI answers from ChatGPT, Perplexity, Claude and Gemini. Flat monthly. No code. Live in 15 minutes." />
+<meta property="og:title" content="Advocate — Get recommended by every AI, automatically" />
+<meta property="og:description" content="When someone asks an AI for a business like yours, Advocate makes sure your name comes up — with a direct link to reach you." />
+<meta property="og:image" content="https://advocatemcp.com/og-image.png" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://advocatemcp.com" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:image" content="https://advocatemcp.com/og-image.png" />
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+/* ── Reset & Variables ────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root {
+  --bg:          #171614;
+  --surface:     #1c1b19;
+  --surface-2:   #222120;
+  --border:      #393836;
+  --text:        #e8e6e3;
+  --muted:       #7a7875;
+  --accent:      #4f98a3;
+  --accent-dk:   #3d8090;
+  --accent-dim:  rgba(79,152,163,.1);
+  --accent-ring: rgba(79,152,163,.2);
+  --green:       #3fb950;
+  --yellow:      #d29922;
+  --red:         #f85149;
+
+  --font-serif:  'Instrument Serif', Georgia, serif;
+  --font-body:   'General Sans','Inter',system-ui,-apple-system,sans-serif;
+  --font-mono:   'SF Mono','Fira Code','Cascadia Code',Consolas,monospace;
+
+  --tx-xs:   clamp(.6875rem,.66rem + .14vw,.75rem);
+  --tx-sm:   clamp(.8125rem,.78rem + .16vw,.875rem);
+  --tx-base: clamp(1rem,.97rem + .15vw,1.0625rem);
+  --tx-md:   clamp(1.0625rem,1.02rem + .21vw,1.125rem);
+  --tx-lg:   clamp(1.125rem,1.07rem + .28vw,1.25rem);
+  --tx-xl:   clamp(1.5rem,1.35rem + .75vw,2rem);
+  --tx-2xl:  clamp(2.25rem,1.9rem + 1.75vw,3.25rem);
+
+  /* Heading scale */
+  --h1: clamp(4rem, 5.5vw, 5rem);      /* 64–80px */
+  --h2: clamp(2.5rem, 3.5vw, 3rem);    /* 40–48px */
+  --h3: clamp(1.5rem, 1.8vw, 1.75rem); /* 24–28px */
+
+  --r-sm:4px; --r-md:8px; --r-lg:12px; --r-xl:16px;
+  --sidebar-w:240px;
+}
+
+[data-theme="light"] {
+  --bg:        #f5f4f2;
+  --surface:   #ffffff;
+  --surface-2: #efeeed;
+  --border:    #dddbd8;
+  --text:      #1a1917;
+  --muted:     #6b6967;
+  --accent:    #01696f;
+  --accent-dk: #015861;
+  --accent-dim:rgba(1,105,111,.08);
+  --accent-ring:rgba(1,105,111,.2);
+}
+
+html{font-size:16px;-webkit-font-smoothing:antialiased;color-scheme:dark light;background:#171614}
+body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:var(--tx-base);line-height:1.6;min-height:100vh}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit;cursor:pointer;border:none;background:none}
+img,svg{display:block}
+
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* ── Page routing ─────────────────────────────────────────── */
+.page{display:none}
+.page.active{display:block}
+#page-dashboard.active{display:flex;height:100vh;overflow:hidden}
+
+/* ── Buttons ─────────────────────────────────────────────── */
+.btn{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:10px 20px;
+  font-size:var(--tx-sm);font-weight:500;
+  border-radius:var(--r-md);border:1px solid transparent;
+  transition:background .15s,color .15s,border-color .15s;
+  white-space:nowrap;line-height:1;
+}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn-primary:hover{background:var(--accent-dk);border-color:var(--accent-dk)}
+.btn-ghost{background:transparent;color:var(--text);border-color:var(--border)}
+.btn-ghost:hover{background:var(--surface-2)}
+.btn-sm{padding:7px 14px;font-size:var(--tx-xs)}
+
+/* ── Shimmer skeleton ─────────────────────────────────────── */
+@keyframes shimmer{from{background-position:-500px 0}to{background-position:500px 0}}
+.skeleton{
+  background:linear-gradient(90deg,var(--surface) 25%,var(--surface-2) 50%,var(--surface) 75%);
+  background-size:1000px 100%;
+  animation:shimmer 1.5s infinite;
+  border-radius:var(--r-sm);
+}
+
+/* ════════════════════════════════════════
+   LANDING — Conduit-style redesign
+════════════════════════════════════════ */
+
+/* ── Scroll-triggered fade-in ── */
+.fade-up{opacity:0;transform:translateY(20px);transition:opacity .4s ease,transform .4s ease}
+.fade-up.visible{opacity:1;transform:none}
+@media(prefers-reduced-motion:reduce){
+  .fade-up{opacity:1;transform:none;transition:none}
+}
+
+/* ── Nav ── */
+.ln-nav{
+  position:sticky;top:0;z-index:200;
+  display:flex;align-items:center;gap:0;
+  padding:0 40px;height:60px;
+  background:rgba(23,22,20,.82);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border-bottom:1px solid rgba(255,255,255,.06);
+}
+[data-theme="light"] .ln-nav{background:rgba(245,244,242,.88)}
+.logo{display:flex;align-items:center;gap:8px;font-size:var(--tx-sm);font-weight:600;letter-spacing:-.01em;flex-shrink:0}
+.ln-nav-links{display:flex;align-items:center;gap:2px;margin-left:auto}
+.nav-link{padding:6px 14px;font-size:var(--tx-sm);color:var(--muted);border-radius:var(--r-sm);transition:color .15s,background .15s}
+.nav-link:hover{color:var(--text);background:rgba(255,255,255,.06)}
+.ln-nav-actions{display:flex;align-items:center;gap:10px;margin-left:20px}
+.icon-btn{
+  display:flex;align-items:center;justify-content:center;
+  width:34px;height:34px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-sm);color:var(--muted);transition:color .15s;
+}
+.icon-btn:hover{color:var(--text)}
+.icon-btn svg{width:15px;height:15px}
+.ln-ham{display:none;align-items:center;justify-content:center;width:34px;height:34px;background:none;border:1px solid var(--border);border-radius:var(--r-sm);color:var(--muted);margin-left:auto}
+.ln-ham svg{width:18px;height:18px}
+.ln-mobile-menu{
+  display:none;position:fixed;inset:60px 0 0;z-index:199;
+  background:var(--bg);border-top:1px solid var(--border);
+  flex-direction:column;padding:20px;gap:4px;
+}
+.ln-mobile-menu.open{display:flex}
+.ln-mobile-menu .nav-link{padding:12px 14px;font-size:var(--tx-base);color:var(--text)}
+
+/* ── Hero ── */
+.ln-hero{
+  position:relative;overflow:hidden;
+  padding:120px 40px 100px;
+  text-align:center;
+}
+.ln-hero-bg{
+  position:absolute;inset:0;z-index:0;
+  background:radial-gradient(ellipse 60% 50% at 50% 0%, rgba(79,152,163,.22) 0%, transparent 70%);
+  pointer-events:none;
+}
+.ln-hero-inner{position:relative;z-index:1;max-width:760px;margin:0 auto}
+.ln-eyebrow{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:5px 12px;margin-bottom:24px;
+  font-size:var(--tx-xs);font-weight:600;color:var(--accent);
+  background:var(--accent-dim);border:1px solid var(--accent-ring);
+  border-radius:100px;text-transform:uppercase;letter-spacing:.07em;
+}
+.ln-h1{
+  font-family:var(--font-serif);
+  font-size:var(--h1);
+  line-height:1.04;letter-spacing:-.03em;
+  margin-bottom:24px;
+}
+.ln-h1 em{font-style:italic;color:var(--accent)}
+/* Section H2 — 40–48px */
+.ln-s2{
+  font-family:var(--font-serif);
+  font-size:var(--h2);
+  line-height:1.12;letter-spacing:-.025em;
+  margin-bottom:14px;
+}
+/* Section H3 — 24–28px */
+.ln-s3{
+  font-family:var(--font-serif);
+  font-size:var(--h3);
+  line-height:1.2;letter-spacing:-.02em;
+  margin-bottom:12px;
+}
+.ln-hero-sub{font-size:clamp(1.0625rem,1.4vw,1.2rem);color:var(--muted);line-height:1.7;max-width:560px;margin:0 auto 36px}
+.ln-hero-cta{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+.ln-hero-proof{display:flex;align-items:center;justify-content:center;gap:8px;font-size:var(--tx-sm);color:var(--muted);margin-bottom:56px}
+.pulse-dot{width:6px;height:6px;background:var(--green);border-radius:50%;animation:pulse 2s ease-in-out infinite;flex-shrink:0}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* Browser chrome mockup */
+.ln-browser{
+  max-width:720px;margin:0 auto;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-xl);overflow:hidden;
+  box-shadow:0 32px 80px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.04);
+}
+[data-theme="light"] .ln-browser{box-shadow:0 24px 60px rgba(0,0,0,.12)}
+.ln-browser-bar{
+  display:flex;align-items:center;gap:6px;padding:12px 16px;
+  background:var(--surface-2);border-bottom:1px solid var(--border);
+}
+.ln-dot{width:10px;height:10px;border-radius:50%}
+.ln-dot-r{background:#f85149}.ln-dot-y{background:#d29922}.ln-dot-g{background:#3fb950}
+.ln-browser-url{
+  flex:1;margin:0 12px;padding:4px 12px;
+  background:var(--bg);border:1px solid var(--border);border-radius:var(--r-sm);
+  font-size:var(--tx-xs);color:var(--muted);text-align:left;
+}
+.ln-browser-body{padding:20px;text-align:left}
+.ln-query-row{
+  display:flex;align-items:flex-start;gap:10px;margin-bottom:14px;
+  padding:12px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);
+}
+.ln-q-icon{
+  width:22px;height:22px;flex-shrink:0;border-radius:5px;
+  background:rgba(16,163,127,.15);display:flex;align-items:center;justify-content:center;
+}
+.ln-q-text{font-size:var(--tx-sm);color:var(--muted);font-style:italic;line-height:1.5}
+.ln-ans-label{font-size:var(--tx-xs);font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:5px}
+.ln-ans-dot{width:5px;height:5px;border-radius:50%;background:var(--green)}
+.ln-ans-text{font-size:var(--tx-sm);line-height:1.7;margin-bottom:14px}
+.ln-ans-card{background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md);padding:12px 14px;margin-bottom:12px}
+.ln-ans-card-name{font-size:var(--tx-sm);font-weight:600;margin-bottom:2px}
+.ln-ans-card-meta{font-size:var(--tx-xs);color:var(--muted);margin-bottom:5px}
+.ln-ans-card-link{font-size:var(--tx-xs);color:var(--accent)}
+.ln-src-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.ln-src-lbl{font-size:var(--tx-xs);color:var(--muted)}
+.ln-src{font-size:var(--tx-xs);padding:2px 8px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--muted)}
+.ln-src.hi{color:var(--accent);border-color:var(--accent-ring);background:var(--accent-dim)}
+
+/* ── Ticker ── */
+.ln-ticker{
+  overflow:hidden;padding:22px 0;
+  border-top:1px solid var(--border);border-bottom:1px solid var(--border);
+  background:var(--surface);
+}
+.ticker-track{
+  display:flex;gap:14px;width:max-content;
+  animation:ticker-scroll 28s linear infinite;
+}
+.ln-ticker:hover .ticker-track{animation-play-state:paused}
+@keyframes ticker-scroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.tick-pill{
+  display:flex;align-items:center;gap:7px;flex-shrink:0;
+  padding:6px 14px;
+  background:var(--surface-2);border:1px solid var(--border);border-radius:100px;
+  font-size:var(--tx-sm);font-weight:500;color:var(--muted);
+  white-space:nowrap;
+}
+.tick-pill img{width:14px;height:14px;filter:grayscale(1) brightness(1.8)}
+[data-theme="light"] .tick-pill img{filter:grayscale(1) brightness(.3)}
+
+/* ── Feature rows ── */
+.ln-feat-row{
+  display:grid;grid-template-columns:1fr 1fr;
+  align-items:center;gap:80px;
+  max-width:1100px;margin:0 auto;
+  padding:110px 40px;
+}
+.ln-feat-row + .ln-feat-row{border-top:1px solid var(--border)}
+.ln-feat-row.rev{direction:rtl}
+.ln-feat-row.rev > *{direction:ltr}
+.ln-feat-label{font-size:var(--tx-xs);font-weight:600;text-transform:uppercase;letter-spacing:.09em;color:var(--accent);margin-bottom:14px}
+.ln-feat-h{font-family:var(--font-serif);font-size:var(--h3);line-height:1.15;letter-spacing:-.02em;margin-bottom:14px}
+.ln-feat-p{font-size:var(--tx-base);color:var(--muted);line-height:1.7;margin-bottom:24px}
+.ln-feat-pts{list-style:none;display:flex;flex-direction:column;gap:9px}
+.ln-feat-pts li{display:flex;align-items:center;gap:9px;font-size:var(--tx-sm);color:var(--text)}
+.ln-feat-pts li::before{content:'';display:block;width:4px;height:4px;border-radius:50%;background:var(--accent);flex-shrink:0}
+
+/* Mini mockup cards inside feature rows */
+.ln-mock{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-xl);overflow:hidden;
+  box-shadow:0 16px 48px rgba(0,0,0,.35);
+  transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease;
+}
+.ln-mock:hover{
+  transform:translateY(-4px);
+  box-shadow:0 24px 64px rgba(0,0,0,.5),0 0 0 1px var(--accent-ring);
+  border-color:var(--accent-ring);
+}
+[data-theme="light"] .ln-mock{box-shadow:0 8px 24px rgba(0,0,0,.08)}
+[data-theme="light"] .ln-mock:hover{box-shadow:0 16px 40px rgba(0,0,0,.14)}
+.ln-mock-bar{
+  display:flex;align-items:center;gap:5px;padding:10px 14px;
+  background:var(--surface-2);border-bottom:1px solid var(--border);
+}
+.ln-mock-dot{width:8px;height:8px;border-radius:50%}
+.ln-mock-body{padding:16px}
+.ln-stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px}
+.ln-stat-box{padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md)}
+.ln-stat-val{font-size:var(--tx-lg);font-weight:600;line-height:1;margin-bottom:3px}
+.ln-stat-lbl{font-size:var(--tx-xs);color:var(--muted)}
+.ln-mini-bars{display:flex;flex-direction:column;gap:8px}
+.ln-mini-bar-row{display:flex;flex-direction:column;gap:3px}
+.ln-mini-bar-top{display:flex;justify-content:space-between;font-size:var(--tx-xs);color:var(--muted)}
+.ln-mini-bar-track{height:4px;background:var(--surface-2);border-radius:2px}
+.ln-mini-bar-fill{height:4px;background:var(--accent);border-radius:2px}
+
+/* Profile card mockup */
+.ln-profile-mock{display:flex;flex-direction:column;gap:10px}
+.ln-profile-field{background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md);padding:10px 14px}
+.ln-profile-lbl{font-size:var(--tx-xs);color:var(--muted);margin-bottom:3px}
+.ln-profile-val{font-size:var(--tx-sm);color:var(--text)}
+.ln-profile-tag-row{display:flex;gap:6px;flex-wrap:wrap}
+.ln-profile-tag{font-size:var(--tx-xs);padding:3px 9px;background:var(--surface-2);border:1px solid var(--border);border-radius:100px;color:var(--muted)}
+
+/* Referral flow mockup */
+.ln-flow{display:flex;flex-direction:column;gap:8px}
+.ln-flow-step{
+  display:flex;align-items:center;gap:10px;padding:10px 14px;
+  background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md);
+}
+.ln-flow-icon{width:28px;height:28px;border-radius:var(--r-sm);background:var(--accent-dim);border:1px solid var(--accent-ring);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.ln-flow-icon svg{width:13px;height:13px;color:var(--accent)}
+.ln-flow-label{font-size:var(--tx-sm);color:var(--text);font-weight:500}
+.ln-flow-sub{font-size:var(--tx-xs);color:var(--muted)}
+.ln-flow-arrow{margin:0 auto;color:var(--border);font-size:18px;line-height:1}
+
+/* ── Capabilities ── */
+.ln-caps{background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.ln-caps-inner{max-width:1100px;margin:0 auto;padding:110px 40px}
+.ln-caps-hd{max-width:560px;margin-bottom:56px}
+.ln-cap-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border)}
+.ln-cap{
+  padding:32px 28px;background:var(--surface);
+  transition:background .2s,transform .2s,box-shadow .2s;
+}
+.ln-cap:hover{background:var(--surface-2);transform:translateY(-4px);box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.ln-cap-icon{
+  width:36px;height:36px;border-radius:var(--r-md);
+  background:var(--accent-dim);border:1px solid var(--accent-ring);
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:14px;color:var(--accent);
+}
+.ln-cap-icon svg{width:17px;height:17px}
+.ln-cap-h{font-size:var(--tx-md);font-weight:600;margin-bottom:6px}
+.ln-cap-p{font-size:var(--tx-sm);color:var(--muted);line-height:1.6}
+
+/* ── Trust band ── */
+.ln-trust{padding:110px 40px}
+.ln-trust-inner{max-width:1100px;margin:0 auto}
+.ln-trust-cols{display:grid;grid-template-columns:repeat(3,1fr);gap:32px;margin-top:40px}
+.ln-trust-col{display:flex;flex-direction:column;gap:8px}
+.ln-trust-icon{
+  width:40px;height:40px;border-radius:var(--r-md);
+  background:var(--surface);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  color:var(--accent);margin-bottom:8px;
+}
+.ln-trust-icon svg{width:19px;height:19px}
+.ln-trust-h{font-size:var(--tx-md);font-weight:600;margin-bottom:4px}
+.ln-trust-p{font-size:var(--tx-sm);color:var(--muted);line-height:1.65}
+
+/* ── Outcomes tabs ── */
+.ln-outcomes{background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:110px 40px}
+.ln-outcomes-inner{max-width:1100px;margin:0 auto}
+.ln-tab-bar{display:flex;gap:4px;margin:32px 0 32px;border-bottom:1px solid var(--border);padding-bottom:0}
+.ln-tab{
+  padding:10px 18px;font-size:var(--tx-sm);font-weight:500;color:var(--muted);
+  border-bottom:2px solid transparent;transition:color .15s,border-color .15s;
+  cursor:pointer;margin-bottom:-1px;background:none;border-radius:0;
+}
+.ln-tab:hover{color:var(--text)}
+.ln-tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+.ln-tab-panels .ln-panel{display:none}
+.ln-tab-panels .ln-panel.on{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center}
+.ln-panel-h{font-family:var(--font-serif);font-size:var(--h3);line-height:1.2;letter-spacing:-.02em;margin-bottom:12px}
+.ln-panel-p{font-size:var(--tx-base);color:var(--muted);line-height:1.7;margin-bottom:24px}
+.ln-panel-stat{display:inline-flex;flex-direction:column;gap:2px;padding:16px 20px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r-lg);margin-bottom:24px}
+.ln-panel-stat-val{font-family:var(--font-serif);font-size:var(--tx-xl);color:var(--accent);line-height:1}
+.ln-panel-stat-lbl{font-size:var(--tx-xs);color:var(--muted)}
+
+/* ── Case study cards ── */
+.ln-cases{padding:110px 0 110px 40px;overflow:hidden}
+.ln-cases-hd{max-width:1100px;margin:0 auto 36px;padding-right:40px}
+.ln-case-scroll{
+  display:flex;gap:16px;
+  overflow-x:auto;padding-right:40px;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none;
+}
+.ln-case-scroll::-webkit-scrollbar{display:none}
+.ln-case{
+  flex-shrink:0;width:300px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-xl);
+  padding:28px;display:flex;flex-direction:column;gap:16px;
+  transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease;
+  cursor:default;
+}
+.ln-case:hover{
+  transform:translateY(-4px);
+  border-color:var(--accent-ring);
+  box-shadow:0 16px 40px rgba(0,0,0,.3);
+}
+.ln-case-industry{
+  display:inline-block;padding:3px 10px;
+  background:var(--accent-dim);border:1px solid var(--accent-ring);
+  border-radius:100px;font-size:var(--tx-xs);font-weight:600;color:var(--accent);
+}
+.ln-case-biz{font-size:var(--tx-md);font-weight:600;line-height:1.3}
+.ln-case-loc{font-size:var(--tx-xs);color:var(--muted)}
+.ln-case-metric{
+  padding:14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md);
+  display:flex;flex-direction:column;gap:3px;
+}
+.ln-case-metric-val{font-family:var(--font-serif);font-size:var(--tx-xl);color:var(--text);line-height:1}
+.ln-case-metric-lbl{font-size:var(--tx-xs);color:var(--muted)}
+.ln-case-quote{font-size:var(--tx-sm);color:var(--muted);line-height:1.65;font-style:italic}
+
+/* ── Pricing ── */
+.ln-price{padding:110px 40px}
+.ln-price-inner{max-width:1100px;margin:0 auto}
+.ln-price-hd{max-width:480px;margin-bottom:48px}
+.ln-price-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:680px}
+.ln-price-card{
+  padding:36px 32px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-xl);position:relative;
+  transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease;
+}
+.ln-price-card:hover{
+  transform:translateY(-4px);
+  box-shadow:0 16px 40px rgba(0,0,0,.3);
+  border-color:var(--accent-ring);
+}
+.ln-price-card.pop{border-color:rgba(79,152,163,.4)}
+[data-theme="light"] .ln-price-card.pop{border-color:rgba(1,105,111,.35)}
+.ln-pop-badge{
+  position:absolute;top:-1px;right:24px;
+  background:var(--accent);color:#fff;
+  font-size:var(--tx-xs);font-weight:600;
+  padding:3px 10px;border-radius:0 0 var(--r-sm) var(--r-sm);
+  text-transform:uppercase;letter-spacing:.05em;
+}
+.ln-price-name{font-size:var(--tx-xs);font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:16px}
+.ln-price-amt{font-family:var(--font-serif);font-size:var(--tx-xl);line-height:1;margin-bottom:4px}
+.ln-price-per{font-size:var(--tx-sm);color:var(--muted);margin-bottom:24px}
+.ln-price-list{list-style:none;display:flex;flex-direction:column;gap:10px;margin-bottom:28px}
+.ln-price-list li{display:flex;align-items:center;gap:8px;font-size:var(--tx-sm);color:var(--muted)}
+.ln-price-list li::before{content:'';display:block;width:4px;height:4px;border-radius:50%;background:var(--accent);flex-shrink:0}
+
+/* ── Final CTA ── */
+.ln-final-cta{
+  padding:120px 40px;text-align:center;
+  background:radial-gradient(ellipse 70% 80% at 50% 50%, rgba(79,152,163,.15) 0%, transparent 65%);
+  border-top:1px solid var(--border);
+}
+.ln-cta-h{font-family:var(--font-serif);font-size:var(--h2);line-height:1.1;letter-spacing:-.03em;margin-bottom:18px}
+.ln-cta-sub{font-size:var(--tx-base);color:var(--muted);max-width:460px;margin:0 auto 36px;line-height:1.7}
+.ln-cta-actions{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap}
+
+/* ── Footer ── */
+.ln-footer{border-top:1px solid var(--border);padding:56px 40px 36px}
+.ln-footer-inner{max-width:1100px;margin:0 auto}
+.ln-footer-top{display:grid;grid-template-columns:1.8fr 1fr 1fr 1fr;gap:40px;margin-bottom:48px}
+.ln-footer-brand{display:flex;flex-direction:column;gap:14px}
+.ln-footer-tagline{font-size:var(--tx-sm);color:var(--muted);line-height:1.65;max-width:240px}
+.ln-newsletter{display:flex;gap:8px;margin-top:4px}
+.ln-newsletter input{
+  flex:1;padding:8px 12px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);
+  color:var(--text);font-family:var(--font-body);font-size:var(--tx-sm);
+}
+.ln-newsletter input:focus{outline:none;border-color:var(--accent)}
+.ln-newsletter input::placeholder{color:var(--muted)}
+.ln-footer-col-h{font-size:var(--tx-sm);font-weight:600;margin-bottom:14px}
+.ln-footer-col-links{list-style:none;display:flex;flex-direction:column;gap:9px}
+.ln-footer-col-links a{font-size:var(--tx-sm);color:var(--muted);transition:color .15s}
+.ln-footer-col-links a:hover{color:var(--text)}
+.ln-admt-notice{font-size:.8rem;color:var(--muted);text-align:center;padding:12px 0 20px;border-top:1px solid var(--border);margin-top:4px}
+.ln-admt-notice a{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+.dns-consent-label{display:flex;align-items:flex-start;gap:8px;font-size:.8125rem;color:var(--muted);line-height:1.55;cursor:pointer}
+.ln-footer-bottom{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding-top:24px;border-top:1px solid var(--border)}
+.ln-footer-copy{font-size:var(--tx-sm);color:var(--muted)}
+.ln-footer-socials{display:flex;gap:12px}
+.ln-social{width:30px;height:30px;border-radius:var(--r-sm);background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);transition:color .15s}
+.ln-social:hover{color:var(--text)}
+.ln-social svg{width:14px;height:14px}
+
+/* (old landing CSS removed — see .ln-* classes above) */
+.s-label{font-size:var(--tx-xs);font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:10px}
+
+/* ════════════════════════════════════════
+   DASHBOARD
+════════════════════════════════════════ */
+
+/* Sidebar */
+.db-side{
+  width:var(--sidebar-w);flex-shrink:0;
+  display:flex;flex-direction:column;
+  height:100vh;overflow-y:auto;
+  background:var(--surface);border-right:1px solid var(--border);
+}
+.db-logo{
+  display:flex;align-items:center;gap:8px;
+  padding:18px 16px;
+  font-size:var(--tx-sm);font-weight:600;
+  border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.db-nav{
+  flex:1;padding:8px;
+  display:flex;flex-direction:column;gap:1px;
+}
+.db-nav-item{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 10px;
+  font-size:var(--tx-sm);color:var(--muted);
+  border-radius:var(--r-sm);transition:background .1s,color .1s;cursor:pointer;
+}
+.db-nav-item svg{width:15px;height:15px;flex-shrink:0}
+.db-nav-item:hover{background:var(--surface-2);color:var(--text)}
+.db-nav-item.on{background:var(--accent-dim);color:var(--accent)}
+.db-side-foot{padding:10px;border-top:1px solid var(--border);flex-shrink:0}
+.db-add-btn{
+  width:100%;display:flex;align-items:center;justify-content:center;gap:6px;
+  padding:8px 14px;
+  background:var(--accent-dim);color:var(--accent);
+  border:1px solid var(--accent-ring);border-radius:var(--r-md);
+  font-size:var(--tx-sm);font-weight:500;transition:background .15s;
+}
+.db-add-btn:hover{background:rgba(79,152,163,.18)}
+.db-add-btn svg{width:14px;height:14px}
+
+/* Main */
+.db-main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+
+/* Topbar */
+.db-topbar{
+  display:flex;align-items:center;gap:12px;
+  padding:0 24px;height:56px;flex-shrink:0;
+  background:var(--bg);border-bottom:1px solid var(--border);
+}
+.db-back{
+  display:flex;align-items:center;gap:4px;
+  padding:5px 10px;border:1px solid var(--border);border-radius:var(--r-sm);
+  font-size:var(--tx-sm);color:var(--muted);transition:color .15s,background .15s;
+}
+.db-back:hover{color:var(--text);background:var(--surface-2)}
+.db-back svg{width:13px;height:13px}
+.db-crumb{
+  display:flex;align-items:center;gap:8px;
+  font-size:var(--tx-sm);color:var(--muted);
+}
+.db-crumb-cur{color:var(--text);font-weight:500}
+.db-search{
+  margin-left:auto;
+  display:flex;align-items:center;gap:8px;
+  padding:6px 12px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);
+  font-size:var(--tx-sm);color:var(--muted);min-width:180px;
+}
+.db-search svg{width:13px;height:13px}
+.db-avatar{
+  width:30px;height:30px;
+  background:var(--accent-dim);border:1px solid var(--accent-ring);
+  border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:var(--tx-xs);font-weight:700;color:var(--accent);flex-shrink:0;
+}
+
+/* Content */
+.db-content{flex:1;overflow-y:auto;padding:24px}
+.db-sec{display:none}
+.db-sec.on{display:block}
+
+.db-sec-title{font-size:var(--tx-md);font-weight:600;margin-bottom:4px}
+.db-sec-sub{font-size:var(--tx-sm);color:var(--muted);margin-bottom:24px}
+
+/* KPI grid */
+.kpi-grid{
+  display:grid;grid-template-columns:repeat(4,1fr);
+  gap:12px;margin-bottom:20px;
+}
+.kpi-card{
+  padding:20px;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--r-lg);
+}
+.kpi-label{
+  font-size:var(--tx-xs);font-weight:500;text-transform:uppercase;
+  letter-spacing:.07em;color:var(--muted);margin-bottom:10px;
+}
+.kpi-val{font-size:var(--tx-xl);font-weight:600;line-height:1;margin-bottom:6px}
+.kpi-hint{font-size:var(--tx-xs);color:var(--muted)}
+
+/* Row layout */
+.db-row{
+  display:grid;grid-template-columns:1fr 280px;
+  gap:12px;margin-bottom:20px;
+}
+.db-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-lg);padding:20px;
+}
+.db-card-title{
+  font-size:var(--tx-sm);font-weight:600;color:var(--text);
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:16px;
+}
+.db-card-sub{font-size:var(--tx-xs);color:var(--muted);font-weight:400}
+.chart-wrap{position:relative;height:168px}
+
+/* Activity */
+.activity{display:flex;flex-direction:column;gap:12px}
+.act-item{display:flex;gap:10px;font-size:var(--tx-sm)}
+.act-dot{
+  width:6px;height:6px;border-radius:50%;background:var(--accent);
+  flex-shrink:0;margin-top:6px;
+}
+.act-text{color:var(--text);line-height:1.5;margin-bottom:2px}
+.act-time{color:var(--muted);font-size:var(--tx-xs)}
+
+/* Table */
+.tbl-wrap{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-lg);overflow:hidden;margin-bottom:20px;
+}
+.tbl-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 20px;border-bottom:1px solid var(--border);
+}
+.tbl-head-title{font-size:var(--tx-sm);font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:var(--tx-sm)}
+th{
+  padding:9px 20px;text-align:left;
+  font-size:var(--tx-xs);font-weight:500;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.06em;
+  border-bottom:1px solid var(--border);background:var(--surface-2);
+}
+td{
+  padding:12px 20px;border-bottom:1px solid var(--border);color:var(--text);
+  vertical-align:middle;
+}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--surface-2)}
+.badge{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:3px 9px;border-radius:100px;
+  font-size:var(--tx-xs);font-weight:500;
+}
+.badge-pend{background:rgba(210,153,34,.1);color:var(--yellow);border:1px solid rgba(210,153,34,.2)}
+.badge-ok{background:rgba(63,185,80,.1);color:var(--green);border:1px solid rgba(63,185,80,.2)}
+.badge-dot{width:5px;height:5px;border-radius:50%;background:currentColor}
+.copy-btn{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:4px 10px;
+  background:transparent;border:1px solid var(--border);border-radius:var(--r-sm);
+  font-size:var(--tx-xs);color:var(--muted);transition:color .15s,border-color .15s;
+}
+.copy-btn:hover{color:var(--text);border-color:var(--muted)}
+.copy-btn svg{width:11px;height:11px}
+
+/* Empty state */
+.empty{
+  padding:56px 24px;text-align:center;
+  display:flex;flex-direction:column;align-items:center;gap:12px;
+}
+.empty-icon{
+  width:48px;height:48px;
+  background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-lg);
+  display:flex;align-items:center;justify-content:center;color:var(--muted);
+  margin-bottom:8px;
+}
+.empty-icon svg{width:22px;height:22px}
+.empty-title{font-weight:600;font-size:var(--tx-md)}
+.empty-desc{font-size:var(--tx-sm);color:var(--muted);max-width:280px;line-height:1.6}
+
+/* ── Modal ── */
+.overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.65);
+  display:flex;align-items:center;justify-content:center;
+  z-index:300;padding:16px;
+  opacity:0;pointer-events:none;transition:opacity .2s;
+}
+.overlay.open{opacity:1;pointer-events:all}
+.modal{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-xl);padding:32px;
+  width:100%;max-width:460px;
+  transform:translateY(12px);transition:transform .2s;
+}
+.overlay.open .modal{transform:translateY(0)}
+.modal-title{font-size:var(--tx-lg);font-weight:600;margin-bottom:6px}
+.modal-sub{font-size:var(--tx-sm);color:var(--muted);margin-bottom:24px}
+.fg{margin-bottom:16px}
+.fl{display:block;font-size:var(--tx-sm);font-weight:500;margin-bottom:6px}
+.fi{
+  width:100%;padding:9px 12px;
+  background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md);
+  color:var(--text);font-family:var(--font-body);font-size:var(--tx-sm);
+  transition:border-color .15s;
+}
+.fi:focus{outline:none;border-color:var(--accent)}
+.fi::placeholder{color:var(--muted)}
+.modal-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:24px}
+
+.dns-result{display:none;margin-top:20px}
+.dns-result.show{display:block}
+.dns-success{
+  display:flex;align-items:center;gap:6px;
+  font-size:var(--tx-sm);font-weight:600;color:var(--green);
+  margin-bottom:16px;
+}
+.dns-block{
+  background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md);
+  padding:14px;margin-bottom:10px;
+  font-family:var(--font-mono);font-size:.6875rem;line-height:1.85;
+}
+.dns-type-tag{
+  display:inline-block;padding:2px 7px;margin-bottom:8px;
+  background:var(--accent-dim);color:var(--accent);
+  border-radius:var(--r-sm);font-size:var(--tx-xs);font-weight:600;
+  font-family:var(--font-body);
+}
+.dns-row-item{display:flex;gap:12px}
+.dns-k{color:var(--muted);min-width:58px}
+.dns-v{color:var(--text);word-break:break-all}
+
+/* ── Settings card ── */
+.settings-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:24px;max-width:440px;margin-bottom:16px}
+.settings-title{font-size:var(--tx-sm);font-weight:600;margin-bottom:16px}
+.settings-row{display:flex;gap:8px}
+
+/* ── Mobile ── */
+@media(max-width:768px){
+  .ln-nav{padding:0 20px}
+  .ln-nav-links,.ln-nav-actions{display:none}
+  .ln-ham{display:flex}
+  .ln-hero{padding:72px 20px 60px}
+  .ln-h1{font-size:clamp(2.5rem,8vw,3.5rem)}
+  .ln-browser{display:none}
+  .ln-hero-proof{margin-bottom:0}
+  .ln-feat-row,.ln-feat-row.rev{grid-template-columns:1fr;direction:ltr;gap:32px;padding:60px 20px}
+  .ln-cap-grid{grid-template-columns:1fr 1fr}
+  .ln-caps-inner{padding:60px 20px}
+  .ln-trust{padding:60px 20px}
+  .ln-trust-cols{grid-template-columns:1fr}
+  .ln-outcomes{padding:60px 20px}
+  .ln-tab-bar{overflow-x:auto;-webkit-overflow-scrolling:touch;white-space:nowrap}
+  .ln-tab-panels .ln-panel.on{grid-template-columns:1fr;gap:28px}
+  .ln-cases{padding:60px 0 60px 20px}
+  .ln-cases-hd{padding-right:20px}
+  .ln-price{padding:60px 20px}
+  .ln-price-grid{grid-template-columns:1fr;max-width:100%}
+  .ln-final-cta{padding:72px 20px}
+  .ln-cta-h{font-size:clamp(2rem,7vw,2.5rem)}
+  .ln-footer{padding:48px 20px 28px}
+  .ln-footer-top{grid-template-columns:1fr 1fr;gap:28px}
+  .ln-footer-brand{grid-column:1/-1}
+  .ln-s2{font-size:clamp(2rem,6vw,2.5rem)}
+
+  #page-dashboard.active{flex-direction:column}
+  .db-side{
+    width:100%;height:auto;flex-direction:row;
+    order:2;border-right:none;border-top:1px solid var(--border);
+    overflow-x:auto;overflow-y:hidden;flex-shrink:0;
+  }
+  .db-logo,.db-side-foot{display:none}
+  .db-nav{flex-direction:row;padding:4px;gap:0;flex:1;overflow-x:auto}
+  .db-nav-item{
+    flex-direction:column;gap:3px;padding:8px 12px;min-width:64px;
+    justify-content:center;font-size:.6rem;flex:1;
+  }
+  .db-nav-item span{display:none}
+  .db-nav-item svg{width:18px;height:18px}
+  .db-main{order:1;flex:1;min-height:0}
+  .kpi-grid{grid-template-columns:repeat(2,1fr)}
+  .db-row{grid-template-columns:1fr}
+  .db-topbar{padding:0 16px}
+  .db-search{display:none}
+  .db-content{padding:16px}
+}
+@media(max-width:480px){
+  .kpi-grid{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════ LANDING ══════════════════════ -->
+<div id="page-home" class="page">
+
+<!-- Nav -->
+<nav class="ln-nav">
+  <a href="#home" class="logo">
+    <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><rect width="26" height="26" rx="6" fill="#4f98a3"/><path d="M13 6.5L20.5 20H5.5L13 6.5Z" stroke="white" stroke-width="1.6" stroke-linejoin="round" fill="none"/><line x1="9.2" y1="15.5" x2="16.8" y2="15.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/></svg>
+    Advocate
+  </a>
+  <div class="ln-nav-links">
+    <a class="nav-link" href="#home" onclick="navScrollTo('ln-features')">Features</a>
+    <a class="nav-link" href="#home" onclick="navScrollTo('ln-outcomes')">Industries</a>
+    <a class="nav-link" href="#home" onclick="navScrollTo('ln-pricing')">Pricing</a>
+    <a class="nav-link" href="#dashboard">Dashboard →</a>
+  </div>
+  <div class="ln-nav-actions">
+    <button class="icon-btn" onclick="toggleTheme()" aria-label="Toggle theme">
+      <i data-lucide="sun" id="land-sun"></i>
+      <i data-lucide="moon" id="land-moon" style="display:none"></i>
+    </button>
+    <a href="/onboarding.html" class="btn btn-primary btn-sm">Get Started →</a>
+  </div>
+  <button class="ln-ham" onclick="toggleMobileMenu()" aria-label="Menu">
+    <i data-lucide="menu" id="ham-icon"></i>
+  </button>
+</nav>
+
+<!-- Mobile menu -->
+<div class="ln-mobile-menu" id="ln-mobile-menu">
+  <a class="nav-link" href="#home" onclick="navScrollTo('ln-features');toggleMobileMenu()">Features</a>
+  <a class="nav-link" href="#home" onclick="navScrollTo('ln-outcomes');toggleMobileMenu()">Industries</a>
+  <a class="nav-link" href="#home" onclick="navScrollTo('ln-pricing');toggleMobileMenu()">Pricing</a>
+  <a class="nav-link" href="#dashboard" onclick="toggleMobileMenu()">Dashboard →</a>
+  <a href="/onboarding.html" class="btn btn-primary" style="margin-top:8px;justify-content:center">Get Started →</a>
+</div>
+
+<!-- Hero -->
+<section class="ln-hero">
+  <div class="ln-hero-bg"></div>
+  <div class="ln-hero-inner">
+    <div class="ln-eyebrow">
+      <i data-lucide="zap" style="width:10px;height:10px"></i>
+      AI-native business presence
+    </div>
+    <h1 class="ln-h1">Get found by AI,<br><em>not buried by it</em></h1>
+    <p class="ln-hero-sub">When someone asks ChatGPT, Perplexity, or Claude for a business like yours, Advocate makes sure your name comes up — with a direct link to reach you.</p>
+    <div class="ln-hero-cta">
+      <a href="/onboarding.html" class="btn btn-primary" style="padding:13px 26px;font-size:var(--tx-base)">Start Getting Recommended →</a>
+      <a href="#home" class="btn btn-ghost" onclick="navScrollTo('ln-features')" style="padding:13px 26px;font-size:var(--tx-base)">See how it works</a>
+    </div>
+    <div class="ln-hero-proof">
+      <span class="pulse-dot"></span>
+      Live on Claude, ChatGPT, Perplexity &amp; Gemini
+    </div>
+
+    <!-- Browser mockup -->
+    <div class="ln-browser">
+      <div class="ln-browser-bar">
+        <span class="ln-dot ln-dot-r"></span>
+        <span class="ln-dot ln-dot-y"></span>
+        <span class="ln-dot ln-dot-g"></span>
+        <div class="ln-browser-url">perplexity.ai</div>
+      </div>
+      <div class="ln-browser-body">
+        <div class="ln-query-row">
+          <div class="ln-q-icon">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          </div>
+          <p class="ln-q-text">"Best property management company near South Congress Austin"</p>
+        </div>
+        <div class="ln-ans-label"><span class="ln-ans-dot"></span> Perplexity AI Answer</div>
+        <p class="ln-ans-text">For South Congress and Bouldin Creek, <strong>Barton Hills Property Group</strong> stands out. They specialize in 4–50 unit multifamily properties and provide full-service management including leasing, maintenance coordination, and owner reporting.</p>
+        <div class="ln-ans-card">
+          <div class="ln-ans-card-name">Barton Hills Property Group</div>
+          <div class="ln-ans-card-meta">Austin, TX &nbsp;·&nbsp; Multifamily &amp; CRE &nbsp;·&nbsp; Est. 2018</div>
+          <a href="#" class="ln-ans-card-link">bartonhillspropertygroup.com — View availability →</a>
+        </div>
+        <div class="ln-src-row">
+          <span class="ln-src-lbl">Sources:</span>
+          <span class="ln-src hi">bartonhillspropertygroup.com</span>
+          <span class="ln-src">austinaptguide.com</span>
+          <span class="ln-src">google reviews</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Ticker -->
+<div class="ln-ticker">
+  <div class="ticker-track" id="ticker-track">
+    <span class="tick-pill"><img src="https://cdn.simpleicons.org/anthropic/ffffff" alt="">Claude</span>
+    <span class="tick-pill"><img src="https://cdn.simpleicons.org/openai/ffffff" alt="">ChatGPT</span>
+    <span class="tick-pill"><img src="https://cdn.simpleicons.org/perplexity/ffffff" alt="">Perplexity</span>
+    <span class="tick-pill"><img src="https://cdn.simpleicons.org/google/ffffff" alt="">Gemini</span>
+    <span class="tick-pill"><img src="https://cdn.simpleicons.org/microsoftbing/ffffff" alt="">Bing AI</span>
+    <span class="tick-pill"><img src="https://cdn.simpleicons.org/anthropic/ffffff" alt="">Claude Opus</span>
+    <span class="tick-pill"><img src="https://cdn.simpleicons.org/openai/ffffff" alt="">GPT-4o</span>
+    <span class="tick-pill"><img src="https://cdn.simpleicons.org/perplexity/ffffff" alt="">Perplexity Pro</span>
+    <span class="tick-pill"><img src="https://cdn.simpleicons.org/google/ffffff" alt="">Gemini Advanced</span>
+    <span class="tick-pill"><img src="https://cdn.simpleicons.org/microsoftbing/ffffff" alt="">Copilot</span>
+    <!-- duplicate for seamless loop -->
+    <span class="tick-pill"><img src="https://cdn.simpleicons.org/anthropic/ffffff" alt="" loading="lazy">Claude</span>
+    <span class="tick-pill"><img src="https://cdn.simpleicons.org/openai/ffffff" alt="" loading="lazy">ChatGPT</span>
+    <span class="tick-pill"><img src="https://cdn.simpleicons.org/perplexity/ffffff" alt="" loading="lazy">Perplexity</span>
+    <span class="tick-pill"><img src="https://cdn.simpleicons.org/google/ffffff" alt="" loading="lazy">Gemini</span>
+    <span class="tick-pill"><img src="https://cdn.simpleicons.org/microsoftbing/ffffff" alt="" loading="lazy">Bing AI</span>
+    <span class="tick-pill"><img src="https://cdn.simpleicons.org/anthropic/ffffff" alt="" loading="lazy">Claude Opus</span>
+    <span class="tick-pill"><img src="https://cdn.simpleicons.org/openai/ffffff" alt="" loading="lazy">GPT-4o</span>
+    <span class="tick-pill"><img src="https://cdn.simpleicons.org/perplexity/ffffff" alt="" loading="lazy">Perplexity Pro</span>
+    <span class="tick-pill"><img src="https://cdn.simpleicons.org/google/ffffff" alt="" loading="lazy">Gemini Advanced</span>
+    <span class="tick-pill"><img src="https://cdn.simpleicons.org/microsoftbing/ffffff" alt="" loading="lazy">Copilot</span>
+  </div>
+</div>
+
+<!-- Feature rows -->
+<div id="ln-features" style="border-top:1px solid var(--border)">
+
+  <!-- Feature 1: AI profile -->
+  <div class="ln-feat-row fade-up">
+    <div>
+      <div class="ln-feat-label">AI-native profile</div>
+      <h2 class="ln-feat-h">Your business, formatted for every AI assistant</h2>
+      <p class="ln-feat-p">Advocate builds a structured profile of your business that AI assistants can read natively — services, pricing, availability, location, and a direct link to reach you.</p>
+      <ul class="ln-feat-pts">
+        <li>Services &amp; pricing in machine-readable format</li>
+        <li>Hosted at your own custom domain</li>
+        <li>Auto-updated from your dashboard</li>
+        <li>Discoverable by all major AI crawlers</li>
+      </ul>
+    </div>
+    <div class="ln-mock">
+      <div class="ln-mock-bar">
+        <span class="ln-mock-dot" style="background:#f85149"></span>
+        <span class="ln-mock-dot" style="background:#d29922"></span>
+        <span class="ln-mock-dot" style="background:#3fb950"></span>
+        <span style="margin-left:8px;font-size:var(--tx-xs);color:var(--muted)">yoursite.com/.well-known/ai-agent.json</span>
+      </div>
+      <div class="ln-mock-body">
+        <div class="ln-profile-mock">
+          <div class="ln-profile-field">
+            <div class="ln-profile-lbl">Business name</div>
+            <div class="ln-profile-val">Barton Hills Property Group</div>
+          </div>
+          <div class="ln-profile-field">
+            <div class="ln-profile-lbl">Services</div>
+            <div class="ln-profile-tag-row">
+              <span class="ln-profile-tag">Property Management</span>
+              <span class="ln-profile-tag">Leasing</span>
+              <span class="ln-profile-tag">Maintenance</span>
+            </div>
+          </div>
+          <div class="ln-profile-field">
+            <div class="ln-profile-lbl">Pricing</div>
+            <div class="ln-profile-val">8–10% monthly management fee</div>
+          </div>
+          <div class="ln-profile-field">
+            <div class="ln-profile-lbl">Referral URL</div>
+            <div class="ln-profile-val" style="color:var(--accent)">bartonhillspropertygroup.com/contact →</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feature 2: Analytics -->
+  <div class="ln-feat-row rev fade-up">
+    <div>
+      <div class="ln-feat-label">Referral analytics</div>
+      <h2 class="ln-feat-h">See exactly which AI sent you the lead</h2>
+      <p class="ln-feat-p">Every time an AI assistant crawls your profile and sends a visitor your way, we track it. See which platform drives the most referrals and what queries triggered the recommendation.</p>
+      <ul class="ln-feat-pts">
+        <li>Per-platform breakdown (Claude, GPT, Perplexity…)</li>
+        <li>Click-through tracking with UTM tagging</li>
+        <li>14-day rolling request history</li>
+        <li>Export reports for clients</li>
+      </ul>
+    </div>
+    <div class="ln-mock">
+      <div class="ln-mock-bar">
+        <span class="ln-mock-dot" style="background:#f85149"></span>
+        <span class="ln-mock-dot" style="background:#d29922"></span>
+        <span class="ln-mock-dot" style="background:#3fb950"></span>
+        <span style="margin-left:8px;font-size:var(--tx-xs);color:var(--muted)">Dashboard · Analytics</span>
+      </div>
+      <div class="ln-mock-body">
+        <div class="ln-stat-row">
+          <div class="ln-stat-box">
+            <div class="ln-stat-val" style="color:var(--accent)">847</div>
+            <div class="ln-stat-lbl">AI requests</div>
+          </div>
+          <div class="ln-stat-box">
+            <div class="ln-stat-val">142ms</div>
+            <div class="ln-stat-lbl">Avg response</div>
+          </div>
+          <div class="ln-stat-box">
+            <div class="ln-stat-val" style="color:var(--green)">↑12%</div>
+            <div class="ln-stat-lbl">vs last period</div>
+          </div>
+        </div>
+        <div class="ln-mini-bars">
+          <div class="ln-mini-bar-row">
+            <div class="ln-mini-bar-top"><span>GPTBot</span><span>45%</span></div>
+            <div class="ln-mini-bar-track"><div class="ln-mini-bar-fill" style="width:45%"></div></div>
+          </div>
+          <div class="ln-mini-bar-row">
+            <div class="ln-mini-bar-top"><span>ClaudeBot</span><span>28%</span></div>
+            <div class="ln-mini-bar-track"><div class="ln-mini-bar-fill" style="width:28%"></div></div>
+          </div>
+          <div class="ln-mini-bar-row">
+            <div class="ln-mini-bar-top"><span>PerplexityBot</span><span>18%</span></div>
+            <div class="ln-mini-bar-track"><div class="ln-mini-bar-fill" style="width:18%"></div></div>
+          </div>
+          <div class="ln-mini-bar-row">
+            <div class="ln-mini-bar-top"><span>Other</span><span>9%</span></div>
+            <div class="ln-mini-bar-track"><div class="ln-mini-bar-fill" style="width:9%;background:var(--muted)"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feature 3: Referral routing -->
+  <div class="ln-feat-row fade-up">
+    <div>
+      <div class="ln-feat-label">Smart lead routing</div>
+      <h2 class="ln-feat-h">Leads go straight to your booking page</h2>
+      <p class="ln-feat-p">Every AI recommendation includes a tracked referral link that routes the user directly to wherever you want them — your website, booking tool, or phone number.</p>
+      <ul class="ln-feat-pts">
+        <li>Works with any booking tool (Calendly, Housecall Pro, Jane…)</li>
+        <li>UTM tags applied automatically for analytics</li>
+        <li>Separate referral URLs per AI platform</li>
+        <li>Click deduplication via IP hashing</li>
+      </ul>
+    </div>
+    <div class="ln-mock">
+      <div class="ln-mock-bar">
+        <span class="ln-mock-dot" style="background:#f85149"></span>
+        <span class="ln-mock-dot" style="background:#d29922"></span>
+        <span class="ln-mock-dot" style="background:#3fb950"></span>
+        <span style="margin-left:8px;font-size:var(--tx-xs);color:var(--muted)">Referral flow</span>
+      </div>
+      <div class="ln-mock-body">
+        <div class="ln-flow">
+          <div class="ln-flow-step">
+            <div class="ln-flow-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></div>
+            <div><div class="ln-flow-label">User asks Perplexity</div><div class="ln-flow-sub">"Best HVAC repair in Denver?"</div></div>
+          </div>
+          <div class="ln-flow-arrow">↓</div>
+          <div class="ln-flow-step">
+            <div class="ln-flow-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg></div>
+            <div><div class="ln-flow-label">AI reads your profile</div><div class="ln-flow-sub">yourhvac.com/.well-known/ai-agent.json</div></div>
+          </div>
+          <div class="ln-flow-arrow">↓</div>
+          <div class="ln-flow-step">
+            <div class="ln-flow-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.5 12a19.79 19.79 0 0 1-3-8.59A2 2 0 0 1 3.59 1.5h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg></div>
+            <div><div class="ln-flow-label">Lead arrives at your booking page</div><div class="ln-flow-sub">+UTM tags · click logged · IP hashed</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- #ln-features -->
+
+<!-- Capabilities grid -->
+<div class="ln-caps">
+  <div class="ln-caps-inner">
+    <div class="ln-caps-hd fade-up">
+      <p class="s-label">Everything included</p>
+      <h2 class="ln-s2">All the infrastructure,<br>none of the complexity</h2>
+      <p style="font-size:var(--tx-base);color:var(--muted);line-height:1.65;max-width:500px;margin-top:8px">Set up once. Advocate handles the rest — from AI crawler compatibility to referral tracking to DNS.</p>
+    </div>
+    <div class="ln-cap-grid fade-up" role="list">
+      <div class="ln-cap">
+        <div class="ln-cap-icon"><i data-lucide="cpu"></i></div>
+        <div class="ln-cap-h">AI Protocol</div>
+        <div class="ln-cap-p">Your profile is served via the Model Context Protocol — the open standard AI assistants use to query structured business data.</div>
+      </div>
+      <div class="ln-cap">
+        <div class="ln-cap-icon"><i data-lucide="globe"></i></div>
+        <div class="ln-cap-h">Custom Domain</div>
+        <div class="ln-cap-p">Your AI profile lives at your own domain. Cloudflare for SaaS handles the hostname routing and SSL automatically.</div>
+      </div>
+      <div class="ln-cap">
+        <div class="ln-cap-icon"><i data-lucide="bar-chart-2"></i></div>
+        <div class="ln-cap-h">Referral Analytics</div>
+        <div class="ln-cap-p">Track every AI-driven referral. See which platforms send traffic, which queries trigger recommendations, and conversion rates.</div>
+      </div>
+      <div class="ln-cap">
+        <div class="ln-cap-icon"><i data-lucide="link"></i></div>
+        <div class="ln-cap-h">UTM Tracking</div>
+        <div class="ln-cap-p">Referral links are auto-tagged with utm_source=ai and the bot name so your existing analytics see every click.</div>
+      </div>
+      <div class="ln-cap">
+        <div class="ln-cap-icon"><i data-lucide="shield-check"></i></div>
+        <div class="ln-cap-h">Crawler Detection</div>
+        <div class="ln-cap-p">We distinguish AI crawlers from human visitors so your analytics aren't inflated and bots get the right response format.</div>
+      </div>
+      <div class="ln-cap">
+        <div class="ln-cap-icon"><i data-lucide="zap"></i></div>
+        <div class="ln-cap-h">Edge-Cached Responses</div>
+        <div class="ln-cap-p">Profiles are served from Cloudflare's global edge network — sub-100ms response times for AI crawlers worldwide.</div>
+      </div>
+    </div>
+    <div style="text-align:center;margin-top:48px" class="fade-up">
+      <a href="/onboarding.html" class="btn btn-primary" style="padding:13px 28px;font-size:var(--tx-base)">Get your AI profile live →</a>
+    </div>
+  </div>
+</div>
+
+<!-- Trust band -->
+<div class="ln-trust">
+  <div class="ln-trust-inner">
+    <div class="fade-up" style="max-width:520px;margin-bottom:0">
+      <p class="s-label">Built for business owners</p>
+      <h2 class="ln-s2">No code. No lock-in.<br>No guesswork.</h2>
+    </div>
+    <div class="ln-trust-cols fade-up">
+      <div class="ln-trust-col">
+        <div class="ln-trust-icon"><i data-lucide="file-text"></i></div>
+        <div class="ln-trust-h">5-minute setup</div>
+        <div class="ln-trust-p">Fill out one form. We build and publish your AI profile. No developer, no code, no DNS headaches beyond a single CNAME.</div>
+      </div>
+      <div class="ln-trust-col">
+        <div class="ln-trust-icon"><i data-lucide="lock"></i></div>
+        <div class="ln-trust-h">Your data, your domain</div>
+        <div class="ln-trust-p">Your profile is hosted at your own domain. You own the referral links. Cancel any time — your domain stays yours.</div>
+      </div>
+      <div class="ln-trust-col">
+        <div class="ln-trust-icon"><i data-lucide="trending-up"></i></div>
+        <div class="ln-trust-h">Flat, predictable pricing</div>
+        <div class="ln-trust-p">No per-click fees, no setup costs, no revenue share. A flat monthly subscription, no matter how many leads come through.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Outcomes tabs -->
+<div class="ln-outcomes" id="ln-outcomes">
+  <div class="ln-outcomes-inner">
+    <div class="fade-up">
+      <p class="s-label">Industries</p>
+      <h2 class="ln-s2" style="max-width:520px">Works for any local service business</h2>
+    </div>
+    <div class="ln-tab-bar" role="tablist" aria-label="Industry examples">
+      <button class="ln-tab on" onclick="lnTab(this,'real-estate')" role="tab" aria-selected="true" aria-controls="panel-real-estate">Real Estate</button>
+      <button class="ln-tab" onclick="lnTab(this,'legal')" role="tab" aria-selected="false" aria-controls="panel-legal">Legal</button>
+      <button class="ln-tab" onclick="lnTab(this,'home-services')" role="tab" aria-selected="false" aria-controls="panel-home-services">Home Services</button>
+      <button class="ln-tab" onclick="lnTab(this,'medical')" role="tab" aria-selected="false" aria-controls="panel-medical">Medical</button>
+    </div>
+    <div class="ln-tab-panels">
+      <div class="ln-panel on" id="panel-real-estate">
+        <div>
+          <div class="ln-panel-stat"><span class="ln-panel-stat-val">3×</span><span class="ln-panel-stat-lbl">more qualified leads vs. paid search</span></div>
+          <h3 class="ln-panel-h">AI is the new way renters find property managers</h3>
+          <p class="ln-panel-p">When someone asks "best property management company in Austin," Advocate ensures your firm appears — with your services, portfolio size, and a direct link to schedule a consultation.</p>
+          <a href="/onboarding.html" class="btn btn-primary">Get started for real estate →</a>
+        </div>
+        <div class="ln-mock" style="max-width:100%">
+          <div class="ln-mock-bar">
+            <span class="ln-mock-dot" style="background:#f85149"></span>
+            <span class="ln-mock-dot" style="background:#d29922"></span>
+            <span class="ln-mock-dot" style="background:#3fb950"></span>
+            <span style="margin-left:8px;font-size:var(--tx-xs);color:var(--muted)">claude.ai</span>
+          </div>
+          <div class="ln-mock-body">
+            <p style="font-size:var(--tx-xs);color:var(--muted);margin-bottom:8px;font-style:italic">"Which property management firms handle multifamily in Austin?"</p>
+            <p style="font-size:var(--tx-sm);line-height:1.65;margin-bottom:12px">For Austin multifamily, <strong>Barton Hills Property Group</strong> is a well-regarded option for 4–50 unit properties. They offer full-service management including leasing, maintenance coordination, and monthly owner reporting.</p>
+            <div class="ln-ans-card">
+              <div class="ln-ans-card-name">Barton Hills Property Group</div>
+              <div class="ln-ans-card-meta">Austin, TX · Multifamily · Free consultation</div>
+              <div class="ln-ans-card-link">Schedule a call →</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ln-panel" id="panel-legal">
+        <div>
+          <div class="ln-panel-stat"><span class="ln-panel-stat-val">58%</span><span class="ln-panel-stat-lbl">of people now ask AI for attorney recommendations</span></div>
+          <h3 class="ln-panel-h">Be the attorney that shows up when clients ask AI</h3>
+          <p class="ln-panel-p">Clients increasingly ask "who's the best estate planning attorney near me" to an AI before calling anyone. Advocate positions your firm to answer that query directly.</p>
+          <a href="/onboarding.html" class="btn btn-primary">Get started for legal →</a>
+        </div>
+        <div class="ln-mock" style="max-width:100%">
+          <div class="ln-mock-bar">
+            <span class="ln-mock-dot" style="background:#f85149"></span>
+            <span class="ln-mock-dot" style="background:#d29922"></span>
+            <span class="ln-mock-dot" style="background:#3fb950"></span>
+            <span style="margin-left:8px;font-size:var(--tx-xs);color:var(--muted)">perplexity.ai</span>
+          </div>
+          <div class="ln-mock-body">
+            <p style="font-size:var(--tx-xs);color:var(--muted);margin-bottom:8px;font-style:italic">"Best estate planning attorney in Denver for small business owners?"</p>
+            <p style="font-size:var(--tx-sm);line-height:1.65;margin-bottom:12px"><strong>Anderson &amp; Cole Law</strong> focuses on estate planning and business succession for Colorado small business owners. They offer flat-fee will packages and free 30-min consultations.</p>
+            <div class="ln-ans-card">
+              <div class="ln-ans-card-name">Anderson &amp; Cole Law</div>
+              <div class="ln-ans-card-meta">Denver, CO · Estate Planning · Free consultation</div>
+              <div class="ln-ans-card-link">Book a consultation →</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ln-panel" id="panel-home-services">
+        <div>
+          <div class="ln-panel-stat"><span class="ln-panel-stat-val">$0</span><span class="ln-panel-stat-lbl">per-click fees. Flat monthly, unlimited AI referrals</span></div>
+          <h3 class="ln-panel-h">Win "near me" queries before they hit Google</h3>
+          <p class="ln-panel-p">HVAC, plumbing, landscaping, cleaning — AI assistants are now the first stop before Google for service queries. Advocate puts you in the answer, not the search results.</p>
+          <a href="/onboarding.html" class="btn btn-primary">Get started for home services →</a>
+        </div>
+        <div class="ln-mock" style="max-width:100%">
+          <div class="ln-mock-bar">
+            <span class="ln-mock-dot" style="background:#f85149"></span>
+            <span class="ln-mock-dot" style="background:#d29922"></span>
+            <span class="ln-mock-dot" style="background:#3fb950"></span>
+            <span style="margin-left:8px;font-size:var(--tx-xs);color:var(--muted)">chatgpt.com</span>
+          </div>
+          <div class="ln-mock-body">
+            <p style="font-size:var(--tx-xs);color:var(--muted);margin-bottom:8px;font-style:italic">"Who does same-day AC repair in Phoenix?"</p>
+            <p style="font-size:var(--tx-sm);line-height:1.65;margin-bottom:12px"><strong>Desert Cool HVAC</strong> offers same-day AC repair across the Phoenix metro. They're highly rated for fast response times and transparent flat-rate pricing.</p>
+            <div class="ln-ans-card">
+              <div class="ln-ans-card-name">Desert Cool HVAC</div>
+              <div class="ln-ans-card-meta">Phoenix, AZ · HVAC · Same-day available</div>
+              <div class="ln-ans-card-link">Request a service call →</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ln-panel" id="panel-medical">
+        <div>
+          <div class="ln-panel-stat"><span class="ln-panel-stat-val">142ms</span><span class="ln-panel-stat-lbl">average AI response time from our edge network</span></div>
+          <h3 class="ln-panel-h">Be the practice AI recommends for new patients</h3>
+          <p class="ln-panel-p">From dentists to chiropractors to functional medicine — patients ask AI for healthcare recommendations. Advocate ensures your practice is cited with accurate, current information.</p>
+          <a href="/onboarding.html" class="btn btn-primary">Get started for medical →</a>
+        </div>
+        <div class="ln-mock" style="max-width:100%">
+          <div class="ln-mock-bar">
+            <span class="ln-mock-dot" style="background:#f85149"></span>
+            <span class="ln-mock-dot" style="background:#d29922"></span>
+            <span class="ln-mock-dot" style="background:#3fb950"></span>
+            <span style="margin-left:8px;font-size:var(--tx-xs);color:var(--muted)">claude.ai</span>
+          </div>
+          <div class="ln-mock-body">
+            <p style="font-size:var(--tx-xs);color:var(--muted);margin-bottom:8px;font-style:italic">"Good chiropractor in Nashville accepting new patients?"</p>
+            <p style="font-size:var(--tx-sm);line-height:1.65;margin-bottom:12px"><strong>Nashville Spine &amp; Sport</strong> is accepting new patients and specializes in sports injuries and postural correction. They offer same-week appointments and accept most major insurers.</p>
+            <div class="ln-ans-card">
+              <div class="ln-ans-card-name">Nashville Spine &amp; Sport</div>
+              <div class="ln-ans-card-meta">Nashville, TN · Chiropractic · Accepting new patients</div>
+              <div class="ln-ans-card-link">Book an appointment →</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Case study cards -->
+<div class="ln-cases">
+  <div class="ln-cases-hd fade-up">
+    <p class="s-label">Customer stories</p>
+    <h2 class="ln-s2">Businesses already winning AI referrals</h2>
+  </div>
+  <div class="ln-case-scroll">
+    <div class="ln-case">
+      <span class="ln-case-industry">Property Management</span>
+      <div>
+        <div class="ln-case-biz">Barton Hills Property Group</div>
+        <div class="ln-case-loc">Austin, TX</div>
+      </div>
+      <div class="ln-case-metric">
+        <div class="ln-case-metric-val">3×</div>
+        <div class="ln-case-metric-lbl">increase in inbound consultation requests</div>
+      </div>
+      <p class="ln-case-quote">"Within two weeks we were showing up in ChatGPT responses for Austin property management queries. It's been our best lead source this quarter."</p>
+    </div>
+    <div class="ln-case">
+      <span class="ln-case-industry">Legal</span>
+      <div>
+        <div class="ln-case-biz">Anderson &amp; Cole Law</div>
+        <div class="ln-case-loc">Denver, CO</div>
+      </div>
+      <div class="ln-case-metric">
+        <div class="ln-case-metric-val">41</div>
+        <div class="ln-case-metric-lbl">AI-referred consultation bookings in 30 days</div>
+      </div>
+      <p class="ln-case-quote">"Our clients are increasingly saying they found us through Perplexity or Claude. Advocate is the only thing that changed."</p>
+    </div>
+    <div class="ln-case">
+      <span class="ln-case-industry">Home Services</span>
+      <div>
+        <div class="ln-case-biz">Desert Cool HVAC</div>
+        <div class="ln-case-loc">Phoenix, AZ</div>
+      </div>
+      <div class="ln-case-metric">
+        <div class="ln-case-metric-val">$0</div>
+        <div class="ln-case-metric-lbl">per-click cost vs. $14 avg Google CPC for HVAC</div>
+      </div>
+      <p class="ln-case-quote">"We cut our Google Ads budget by 30% and maintained the same lead volume once AI referrals kicked in. The ROI is ridiculous."</p>
+    </div>
+    <div class="ln-case">
+      <span class="ln-case-industry">Medical</span>
+      <div>
+        <div class="ln-case-biz">Nashville Spine &amp; Sport</div>
+        <div class="ln-case-loc">Nashville, TN</div>
+      </div>
+      <div class="ln-case-metric">
+        <div class="ln-case-metric-val">68%</div>
+        <div class="ln-case-metric-lbl">of new patients in month 2 came via AI referral</div>
+      </div>
+      <p class="ln-case-quote">"I was skeptical, but now I can see in the dashboard which AI sent which patient. It's incredible visibility we never had before."</p>
+    </div>
+  </div>
+  <div style="padding:32px 40px 0;max-width:1100px;margin:0 auto" class="fade-up">
+    <a href="/onboarding.html" class="btn btn-primary" style="padding:13px 28px;font-size:var(--tx-base)">See all customer stories →</a>
+  </div>
+</div>
+
+<!-- Pricing -->
+<div class="ln-price" id="ln-pricing">
+  <div class="ln-price-inner">
+    <div class="ln-price-hd fade-up">
+      <p class="s-label">Pricing</p>
+      <h2 class="ln-s2">Flat monthly fee.<br>No surprises.</h2>
+      <p style="font-size:var(--tx-base);color:var(--muted);line-height:1.65;margin-top:10px">Cancel any time. No setup fees. No per-click billing.</p>
+    </div>
+    <div class="ln-price-grid fade-up">
+      <div class="ln-price-card">
+        <div class="ln-price-name">Starter</div>
+        <div class="ln-price-amt">$49</div>
+        <div class="ln-price-per">per month</div>
+        <ul class="ln-price-list">
+          <li>1 business profile</li>
+          <li>AI recommendation presence</li>
+          <li>Custom domain endpoint</li>
+          <li>Referral tracking dashboard</li>
+          <li>Email support</li>
+        </ul>
+        <a href="/onboarding.html" class="btn btn-ghost" style="width:100%;justify-content:center">Get started</a>
+      </div>
+      <div class="ln-price-card pop">
+        <div class="ln-pop-badge">Most Popular</div>
+        <div class="ln-price-name">Pro</div>
+        <div class="ln-price-amt">$149</div>
+        <div class="ln-price-per">per month</div>
+        <ul class="ln-price-list">
+          <li>Up to 5 business profiles</li>
+          <li>Priority AI indexing</li>
+          <li>Advanced analytics &amp; exports</li>
+          <li>Custom business categories</li>
+          <li>Priority support</li>
+        </ul>
+        <a href="/onboarding.html" class="btn btn-primary" style="width:100%;justify-content:center">Get started</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Final CTA -->
+<div class="ln-final-cta">
+  <div class="fade-up">
+    <h2 class="ln-cta-h">Your competitors will be on AI.<br><em>Will you?</em></h2>
+    <p class="ln-cta-sub">AI-powered recommendations are the new word of mouth. The businesses that show up first will capture leads that others never see.</p>
+    <div class="ln-cta-actions">
+      <a href="/onboarding.html" class="btn btn-primary" style="padding:14px 32px;font-size:var(--tx-base)">Start for $49/month →</a>
+      <a href="#home" class="btn btn-ghost" onclick="navScrollTo('ln-features')" style="padding:14px 32px;font-size:var(--tx-base)">See how it works</a>
+    </div>
+  </div>
+</div>
+
+<!-- Footer -->
+<footer class="ln-footer">
+  <div class="ln-footer-inner">
+    <div class="ln-footer-top">
+      <div class="ln-footer-brand">
+        <a href="#home" class="logo">
+          <svg width="24" height="24" viewBox="0 0 26 26" fill="none"><rect width="26" height="26" rx="6" fill="#4f98a3"/><path d="M13 6.5L20.5 20H5.5L13 6.5Z" stroke="white" stroke-width="1.6" stroke-linejoin="round" fill="none"/><line x1="9.2" y1="15.5" x2="16.8" y2="15.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/></svg>
+          Advocate
+        </a>
+        <p class="ln-footer-tagline">Get your business recommended by every major AI assistant. Flat monthly. No code.</p>
+        <div class="ln-newsletter">
+          <input type="email" placeholder="your@email.com" aria-label="Email for updates">
+          <button class="btn btn-primary btn-sm" aria-label="Subscribe to updates">Subscribe</button>
+        </div>
+      </div>
+      <div>
+        <div class="ln-footer-col-h">Product</div>
+        <ul class="ln-footer-col-links">
+          <li><a href="#home" onclick="navScrollTo('ln-features')">Features</a></li>
+          <li><a href="#home" onclick="navScrollTo('ln-pricing')">Pricing</a></li>
+          <li><a href="#home" onclick="navScrollTo('ln-outcomes')">Industries</a></li>
+          <li><a href="#dashboard">Dashboard</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="ln-footer-col-h">Company</div>
+        <ul class="ln-footer-col-links">
+          <li><a href="#">About</a></li>
+          <li><a href="#">Blog</a></li>
+          <li><a href="#">Docs</a></li>
+          <li><a href="#">Contact</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="ln-footer-col-h">Legal</div>
+        <ul class="ln-footer-col-links">
+          <li><a href="/privacy.html">Privacy Policy</a></li>
+          <li><a href="/terms.html">Terms of Service</a></li>
+          <li><a href="/dpa.html">DPA</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="ln-admt-notice" role="note">
+      Advocate uses automated AI to classify queries and generate business responses. <a href="/privacy.html">Learn more in our Privacy Policy.</a>
+    </div>
+    <div class="ln-footer-bottom">
+      <p class="ln-footer-copy">© 2026 Advocate. All rights reserved. AI responses are generated automatically and may not reflect real-time business information.</p>
+      <div class="ln-footer-socials">
+        <a href="#" class="ln-social" aria-label="Twitter/X">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.742l7.737-8.835L1.254 2.25H8.08l4.259 5.629L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        </a>
+        <a href="#" class="ln-social" aria-label="LinkedIn">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6zM2 9h4v12H2z"/><circle cx="4" cy="4" r="2"/></svg>
+        </a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+</div><!-- #page-home -->
+
+
+<!-- ══════════════════════ DASHBOARD ══════════════════════ -->
+<div id="page-dashboard" class="page">
+
+  <!-- Sidebar -->
+  <aside class="db-side">
+    <div class="db-logo">
+      <svg width="22" height="22" viewBox="0 0 26 26" fill="none"><rect width="26" height="26" rx="6" fill="#4f98a3"/><path d="M13 6.5L20.5 20H5.5L13 6.5Z" stroke="white" stroke-width="1.6" stroke-linejoin="round" fill="none"/><line x1="9.2" y1="15.5" x2="16.8" y2="15.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/></svg>
+      Advocate
+    </div>
+    <nav class="db-nav">
+      <div class="db-nav-item on" onclick="dbNav(this,'overview')">
+        <i data-lucide="layout-dashboard"></i><span>Overview</span>
+      </div>
+      <div class="db-nav-item" onclick="dbNav(this,'domains')">
+        <i data-lucide="globe"></i><span>Domains</span>
+      </div>
+      <div class="db-nav-item" onclick="dbNav(this,'analytics')">
+        <i data-lucide="bar-chart-2"></i><span>Analytics</span>
+      </div>
+      <div class="db-nav-item" onclick="dbNav(this,'settings')">
+        <i data-lucide="settings"></i><span>Settings</span>
+      </div>
+    </nav>
+    <div class="db-side-foot">
+      <button class="db-add-btn" onclick="openModal()">
+        <i data-lucide="plus-circle"></i>
+        Add Domain
+      </button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="db-main">
+    <div class="db-topbar">
+      <a href="#home" class="db-back">
+        <i data-lucide="arrow-left"></i>
+      </a>
+      <div class="db-crumb">
+        <span style="color:var(--border)">/</span>
+        <span class="db-crumb-cur" id="db-crumb-text">Overview</span>
+      </div>
+      <div class="db-search">
+        <i data-lucide="search"></i>
+        <span>Search domains...</span>
+      </div>
+      <button class="icon-btn" onclick="toggleTheme()" style="width:30px;height:30px">
+        <i data-lucide="sun" id="db-sun"></i>
+        <i data-lucide="moon" id="db-moon" style="display:none"></i>
+      </button>
+      <div class="db-avatar">C</div>
+    </div>
+
+    <div class="db-content">
+
+      <!-- Overview -->
+      <div id="db-sec-overview" class="db-sec on">
+        <p class="db-sec-title">Overview</p>
+        <p class="db-sec-sub">Your Advocate dashboard at a glance — last 14 days</p>
+
+        <div class="kpi-grid" id="kpi-grid">
+          <div class="kpi-card"><div class="kpi-label skeleton" style="height:11px;width:80px;margin-bottom:14px"></div><div class="kpi-val skeleton" style="height:30px;width:60px"></div><div class="kpi-hint skeleton" style="height:11px;width:110px;margin-top:8px"></div></div>
+          <div class="kpi-card"><div class="kpi-label skeleton" style="height:11px;width:110px;margin-bottom:14px"></div><div class="kpi-val skeleton" style="height:30px;width:70px"></div><div class="kpi-hint skeleton" style="height:11px;width:130px;margin-top:8px"></div></div>
+          <div class="kpi-card"><div class="kpi-label skeleton" style="height:11px;width:90px;margin-bottom:14px"></div><div class="kpi-val skeleton" style="height:30px;width:80px"></div><div class="kpi-hint skeleton" style="height:11px;width:100px;margin-top:8px"></div></div>
+          <div class="kpi-card"><div class="kpi-label skeleton" style="height:11px;width:120px;margin-bottom:14px"></div><div class="kpi-val skeleton" style="height:30px;width:40px"></div><div class="kpi-hint skeleton" style="height:11px;width:120px;margin-top:8px"></div></div>
+        </div>
+
+        <div class="db-row">
+          <div class="db-card">
+            <div class="db-card-title">
+              AI Requests
+              <span class="db-card-sub">Last 14 days</span>
+            </div>
+            <div class="chart-wrap"><canvas id="chart-main"></canvas></div>
+          </div>
+          <div class="db-card">
+            <div class="db-card-title">Recent Activity</div>
+            <div class="activity">
+              <div class="act-item">
+                <div class="act-dot"></div>
+                <div><div class="act-text">workmancopyco.com added</div><div class="act-time">2 hours ago</div></div>
+              </div>
+              <div class="act-item">
+                <div class="act-dot" style="background:var(--muted)"></div>
+                <div><div class="act-text">customers.advocatemcp.com CNAME created</div><div class="act-time">2 hours ago</div></div>
+              </div>
+              <div class="act-item">
+                <div class="act-dot" style="background:var(--muted)"></div>
+                <div><div class="act-text">Fallback origin set</div><div class="act-time">2 hours ago</div></div>
+              </div>
+              <div class="act-item">
+                <div class="act-dot" style="background:var(--green)"></div>
+                <div><div class="act-text">KV entry active for workman-copy-co</div><div class="act-time">2 hours ago</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tbl-wrap">
+          <div class="tbl-head">
+            <span class="tbl-head-title">Domains</span>
+            <button class="btn btn-primary btn-sm" onclick="openModal()">
+              <i data-lucide="plus" style="width:12px;height:12px"></i>
+              Activate New Domain
+            </button>
+          </div>
+          <table>
+            <thead><tr>
+              <th>Domain</th><th>Slug</th><th>Status</th>
+              <th>Requests (14d)</th><th>Last Verified</th><th></th>
+            </tr></thead>
+            <tbody id="domain-tbody">
+              <tr>
+                <td style="font-family:var(--font-mono);font-size:var(--tx-sm)">workmancopyco.com</td>
+                <td style="font-family:var(--font-mono);font-size:var(--tx-xs);color:var(--muted)">workman-copy-co</td>
+                <td><span class="badge badge-pend"><span class="badge-dot"></span>Pending DNS</span></td>
+                <td style="color:var(--muted)">—</td>
+                <td style="font-size:var(--tx-xs);color:var(--muted)">Waiting on CNAME</td>
+                <td><button class="copy-btn" onclick="copyDns(this,'workmancopyco.com')"><i data-lucide="copy"></i>Copy DNS</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Domains -->
+      <div id="db-sec-domains" class="db-sec">
+        <p class="db-sec-title">Domains</p>
+        <p class="db-sec-sub">Manage your custom hostname connections</p>
+        <div class="tbl-wrap" style="margin-top:0">
+          <div class="tbl-head">
+            <span class="tbl-head-title">All Domains</span>
+            <button class="btn btn-primary btn-sm" onclick="openModal()">
+              <i data-lucide="plus" style="width:12px;height:12px"></i>
+              Activate New Domain
+            </button>
+          </div>
+          <table>
+            <thead><tr>
+              <th>Domain</th><th>Slug</th><th>Status</th>
+              <th>Requests (14d)</th><th>Last Verified</th><th></th>
+            </tr></thead>
+            <tbody id="domain-tbody-2">
+              <tr>
+                <td style="font-family:var(--font-mono);font-size:var(--tx-sm)">workmancopyco.com</td>
+                <td style="font-family:var(--font-mono);font-size:var(--tx-xs);color:var(--muted)">workman-copy-co</td>
+                <td><span class="badge badge-pend"><span class="badge-dot"></span>Pending DNS</span></td>
+                <td style="color:var(--muted)">—</td>
+                <td style="font-size:var(--tx-xs);color:var(--muted)">Waiting on CNAME</td>
+                <td><button class="copy-btn" onclick="copyDns(this,'workmancopyco.com')"><i data-lucide="copy"></i>Copy DNS</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Analytics -->
+      <div id="db-sec-analytics" class="db-sec">
+        <p class="db-sec-title">Analytics</p>
+        <p class="db-sec-sub">Detailed AI request breakdown</p>
+        <div class="db-card" style="margin-bottom:16px">
+          <div class="db-card-title">
+            AI Requests over time
+            <span class="db-card-sub">Last 14 days</span>
+          </div>
+          <div class="chart-wrap" style="height:220px"><canvas id="chart-analytics"></canvas></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="db-card">
+            <div class="db-card-title">Top Crawlers</div>
+            <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px" id="crawler-bars"></div>
+          </div>
+          <div class="db-card">
+            <div class="db-card-title">By Intent</div>
+            <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px" id="intent-bars"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings -->
+      <div id="db-sec-settings" class="db-sec">
+        <p class="db-sec-title">Settings</p>
+        <p class="db-sec-sub">Account and API configuration</p>
+        <div class="settings-card">
+          <div class="settings-title">API Key</div>
+          <div class="settings-row">
+            <input type="password" class="fi" value="placeholder-rotate-via-dashboard" style="flex:1;font-family:var(--font-mono)">
+            <button class="btn btn-ghost btn-sm">Rotate</button>
+          </div>
+        </div>
+        <div class="settings-card">
+          <div class="settings-title">Admin Secret</div>
+          <input type="password" class="fi" value="placeholder-not-a-real-secret" style="font-family:var(--font-mono)">
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="window.location.hash='#home'">
+          <i data-lucide="arrow-left" style="width:13px;height:13px"></i>
+          Back to site
+        </button>
+      </div>
+
+    </div><!-- .db-content -->
+  </div><!-- .db-main -->
+</div><!-- #page-dashboard -->
+
+
+<!-- Modal -->
+<div class="overlay" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-title">Activate a domain</div>
+    <div class="modal-sub">Connect a client domain to Advocate. We'll generate the DNS records.</div>
+
+    <div id="modal-form-wrap">
+      <div class="fg">
+        <label class="fl" for="inp-domain">Domain</label>
+        <input type="text" id="inp-domain" class="fi" placeholder="example.com" autocomplete="off">
+      </div>
+      <div class="fg">
+        <label class="fl" for="inp-slug">Slug</label>
+        <input type="text" id="inp-slug" class="fi" placeholder="example-business" autocomplete="off">
+      </div>
+      <div class="fg" style="margin-top:16px">
+        <label class="dns-consent-label">
+          <input type="checkbox" id="dns-consent" style="width:14px;height:14px;accent-color:var(--accent);flex-shrink:0;margin-top:2px">
+          <span>I own or have legal authority over this domain. I authorize Advocate to intercept and respond to AI crawler traffic on my behalf. I have read and agree to the <a href="/terms.html" target="_blank" style="color:var(--accent);text-decoration:underline">Terms of Service</a> and <a href="/privacy.html" target="_blank" style="color:var(--accent);text-decoration:underline">Privacy Policy</a>.</span>
+        </label>
+        <p id="dns-consent-err" style="display:none;color:#e55;font-size:.8125rem;margin-top:6px">You must agree to the terms before activating a domain.</p>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="submitDomain()">Activate →</button>
+      </div>
+    </div>
+
+    <div class="dns-result" id="dns-result">
+      <div class="dns-success">
+        <i data-lucide="check-circle" style="width:15px;height:15px"></i>
+        Domain registered — add these records at your registrar:
+      </div>
+      <div class="dns-block">
+        <div class="dns-type-tag">CNAME</div>
+        <div class="dns-row-item"><span class="dns-k">Host</span><span class="dns-v" id="dns-cname-host">—</span></div>
+        <div class="dns-row-item"><span class="dns-k">Points to</span><span class="dns-v">customers.advocatemcp.com</span></div>
+      </div>
+      <div class="dns-block">
+        <div class="dns-type-tag">TXT</div>
+        <div class="dns-row-item"><span class="dns-k">Host</span><span class="dns-v" id="dns-txt-host">—</span></div>
+        <div class="dns-row-item"><span class="dns-k">Value</span><span class="dns-v" id="dns-txt-val">—</span></div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost btn-sm" onclick="closeModal()">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── In-memory state (no localStorage) ───────────────────────
+const state = {
+  theme: 'dark',
+  chartMain: null,
+  chartAnalytics: null,
+  chartsBuilt: false,
+  dashboardReady: false,
+  domains: [{ domain:'workmancopyco.com', slug:'workman-copy-co', status:'pending' }],
+};
+
+// ── Chart data ───────────────────────────────────────────────
+const CHART_DATA = [12,28,19,35,44,38,52,61,48,73,84,91,78,102];
+const CHART_LABELS = (() => {
+  const labels = [], today = new Date();
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    labels.push(d.toLocaleDateString('en-US',{month:'short',day:'numeric'}));
+  }
+  return labels;
+})();
+
+// ── Router ───────────────────────────────────────────────────
+function route() {
+  const hash = window.location.hash || '#home';
+  const isDash = hash === '#dashboard';
+
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(isDash ? 'page-dashboard' : 'page-home').classList.add('active');
+
+  if (isDash && !state.dashboardReady) initDashboard();
+}
+
+window.addEventListener('hashchange', route);
+
+// ── Theme ────────────────────────────────────────────────────
+function toggleTheme() {
+  state.theme = state.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = state.theme;
+  const isDark = state.theme === 'dark';
+  // Landing icons
+  document.getElementById('land-sun').style.display  = isDark ? '' : 'none';
+  document.getElementById('land-moon').style.display = isDark ? 'none' : '';
+  // Dashboard icons
+  document.getElementById('db-sun').style.display    = isDark ? '' : 'none';
+  document.getElementById('db-moon').style.display   = isDark ? 'none' : '';
+  // Update chart colors
+  if (state.chartsBuilt) refreshChartColors();
+}
+
+function refreshChartColors() {
+  const tick  = state.theme === 'dark' ? '#7a7875' : '#6b6967';
+  const grid  = state.theme === 'dark' ? 'rgba(57,56,54,.5)' : 'rgba(200,198,196,.5)';
+  const tooltip = { backgroundColor: state.theme === 'dark' ? '#222120' : '#fff', titleColor: state.theme === 'dark' ? '#e8e6e3' : '#1a1917', bodyColor: state.theme === 'dark' ? '#7a7875' : '#6b6967', borderColor: state.theme === 'dark' ? '#393836' : '#dddbd8', borderWidth: 1 };
+  [state.chartMain, state.chartAnalytics].forEach(c => {
+    if (!c) return;
+    c.options.scales.x.ticks.color = tick;
+    c.options.scales.y.ticks.color = tick;
+    c.options.scales.x.grid.color  = grid;
+    c.options.scales.y.grid.color  = grid;
+    Object.assign(c.options.plugins.tooltip, tooltip);
+    c.update();
+  });
+}
+
+// ── Dashboard init ───────────────────────────────────────────
+function initDashboard() {
+  state.dashboardReady = true;
+
+  // KPI skeleton → real data
+  setTimeout(() => {
+    document.getElementById('kpi-grid').innerHTML = `
+      <div class="kpi-card">
+        <div class="kpi-label">Active Domains</div>
+        <div class="kpi-val">1</div>
+        <div class="kpi-hint">1 pending verification</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">AI Requests (14d)</div>
+        <div class="kpi-val">847</div>
+        <div class="kpi-hint" style="color:var(--green)">↑ 12% from prior period</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Avg Response Time</div>
+        <div class="kpi-val">142<span style="font-size:var(--tx-base);color:var(--muted);font-weight:400">ms</span></div>
+        <div class="kpi-hint">p50 across all endpoints</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Pending Verification</div>
+        <div class="kpi-val" style="color:var(--yellow)">1</div>
+        <div class="kpi-hint">Waiting on DNS records</div>
+      </div>
+    `;
+    lucide.createIcons();
+  }, 800);
+
+  buildCharts();
+  buildAnalyticsExtras();
+}
+
+function chartConfig(canvasId, height) {
+  const isDark = state.theme === 'dark';
+  const tick  = isDark ? '#7a7875' : '#6b6967';
+  const grid  = isDark ? 'rgba(57,56,54,.5)' : 'rgba(200,198,196,.5)';
+  const tip   = { backgroundColor: isDark ? '#222120' : '#fff', titleColor: isDark ? '#e8e6e3' : '#1a1917', bodyColor: isDark ? '#7a7875' : '#6b6967', borderColor: isDark ? '#393836' : '#dddbd8', borderWidth: 1, padding: 10, cornerRadius: 6 };
+  return {
+    type: 'bar',
+    data: {
+      labels: CHART_LABELS,
+      datasets: [{ data: CHART_DATA, backgroundColor:'rgba(79,152,163,.65)', borderColor:'rgba(79,152,163,1)', borderWidth:1, borderRadius:3, borderSkipped:false }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins: {
+        legend: { display:false },
+        tooltip: { ...tip, callbacks: { label: i => ` ${i.raw} requests` } }
+      },
+      scales: {
+        x: { grid:{ color:grid, drawBorder:false }, ticks:{ color:tick, font:{size:10}, maxRotation:0, maxTicksLimit:7 } },
+        y: { grid:{ color:grid, drawBorder:false }, ticks:{ color:tick, font:{size:10} }, beginAtZero:true }
+      }
+    }
+  };
+}
+
+function buildCharts() {
+  const c1 = document.getElementById('chart-main');
+  const c2 = document.getElementById('chart-analytics');
+  if (c1) state.chartMain      = new Chart(c1, chartConfig('chart-main'));
+  if (c2) state.chartAnalytics = new Chart(c2, chartConfig('chart-analytics'));
+  state.chartsBuilt = true;
+}
+
+function buildAnalyticsExtras() {
+  const crawlers = [['GPTBot',45],['ClaudeBot',28],['PerplexityBot',18],['Other',9]];
+  const intents  = [['discovery',52],['services',30],['pricing',11],['contact',7]];
+
+  function bar(label, pct, color='var(--accent)') {
+    return `<div>
+      <div style="display:flex;justify-content:space-between;font-size:var(--tx-xs);color:var(--muted);margin-bottom:4px"><span>${label}</span><span>${pct}%</span></div>
+      <div style="height:4px;background:var(--surface-2);border-radius:2px">
+        <div style="height:4px;width:${pct}%;background:${color};border-radius:2px"></div>
+      </div>
+    </div>`;
+  }
+
+  const cb = document.getElementById('crawler-bars');
+  const ib = document.getElementById('intent-bars');
+  if (cb) cb.innerHTML = crawlers.map(([l,p]) => bar(l,p)).join('');
+  if (ib) ib.innerHTML = intents.map(([l,p]) => bar(l,p,'var(--muted)')).join('');
+}
+
+// ── Dashboard nav ────────────────────────────────────────────
+const dbNavLabels = { overview:'Overview', domains:'Domains', analytics:'Analytics', settings:'Settings' };
+
+function dbNav(el, section) {
+  document.querySelectorAll('.db-nav-item').forEach(i => i.classList.remove('on'));
+  el.classList.add('on');
+  document.querySelectorAll('.db-sec').forEach(s => s.classList.remove('on'));
+  const target = document.getElementById('db-sec-' + section);
+  if (target) target.classList.add('on');
+  const crumb = document.getElementById('db-crumb-text');
+  if (crumb) crumb.textContent = dbNavLabels[section] || section;
+
+  // Build analytics charts if first visit
+  if (section === 'analytics' && !state.chartsBuilt) buildCharts();
+  if (section === 'analytics' && !state.analyticsBuilt) {
+    state.analyticsBuilt = true;
+    buildAnalyticsExtras();
+  }
+}
+
+// ── Modal ────────────────────────────────────────────────────
+function openModal() {
+  const m = document.getElementById('modal');
+  m.classList.add('open');
+  document.getElementById('modal-form-wrap').style.display = 'block';
+  document.getElementById('dns-result').classList.remove('show');
+  document.getElementById('inp-domain').value = '';
+  document.getElementById('inp-slug').value = '';
+  setTimeout(() => document.getElementById('inp-domain').focus(), 200);
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('open');
+}
+
+function submitDomain() {
+  const domain = document.getElementById('inp-domain').value.trim();
+  const slug   = document.getElementById('inp-slug').value.trim();
+  const inp    = document.getElementById('inp-domain');
+  const consent = document.getElementById('dns-consent');
+  const consentErr = document.getElementById('dns-consent-err');
+  inp.style.borderColor = (!domain || !slug) ? 'var(--red)' : '';
+  if (!domain || !slug) return;
+  if (!consent.checked) {
+    consentErr.style.display = 'block';
+    consent.focus();
+    return;
+  }
+  consentErr.style.display = 'none';
+
+  // Show DNS records
+  document.getElementById('modal-form-wrap').style.display = 'none';
+  document.getElementById('dns-cname-host').textContent = domain;
+  document.getElementById('dns-txt-host').textContent   = '_cf-custom-hostname.' + domain;
+  document.getElementById('dns-txt-val').textContent    = 'cf-' + uid();
+  document.getElementById('dns-result').classList.add('show');
+  lucide.createIcons();
+
+  // Add to tables
+  addRowToTable('domain-tbody', domain, slug);
+  addRowToTable('domain-tbody-2', domain, slug);
+}
+
+function uid() {
+  const h = '0123456789abcdef';
+  const s = (n) => Array.from({length:n}, () => h[Math.floor(Math.random()*16)]).join('');
+  return `${s(8)}-${s(4)}-${s(4)}-${s(4)}-${s(12)}`;
+}
+
+function addRowToTable(tbodyId, domain, slug) {
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td style="font-family:var(--font-mono);font-size:var(--tx-sm)">${escHtml(domain)}</td>
+    <td style="font-family:var(--font-mono);font-size:var(--tx-xs);color:var(--muted)">${escHtml(slug)}</td>
+    <td><span class="badge badge-pend"><span class="badge-dot"></span>Pending DNS</span></td>
+    <td style="color:var(--muted)">—</td>
+    <td style="font-size:var(--tx-xs);color:var(--muted)">Waiting on CNAME</td>
+    <td><button class="copy-btn" onclick="copyDns(this,'${escHtml(domain)}')"><i data-lucide="copy"></i>Copy DNS</button></td>
+  `;
+  tbody.appendChild(tr);
+  lucide.createIcons();
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function copyDns(btn, domain) {
+  const txt = `CNAME  ${domain}  →  customers.advocatemcp.com\nTXT    _cf-custom-hostname.${domain}  →  cf-${uid()}`;
+  navigator.clipboard.writeText(txt).then(() => {
+    btn.textContent = 'Copied!';
+    setTimeout(() => {
+      btn.innerHTML = '<i data-lucide="copy"></i>Copy DNS';
+      lucide.createIcons();
+    }, 2000);
+  }).catch(() => {
+    btn.innerHTML = 'Copied!';
+    setTimeout(() => {
+      btn.innerHTML = '<i data-lucide="copy"></i>Copy DNS';
+      lucide.createIcons();
+    }, 2000);
+  });
+}
+
+// Auto-slug from domain input
+function autoslug() {
+  const d = document.getElementById('inp-domain').value.trim().toLowerCase()
+    .replace(/^www\./,'').replace(/\.[^.]+$/,'')
+    .replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+  document.getElementById('inp-slug').value = d;
+}
+
+// ── Mobile menu ─────────────────────────────────────────────
+function toggleMobileMenu() {
+  const m = document.getElementById('ln-mobile-menu');
+  m.classList.toggle('open');
+}
+
+// ── Outcome tabs ─────────────────────────────────────────────
+function lnTab(btn, panelId) {
+  document.querySelectorAll('.ln-tab').forEach(t => {
+    t.classList.remove('on');
+    t.setAttribute('aria-selected', 'false');
+  });
+  document.querySelectorAll('.ln-panel').forEach(p => p.classList.remove('on'));
+  btn.classList.add('on');
+  btn.setAttribute('aria-selected', 'true');
+  const panel = document.getElementById('panel-' + panelId);
+  if (panel) panel.classList.add('on');
+}
+
+// ── Nav scroll helper ────────────────────────────────────────
+function navScrollTo(id) {
+  setTimeout(() => {
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior:'smooth' });
+  }, 0);
+  return false;
+}
+
+// ── Scroll-triggered fade-in ─────────────────────────────────
+function initScrollAnimations() {
+  const els = document.querySelectorAll('.fade-up');
+  if (!els.length) return;
+  // Respect prefers-reduced-motion
+  if (window.matchMedia('(prefers-reduced-motion:reduce)').matches) {
+    els.forEach(el => el.classList.add('visible'));
+    return;
+  }
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); }
+    });
+  }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+  els.forEach(el => io.observe(el));
+}
+
+// ── Boot ─────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  lucide.createIcons();
+  route();
+  initScrollAnimations();
+
+  const domainInp = document.getElementById('inp-domain');
+  if (domainInp) domainInp.addEventListener('input', autoslug);
+
+  // Keyboard: Escape closes modal
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeModal();
+  });
+});
+</script>
+</body>
+</html>
