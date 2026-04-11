@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" style="background:#171614">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="dark light" />
+<title>Sign in — Advocate</title>
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<style>
+/* ── Reset & Variables ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root {
+  --bg:          #171614;
+  --surface:     #1c1b19;
+  --surface-2:   #222120;
+  --border:      #393836;
+  --text:        #e8e6e3;
+  --muted:       #7a7875;
+  --accent:      #4f98a3;
+  --accent-dk:   #3d8090;
+  --accent-dim:  rgba(79,152,163,.1);
+  --accent-ring: rgba(79,152,163,.2);
+  --green:       #3fb950;
+  --yellow:      #d29922;
+  --red:         #f85149;
+
+  --font-serif: 'Instrument Serif', Georgia, serif;
+  --font-body:  'General Sans','Inter',system-ui,-apple-system,sans-serif;
+
+  --tx-xs:   .6875rem;
+  --tx-sm:   .875rem;
+  --tx-base: 1rem;
+  --tx-md:   1.0625rem;
+  --tx-lg:   1.25rem;
+
+  --r-sm:4px; --r-md:8px; --r-lg:12px; --r-xl:16px;
+}
+
+[data-theme="light"] {
+  --bg:         #f5f4f2;
+  --surface:    #ffffff;
+  --surface-2:  #efeeed;
+  --border:     #dddbd8;
+  --text:       #1a1917;
+  --muted:      #6b6967;
+  --accent:     #01696f;
+  --accent-dk:  #015861;
+  --accent-dim: rgba(1,105,111,.08);
+  --accent-ring:rgba(1,105,111,.2);
+}
+
+html{font-size:16px;-webkit-font-smoothing:antialiased;color-scheme:dark light;background:#171614}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:var(--font-body);font-size:var(--tx-base);line-height:1.6;
+  min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:24px;
+}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit;cursor:pointer;border:none;background:none}
+
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* ── Card ── */
+.login-card{
+  width:100%;max-width:400px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-xl);padding:36px 32px;
+}
+
+/* ── Logo ── */
+.login-logo{
+  display:flex;align-items:center;gap:8px;
+  font-size:var(--tx-sm);font-weight:600;letter-spacing:-.01em;
+  margin-bottom:28px;
+}
+
+/* ── Heading ── */
+.login-h{
+  font-family:var(--font-serif);
+  font-size:1.75rem;line-height:1.1;letter-spacing:-.02em;
+  margin-bottom:6px;
+}
+.login-sub{font-size:var(--tx-sm);color:var(--muted);margin-bottom:28px}
+
+/* ── Form ── */
+.fg{margin-bottom:16px}
+.fl{display:block;font-size:var(--tx-sm);font-weight:500;margin-bottom:6px}
+.fi{
+  width:100%;padding:9px 12px;
+  background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md);
+  color:var(--text);font-family:var(--font-body);font-size:var(--tx-sm);
+  transition:border-color .15s;
+}
+.fi:focus{outline:none;border-color:var(--accent)}
+.fi::placeholder{color:var(--muted)}
+
+/* ── Submit button ── */
+.btn-submit{
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  width:100%;padding:11px 20px;
+  font-size:var(--tx-sm);font-weight:500;
+  background:var(--accent);color:#fff;
+  border:1px solid var(--accent);border-radius:var(--r-md);
+  transition:background .15s,border-color .15s;line-height:1;
+}
+.btn-submit:hover{background:var(--accent-dk);border-color:var(--accent-dk)}
+.btn-submit:disabled{opacity:.55;cursor:not-allowed}
+
+/* ── Error banner ── */
+.login-error{
+  display:none;
+  padding:10px 14px;margin-bottom:20px;
+  background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.2);
+  border-radius:var(--r-md);
+  font-size:var(--tx-sm);color:var(--red);line-height:1.5;
+}
+.login-error.show{display:block}
+
+/* ── Divider ── */
+.login-divider{border:none;border-top:1px solid var(--border);margin:24px 0 18px}
+
+/* ── Footer ── */
+.login-foot{
+  text-align:center;font-size:var(--tx-sm);color:var(--muted);
+  margin-top:20px;
+}
+.login-foot a{color:var(--accent)}
+.login-foot a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+
+<div class="login-card">
+
+  <div class="login-logo">
+    <svg width="22" height="22" viewBox="0 0 26 26" fill="none">
+      <rect width="26" height="26" rx="6" fill="#4f98a3"/>
+      <path d="M13 6.5L20.5 20H5.5L13 6.5Z" stroke="white" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+      <line x1="9.2" y1="15.5" x2="16.8" y2="15.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/>
+    </svg>
+    Advocate
+  </div>
+
+  <h1 class="login-h">Welcome back</h1>
+  <p class="login-sub">Sign in to your Advocate dashboard</p>
+
+  <div class="login-error" id="login-error" role="alert"></div>
+
+  <form id="login-form" novalidate>
+    <div class="fg">
+      <label class="fl" for="email">Email</label>
+      <input class="fi" id="email" name="email" type="email"
+             autocomplete="email" placeholder="you@example.com" required />
+    </div>
+    <div class="fg" style="margin-bottom:20px">
+      <label class="fl" for="password">Password</label>
+      <input class="fi" id="password" name="password" type="password"
+             autocomplete="current-password" placeholder="••••••••" required />
+    </div>
+
+    <button type="submit" class="btn-submit" id="submit-btn">
+      Sign in
+    </button>
+  </form>
+
+  <hr class="login-divider" />
+
+  <p class="login-foot">
+    Need an account? <a href="/onboarding.html">Get started →</a>
+  </p>
+
+</div>
+
+<script src="/js/dashboard-auth.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var ERROR_MESSAGES = {
+    invalid_credentials: 'Incorrect email or password. Please try again.',
+    rate_limited:        'Too many sign-in attempts. Please wait a few minutes and try again.',
+    platform_error:      'Something went wrong on our end. Please try again shortly.',
+    invalid_body:        'Please enter a valid email and password.',
+  };
+
+  function showError(msg) {
+    var el = document.getElementById('login-error');
+    el.textContent = msg;
+    el.classList.add('show');
+  }
+
+  function clearError() {
+    var el = document.getElementById('login-error');
+    el.textContent = '';
+    el.classList.remove('show');
+  }
+
+  function setLoading(loading) {
+    var btn = document.getElementById('submit-btn');
+    btn.disabled = loading;
+    btn.textContent = loading ? 'Signing in\u2026' : 'Sign in';
+  }
+
+  document.getElementById('login-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    clearError();
+
+    var email    = document.getElementById('email').value.trim();
+    var password = document.getElementById('password').value;
+
+    if (!email || !password) {
+      showError(ERROR_MESSAGES.invalid_body);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await window.AMCP.login(email, password);
+      window.location.href = '/dashboard.html';
+    } catch (err) {
+      var code = (err && err.error_code) ? err.error_code : 'platform_error';
+      showError(ERROR_MESSAGES[code] || ERROR_MESSAGES.platform_error);
+    } finally {
+      setLoading(false);
+    }
+  });
+
+  // If the refresh cookie is still valid, skip the login page entirely
+  window.AMCP.refresh().then(function (ok) {
+    if (ok) window.location.href = '/dashboard.html';
+  });
+})();
+</script>
+</body>
+</html>
