@@ -38,8 +38,8 @@ Phase C originally proposed six commits. During Commit 1 execution a pre-existin
 |---|---|---|---|
 | 0 | (Sidetrack) Deterministic tampered-signature test fix | shipped | `63f1e30` |
 | 1 | Schema migration + types.ts field + session notes init | shipped | `d016946` |
-| 2 | Access token library + unit tests | *(in progress)* | — |
-| 3 | Shared CORS helper + unit tests | not started | — |
+| 2 | Access token library + unit tests | shipped | `5dc6289` |
+| 3 | Shared CORS helper + unit tests | *(in progress)* | — |
 | 4 | Auth endpoints (login, logout, refresh) + cookie helpers + middleware | not started | — |
 | 5 | Bearer middleware applied to existing endpoints + CORS dispatch lines | not started | — |
 | 6 | Final documentation + session notes finalization | not started | — |
@@ -292,6 +292,77 @@ Clean. The new exported symbols (`AccessTokenPayload`, `AccessTokenError`, `ACCE
 
 - **Shape validation needed an additional pattern for nullable fields.** The `tenant_id` and `full_name` fields are `string | null`. A simple `typeof === "string"` check would reject the admin-user case (where both are null). I added explicit `null`-or-string checks using `(field === null || typeof field === "string")`. This is the only structural divergence from `activation-token.ts`'s simpler all-required-string-or-number check.
 - **The `Omit<AccessTokenPayload, "iat" | "exp">` parameter type** on `signAccessToken` forces callers to supply all five user claims but prevents them from passing `iat`/`exp` (which the sign function computes internally). Cleaner TypeScript than the activation-token approach, where the caller only passed `{slug}` and everything else was internal. Possible future cleanup opportunity in activation-token.ts to use the same `Omit` pattern, but that's a refactor for another session — flagged in the found-during-reading list below.
+
+### Commit hash
+
+*(to be populated after git commit)*
+
+## Commit 3 — shared CORS helper + 6 unit tests
+
+### Files created in this commit
+
+- `worker/src/lib/cors.ts` — shared CORS helper. Exports `ALLOWED_ORIGINS` (`ReadonlySet<string>` with 5 origins: `https://advocatemcp.com`, `https://www.advocatemcp.com`, and three localhost origins for Phase D dev), `CorsOptions` interface with an optional `credentials` boolean, and three functions: `corsHeadersFor(request, opts)` returning a plain object of CORS headers, `withCors(response, request, opts)` wrapping an existing Response with merged headers, and `handleCorsPreflight(request, opts)` returning a 204 Response for OPTIONS preflights.
+- `worker/src/lib/cors.test.ts` — 6 unit tests. Pure function tests using Web API Request/Response/Headers constructors, no network, no D1, no mocks.
+
+### Relationship to stripe.ts's existing local CORS helper
+
+The existing CORS helper at `worker/src/routes/stripe.ts` lines 31–52 predates this commit. It has its own `ALLOWED_ORIGINS` Set (2 entries, no localhost), its own `corsHeaders(request)` function (takes no options — no credentials mode), and its own `withCors(resp, request)`, `handlePublicOnboardPreflight(request)` helpers.
+
+**The stripe.ts local helper is deliberately left untouched in Commit 3 per the ratified Phase C scope boundary.** The new shared `cors.ts` is introduced but not wired into any endpoint yet — Commits 4 and 5 use it for the new `/api/auth/*` endpoints and the extended `/api/client/*` endpoints. The existing `/api/onboard/public` and `GET /api/onboard/session/:id` endpoints continue to call their local `withCors` and `corsHeaders` from `stripe.ts`. Zero behavioral change for any currently-working endpoint.
+
+Migrating `stripe.ts` to use the shared helper is a future cleanup session. When that happens, the existing endpoints will need to adopt the richer `Access-Control-Allow-Headers` list from the shared helper (`Content-Type, Authorization, X-Activation-Token` instead of just `Content-Type`), which is additive and safe.
+
+### Behavioral differences between stripe.ts's helper and the new shared helper
+
+| Property | stripe.ts (existing) | cors.ts (new shared) |
+|---|---|---|
+| Allowed origins | 2 (advocatemcp.com + www) | 5 (adds 3 localhost) |
+| Allow-Headers | `Content-Type` | `Content-Type, Authorization, X-Activation-Token` |
+| Credentials mode | not supported (never set) | opt-in via `CorsOptions.credentials` |
+| Preflight handler | `handlePublicOnboardPreflight(request)` — no options | `handleCorsPreflight(request, opts)` — options include credentials |
+| `withCors` signature | `withCors(resp, request)` — two args | `withCors(response, request, opts?)` — three args with optional options |
+
+Both helpers clone `new Headers(response.headers)` before mutating — no reference-sharing bugs in either.
+
+### Test count delta
+
+- Before Commit 3: 49 tests across 5 test files
+- After Commit 3: 55 tests across 6 test files (+6 tests, +1 file)
+
+### Test suite status
+
+```
+$ cd worker && npm test
+ RUN  v4.1.4 /Users/cameronmcewan/Desktop/advocate/advocatemcp/worker
+ Test Files  6 passed (6)
+      Tests  55 passed (55)
+   Duration  143ms
+```
+
+Second run (determinism confirmation):
+
+```
+ Test Files  6 passed (6)
+      Tests  55 passed (55)
+   Duration  126ms
+```
+
+Both runs 55/55 green. Tests are pure function tests with no time/random/external dependencies, so determinism is guaranteed by construction.
+
+### Typecheck status
+
+```
+$ cd worker && npx tsc --noEmit
+(no output)
+```
+
+Clean. The new exported symbols (`ALLOWED_ORIGINS`, `CorsOptions`, `corsHeadersFor`, `withCors`, `handleCorsPreflight`) compile without errors. Nothing in the existing code imports them yet — that's Commits 4 and 5.
+
+### Notes-worthy observations during implementation
+
+- **Reference-sharing protection is consistent with the existing stripe.ts pattern.** Both the old `withCors` in stripe.ts and the new `withCors` in cors.ts clone `new Headers(response.headers)` before mutating and pass the clone (not the original's headers) to `new Response(...)`. This prevents any weird mutation-through-reference bugs. Cameron's explicit heads-up in the Commit 3 prompt about this exact pattern was the right thing to flag — it would have been an easy mistake to make.
+- **The `Vary: Origin` header is included in all responses** regardless of whether the origin was allowed. This is defensive cache-correctness behavior: if a cache is placed between the worker and the browser, `Vary: Origin` ensures the cache keys on the Origin header so different origins get different cached CORS responses. Omitting it would allow a cache to serve the wrong `Allow-Origin` to a second origin.
+- **The `credentials` option uses explicit-true matching (`opts.credentials === true`)** rather than truthy coercion (`if (opts.credentials)`). This is defensive against string values like `"false"` accidentally coercing to truthy — the credentials header is security-critical and should only fire when the caller explicitly opts in with a boolean.
 
 ### Commit hash
 
