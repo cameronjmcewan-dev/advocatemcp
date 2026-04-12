@@ -447,6 +447,9 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <div class="db-nav-item" data-section="settings">
       <i data-lucide="settings"></i><span>Settings</span>
     </div>
+    <div class="db-nav-item" data-section="domains">
+      <i data-lucide="globe"></i><span>Domains</span>
+    </div>
   </nav>
   <div class="db-side-foot">
     <span class="db-plan-badge" id="plan-badge">Free</span>
@@ -686,6 +689,36 @@ tr:hover td{background:rgba(255,255,255,.02)}
       </div>
     </section>
 
+    <!-- ── Domains (stub — Q3 pending) ── -->
+    <section id="sec-domains" class="db-sec">
+      <p class="db-sec-title">Domains</p>
+      <p class="db-sec-sub">Custom domain routing through Advocate</p>
+
+      <div class="db-card" style="max-width:520px">
+        <div class="db-card-title">Domain routing</div>
+        <p style="font-size:var(--tx-sm);color:var(--muted);line-height:1.7;margin-bottom:16px">
+          Your domain is configured and routing AI crawler traffic through Advocate.
+          To update your domain or add a new one, use your activation link from the
+          onboarding email, or contact support.
+        </p>
+        <a href="/activate.html"
+           style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;
+                  background:var(--accent-dim);color:var(--accent);
+                  border:1px solid var(--accent-ring);border-radius:var(--r-md);
+                  font-size:var(--tx-sm);font-weight:500;">
+          Activate a domain →
+        </a>
+      </div>
+
+      <div class="db-card" style="max-width:520px;margin-top:12px;background:rgba(210,153,34,.04);border-color:rgba(210,153,34,.2)">
+        <div class="db-card-title" style="color:var(--yellow)">Coming soon</div>
+        <p style="font-size:var(--tx-sm);color:var(--muted);line-height:1.7">
+          A full domain management view (activation status, CNAME target, TXT verification record,
+          and live DNS check) is planned for a future release.
+        </p>
+      </div>
+    </section>
+
   </div><!-- #content -->
 </div><!-- #main -->
 
@@ -708,6 +741,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
     'bot-activity':      'Bot Activity',
     'recommendations':   'Recommendations',
     'settings':          'Settings',
+    'domains':           'Domains',
   };
 
   var currentSection = 'overview';

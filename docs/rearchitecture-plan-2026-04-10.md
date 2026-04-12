@@ -1175,13 +1175,12 @@ No. `advocatemcp.com` and `customers.advocatemcp.com` share eTLD+1 `advocatemcp.
 Needed for: Settings section to show customers their current key (masked) with a copy button.
 Requires: A one-line addition to `apiMe` in `worker/src/routes/portal.ts`.
 Constraint: Any worker change is outside Phase D scope.
-Decision needed from Cameron before Commit 6.
+Status: Phase D Settings section ships with rotate-only; show/copy of current key deferred.
 
-**Q3 (open): Should a `GET /api/client/domains` endpoint exist before Phase D ends?**
-Needed for: A real Domains section (activation status, CNAME target, TXT record for verification).
-Requires: New worker route + new Railway query for domain/hostname data.
-Constraint: Worker + Railway changes are outside Phase D scope.
-Decision needed from Cameron before Commit 9 (currently planning static stub).
+**Q3 (resolved in Phase D): Domains section ships as stub.**
+A `GET /api/client/domains` worker endpoint is not built in Phase D. The Domains section shows a
+"domain routing configured" message and a link to `activate.html`. A real view with activation
+status, CNAME target, and TXT verification record is Phase E or later.
 
 ---
 
@@ -1213,3 +1212,40 @@ Decision needed from Cameron before Commit 9 (currently planning static stub).
 ---
 
 *Section 12 added 2026-04-11. Pre-work commit before Phase D implementation begins.*
+
+---
+
+### 12.10 Phase D completion record
+
+Phase D fully implemented 2026-04-12. Nine commits on branch `claude/consolidate-dashboard-m14cz`:
+
+| Commit | Hash | Description |
+|---|---|---|
+| Docs | `1356c31` | Section 12 appended to this document |
+| 1 | `50e5943` | `site/login.html` + `site/js/dashboard-auth.js` |
+| 2 | `5badd30` | `site/dashboard.html` shell |
+| 3–6 | `831767f` | All six section JS modules |
+| 7 | `70c8f1a` | E2E verification fixes (3 bugs fixed) |
+| 8 | `8ca2e8c` | `site/activate.html` + `site/js/dashboard-activate.js` |
+| 9 | *(this commit)* | Domains stub + docs update |
+
+**Files shipped:**
+- `site/login.html` — brand login page
+- `site/dashboard.html` — 7-section dashboard (Overview, AI Requests, Referral Clicks, Bot Activity, Recommendations, Settings, Domains)
+- `site/activate.html` — domain activation with DNS record display
+- `site/js/dashboard-auth.js` — `window.AMCP` auth module
+- `site/js/dashboard-overview.js` — Overview section
+- `site/js/dashboard-requests.js` — AI Requests section
+- `site/js/dashboard-clicks.js` — Referral Clicks section
+- `site/js/dashboard-bots.js` — Bot Activity section (includes 7×24 heatmap)
+- `site/js/dashboard-recs.js` — Recommendations section
+- `site/js/dashboard-settings.js` — Settings section with API key rotate
+- `site/js/dashboard-activate.js` — Activation page logic
+
+**To deploy:** `wrangler pages deploy site --project-name=advocatemcp-site --branch=main` (run from repo root or any directory — the deploy command uses the `site/` path explicitly).
+
+**Remaining before Phase E:**
+- Update nav link in `site/index.html` from `#dashboard` to `/dashboard.html`
+- Deploy to Cloudflare Pages
+- Verify login → dashboard flow end-to-end in production
+- Phase E: redirect `customers.advocatemcp.com/dashboard` → `advocatemcp.com/dashboard.html`
