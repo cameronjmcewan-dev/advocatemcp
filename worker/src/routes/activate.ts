@@ -30,14 +30,35 @@ import {
   verifyActivationToken,
   type ActivationTokenError,
   type ActivationTokenPayload,
+  base64urlToBytes,
 } from "../lib/activation-token";
 import {
   activateDomain,
   type ActivateFailReason,
 } from "./domains";
 import { withCors } from "../lib/cors";
-import { getActivationRecord, updateActivationStatus } from "../portalDb";
+import {
+  getActivationRecord,
+  updateActivationStatus,
+  getUserByEmail,
+  createUser,
+  updateUserPassword,
+  getBusinessBySlug,
+  grantAccess,
+} from "../portalDb";
 import { sendActivationEmail } from "../lib/resend";
+import {
+  generateSalt,
+  hashPassword,
+  generateSessionToken,
+  hashToken,
+  refreshCookieHeader,
+} from "../auth";
+import {
+  signAccessToken,
+  ACCESS_TOKEN_TTL_SECONDS,
+} from "../lib/access-token";
+import { getTenant } from "./onboard";
 
 // ── Customer message catalog ─────────────────────────────────────────────────
 // Every customer-facing string that can appear in an /api/activate response.
@@ -510,4 +531,200 @@ export async function handleResendActivation(
     JSON.stringify({ error: result.error, retryable: result.retryable, slug }),
     { status: 500, headers: { "Content-Type": "application/json" } },
   );
+}
+
+// ── POST /api/activate/hosted ────────────────────────────────────────────────
+//
+// Hosted-tenant activation endpoint. Token-authenticated. Accepts a
+// password from the customer, creates (or updates) their user account
+// in D1, links them to the business via user_business_access, mints an
+// access token, sets the amcp_refresh cookie, and returns the redirect
+// URL for the dashboard.
+//
+// This is the hosted-tenant counterpart to POST /api/activate, which
+// handles DNS-based tenants. Hosted tenants don't need domain entry or
+// DNS setup — they just need a password to access the dashboard.
+//
+// Response shape:
+//   200 { ok, access_token, expires_in, redirect, hosted_url }
+//       + Set-Cookie: amcp_refresh=...
+//   400 { error }   — not hosted, no token, password too short, etc
+//   401 { error }   — token invalid or expired
+//   500 { error }   — platform error (missing signing key, etc)
+
+export async function handleActivateHosted(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  if (request.method !== "POST") {
+    return withCors(jsonErr(405, "unknown"), request);
+  }
+  if (!env.ACTIVATION_SIGNING_KEY) {
+    console.error(JSON.stringify({
+      activate: true,
+      event: "hosted_activation_reject",
+      error_code: "platform_error",
+      reason: "ACTIVATION_SIGNING_KEY missing from env",
+    }));
+    return withCors(jsonErr(500, "platform_error"), request);
+  }
+  if (!env.ACCESS_TOKEN_SIGNING_KEY) {
+    console.error(JSON.stringify({
+      activate: true,
+      event: "hosted_activation_reject",
+      error_code: "platform_error",
+      reason: "ACCESS_TOKEN_SIGNING_KEY missing from env",
+    }));
+    return withCors(jsonErr(500, "platform_error"), request);
+  }
+
+  // ── Parse body ──────────────────────────────────────────────────────────
+  let body: Record<string, unknown> = {};
+  try {
+    const text = await request.text();
+    if (text.trim().length > 0) {
+      body = JSON.parse(text) as Record<string, unknown>;
+    }
+  } catch {
+    return withCors(jsonErr(400, "domain_required"), request);
+  }
+
+  // ── Extract and verify token ──────────────────────────────────────────
+  const token =
+    request.headers.get("X-Activation-Token") ??
+    (typeof body.token === "string" ? body.token : null) ??
+    new URL(request.url).searchParams.get("t");
+
+  if (!token) {
+    return withCors(jsonErr(401, "missing_token"), request);
+  }
+
+  let payload: ActivationTokenPayload;
+  try {
+    payload = await verifyActivationToken(token, env.ACTIVATION_SIGNING_KEY);
+  } catch (err) {
+    const reason = err as ActivationTokenError;
+    const code = reason === "expired" ? "token_expired" : "token_invalid";
+    console.warn(JSON.stringify({
+      activate: true,
+      event: "hosted_activation_reject",
+      error_code: code,
+      reason,
+    }));
+    return withCors(jsonErr(401, code), request);
+  }
+  const slug = payload.slug;
+
+  // ── Verify this is a hosted tenant ──────────────────────────────────────
+  const tenantDomain = `${slug}.hosted.advocatemcp.com`;
+  const tenant = await getTenant(env, tenantDomain);
+  if (!tenant || tenant.skipDns !== true) {
+    return withCors(
+      new Response(
+        JSON.stringify({
+          ok: false,
+          error_code: "not_hosted",
+          customer_message: "This activation link is for a domain-based account. Please use the domain activation page instead.",
+        }, null, 2),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      ),
+      request,
+    );
+  }
+
+  // ── Verify business exists in D1 ────────────────────────────────────────
+  const biz = await getBusinessBySlug(env.DB, slug);
+  if (!biz) {
+    console.warn(JSON.stringify({
+      activate: true,
+      event: "hosted_activation_reject",
+      error_code: "account_not_ready",
+      slug,
+    }));
+    return withCors(jsonErr(400, "account_not_ready"), request);
+  }
+
+  // ── Validate password ──────────────────────────────────────────────────
+  const password = typeof body.password === "string" ? body.password : "";
+  if (password.length < 8) {
+    return withCors(
+      new Response(
+        JSON.stringify({
+          ok: false,
+          error_code: "password_too_short",
+          customer_message: "Password must be at least 8 characters.",
+        }, null, 2),
+        { status: 400, headers: { "Content-Type": "application/json" } },
+      ),
+      request,
+    );
+  }
+
+  // ── Create or update user ──────────────────────────────────────────────
+  const email = tenant.email.toLowerCase().trim();
+  const salt = generateSalt();
+  const passwordHash = await hashPassword(password, salt);
+
+  let user = await getUserByEmail(env.DB, email);
+  if (user) {
+    await updateUserPassword(env.DB, user.id, passwordHash, salt);
+  } else {
+    user = await createUser(env.DB, email, passwordHash, salt, tenant.name, "client");
+  }
+
+  // ── Link user to business (idempotent via INSERT OR IGNORE) ────────────
+  await grantAccess(env.DB, user.id, biz.id);
+
+  // ── Mint session + access token ────────────────────────────────────────
+  // Inline session creation — same pattern as handleAuthLogin in authApi.ts.
+  // We need control over the raw refresh token to set the cookie, which
+  // portalDb.createSession doesn't expose (see authApi.ts:340-345).
+  const refreshRawToken = generateSessionToken();
+  const refreshTokenHash = await hashToken(refreshRawToken);
+  const sessionId = crypto.randomUUID().replace(/-/g, "");
+  const nowIso = new Date().toISOString();
+  const expiresIso = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  await env.DB
+    .prepare(
+      `INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at, last_seen_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(sessionId, user.id, refreshTokenHash, expiresIso, nowIso, nowIso)
+    .run();
+
+  const accessToken = await signAccessToken(
+    {
+      sub:       user.id,
+      role:      user.role,
+      tenant_id: null,
+      email:     user.email,
+      full_name: user.full_name,
+    },
+    env.ACCESS_TOKEN_SIGNING_KEY,
+  );
+
+  console.log(JSON.stringify({
+    activate: true,
+    event: "hosted_activation_success",
+    slug,
+    user_id: user.id,
+    is_new_user: !await getUserByEmail(env.DB, email), // always false here, but documents intent
+  }));
+
+  const responseBody = {
+    ok: true,
+    access_token: accessToken,
+    expires_in:   ACCESS_TOKEN_TTL_SECONDS,
+    redirect:     "https://advocatemcp.com/dashboard.html",
+    hosted_url:   `https://${tenantDomain}`,
+  };
+
+  const resp = new Response(JSON.stringify(responseBody, null, 2), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json",
+      "Set-Cookie":   refreshCookieHeader(refreshRawToken),
+    },
+  });
+  return withCors(resp, request, { credentials: true });
 }

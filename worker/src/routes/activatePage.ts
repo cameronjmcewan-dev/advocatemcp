@@ -50,8 +50,34 @@ import {
   renderFooter,
   themeToggleScript,
 } from "./sharedLayout";
+import { base64urlToBytes } from "../lib/activation-token";
+import { getTenant } from "./onboard";
 
-export async function handleActivatePage(request: Request, _env: Env): Promise<Response> {
+/**
+ * Attempt to extract the slug from a signed activation token WITHOUT
+ * verifying the signature. This is a lightweight base64url decode of
+ * the payload half only — no HMAC, no crypto import. Signature
+ * verification still happens on POST /api/activate or
+ * POST /api/activate/hosted. The slug is only used here to look up
+ * the tenant type for conditional page rendering.
+ *
+ * Returns null if the token is malformed or the payload doesn't
+ * contain a slug — the page falls back to the DNS UI in that case.
+ */
+function extractSlugFromToken(token: string): string | null {
+  try {
+    const dotIdx = token.indexOf(".");
+    if (dotIdx < 1) return null;
+    const payloadB64 = token.slice(0, dotIdx);
+    const jsonStr = new TextDecoder().decode(base64urlToBytes(payloadB64));
+    const payload = JSON.parse(jsonStr) as { slug?: string };
+    return typeof payload.slug === "string" ? payload.slug : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function handleActivatePage(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const tokenParam = url.searchParams.get("t");
   const hasToken = typeof tokenParam === "string" && tokenParam.length > 0;
@@ -61,13 +87,36 @@ export async function handleActivatePage(request: Request, _env: Env): Promise<R
   // so should only contain safe chars, but escape anyway as defense in depth.
   const escapedToken = hasToken ? escapeHtml(tokenParam!) : "";
 
-  return new Response(renderPage(hasToken, escapedToken), {
-    status: 200,
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": "no-store",
+  // Detect tenant type for conditional rendering. Cheap: one base64url
+  // decode (~0ms) + one KV lookup (~1ms at edge). No signature verification.
+  let isHosted = false;
+  let hostedUrl = "";
+  let tenantEmail = "";
+  if (hasToken) {
+    const slug = extractSlugFromToken(tokenParam!);
+    if (slug) {
+      const tenantDomain = `${slug}.hosted.advocatemcp.com`;
+      const tenant = await getTenant(env, tenantDomain);
+      if (tenant && tenant.skipDns === true) {
+        isHosted = true;
+        hostedUrl = `https://${tenantDomain}`;
+        tenantEmail = tenant.email ?? "";
+      }
+    }
+  }
+
+  return new Response(
+    isHosted
+      ? renderHostedPage(escapedToken, escapeHtml(hostedUrl), escapeHtml(tenantEmail))
+      : renderPage(hasToken, escapedToken),
+    {
+      status: 200,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store",
+      },
     },
-  });
+  );
 }
 
 function escapeHtml(s: string): string {
@@ -79,7 +128,168 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-// ── Page HTML ────────────────────────────────────────────────────────────────
+// ── Hosted page HTML ─────────────────────────────────────────────────────────
+
+function renderHostedPage(escapedToken: string, hostedUrl: string, email: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Set your password — AdvocateMCP</title>
+<meta name="theme-color" content="#0d1117" media="(prefers-color-scheme:dark)">
+<meta name="theme-color" content="#f9fafb" media="(prefers-color-scheme:light)">
+${googleFontsLink()}
+${BASE_TOKENS_CSS}
+${BASE_LAYOUT_CSS}
+<style>
+.wrap{max-width:640px;margin:0 auto;padding:2rem 1.5rem;flex:1;width:100%}
+.state{display:none}
+.state.active{display:block}
+.tag{font-size:.6875rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--green3);margin-bottom:.5rem}
+.h1{font-size:1.5rem;font-weight:700;letter-spacing:-.02em;margin-bottom:.75rem;color:var(--text)}
+.lede{color:var(--sub);margin-bottom:1.5rem;font-size:.9375rem}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:1.5rem;margin-bottom:1rem}
+.label{display:block;font-size:.8125rem;font-weight:500;color:var(--text);margin-bottom:.375rem}
+.hint{font-size:.75rem;color:var(--sub);margin-top:.375rem}
+.input{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:.625rem .75rem;color:var(--text);font-family:var(--font);font-size:.9375rem;transition:border-color .15s}
+.input:focus{outline:none;border-color:var(--green3)}
+.input[readonly]{opacity:.7;cursor:not-allowed}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;background:var(--green);color:#fff;border:none;border-radius:6px;padding:.625rem 1.25rem;font-family:var(--font);font-size:.875rem;font-weight:500;cursor:pointer;transition:background .15s;width:100%;margin-top:1rem}
+.btn:hover{background:var(--green2)}
+.btn:disabled{opacity:.6;cursor:not-allowed}
+.err{display:none;background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.25);border-radius:6px;padding:.75rem .875rem;color:var(--red);font-size:.8125rem;margin-bottom:1rem;line-height:1.5}
+.err.active{display:block}
+.spinner{display:inline-block;width:20px;height:20px;border:2px solid var(--border2);border-top-color:var(--green3);border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:.5rem}
+@keyframes spin{to{transform:rotate(360deg)}}
+.submitting-msg{font-size:.9375rem;color:var(--sub);display:flex;align-items:center}
+.success-url{font-family:var(--mono);font-size:.875rem;color:var(--green3);word-break:break-all;margin:.75rem 0}
+</style>
+</head>
+<body>
+
+${renderHeader({ subtitle: "Set your password" })}
+
+<main class="wrap" id="activate-root" data-token="${escapedToken}">
+
+<div class="err" id="err-banner" role="alert" aria-live="polite"></div>
+
+<!-- State H1 — Password form -->
+<div class="state active" id="state-h1">
+  <div class="tag">Account setup</div>
+  <h1 class="h1">Set your password</h1>
+  <p class="lede">Choose a password for your AdvocateMCP dashboard. You'll use this email and password to log in.</p>
+
+  <div class="card">
+    <label class="label" for="hosted-email">Email</label>
+    <input class="input" type="email" id="hosted-email" value="${email}" readonly>
+    <div class="hint">This is the email you signed up with. It can't be changed here.</div>
+
+    <label class="label" for="hosted-password" style="margin-top:1rem">Password</label>
+    <input class="input" type="password" id="hosted-password" placeholder="At least 8 characters" minlength="8" required autocomplete="new-password">
+
+    <button type="button" class="btn" id="hosted-submit-btn">Set password and continue</button>
+  </div>
+</div>
+
+<!-- State H2 — Submitting -->
+<div class="state" id="state-h2">
+  <div class="tag">Working</div>
+  <h1 class="h1">Creating your account</h1>
+  <div class="card">
+    <div class="submitting-msg">
+      <span class="spinner" aria-hidden="true"></span>
+      <span>Setting up your dashboard access. Just a moment.</span>
+    </div>
+  </div>
+</div>
+
+<!-- State H3 — Success -->
+<div class="state" id="state-h3">
+  <div class="tag">You're all set</div>
+  <h1 class="h1">Your account is ready</h1>
+  <p class="lede">Your business is live on AI search at:</p>
+  <div class="success-url" id="hosted-url-display">${hostedUrl}</div>
+  <p class="lede">AI crawlers can now discover your business and recommend it to searchers. Log in to your dashboard to see traffic, analytics, and recommendations.</p>
+  <a href="https://advocatemcp.com/dashboard.html" class="btn" id="go-dashboard-btn">Go to your dashboard</a>
+</div>
+
+</main>
+
+${renderFooter()}
+
+${themeToggleScript()}
+<script>
+(function(){
+  var root = document.getElementById("activate-root");
+  var token = root ? root.getAttribute("data-token") : "";
+  if (!token) return;
+
+  var submitBtn = document.getElementById("hosted-submit-btn");
+  var errBanner = document.getElementById("err-banner");
+  var passwordInput = document.getElementById("hosted-password");
+
+  function showState(id){
+    ["state-h1","state-h2","state-h3"].forEach(function(s){
+      var el = document.getElementById(s);
+      if (el) el.classList.toggle("active", s === id);
+    });
+  }
+
+  function showError(msg){
+    errBanner.textContent = msg;
+    errBanner.classList.add("active");
+  }
+
+  function clearError(){
+    errBanner.textContent = "";
+    errBanner.classList.remove("active");
+  }
+
+  submitBtn.addEventListener("click", function(){
+    clearError();
+    var password = passwordInput.value || "";
+    if (password.length < 8) {
+      showError("Password must be at least 8 characters.");
+      return;
+    }
+
+    submitBtn.disabled = true;
+    showState("state-h2");
+
+    fetch("/api/activate/hosted", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Activation-Token": token
+      },
+      body: JSON.stringify({ password: password })
+    })
+    .then(function(resp){ return resp.json().then(function(data){ return { status: resp.status, data: data }; }); })
+    .then(function(r){
+      submitBtn.disabled = false;
+      if (r.data && r.data.ok) {
+        showState("state-h3");
+      } else {
+        var msg = (r.data && r.data.customer_message) || "Something went wrong. Please try again, or contact support.";
+        showError(msg);
+        showState("state-h1");
+      }
+    })
+    .catch(function(){
+      submitBtn.disabled = false;
+      showError("We couldn't reach our servers. Please check your internet connection and try again.");
+      showState("state-h1");
+    });
+  });
+})();
+</script>
+</body>
+</html>`;
+}
+
+// ── DNS page HTML ────────────────────────────────────────────────────────────
 
 function renderPage(hasToken: boolean, escapedToken: string): string {
   return `<!DOCTYPE html>

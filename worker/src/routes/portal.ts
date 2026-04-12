@@ -21,7 +21,7 @@ import {
 } from "./onboard";
 import { handleOnboardPage } from "./onboardPage";
 import { handleActivatePage } from "./activatePage";
-import { handleActivate, handleActivationToken, handleGetActivation, handleResendActivation } from "./activate";
+import { handleActivate, handleActivateHosted, handleActivationToken, handleGetActivation, handleResendActivation } from "./activate";
 import {
   getSessionFromRequest,
   handleAuthLogin,
@@ -65,6 +65,8 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/activate"                 && method === "GET")  return handleActivatePage(request, env);
   if (pathname === "/api/activate"             && method === "OPTIONS") return handleCorsPreflight(request);
   if (pathname === "/api/activate"             && method === "POST")    return handleActivate(request, env);
+  if (pathname === "/api/activate/hosted"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/activate/hosted"      && method === "POST")    return handleActivateHosted(request, env);
   if (pathname === "/admin/activation-token"   && method === "POST") return handleActivationToken(request, env);
 
   // ── Phase C cross-origin auth endpoints ────────────────────────────────
