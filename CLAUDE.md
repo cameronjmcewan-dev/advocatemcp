@@ -246,7 +246,20 @@ This bit us during the `workman-copy-co` dry-run cleanup on 2026-04-10: a `d1 ex
 
 ## What is in progress
 
-Phase C cross-origin auth foundation shipped and verified in production 2026-04-11. Three new auth endpoints (`POST /api/auth/login`, `POST /api/auth/logout`, `POST /api/auth/refresh`) live on customers.advocatemcp.com with the hybrid Bearer access token + refresh cookie design. Five existing `/api/client/*` endpoints now accept Bearer tokens in addition to the legacy admin session cookie. Admin portal login at `customers.advocatemcp.com/login` preserved byte-for-byte. See `docs/session-2026-04-11-phase-c-cross-origin-auth-foundation.md` for the full execution log across seven commits (Commit 0 sidetrack + Commits 1-6), and `docs/rearchitecture-plan-2026-04-10.md` Section 8 Phase C for the original plan. Phase D (frontend dashboard at advocatemcp.com), Phase E (deprecate worker HTML), and Phase F (Stripe webhook → activation token → email wiring) are the next priorities in that order.
+Phase D (static dashboard at advocatemcp.com) and Phase E redirect are implemented on branch `claude/consolidate-dashboard-m14cz` — awaiting deploy. Phase C auth endpoints are live in production and fully consumed by the new frontend. See `docs/rearchitecture-plan-2026-04-10.md` Section 12 for the full Phase D execution record.
+
+**Branch `claude/consolidate-dashboard-m14cz` — not yet deployed:**
+- `site/login.html`, `site/dashboard.html`, `site/activate.html` — new static pages at advocatemcp.com
+- `site/js/dashboard-auth.js` and six section modules — `window.AMCP` auth + live data rendering
+- `worker/src/routes/portal.ts` — `/dashboard` and `/login` now 301-redirect to advocatemcp.com
+
+**Deploy commands (run after merging):**
+```
+wrangler pages deploy site --project-name=advocatemcp-site --branch=main
+cd worker && npx wrangler deploy
+```
+
+**Phase E cleanup (deferred — separate pass):** Delete `loginPage()`, `dashboard()`, `buildDashboard` import from `portal.ts`; remove `#page-dashboard` div + `initDashboard()` + `route()` from `site/index.html` (~243 lines dead code). Phase F (Stripe webhook → activation token → email wiring) is the next priority after deploy is verified.
 
 ## What is next on the roadmap (priority order)
 
