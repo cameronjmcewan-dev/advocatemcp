@@ -176,6 +176,7 @@ describe("provisionActivationToken (Phase F Part 1)", () => {
     expect(mockedSign).toHaveBeenCalledWith(
       { slug: "workman-copy-co" },
       "test-phase-f-key",
+      7 * 24 * 3600, // 7-day TTL — Phase F Part 2
     );
 
     const row = rows.get("workman-copy-co");

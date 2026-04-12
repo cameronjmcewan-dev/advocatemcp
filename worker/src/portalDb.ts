@@ -312,6 +312,23 @@ export async function getActivationRecord(
   };
 }
 
+/**
+ * Update the activation_status for a business. Unconditional — callers
+ * are responsible for deciding when a status transition is appropriate.
+ * Used by the Stripe webhook to flip pending_send → sent after a
+ * successful Resend API call, and by the admin resend endpoint.
+ */
+export async function updateActivationStatus(
+  db: D1Database,
+  slug: string,
+  status: string,
+): Promise<void> {
+  await db
+    .prepare("UPDATE businesses SET activation_status = ? WHERE slug = ?")
+    .bind(status, slug)
+    .run();
+}
+
 export async function updateUserPassword(
   db: D1Database,
   userId: string,

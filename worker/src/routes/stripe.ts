@@ -24,9 +24,11 @@ import {
   requireAdmin,
 } from "./onboard";
 import { signActivationToken } from "../lib/activation-token";
+import { sendActivationEmail } from "../lib/resend";
 import {
   getActivationRecord,
   setActivationTokenIfMissing,
+  updateActivationStatus,
 } from "../portalDb";
 
 // ── CORS helper for the public wizard endpoint ───────────────────────────────
@@ -656,7 +658,8 @@ export async function provisionActivationToken(
   if (existing === null) return "no_row";
   if (existing.token !== null) return "existing";
 
-  const token = await signActivationToken({ slug }, env.ACTIVATION_SIGNING_KEY);
+  const SEVEN_DAYS = 7 * 24 * 3600;
+  const token = await signActivationToken({ slug }, env.ACTIVATION_SIGNING_KEY, SEVEN_DAYS);
   const wrote = await setActivationTokenIfMissing(env.DB, slug, token, now);
   // If wrote is false here, another concurrent invocation won the race
   // between our SELECT and UPDATE. The token we just minted is
@@ -839,6 +842,70 @@ export async function handleStripeWebhook(
     }));
   }
 
+  // Phase F Part 2: send the activation email via Resend. Non-fatal —
+  // a failure leaves activation_status as 'pending_send' so the
+  // operator can use POST /admin/businesses/:slug/resend-activation.
+  let emailResult: "sent" | "failed" | "skipped" | "no_key" | "no_token" = "skipped";
+  if (activationResult === "minted") {
+    try {
+      if (!env.RESEND_API_KEY) {
+        emailResult = "no_key";
+        console.warn(JSON.stringify({
+          onboarding: true,
+          event: "stripe_webhook_activation_email_no_key",
+          domain,
+          slug: tenant.slug,
+        }));
+      } else {
+        const record = await getActivationRecord(env.DB, tenant.slug);
+        if (!record || !record.token) {
+          emailResult = "no_token";
+          console.warn(JSON.stringify({
+            onboarding: true,
+            event: "stripe_webhook_activation_email_no_token",
+            domain,
+            slug: tenant.slug,
+          }));
+        } else {
+          const activateUrl = `https://customers.advocatemcp.com/activate?t=${encodeURIComponent(record.token)}`;
+          const sendResult = await sendActivationEmail(env.RESEND_API_KEY, tenant.email, activateUrl);
+
+          if (sendResult.ok) {
+            await updateActivationStatus(env.DB, tenant.slug, "sent");
+            emailResult = "sent";
+            console.log(JSON.stringify({
+              onboarding: true,
+              event: "stripe_webhook_activation_email_sent",
+              domain,
+              slug: tenant.slug,
+              email_to_length: tenant.email.length,
+              email_id: sendResult.id,
+            }));
+          } else {
+            emailResult = "failed";
+            console.warn(JSON.stringify({
+              onboarding: true,
+              event: "stripe_webhook_activation_email_failed",
+              domain,
+              slug: tenant.slug,
+              error: sendResult.error,
+              retryable: sendResult.retryable,
+            }));
+          }
+        }
+      }
+    } catch (err) {
+      emailResult = "failed";
+      console.warn(JSON.stringify({
+        onboarding: true,
+        event: "stripe_webhook_activation_email_error",
+        domain,
+        slug: tenant.slug,
+        error: String(err),
+      }));
+    }
+  }
+
   console.log(JSON.stringify({
     onboarding: true,
     event: "stripe_webhook_processed",
@@ -847,6 +914,7 @@ export async function handleStripeWebhook(
     plan: tenant.stripe.plan,
     status: tenant.status,
     activation: activationResult,
+    email: emailResult,
   }));
 
   return new Response("OK", { status: 200 });
