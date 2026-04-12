@@ -60,4 +60,15 @@ export interface Env {
   STRIPE_PRICE_ID_BASE?: string;
   /** Stripe Price ID for $250/mo pro plan */
   STRIPE_PRICE_ID_PRO?: string;
+
+  // ── Email (Resend) ──────────────────────────────────────────────────
+  /**
+   * Resend API key for transactional email delivery. Used by
+   * worker/src/lib/resend.ts to send activation emails after
+   * successful Stripe checkout. The advocatemcp.com domain must be
+   * verified in Resend (DKIM + SPF) for delivery from
+   * support@advocatemcp.com.
+   * Set via: `cd worker && npx wrangler secret put RESEND_API_KEY`
+   */
+  RESEND_API_KEY?: string;
 }
