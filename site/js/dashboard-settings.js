@@ -21,12 +21,10 @@
     setText('settings-email', user.email);
     setText('settings-plan',  user.role === 'admin' ? 'Admin' : 'Pro');
 
-    /* Slug comes from metrics data — already set by shell if available */
-    var slugEl = document.getElementById('settings-slug');
-    if (slugEl && slugEl.textContent === '—') {
-      if (window.AMCP_DATA && window.AMCP_DATA.slug) {
-        slugEl.textContent = window.AMCP_DATA.slug;
-      }
+    /* Slug comes from metrics data; set it if available */
+    if (window.AMCP_DATA && window.AMCP_DATA.slug) {
+      var slugEl = document.getElementById('settings-slug');
+      if (slugEl) slugEl.textContent = window.AMCP_DATA.slug;
     }
 
     /* Update plan badge in sidebar */
@@ -62,10 +60,10 @@
     if (el) el.textContent = '';
   }
 
-  document.addEventListener('DOMContentLoaded', function () {
-    var btn = document.getElementById('btn-rotate-key');
-    if (!btn) return;
-
+  /* Script runs after DOM is parsed (bottom of <body>), so we can attach
+   * the listener directly without waiting for DOMContentLoaded. */
+  var btn = document.getElementById('btn-rotate-key');
+  if (btn) {
     btn.addEventListener('click', async function () {
       if (rotating) return;
 
@@ -91,7 +89,7 @@
           return;
         }
 
-        var newKey = data.api_key || data.key || '';
+        var newKey = data.new_api_key || '';
         if (newKey) {
           var display = document.getElementById('new-key-display');
           if (display) {
@@ -120,7 +118,7 @@
         btn.textContent = 'Rotate';
       }
     });
-  });
+  }
 
   window.AMCP_SECTIONS = window.AMCP_SECTIONS || {};
   window.AMCP_SECTIONS['settings']       = render;
