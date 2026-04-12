@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" style="background:#171614">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="dark light" />
+<title>Dashboard — Advocate</title>
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+/* ── Reset & Variables ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root {
+  --bg:          #171614;
+  --surface:     #1c1b19;
+  --surface-2:   #222120;
+  --border:      #393836;
+  --text:        #e8e6e3;
+  --muted:       #7a7875;
+  --accent:      #4f98a3;
+  --accent-dk:   #3d8090;
+  --accent-dim:  rgba(79,152,163,.1);
+  --accent-ring: rgba(79,152,163,.2);
+  --green:       #3fb950;
+  --yellow:      #d29922;
+  --red:         #f85149;
+
+  --font-serif: 'Instrument Serif', Georgia, serif;
+  --font-body:  'General Sans','Inter',system-ui,-apple-system,sans-serif;
+  --font-mono:  'SF Mono','Fira Code','Cascadia Code',Consolas,monospace;
+
+  --tx-xs:   clamp(.6875rem,.66rem + .14vw,.75rem);
+  --tx-sm:   clamp(.8125rem,.78rem + .16vw,.875rem);
+  --tx-base: clamp(1rem,.97rem + .15vw,1.0625rem);
+  --tx-md:   clamp(1.0625rem,1.02rem + .21vw,1.125rem);
+  --tx-lg:   clamp(1.125rem,1.07rem + .28vw,1.25rem);
+  --tx-xl:   clamp(1.5rem,1.35rem + .75vw,2rem);
+
+  --r-sm:4px; --r-md:8px; --r-lg:12px; --r-xl:16px;
+  --sidebar-w:240px;
+}
+
+[data-theme="light"] {
+  --bg:         #f5f4f2;
+  --surface:    #ffffff;
+  --surface-2:  #efeeed;
+  --border:     #dddbd8;
+  --text:       #1a1917;
+  --muted:      #6b6967;
+  --accent:     #01696f;
+  --accent-dk:  #015861;
+  --accent-dim: rgba(1,105,111,.08);
+  --accent-ring:rgba(1,105,111,.2);
+}
+
+html{font-size:16px;-webkit-font-smoothing:antialiased;color-scheme:dark light;background:#171614}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:var(--font-body);font-size:var(--tx-base);line-height:1.6;
+  height:100vh;overflow:hidden;
+  display:flex;
+}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit;cursor:pointer;border:none;background:none}
+img,svg{display:block}
+
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* ── Shimmer skeleton ── */
+@keyframes shimmer{from{background-position:-500px 0}to{background-position:500px 0}}
+.skeleton{
+  background:linear-gradient(90deg,var(--surface) 25%,var(--surface-2) 50%,var(--surface) 75%);
+  background-size:1000px 100%;
+  animation:shimmer 1.5s infinite;
+  border-radius:var(--r-sm);
+}
+
+/* ── Layout ── */
+#sidebar{
+  width:var(--sidebar-w);flex-shrink:0;
+  display:flex;flex-direction:column;
+  height:100vh;
+  background:var(--surface);border-right:1px solid var(--border);
+}
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+
+/* ── Sidebar ── */
+.db-logo{
+  display:flex;align-items:center;gap:8px;
+  padding:18px 16px;
+  font-size:var(--tx-sm);font-weight:600;letter-spacing:-.01em;
+  border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.db-nav{
+  flex:1;padding:8px;
+  display:flex;flex-direction:column;gap:1px;
+  overflow-y:auto;
+}
+.db-nav-item{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 10px;
+  font-size:var(--tx-sm);color:var(--muted);
+  border-radius:var(--r-sm);
+  transition:background .1s,color .1s;cursor:pointer;
+  user-select:none;
+}
+.db-nav-item svg{width:15px;height:15px;flex-shrink:0}
+.db-nav-item:hover{background:var(--surface-2);color:var(--text)}
+.db-nav-item.on{background:var(--accent-dim);color:var(--accent)}
+.db-side-foot{
+  padding:12px;border-top:1px solid var(--border);flex-shrink:0;
+  font-size:var(--tx-xs);color:var(--muted);
+}
+.db-plan-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:3px 8px;border-radius:100px;
+  background:var(--accent-dim);color:var(--accent);
+  border:1px solid var(--accent-ring);
+  font-size:var(--tx-xs);font-weight:500;
+}
+
+/* ── Topbar ── */
+#topbar{
+  display:flex;align-items:center;gap:12px;
+  padding:0 24px;height:56px;flex-shrink:0;
+  background:var(--bg);border-bottom:1px solid var(--border);
+}
+.db-crumb{
+  display:flex;align-items:center;gap:8px;
+  font-size:var(--tx-sm);color:var(--muted);
+  flex:1;
+}
+.db-crumb-sep{color:var(--border)}
+.db-crumb-cur{color:var(--text);font-weight:500}
+.icon-btn{
+  display:flex;align-items:center;justify-content:center;
+  width:30px;height:30px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-sm);color:var(--muted);
+  transition:color .15s;flex-shrink:0;
+}
+.icon-btn:hover{color:var(--text)}
+.icon-btn svg{width:14px;height:14px}
+.db-avatar{
+  width:30px;height:30px;
+  background:var(--accent-dim);border:1px solid var(--accent-ring);
+  border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:var(--tx-xs);font-weight:700;color:var(--accent);flex-shrink:0;
+  cursor:default;
+}
+.btn-logout{
+  display:flex;align-items:center;gap:5px;
+  padding:5px 11px;
+  background:transparent;border:1px solid var(--border);border-radius:var(--r-sm);
+  font-size:var(--tx-xs);color:var(--muted);
+  transition:color .15s,border-color .15s;
+}
+.btn-logout:hover{color:var(--red);border-color:var(--red)}
+.btn-logout svg{width:12px;height:12px}
+
+/* ── Content area ── */
+#content{flex:1;overflow-y:auto;padding:28px}
+
+.db-sec{display:none}
+.db-sec.on{display:block}
+
+.db-sec-title{font-size:var(--tx-md);font-weight:600;margin-bottom:4px}
+.db-sec-sub{font-size:var(--tx-sm);color:var(--muted);margin-bottom:24px}
+
+/* ── KPI grid ── */
+.kpi-grid{
+  display:grid;grid-template-columns:repeat(4,1fr);
+  gap:12px;margin-bottom:20px;
+}
+.kpi-card{
+  padding:20px;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--r-lg);
+}
+.kpi-label{
+  font-size:var(--tx-xs);font-weight:500;text-transform:uppercase;
+  letter-spacing:.07em;color:var(--muted);margin-bottom:10px;
+}
+.kpi-val{font-size:var(--tx-xl);font-weight:600;line-height:1;margin-bottom:6px}
+.kpi-hint{font-size:var(--tx-xs);color:var(--muted)}
+
+/* ── Cards ── */
+.db-row{
+  display:grid;grid-template-columns:1fr 280px;
+  gap:12px;margin-bottom:20px;
+}
+.db-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-lg);padding:20px;
+}
+.db-card-title{
+  font-size:var(--tx-sm);font-weight:600;color:var(--text);
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:16px;
+}
+.db-card-sub{font-size:var(--tx-xs);color:var(--muted);font-weight:400}
+.chart-wrap{position:relative;height:168px}
+.chart-wrap-lg{position:relative;height:220px}
+
+/* ── Bar chart rows (inline %) ── */
+.bar-rows{display:flex;flex-direction:column;gap:10px}
+.bar-row{display:flex;flex-direction:column;gap:4px}
+.bar-row-label{display:flex;justify-content:space-between;font-size:var(--tx-xs);color:var(--muted)}
+.bar-row-label span:last-child{color:var(--text);font-weight:500}
+.bar-track{height:5px;background:var(--surface-2);border-radius:3px;overflow:hidden}
+.bar-fill{height:100%;background:var(--accent);border-radius:3px;transition:width .4s ease}
+
+/* ── Tables ── */
+.tbl-wrap{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-lg);overflow:hidden;margin-bottom:20px;
+}
+.tbl-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 20px;border-bottom:1px solid var(--border);
+}
+.tbl-head-title{font-size:var(--tx-sm);font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:var(--tx-sm)}
+th{
+  padding:9px 20px;text-align:left;
+  font-size:var(--tx-xs);font-weight:500;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.06em;
+  border-bottom:1px solid var(--border);background:var(--surface-2);
+}
+td{
+  padding:12px 20px;border-bottom:1px solid var(--border);color:var(--text);
+  vertical-align:middle;
+}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.02)}
+
+/* ── Badges ── */
+.badge{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:3px 9px;border-radius:100px;
+  font-size:var(--tx-xs);font-weight:500;
+}
+.badge-dot{width:5px;height:5px;border-radius:50%;background:currentColor}
+.badge-green{background:rgba(63,185,80,.1);color:var(--green);border:1px solid rgba(63,185,80,.2)}
+.badge-yellow{background:rgba(210,153,34,.1);color:var(--yellow);border:1px solid rgba(210,153,34,.2)}
+.badge-accent{background:var(--accent-dim);color:var(--accent);border:1px solid var(--accent-ring)}
+
+/* ── Empty state ── */
+.empty{
+  padding:56px 24px;text-align:center;
+  display:flex;flex-direction:column;align-items:center;gap:12px;
+}
+.empty-icon{
+  width:48px;height:48px;
+  background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-lg);
+  display:flex;align-items:center;justify-content:center;color:var(--muted);
+  margin-bottom:8px;
+}
+.empty-icon svg{width:22px;height:22px}
+.empty-title{font-weight:600;font-size:var(--tx-md)}
+.empty-desc{font-size:var(--tx-sm);color:var(--muted);max-width:280px;line-height:1.6}
+
+/* ── List items (top queries etc.) ── */
+.list-item{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:9px 0;border-bottom:1px solid var(--border);
+  font-size:var(--tx-sm);line-height:1.5;
+}
+.list-item:last-child{border-bottom:none}
+.list-num{
+  font-size:var(--tx-xs);font-weight:600;color:var(--muted);
+  min-width:18px;padding-top:1px;flex-shrink:0;
+}
+
+/* ── Insight card ── */
+.insight-card{
+  background:var(--accent-dim);border:1px solid var(--accent-ring);
+  border-radius:var(--r-lg);padding:16px 20px;
+  margin-bottom:20px;
+  font-size:var(--tx-sm);line-height:1.6;color:var(--text);
+  display:flex;gap:12px;align-items:flex-start;
+}
+.insight-icon{
+  width:22px;height:22px;flex-shrink:0;margin-top:1px;
+  color:var(--accent);
+}
+.insight-icon svg{width:22px;height:22px}
+
+/* ── Rec cards ── */
+.rec-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
+.rec-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-lg);padding:20px;
+}
+.rec-card-title{font-size:var(--tx-sm);font-weight:600;margin-bottom:6px;display:flex;gap:8px;align-items:center}
+.rec-card-body{font-size:var(--tx-sm);color:var(--muted);line-height:1.6}
+.rec-icon{width:16px;height:16px;color:var(--accent);flex-shrink:0}
+.rec-icon svg{width:16px;height:16px}
+
+/* ── Checklist ── */
+.checklist{display:flex;flex-direction:column;gap:8px}
+.check-item{
+  display:flex;align-items:flex-start;gap:10px;
+  font-size:var(--tx-sm);line-height:1.5;
+}
+.check-dot{
+  width:16px;height:16px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;margin-top:2px;
+}
+.check-dot-done{background:rgba(63,185,80,.15);color:var(--green)}
+.check-dot-done svg{width:10px;height:10px}
+.check-dot-pend{background:var(--surface-2);border:1px solid var(--border)}
+
+/* ── Settings ── */
+.settings-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-lg);padding:24px;
+  max-width:480px;margin-bottom:16px;
+}
+.settings-card-title{font-size:var(--tx-sm);font-weight:600;margin-bottom:4px}
+.settings-card-sub{font-size:var(--tx-xs);color:var(--muted);margin-bottom:16px}
+.settings-row{display:flex;gap:8px;align-items:center}
+.fi{
+  flex:1;padding:9px 12px;
+  background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md);
+  color:var(--text);font-family:var(--font-body);font-size:var(--tx-sm);
+  transition:border-color .15s;
+}
+.fi:focus{outline:none;border-color:var(--accent)}
+.fi::placeholder{color:var(--muted)}
+.btn-sm{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:7px 14px;
+  font-size:var(--tx-xs);font-weight:500;
+  border-radius:var(--r-md);border:1px solid transparent;
+  transition:background .15s,color .15s,border-color .15s;
+  white-space:nowrap;line-height:1;
+}
+.btn-ghost{background:transparent;color:var(--text);border-color:var(--border)}
+.btn-ghost:hover{background:var(--surface-2)}
+.btn-primary-sm{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn-primary-sm:hover{background:var(--accent-dk);border-color:var(--accent-dk)}
+.btn-danger{background:transparent;color:var(--red);border-color:rgba(248,81,73,.3)}
+.btn-danger:hover{background:rgba(248,81,73,.08)}
+
+/* ── Heatmap ── */
+.heatmap-wrap{overflow-x:auto}
+.heatmap{display:grid;grid-template-columns:32px repeat(24,1fr);gap:2px;min-width:560px}
+.hm-label{
+  display:flex;align-items:center;justify-content:flex-end;
+  font-size:.6rem;color:var(--muted);padding-right:4px;
+}
+.hm-cell{
+  aspect-ratio:1;border-radius:2px;
+  background:var(--surface-2);
+  transition:background .2s;
+}
+.hm-cell:hover{outline:1px solid var(--accent)}
+.hm-hour-label{
+  text-align:center;font-size:.55rem;color:var(--muted);padding-bottom:2px;
+  display:flex;align-items:flex-end;justify-content:center;
+}
+
+/* ── Heatmap color scale ── */
+.hm-0{background:var(--surface-2)}
+.hm-1{background:rgba(79,152,163,.2)}
+.hm-2{background:rgba(79,152,163,.4)}
+.hm-3{background:rgba(79,152,163,.6)}
+.hm-4{background:rgba(79,152,163,.8)}
+.hm-5{background:rgba(79,152,163,1)}
+
+/* ── Error state ── */
+.error-banner{
+  padding:12px 16px;
+  background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.2);
+  border-radius:var(--r-md);
+  font-size:var(--tx-sm);color:var(--red);
+  margin-bottom:20px;
+  display:none;
+}
+.error-banner.show{display:block}
+
+/* ── Mobile ── */
+@media(max-width:768px){
+  body{flex-direction:column}
+  #sidebar{
+    width:100%;height:auto;flex-direction:row;
+    order:2;border-right:none;border-top:1px solid var(--border);
+    overflow-x:auto;overflow-y:hidden;flex-shrink:0;height:auto;
+  }
+  .db-logo,.db-side-foot{display:none}
+  .db-nav{flex-direction:row;padding:4px;gap:0;flex:1;overflow-x:auto}
+  .db-nav-item{
+    flex-direction:column;gap:3px;padding:8px 10px;min-width:60px;
+    justify-content:center;font-size:.6rem;flex:1;
+  }
+  .db-nav-item span{display:none}
+  .db-nav-item svg{width:18px;height:18px}
+  #main{order:1;flex:1;min-height:0;overflow:hidden}
+  .kpi-grid{grid-template-columns:repeat(2,1fr)}
+  .db-row{grid-template-columns:1fr}
+  #topbar{padding:0 16px}
+  #content{padding:16px}
+  .rec-grid{grid-template-columns:1fr}
+}
+@media(max-width:480px){
+  .kpi-grid{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- ── Sidebar ── -->
+<aside id="sidebar">
+  <div class="db-logo">
+    <svg width="22" height="22" viewBox="0 0 26 26" fill="none">
+      <rect width="26" height="26" rx="6" fill="#4f98a3"/>
+      <path d="M13 6.5L20.5 20H5.5L13 6.5Z" stroke="white" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+      <line x1="9.2" y1="15.5" x2="16.8" y2="15.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/>
+    </svg>
+    Advocate
+  </div>
+  <nav class="db-nav" id="db-nav">
+    <div class="db-nav-item on" data-section="overview">
+      <i data-lucide="layout-dashboard"></i><span>Overview</span>
+    </div>
+    <div class="db-nav-item" data-section="ai-requests">
+      <i data-lucide="bot"></i><span>AI Requests</span>
+    </div>
+    <div class="db-nav-item" data-section="referral-clicks">
+      <i data-lucide="mouse-pointer-click"></i><span>Referral Clicks</span>
+    </div>
+    <div class="db-nav-item" data-section="bot-activity">
+      <i data-lucide="activity"></i><span>Bot Activity</span>
+    </div>
+    <div class="db-nav-item" data-section="recommendations">
+      <i data-lucide="lightbulb"></i><span>Recommendations</span>
+    </div>
+    <div class="db-nav-item" data-section="settings">
+      <i data-lucide="settings"></i><span>Settings</span>
+    </div>
+  </nav>
+  <div class="db-side-foot">
+    <span class="db-plan-badge" id="plan-badge">Free</span>
+  </div>
+</aside>
+
+<!-- ── Main ── -->
+<div id="main">
+
+  <!-- Topbar -->
+  <div id="topbar">
+    <div class="db-crumb">
+      <span class="db-crumb-sep">/</span>
+      <span class="db-crumb-cur" id="crumb-text">Overview</span>
+    </div>
+    <button class="icon-btn" id="theme-toggle" aria-label="Toggle theme">
+      <i data-lucide="sun" id="icon-sun"></i>
+      <i data-lucide="moon" id="icon-moon" style="display:none"></i>
+    </button>
+    <div class="db-avatar" id="user-avatar" title="">?</div>
+    <button class="btn-logout" id="btn-logout">
+      <i data-lucide="log-out"></i>
+      Sign out
+    </button>
+  </div>
+
+  <!-- Content -->
+  <div id="content">
+
+    <!-- ── Overview ── -->
+    <section id="sec-overview" class="db-sec on">
+      <p class="db-sec-title">Overview</p>
+      <p class="db-sec-sub">Your Advocate dashboard — last 30 days</p>
+
+      <div class="insight-card" id="overview-insight" style="display:none">
+        <div class="insight-icon"><i data-lucide="sparkles"></i></div>
+        <span id="overview-insight-text"></span>
+      </div>
+      <div class="error-banner" id="overview-error"></div>
+
+      <div class="kpi-grid" id="kpi-grid">
+        <div class="kpi-card"><div class="kpi-label skeleton" style="height:11px;width:80px;margin-bottom:14px"></div><div class="kpi-val skeleton" style="height:30px;width:60px"></div><div class="kpi-hint skeleton" style="height:11px;width:110px;margin-top:8px"></div></div>
+        <div class="kpi-card"><div class="kpi-label skeleton" style="height:11px;width:110px;margin-bottom:14px"></div><div class="kpi-val skeleton" style="height:30px;width:70px"></div><div class="kpi-hint skeleton" style="height:11px;width:130px;margin-top:8px"></div></div>
+        <div class="kpi-card"><div class="kpi-label skeleton" style="height:11px;width:90px;margin-bottom:14px"></div><div class="kpi-val skeleton" style="height:30px;width:80px"></div><div class="kpi-hint skeleton" style="height:11px;width:100px;margin-top:8px"></div></div>
+        <div class="kpi-card"><div class="kpi-label skeleton" style="height:11px;width:120px;margin-bottom:14px"></div><div class="kpi-val skeleton" style="height:30px;width:40px"></div><div class="kpi-hint skeleton" style="height:11px;width:120px;margin-top:8px"></div></div>
+      </div>
+
+      <div class="db-row">
+        <div class="db-card">
+          <div class="db-card-title">
+            AI Requests <span class="db-card-sub">Last 30 days</span>
+          </div>
+          <div class="chart-wrap"><canvas id="chart-overview-trend"></canvas></div>
+        </div>
+        <div class="db-card">
+          <div class="db-card-title">Bot Sources</div>
+          <div class="bar-rows" id="overview-bot-bars">
+            <div class="skeleton" style="height:36px;border-radius:6px"></div>
+            <div class="skeleton" style="height:36px;border-radius:6px"></div>
+            <div class="skeleton" style="height:36px;border-radius:6px"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── AI Requests ── -->
+    <section id="sec-ai-requests" class="db-sec">
+      <p class="db-sec-title">AI Requests</p>
+      <p class="db-sec-sub">Query trends, top questions, and intent breakdown</p>
+
+      <div class="error-banner" id="ai-requests-error"></div>
+
+      <div class="db-card" style="margin-bottom:20px">
+        <div class="db-card-title">
+          Queries over time <span class="db-card-sub">Last 30 days</span>
+        </div>
+        <div class="chart-wrap-lg"><canvas id="chart-requests-trend"></canvas></div>
+      </div>
+
+      <div class="db-row">
+        <div class="db-card">
+          <div class="db-card-title">Top Queries</div>
+          <div id="top-queries-list" class="skeleton" style="height:200px;border-radius:8px"></div>
+        </div>
+        <div class="db-card">
+          <div class="db-card-title">By Intent</div>
+          <div class="bar-rows" id="intent-bars">
+            <div class="skeleton" style="height:36px;border-radius:6px"></div>
+            <div class="skeleton" style="height:36px;border-radius:6px"></div>
+            <div class="skeleton" style="height:36px;border-radius:6px"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Referral Clicks ── -->
+    <section id="sec-referral-clicks" class="db-sec">
+      <p class="db-sec-title">Referral Clicks</p>
+      <p class="db-sec-sub">Humans who clicked your link after an AI mentioned you</p>
+
+      <div class="error-banner" id="clicks-error"></div>
+
+      <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">
+        <div class="kpi-card">
+          <div class="kpi-label">Total Clicks</div>
+          <div class="kpi-val" id="kpi-clicks-total"><span class="skeleton" style="display:inline-block;height:30px;width:60px"></span></div>
+          <div class="kpi-hint">All time</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Last 30 Days</div>
+          <div class="kpi-val" id="kpi-clicks-30d"><span class="skeleton" style="display:inline-block;height:30px;width:60px"></span></div>
+          <div class="kpi-hint">Recent activity</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Click-through Rate</div>
+          <div class="kpi-val" id="kpi-ctr"><span class="skeleton" style="display:inline-block;height:30px;width:60px"></span></div>
+          <div class="kpi-hint">Clicks ÷ queries</div>
+        </div>
+      </div>
+
+      <div class="db-card">
+        <div class="db-card-title">Clicks by Bot Source</div>
+        <div class="bar-rows" id="clicks-bot-bars">
+          <div class="skeleton" style="height:36px;border-radius:6px"></div>
+          <div class="skeleton" style="height:36px;border-radius:6px"></div>
+        </div>
+      </div>
+
+      <div class="db-card" style="margin-top:12px">
+        <div class="db-card-title">About Referral Tracking</div>
+        <p style="font-size:var(--tx-sm);color:var(--muted);line-height:1.7">
+          Every time an AI like Perplexity or ChatGPT includes your business in an answer,
+          Advocate embeds a tracked link. When a user clicks that link, we record the source
+          bot, timestamp, and destination. This closes the attribution loop from AI query to
+          customer action.
+        </p>
+      </div>
+    </section>
+
+    <!-- ── Bot Activity ── -->
+    <section id="sec-bot-activity" class="db-sec">
+      <p class="db-sec-title">Bot Activity</p>
+      <p class="db-sec-sub">Which AI crawlers are querying you and when</p>
+
+      <div class="error-banner" id="bot-activity-error"></div>
+
+      <div class="db-row" style="grid-template-columns:1fr 1fr">
+        <div class="db-card">
+          <div class="db-card-title">Crawler Breakdown</div>
+          <div id="crawler-table-wrap">
+            <div class="skeleton" style="height:180px;border-radius:8px"></div>
+          </div>
+        </div>
+        <div class="db-card">
+          <div class="db-card-title">Intent Distribution</div>
+          <div class="bar-rows" id="bot-intent-bars">
+            <div class="skeleton" style="height:36px;border-radius:6px"></div>
+            <div class="skeleton" style="height:36px;border-radius:6px"></div>
+            <div class="skeleton" style="height:36px;border-radius:6px"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="db-card">
+        <div class="db-card-title">
+          Activity by Day &amp; Hour
+          <span class="db-card-sub">UTC · darker = more queries</span>
+        </div>
+        <div class="heatmap-wrap" id="heatmap-wrap">
+          <div class="skeleton" style="height:140px;border-radius:8px"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Recommendations ── -->
+    <section id="sec-recommendations" class="db-sec">
+      <p class="db-sec-title">Recommendations</p>
+      <p class="db-sec-sub">Actions to improve your AI visibility and referral rate</p>
+
+      <div class="rec-grid" id="rec-grid">
+        <div class="skeleton" style="height:120px;border-radius:12px"></div>
+        <div class="skeleton" style="height:120px;border-radius:12px"></div>
+        <div class="skeleton" style="height:120px;border-radius:12px"></div>
+        <div class="skeleton" style="height:120px;border-radius:12px"></div>
+      </div>
+
+      <div class="db-card">
+        <div class="db-card-title">Optimization Checklist</div>
+        <div class="checklist" id="checklist">
+          <div class="skeleton" style="height:20px;border-radius:4px"></div>
+          <div class="skeleton" style="height:20px;border-radius:4px;margin-top:8px"></div>
+          <div class="skeleton" style="height:20px;border-radius:4px;margin-top:8px"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Settings ── -->
+    <section id="sec-settings" class="db-sec">
+      <p class="db-sec-title">Settings</p>
+      <p class="db-sec-sub">Your account and API configuration</p>
+
+      <div class="error-banner" id="settings-error"></div>
+
+      <div class="settings-card">
+        <div class="settings-card-title">Account</div>
+        <div class="settings-card-sub">Your Advocate account details</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;justify-content:space-between;font-size:var(--tx-sm)">
+            <span style="color:var(--muted)">Email</span>
+            <span id="settings-email"><span class="skeleton" style="display:inline-block;height:14px;width:160px"></span></span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:var(--tx-sm)">
+            <span style="color:var(--muted)">Business slug</span>
+            <span id="settings-slug" style="font-family:var(--font-mono);font-size:var(--tx-xs)"><span class="skeleton" style="display:inline-block;height:14px;width:120px"></span></span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:var(--tx-sm)">
+            <span style="color:var(--muted)">Plan</span>
+            <span id="settings-plan"><span class="skeleton" style="display:inline-block;height:14px;width:60px"></span></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-title">API Key</div>
+        <div class="settings-card-sub">
+          Your API key is configured. Use Rotate to generate a new one —
+          your old key stops working immediately.
+        </div>
+        <div class="settings-row">
+          <input type="password" class="fi" id="new-key-display"
+                 value="••••••••••••••••••••••••"
+                 readonly style="font-family:var(--font-mono);font-size:var(--tx-xs)" />
+          <button class="btn-sm btn-ghost" id="copy-new-key" style="display:none">Copy</button>
+          <button class="btn-sm btn-ghost" id="btn-rotate-key">Rotate</button>
+        </div>
+        <div style="margin-top:8px;font-size:var(--tx-xs);color:var(--muted)" id="rotate-status"></div>
+      </div>
+    </section>
+
+  </div><!-- #content -->
+</div><!-- #main -->
+
+<script src="/js/dashboard-auth.js"></script>
+<script src="/js/dashboard-overview.js"></script>
+<script src="/js/dashboard-requests.js"></script>
+<script src="/js/dashboard-clicks.js"></script>
+<script src="/js/dashboard-bots.js"></script>
+<script src="/js/dashboard-recs.js"></script>
+<script src="/js/dashboard-settings.js"></script>
+<script>
+/* ── Dashboard shell: auth gate, nav, theme, section routing ── */
+(function () {
+  'use strict';
+
+  var SECTION_LABELS = {
+    'overview':          'Overview',
+    'ai-requests':       'AI Requests',
+    'referral-clicks':   'Referral Clicks',
+    'bot-activity':      'Bot Activity',
+    'recommendations':   'Recommendations',
+    'settings':          'Settings',
+  };
+
+  var currentSection = 'overview';
+
+  /* ── Nav switching ── */
+  function showSection(name) {
+    if (!SECTION_LABELS[name]) return;
+    currentSection = name;
+
+    document.querySelectorAll('.db-nav-item').forEach(function (el) {
+      el.classList.toggle('on', el.dataset.section === name);
+    });
+    document.querySelectorAll('.db-sec').forEach(function (el) {
+      el.classList.remove('on');
+    });
+    var sec = document.getElementById('sec-' + name);
+    if (sec) sec.classList.add('on');
+
+    document.getElementById('crumb-text').textContent = SECTION_LABELS[name];
+  }
+
+  document.getElementById('db-nav').addEventListener('click', function (e) {
+    var item = e.target.closest('.db-nav-item');
+    if (!item) return;
+    showSection(item.dataset.section);
+    /* Trigger section data load if available */
+    if (window.AMCP_SECTIONS && window.AMCP_SECTIONS[item.dataset.section]) {
+      window.AMCP_SECTIONS[item.dataset.section]();
+    }
+  });
+
+  /* ── Theme toggle ── */
+  function applyTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    document.getElementById('icon-sun').style.display  = t === 'dark'  ? '' : 'none';
+    document.getElementById('icon-moon').style.display = t === 'light' ? '' : 'none';
+  }
+  var savedTheme = localStorage.getItem('amcp-theme') || 'dark';
+  applyTheme(savedTheme);
+  document.getElementById('theme-toggle').addEventListener('click', function () {
+    var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    localStorage.setItem('amcp-theme', next);
+  });
+
+  /* ── Logout ── */
+  document.getElementById('btn-logout').addEventListener('click', function () {
+    window.AMCP.logout();
+  });
+
+  /* ── Auth gate + bootstrap ── */
+  window.AMCP_SECTIONS = {};  // section modules register load callbacks here
+
+  window.AMCP.requireAuth().then(function (ok) {
+    if (!ok) return; // requireAuth already redirected
+
+    lucide.createIcons();
+
+    /* Load user info for avatar + settings */
+    window.AMCP.authedFetch('/api/client/me')
+      .then(function (r) { return r.json(); })
+      .then(function (user) {
+        var initials = (user.full_name || user.email || '?')
+          .split(' ').map(function (w) { return w[0]; }).join('').slice(0, 2).toUpperCase();
+        document.getElementById('user-avatar').textContent = initials;
+        document.getElementById('user-avatar').title = user.full_name || user.email || '';
+
+        /* Pass user data to settings section if it registered */
+        if (window.AMCP_SECTIONS.onUserLoaded) {
+          window.AMCP_SECTIONS.onUserLoaded(user);
+        }
+      })
+      .catch(function () { /* non-fatal */ });
+
+    /* Load metrics then trigger the initial section render */
+    window.AMCP.authedFetch('/api/client/metrics')
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        /* Expose to all section modules */
+        window.AMCP_DATA = data;
+
+        /* Trigger initial section */
+        if (window.AMCP_SECTIONS[currentSection]) {
+          window.AMCP_SECTIONS[currentSection]();
+        }
+
+        /* Update plan badge from slug when data is available */
+        if (data.slug) {
+          var slugEl = document.getElementById('settings-slug');
+          if (slugEl) slugEl.textContent = data.slug;
+        }
+      })
+      .catch(function (err) {
+        console.error('metrics fetch failed', err);
+      });
+  });
+})();
+</script>
+</body>
+</html>
