@@ -36,7 +36,8 @@ import {
   type ActivateFailReason,
 } from "./domains";
 import { withCors } from "../lib/cors";
-import { getActivationRecord } from "../portalDb";
+import { getActivationRecord, updateActivationStatus } from "../portalDb";
+import { sendActivationEmail } from "../lib/resend";
 
 // ── Customer message catalog ─────────────────────────────────────────────────
 // Every customer-facing string that can appear in an /api/activate response.
@@ -398,5 +399,115 @@ export async function handleGetActivation(
       activation_issued_at: record.issued_at,
     }, null, 2),
     { status: 200, headers: { "Content-Type": "application/json" } },
+  );
+}
+
+// ── POST /admin/businesses/:slug/resend-activation ───────────────────────
+//
+// Operator backstop for failed or missed activation emails. Reads the
+// stored activation token from D1, sends (or re-sends) the email via
+// Resend, and updates activation_status to 'sent' on success. Requires
+// the customer email address in the JSON body because D1's businesses
+// table does not store email.
+//
+// Response shape:
+//   200 { ok, email_id, slug, email }  — email sent successfully
+//   400 { error }   — bad body, missing email, or no token minted yet
+//   401 { error }   — X-Admin-Secret missing or invalid
+//   404 { error }   — slug does not exist in the businesses table
+//   405 { error }   — method not POST
+//   500 { error }   — RESEND_API_KEY missing or Resend API failure
+
+export async function handleResendActivation(
+  request: Request,
+  env: Env,
+  slug: string,
+): Promise<Response> {
+  if (request.method !== "POST") {
+    return new Response(
+      JSON.stringify({ error: "Method not allowed" }),
+      { status: 405, headers: { "Content-Type": "application/json" } },
+    );
+  }
+  if (!requireAdminSecret(request, env)) {
+    return new Response(
+      JSON.stringify({ error: "Unauthorized — X-Admin-Secret header required" }),
+      { status: 401, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  // Parse body — expect { "email": "customer@example.com" }
+  let body: Record<string, unknown>;
+  try {
+    body = (await request.json()) as Record<string, unknown>;
+  } catch {
+    return new Response(
+      JSON.stringify({ error: "Request body must be valid JSON" }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
+  const email = typeof body.email === "string" ? body.email.trim() : "";
+  if (!email) {
+    return new Response(
+      JSON.stringify({ error: "Missing required field: email (string)" }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  // Look up activation record
+  const record = await getActivationRecord(env.DB, slug);
+  if (record === null) {
+    return new Response(
+      JSON.stringify({ error: `No business found for slug '${slug}'` }),
+      { status: 404, headers: { "Content-Type": "application/json" } },
+    );
+  }
+  if (!record.token) {
+    return new Response(
+      JSON.stringify({
+        error: "No activation token has been minted for this business yet — wait for the Stripe webhook to fire first",
+      }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  // Check RESEND_API_KEY
+  if (!env.RESEND_API_KEY) {
+    return new Response(
+      JSON.stringify({ error: "RESEND_API_KEY is not configured" }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  // Send the email
+  const activateUrl = `https://customers.advocatemcp.com/activate?t=${encodeURIComponent(record.token)}`;
+  const result = await sendActivationEmail(env.RESEND_API_KEY, email, activateUrl);
+
+  if (result.ok) {
+    await updateActivationStatus(env.DB, slug, "sent");
+    console.log(JSON.stringify({
+      admin: true,
+      event: "admin_resend_activation_sent",
+      slug,
+      email_to_length: email.length,
+      email_id: result.id,
+    }));
+    return new Response(
+      JSON.stringify({ ok: true, email_id: result.id, slug, email }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  console.warn(JSON.stringify({
+    admin: true,
+    event: "admin_resend_activation_failed",
+    slug,
+    email_to_length: email.length,
+    error: result.error,
+    retryable: result.retryable,
+  }));
+  return new Response(
+    JSON.stringify({ error: result.error, retryable: result.retryable, slug }),
+    { status: 500, headers: { "Content-Type": "application/json" } },
   );
 }

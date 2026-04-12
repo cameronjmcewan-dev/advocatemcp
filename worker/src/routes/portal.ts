@@ -21,7 +21,7 @@ import {
 } from "./onboard";
 import { handleOnboardPage } from "./onboardPage";
 import { handleActivatePage } from "./activatePage";
-import { handleActivate, handleActivationToken, handleGetActivation } from "./activate";
+import { handleActivate, handleActivationToken, handleGetActivation, handleResendActivation } from "./activate";
 import {
   getSessionFromRequest,
   handleAuthLogin,
@@ -131,6 +131,14 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   const activationMatch = pathname.match(/^\/admin\/businesses\/([^/]+)\/activation$/);
   if (activationMatch && method === "GET") {
     return handleGetActivation(request, env, activationMatch[1]);
+  }
+
+  // POST /admin/businesses/:slug/resend-activation (Phase F Part 2 —
+  // operator backstop to re-send the activation email if the webhook's
+  // automatic send failed or was missed).
+  const resendMatch = pathname.match(/^\/admin\/businesses\/([^/]+)\/resend-activation$/);
+  if (resendMatch && method === "POST") {
+    return handleResendActivation(request, env, resendMatch[1]);
   }
 
   return null;

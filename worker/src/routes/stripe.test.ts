@@ -52,12 +52,20 @@ vi.mock("../lib/activation-token", () => ({
   ),
 }));
 
+vi.mock("../lib/resend", () => ({
+  sendActivationEmail: vi.fn(
+    async () => ({ ok: true, id: "email_mock_123", retryable: false }),
+  ),
+}));
+
 import { provisionActivationToken } from "./stripe";
-import { handleGetActivation } from "./activate";
+import { handleGetActivation, handleResendActivation } from "./activate";
 import { signActivationToken } from "../lib/activation-token";
+import { sendActivationEmail } from "../lib/resend";
 import type { Env } from "../types";
 
 const mockedSign = vi.mocked(signActivationToken);
+const mockedSend = vi.mocked(sendActivationEmail);
 
 // ── Minimal fake D1 — just enough of the D1Database shape to cover
 // the two SQL statements the helpers emit. Keyed by slug. Each row
@@ -114,6 +122,8 @@ function createFakeDb(
               // looking for the key fragments. This makes the fake
               // robust against formatting changes in the real query.
               const normalized = sql.replace(/\s+/g, " ").trim();
+
+              // setActivationTokenIfMissing — atomic mint
               if (
                 normalized.startsWith("UPDATE businesses") &&
                 normalized.includes("SET activation_token") &&
@@ -132,6 +142,19 @@ function createFakeDb(
                 row.activation_issued_at = issuedAt;
                 return { meta: { changes: 1 } };
               }
+
+              // updateActivationStatus — unconditional status flip
+              if (
+                normalized.startsWith("UPDATE businesses") &&
+                normalized.includes("SET activation_status") &&
+                !normalized.includes("activation_token IS NULL")
+              ) {
+                const [status, slug] = params as [string, string];
+                const row = table.get(slug);
+                if (row) row.activation_status = status;
+                return { meta: { changes: row ? 1 : 0 } };
+              }
+
               return { meta: { changes: 0 } };
             },
           };
@@ -148,9 +171,8 @@ function makeEnv(db: D1Database, overrides: Partial<Env> = {}): Env {
     DB: db,
     ACTIVATION_SIGNING_KEY: "test-phase-f-key",
     ADMIN_SECRET: "test-admin-secret",
-    // The rest of the Env interface is irrelevant to these tests —
-    // stripe.ts provisionActivationToken only touches DB + ACTIVATION_SIGNING_KEY
-    // and handleGetActivation only touches DB + ADMIN_SECRET.
+    RESEND_API_KEY: "test-phase-f-key",
+    ...overrides,
   } as unknown as Env;
 }
 
@@ -159,6 +181,7 @@ function makeEnv(db: D1Database, overrides: Partial<Env> = {}): Env {
 describe("provisionActivationToken (Phase F Part 1)", () => {
   beforeEach(() => {
     mockedSign.mockClear();
+    mockedSend.mockClear();
   });
 
   it("first call mints a token and returns 'minted'", async () => {
@@ -347,5 +370,227 @@ describe("handleGetActivation (GET /admin/businesses/:slug/activation)", () => {
     expect(response.status).toBe(404);
     const body = (await response.json()) as Record<string, unknown>;
     expect(body.error).toContain("ghost-slug");
+  });
+});
+
+// ── handleResendActivation tests ─────────────────────────────────────────
+
+describe("handleResendActivation (POST /admin/businesses/:slug/resend-activation)", () => {
+  function makeRequest(
+    secret?: string,
+    body?: unknown,
+    method = "POST",
+  ): Request {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (secret !== undefined) headers["X-Admin-Secret"] = secret;
+    return new Request(
+      "https://customers.advocatemcp.com/admin/businesses/test-biz/resend-activation",
+      {
+        method,
+        headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      },
+    );
+  }
+
+  beforeEach(() => {
+    mockedSend.mockClear();
+    // Default: successful send
+    mockedSend.mockResolvedValue({ ok: true, id: "email_resend_test", retryable: false });
+  });
+
+  it("returns 405 for non-POST method", async () => {
+    const { db } = createFakeDb({ "test-biz": { activation_token: "tok" } });
+    const env = makeEnv(db);
+
+    // GET requests cannot have a body — construct directly without the helper
+    const response = await handleResendActivation(
+      new Request(
+        "https://customers.advocatemcp.com/admin/businesses/test-biz/resend-activation",
+        { method: "GET", headers: { "X-Admin-Secret": "test-admin-secret" } },
+      ),
+      env,
+      "test-biz",
+    );
+
+    expect(response.status).toBe(405);
+  });
+
+  it("returns 401 when X-Admin-Secret is missing", async () => {
+    const { db } = createFakeDb({ "test-biz": {} });
+    const env = makeEnv(db);
+
+    const response = await handleResendActivation(
+      makeRequest(undefined, { email: "a@b.com" }),
+      env,
+      "test-biz",
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  it("returns 401 when X-Admin-Secret is wrong", async () => {
+    const { db } = createFakeDb({ "test-biz": {} });
+    const env = makeEnv(db);
+
+    const response = await handleResendActivation(
+      makeRequest("wrong-secret", { email: "a@b.com" }),
+      env,
+      "test-biz",
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  it("returns 404 when slug does not exist", async () => {
+    const { db } = createFakeDb({});
+    const env = makeEnv(db);
+
+    const response = await handleResendActivation(
+      makeRequest("test-admin-secret", { email: "a@b.com" }),
+      env,
+      "ghost-slug",
+    );
+
+    expect(response.status).toBe(404);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body.error).toContain("ghost-slug");
+  });
+
+  it("returns 400 when no activation token has been minted yet", async () => {
+    const { db } = createFakeDb({ "test-biz": { activation_token: null } });
+    const env = makeEnv(db);
+
+    const response = await handleResendActivation(
+      makeRequest("test-admin-secret", { email: "a@b.com" }),
+      env,
+      "test-biz",
+    );
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body.error).toContain("wait for the Stripe webhook");
+  });
+
+  it("returns 500 when RESEND_API_KEY is not configured", async () => {
+    const { db } = createFakeDb({
+      "test-biz": { activation_token: "tok", activation_status: "pending_send" },
+    });
+    const env = makeEnv(db);
+    delete (env as { RESEND_API_KEY?: string }).RESEND_API_KEY;
+
+    const response = await handleResendActivation(
+      makeRequest("test-admin-secret", { email: "a@b.com" }),
+      env,
+      "test-biz",
+    );
+
+    expect(response.status).toBe(500);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body.error).toContain("RESEND_API_KEY");
+    expect(mockedSend).not.toHaveBeenCalled();
+  });
+
+  it("returns 200 and updates status to 'sent' on successful send", async () => {
+    const { db, rows } = createFakeDb({
+      "test-biz": { activation_token: "mock-tok-123", activation_status: "pending_send" },
+    });
+    const env = makeEnv(db);
+
+    const response = await handleResendActivation(
+      makeRequest("test-admin-secret", { email: "customer@example.com" }),
+      env,
+      "test-biz",
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(body.email_id).toBe("email_resend_test");
+    expect(body.slug).toBe("test-biz");
+    expect(body.email).toBe("customer@example.com");
+
+    // Status should be updated to 'sent'
+    expect(rows.get("test-biz")?.activation_status).toBe("sent");
+
+    // Verify sendActivationEmail was called with the right args
+    expect(mockedSend).toHaveBeenCalledTimes(1);
+    const callArgs = mockedSend.mock.calls[0];
+    expect(callArgs[0]).toBe("test-phase-f-key"); // RESEND_API_KEY in makeEnv
+    expect(callArgs[1]).toBe("customer@example.com");
+    expect(callArgs[2]).toContain("mock-tok-123");
+  });
+
+  it("returns 500 and does NOT update status on Resend failure", async () => {
+    mockedSend.mockResolvedValueOnce({
+      ok: false,
+      error: "Resend API 422: Invalid email address",
+      retryable: false,
+    });
+
+    const { db, rows } = createFakeDb({
+      "test-biz": { activation_token: "mock-tok-123", activation_status: "pending_send" },
+    });
+    const env = makeEnv(db);
+
+    const response = await handleResendActivation(
+      makeRequest("test-admin-secret", { email: "bad@" }),
+      env,
+      "test-biz",
+    );
+
+    expect(response.status).toBe(500);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body.error).toContain("Invalid email address");
+    expect(body.retryable).toBe(false);
+
+    // Status must NOT have changed
+    expect(rows.get("test-biz")?.activation_status).toBe("pending_send");
+  });
+
+  it("returns 400 for malformed JSON body", async () => {
+    const { db } = createFakeDb({
+      "test-biz": { activation_token: "tok" },
+    });
+    const env = makeEnv(db);
+
+    const response = await handleResendActivation(
+      new Request(
+        "https://customers.advocatemcp.com/admin/businesses/test-biz/resend-activation",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Admin-Secret": "test-admin-secret",
+          },
+          body: "not valid json{{{",
+        },
+      ),
+      env,
+      "test-biz",
+    );
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body.error).toContain("valid JSON");
+  });
+
+  it("returns 400 when email field is missing from body", async () => {
+    const { db } = createFakeDb({
+      "test-biz": { activation_token: "tok" },
+    });
+    const env = makeEnv(db);
+
+    const response = await handleResendActivation(
+      makeRequest("test-admin-secret", { name: "not email" }),
+      env,
+      "test-biz",
+    );
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body.error).toContain("email");
   });
 });
