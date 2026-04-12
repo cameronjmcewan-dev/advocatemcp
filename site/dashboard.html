@@ -793,7 +793,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
   });
 
   /* ── Auth gate + bootstrap ── */
-  window.AMCP_SECTIONS = {};  // section modules register load callbacks here
+  window.AMCP_SECTIONS = window.AMCP_SECTIONS || {};  // preserve registrations from section modules loaded above
 
   window.AMCP.requireAuth().then(function (ok) {
     if (!ok) return; // requireAuth already redirected
