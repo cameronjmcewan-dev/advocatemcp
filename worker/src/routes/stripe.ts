@@ -1023,7 +1023,9 @@ export async function handleStripeWebhook(
           }));
         } else {
           const activateUrl = `https://customers.advocatemcp.com/activate?t=${encodeURIComponent(record.token)}`;
-          const sendResult = await sendActivationEmail(env.RESEND_API_KEY, tenant.email, activateUrl);
+          const emailTenantType = tenant.skipDns === true ? "hosted" as const : "dns" as const;
+          const emailHostedUrl = tenant.skipDns === true ? `https://${tenant.slug}.hosted.advocatemcp.com` : undefined;
+          const sendResult = await sendActivationEmail(env.RESEND_API_KEY, tenant.email, activateUrl, emailTenantType, emailHostedUrl);
 
           if (sendResult.ok) {
             await updateActivationStatus(env.DB, tenant.slug, "sent");

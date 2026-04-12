@@ -102,4 +102,36 @@ describe("sendActivationEmail", () => {
     expect(headers["Authorization"]).toBe(`Bearer ${TEST_KEY}`);
     expect(headers["Content-Type"]).toBe("application/json");
   });
+
+  // 7. Hosted template includes the hosted URL and "Set your password" copy
+  it("uses the hosted template when tenantType is 'hosted'", async () => {
+    mockFetch(200, { id: "email_hosted_1" });
+    const hostedUrl = "https://test-biz.hosted.advocatemcp.com";
+    await sendActivationEmail(TEST_KEY, TEST_TO, TEST_URL, "hosted", hostedUrl);
+
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
+    const reqInit = fetchCall[1] as RequestInit;
+    const body = JSON.parse(reqInit.body as string) as { html: string };
+
+    expect(body.html).toContain(hostedUrl);
+    expect(body.html).toContain("Set your password");
+    expect(body.html).toContain("live on AI search");
+    // Should NOT contain the DNS-specific copy
+    expect(body.html).not.toContain("point your domain at our worker");
+  });
+
+  // 8. DNS template does NOT include hosted URL copy
+  it("uses the DNS template when tenantType is 'dns'", async () => {
+    mockFetch(200, { id: "email_dns_1" });
+    await sendActivationEmail(TEST_KEY, TEST_TO, TEST_URL, "dns");
+
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
+    const reqInit = fetchCall[1] as RequestInit;
+    const body = JSON.parse(reqInit.body as string) as { html: string };
+
+    expect(body.html).toContain("point your domain at our worker");
+    expect(body.html).toContain("Activate your account");
+    // Should NOT contain the hosted-specific copy
+    expect(body.html).not.toContain("live on AI search");
+  });
 });

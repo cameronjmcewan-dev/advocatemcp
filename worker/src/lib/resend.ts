@@ -36,11 +36,29 @@ const SEND_TIMEOUT_MS = 10_000;
 
 // ── Email template ──────────────────────────────────────────────────────────
 
-function buildActivationEmailHtml(activateUrl: string): string {
-  // Inline styles only — no CSS classes, no external images, no JS.
-  // Table-based button for email client compatibility (Gmail, Outlook,
-  // Apple Mail, mobile). Brand colors: #4f98a3 accent teal, #171614
-  // dark, #e8e6e3 warm off-white text.
+function buildDnsEmailHtml(activateUrl: string): string {
+  // DNS tenant template — asks the customer to point their domain.
+  return emailShell(`
+        <p style="margin:0 0 16px">Thanks for joining AdvocateMCP.</p>
+        <p style="margin:0 0 24px">You're one step away from being recommended by every AI. Click below to set your password, point your domain at our worker, and start showing up in AI-generated recommendations.</p>
+        ${emailButton(activateUrl, "Activate your account")}
+        <p style="margin:0 0 16px;font-size:13px;color:#6b7280">This link expires in 7 days. If it's expired when you click it, reply to this email and we'll send a fresh one.</p>
+        <p style="margin:0;font-size:13px;color:#6b7280">Reply to this email if you need help — Cameron.</p>`);
+}
+
+function buildHostedEmailHtml(activateUrl: string, hostedUrl: string): string {
+  // Hosted tenant template — no domain setup, just password + dashboard.
+  return emailShell(`
+        <p style="margin:0 0 16px">Thanks for joining AdvocateMCP.</p>
+        <p style="margin:0 0 16px">Your business is live on AI search at <a href="${escAttr(hostedUrl)}" style="color:#4f98a3;text-decoration:none;font-weight:600">${escAttr(hostedUrl)}</a>.</p>
+        <p style="margin:0 0 24px">Click below to set your password and access your dashboard.</p>
+        ${emailButton(activateUrl, "Set your password")}
+        <p style="margin:0 0 16px;font-size:13px;color:#6b7280">This link expires in 7 days. If it's expired when you click it, reply to this email and we'll send a fresh one.</p>
+        <p style="margin:0;font-size:13px;color:#6b7280">Reply to this email if you need help — Cameron.</p>`);
+}
+
+// Shared email shell — inline styles, table-based layout, brand colors.
+function emailShell(bodyContent: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"></head>
@@ -50,13 +68,7 @@ function buildActivationEmailHtml(activateUrl: string): string {
     <table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;border:1px solid #e5e7eb;padding:40px 36px">
       <tr><td style="font-size:14px;color:#374151;line-height:1.7">
         <div style="font-weight:700;font-size:16px;color:#111827;margin-bottom:20px">AdvocateMCP</div>
-        <p style="margin:0 0 16px">Thanks for joining AdvocateMCP.</p>
-        <p style="margin:0 0 24px">You're one step away from being recommended by every AI. Click below to set your password, point your domain at our worker, and start showing up in AI-generated recommendations.</p>
-        <table cellpadding="0" cellspacing="0" style="margin:0 auto 24px"><tr><td align="center" style="background:#4f98a3;border-radius:6px">
-          <a href="${escAttr(activateUrl)}" style="display:inline-block;padding:12px 28px;color:#ffffff;font-weight:600;font-size:14px;text-decoration:none;border-radius:6px">Activate your account</a>
-        </td></tr></table>
-        <p style="margin:0 0 16px;font-size:13px;color:#6b7280">This link expires in 7 days. If it's expired when you click it, reply to this email and we'll send a fresh one.</p>
-        <p style="margin:0;font-size:13px;color:#6b7280">Reply to this email if you need help — Cameron.</p>
+${bodyContent}
       </td></tr>
     </table>
     <p style="font-size:11px;color:#9ca3af;margin-top:16px;text-align:center">&copy; 2026 AdvocateMCP. All rights reserved.</p>
@@ -64,6 +76,12 @@ function buildActivationEmailHtml(activateUrl: string): string {
 </table>
 </body>
 </html>`;
+}
+
+function emailButton(url: string, label: string): string {
+  return `<table cellpadding="0" cellspacing="0" style="margin:0 auto 24px"><tr><td align="center" style="background:#4f98a3;border-radius:6px">
+          <a href="${escAttr(url)}" style="display:inline-block;padding:12px 28px;color:#ffffff;font-weight:600;font-size:14px;text-decoration:none;border-radius:6px">${escAttr(label)}</a>
+        </td></tr></table>`;
 }
 
 /** Escape a string for safe use inside an HTML attribute value. */
@@ -76,16 +94,25 @@ function escAttr(s: string): string {
 /**
  * Send the activation email via Resend.
  *
- * @param apiKey  Resend API key (env.RESEND_API_KEY).
- * @param to      Recipient email address.
- * @param activateUrl  The full activation URL including the signed token.
+ * @param apiKey      Resend API key (env.RESEND_API_KEY).
+ * @param to          Recipient email address.
+ * @param activateUrl The full activation URL including the signed token.
+ * @param tenantType  'hosted' or 'dns' — determines which email template.
+ * @param hostedUrl   The hosted tenant URL (e.g. https://slug.hosted.advocatemcp.com).
+ *                    Required when tenantType is 'hosted', ignored otherwise.
  * @returns A result object — callers check `ok` and decide what to do.
  */
 export async function sendActivationEmail(
   apiKey: string,
   to: string,
   activateUrl: string,
+  tenantType: "hosted" | "dns" = "dns",
+  hostedUrl?: string,
 ): Promise<SendResult> {
+  const html = tenantType === "hosted" && hostedUrl
+    ? buildHostedEmailHtml(activateUrl, hostedUrl)
+    : buildDnsEmailHtml(activateUrl);
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
 
@@ -101,7 +128,7 @@ export async function sendActivationEmail(
         from:    FROM_ADDRESS,
         to:      [to],
         subject: "Welcome to AdvocateMCP \u2014 let\u2019s get you live",
-        html:    buildActivationEmailHtml(activateUrl),
+        html,
       }),
     });
 

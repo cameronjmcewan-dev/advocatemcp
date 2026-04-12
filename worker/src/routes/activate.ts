@@ -500,9 +500,15 @@ export async function handleResendActivation(
     );
   }
 
+  // Determine tenant type for email template branching
+  const biz = await getBusinessBySlug(env.DB, slug);
+  const isHosted = biz?.domain?.endsWith(".hosted.advocatemcp.com") === true;
+  const emailTenantType = isHosted ? "hosted" as const : "dns" as const;
+  const emailHostedUrl = isHosted ? `https://${slug}.hosted.advocatemcp.com` : undefined;
+
   // Send the email
   const activateUrl = `https://customers.advocatemcp.com/activate?t=${encodeURIComponent(record.token)}`;
-  const result = await sendActivationEmail(env.RESEND_API_KEY, email, activateUrl);
+  const result = await sendActivationEmail(env.RESEND_API_KEY, email, activateUrl, emailTenantType, emailHostedUrl);
 
   if (result.ok) {
     await updateActivationStatus(env.DB, slug, "sent");
