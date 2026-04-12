@@ -113,14 +113,32 @@
     }).join('');
   }
 
+  var EMPTY_MSG =
+    '<div class="empty" style="padding:24px 0">' +
+      '<div class="empty-title">No requests yet</div>' +
+      '<div class="empty-desc">AI crawlers will start logging requests here once your site is activated.</div>' +
+    '</div>';
+
+  function showEmptyState() {
+    var canvas = document.getElementById('chart-requests-trend');
+    if (canvas && canvas.parentNode) canvas.parentNode.innerHTML = EMPTY_MSG;
+
+    var queries = document.getElementById('top-queries-list');
+    if (queries) queries.innerHTML =
+      '<div class="empty-desc" style="font-size:var(--tx-sm);color:var(--muted);padding:12px 0">No queries recorded yet</div>';
+
+    var intents = document.getElementById('intent-bars');
+    if (intents) intents.innerHTML =
+      '<div class="empty-desc" style="font-size:var(--tx-sm);color:var(--muted)">No intent data yet</div>';
+  }
+
   function render() {
     if (rendered) return;
     var data = window.AMCP_DATA;
     if (!data) return;
 
     if (typeof data.total_queries !== 'number') {
-      var err = document.getElementById('ai-requests-error');
-      if (err) { err.textContent = data.message || 'No data available yet.'; err.classList.add('show'); }
+      showEmptyState();
       rendered = true;
       return;
     }

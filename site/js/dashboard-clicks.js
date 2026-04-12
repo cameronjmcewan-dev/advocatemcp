@@ -36,14 +36,26 @@
     if (el) el.textContent = val;
   }
 
+  function showEmptyState() {
+    setText('kpi-clicks-total', '0');
+    setText('kpi-clicks-30d',   '0');
+    setText('kpi-ctr',          '0%');
+
+    var wrap = document.getElementById('clicks-bot-bars');
+    if (wrap) wrap.innerHTML =
+      '<div class="empty" style="padding:24px 0">' +
+        '<div class="empty-title">No clicks yet</div>' +
+        '<div class="empty-desc">Clicks from AI citations back to your site will appear here once traffic starts.</div>' +
+      '</div>';
+  }
+
   function render() {
     if (rendered) return;
     var data = window.AMCP_DATA;
     if (!data) return;
 
     if (typeof data.total_queries !== 'number') {
-      var err = document.getElementById('clicks-error');
-      if (err) { err.textContent = data.message || 'No data available yet.'; err.classList.add('show'); }
+      showEmptyState();
       rendered = true;
       return;
     }

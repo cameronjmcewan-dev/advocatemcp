@@ -166,8 +166,20 @@
       kpiCard('Referral Clicks', '0', 'No clicks yet') +
       kpiCard('Top Bot', '—', 'Waiting for traffic') +
       kpiCard('Top Intent', '—', 'Waiting for traffic');
+
+    /* Replace trend chart canvas with empty-state message */
+    var canvas = document.getElementById('chart-overview-trend');
+    if (canvas && canvas.parentNode) {
+      canvas.parentNode.innerHTML =
+        '<div class="empty" style="padding:24px 0">' +
+          '<div class="empty-title">No activity yet</div>' +
+          '<div class="empty-desc">AI crawlers haven\'t visited your site during this window. Once you\'re live, traffic data will appear here.</div>' +
+        '</div>';
+    }
+
     var bars = document.getElementById('overview-bot-bars');
-    if (bars) bars.innerHTML = '<div class="empty-desc" style="font-size:var(--tx-sm);color:var(--muted);padding:8px 0">No bot traffic yet</div>';
+    if (bars) bars.innerHTML =
+      '<div class="empty-desc" style="font-size:var(--tx-sm);color:var(--muted);padding:8px 0">No bot traffic yet</div>';
   }
 
   function render() {

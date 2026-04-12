@@ -140,14 +140,32 @@
     wrap.innerHTML = '<div class="heatmap">' + hourLabels + dayRows + '</div>';
   }
 
+  function showEmptyState() {
+    var emptyHtml =
+      '<div class="empty" style="padding:24px 0">' +
+        '<div class="empty-title">No bot activity yet</div>' +
+        '<div class="empty-desc">Crawler visits will appear here once AI platforms start indexing your content.</div>' +
+      '</div>';
+
+    var table = document.getElementById('crawler-table-wrap');
+    if (table) table.innerHTML = emptyHtml;
+
+    var intents = document.getElementById('bot-intent-bars');
+    if (intents) intents.innerHTML =
+      '<div class="empty-desc" style="font-size:var(--tx-sm);color:var(--muted)">No intent data yet</div>';
+
+    var heatmap = document.getElementById('heatmap-wrap');
+    if (heatmap) heatmap.innerHTML =
+      '<div class="empty-desc" style="font-size:var(--tx-sm);color:var(--muted);padding:12px 0">No activity data yet</div>';
+  }
+
   function render() {
     if (rendered) return;
     var data = window.AMCP_DATA;
     if (!data) return;
 
     if (typeof data.total_queries !== 'number') {
-      var err = document.getElementById('bot-activity-error');
-      if (err) { err.textContent = data.message || 'No data available yet.'; err.classList.add('show'); }
+      showEmptyState();
       rendered = true;
       return;
     }
