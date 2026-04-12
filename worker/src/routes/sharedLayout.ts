@@ -108,7 +108,7 @@ export function renderHeader(opts: HeaderOptions = {}): string {
   const cls = (name: string) => (activeNav === name ? ' class="active"' : "");
   const cta = showCta ? `<a href="/onboard" class="btn-sm">Get Started →</a>` : "";
   return `<header class="hdr">
-  <a href="/demo" class="logo"><div class="logo-icon">A</div>AdvocateMCP</a>
+  <a href="/" class="logo"><div class="logo-icon">A</div>AdvocateMCP</a>
   ${subHtml}
   <nav class="hdr-nav">
     <a href="/demo"${cls("demo")}>Demo</a>
