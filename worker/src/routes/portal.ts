@@ -81,13 +81,16 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/auth/refresh" && method === "POST")    return handleAuthRefresh(request, env);
 
   // ── Phase C CORS preflight for the existing /api/client/* endpoints ────
-  // The POST/GET handlers are updated below to wrap their responses with
-  // withCors. OPTIONS preflights need matching treatment so browsers
-  // accept the subsequent Bearer-authenticated request.
-  if (pathname === "/api/client/me"         && method === "OPTIONS") return handleCorsPreflight(request);
-  if (pathname === "/api/client/metrics"    && method === "OPTIONS") return handleCorsPreflight(request);
-  if (pathname === "/api/client/activity"   && method === "OPTIONS") return handleCorsPreflight(request);
-  if (pathname === "/api/client/rotate-key" && method === "OPTIONS") return handleCorsPreflight(request);
+  // credentials: true is required because the dashboard frontend at
+  // advocatemcp.com sends credentials: 'include' on every fetch so
+  // the refresh cookie can flow cross-origin. Without the flag the
+  // browser rejects the preflight with: "The value of the
+  // 'Access-Control-Allow-Credentials' header in the response is ''
+  // which must be 'true'".
+  if (pathname === "/api/client/me"         && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/metrics"    && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/activity"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/rotate-key" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
 
   // ── Stripe / new onboarding API ──────────────────────────────────────────
   if (pathname === "/api/onboard/basic"     && method === "POST") return handleBasicOnboard(request, env);
@@ -277,10 +280,11 @@ async function dashboard(request: Request, env: Env): Promise<Response> {
 
 async function apiMe(request: Request, env: Env): Promise<Response> {
   const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
   return withCors(
     jsonOk({ id: ctx.user_id, email: ctx.email, full_name: ctx.full_name, role: ctx.role }),
     request,
+    { credentials: true },
   );
 }
 
@@ -288,46 +292,46 @@ async function apiMe(request: Request, env: Env): Promise<Response> {
 
 async function apiMetrics(request: Request, env: Env): Promise<Response> {
   const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
 
   const businesses = ctx.role === "admin"
     ? await getAllBusinesses(env.DB)
     : await getUserBusinesses(env.DB, ctx.user_id);
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
-  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request);
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
 
   const data = await fetchAnalytics(biz, env);
-  return withCors(jsonOk(data ?? { message: "No data available yet", slug: biz.slug }), request);
+  return withCors(jsonOk(data ?? { message: "No data available yet", slug: biz.slug }), request, { credentials: true });
 }
 
 // ── GET /api/client/activity ───────────────────────────────────────────────
 
 async function apiActivity(request: Request, env: Env): Promise<Response> {
   const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
 
   const businesses = ctx.role === "admin"
     ? await getAllBusinesses(env.DB)
     : await getUserBusinesses(env.DB, ctx.user_id);
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
-  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request);
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
 
   const data = await fetchAnalytics(biz, env);
-  return withCors(jsonOk(data?.recent_queries ?? []), request);
+  return withCors(jsonOk(data?.recent_queries ?? []), request, { credentials: true });
 }
 
 // ── POST /api/client/rotate-key ───────────────────────────────────────────
 
 async function apiRotateKey(request: Request, env: Env): Promise<Response> {
   const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
 
   const businesses = await getUserBusinesses(env.DB, ctx.user_id);
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
-  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request);
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
 
   const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
   let rotateRes: Response;
@@ -337,15 +341,15 @@ async function apiRotateKey(request: Request, env: Env): Promise<Response> {
       headers: { ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}) },
     });
   } catch (err) {
-    return withCors(jsonErr(502, `Backend unreachable: ${String(err)}`), request);
+    return withCors(jsonErr(502, `Backend unreachable: ${String(err)}`), request, { credentials: true });
   }
 
-  if (!rotateRes.ok) return withCors(jsonErr(502, "Backend failed to rotate key"), request);
+  if (!rotateRes.ok) return withCors(jsonErr(502, "Backend failed to rotate key"), request, { credentials: true });
   const data = await rotateRes.json() as { ok: boolean; new_api_key: string };
-  if (!data.ok || !data.new_api_key) return withCors(jsonErr(502, "Invalid response from backend"), request);
+  if (!data.ok || !data.new_api_key) return withCors(jsonErr(502, "Invalid response from backend"), request, { credentials: true });
 
   await updateBusinessApiKey(env.DB, biz.slug, data.new_api_key);
-  return withCors(jsonOk({ ok: true, new_api_key: data.new_api_key }), request);
+  return withCors(jsonOk({ ok: true, new_api_key: data.new_api_key }), request, { credentials: true });
 }
 
 // ── POST /admin/create-client ──────────────────────────────────────────────

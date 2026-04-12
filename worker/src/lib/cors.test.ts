@@ -98,7 +98,38 @@ describe("cors", () => {
     expect(body).toBe("");
   });
 
-  // 6. withCors preserves body, status, and statusText while adding headers
+  // 6. handleCorsPreflight with credentials sets Allow-Credentials on 204
+  it("handleCorsPreflight with credentials: true sets Allow-Credentials header", async () => {
+    const request = makeRequest("https://advocatemcp.com");
+    const response = handleCorsPreflight(request, { credentials: true });
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("Access-Control-Allow-Credentials")).toBe("true");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://advocatemcp.com");
+
+    // Without credentials — must NOT set the header
+    const noCredResponse = handleCorsPreflight(request);
+    expect(noCredResponse.headers.get("Access-Control-Allow-Credentials")).toBeNull();
+  });
+
+  // 7. withCors with credentials merges Allow-Credentials onto the response
+  it("withCors with credentials: true adds Allow-Credentials without losing other headers", async () => {
+    const request = makeRequest("https://advocatemcp.com");
+    const original = new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json", "X-Custom": "keep" },
+    });
+
+    const wrapped = withCors(original, request, { credentials: true });
+
+    expect(wrapped.headers.get("Access-Control-Allow-Credentials")).toBe("true");
+    expect(wrapped.headers.get("Access-Control-Allow-Origin")).toBe("https://advocatemcp.com");
+    // Pre-existing headers preserved
+    expect(wrapped.headers.get("Content-Type")).toBe("application/json");
+    expect(wrapped.headers.get("X-Custom")).toBe("keep");
+  });
+
+  // 8. withCors preserves body, status, and statusText while adding headers
   it("withCors preserves body/status/statusText and adds CORS headers", async () => {
     const request = makeRequest("https://advocatemcp.com");
 
