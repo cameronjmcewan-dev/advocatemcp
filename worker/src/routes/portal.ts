@@ -46,10 +46,10 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   const { pathname } = new URL(request.url);
   const method = request.method;
 
-  if (pathname === "/login"               && method === "GET")  return loginPage(request, env);
+  if (pathname === "/login"               && method === "GET")  return Response.redirect("https://advocatemcp.com/login.html", 301);
   if (pathname === "/auth/login"          && method === "POST") return authLogin(request, env);
   if (pathname === "/auth/logout"         && method === "POST") return authLogout(request, env);
-  if (pathname === "/dashboard"           && method === "GET")  return dashboard(request, env);
+  if (pathname === "/dashboard"           && method === "GET")  return Response.redirect("https://advocatemcp.com/dashboard.html", 301);
   if (pathname === "/api/client/me"       && method === "GET")  return apiMe(request, env);
   if (pathname === "/api/client/metrics"  && method === "GET")  return apiMetrics(request, env);
   if (pathname === "/api/client/activity"   && method === "GET")  return apiActivity(request, env);
