@@ -29,6 +29,7 @@ import {
   getActivationRecord,
   setActivationTokenIfMissing,
   updateActivationStatus,
+  updateBusinessApiKey,
 } from "../portalDb";
 
 // ── CORS helper for the public wizard endpoint ───────────────────────────────
@@ -612,6 +613,111 @@ async function registerBusinessInD1(
   }
 }
 
+// ── Railway registration helper ──────────────────────────────────────────────
+//
+// Called from handleStripeWebhook to create the business profile on the
+// Railway Express backend so the agent can serve AI crawler queries.
+// Without this registration, GET /agents/:slug/profile returns 404 and
+// the activation handler's profile check rejects with slug_not_registered.
+//
+// Reads the wizard-collected profile from the tenant KV record (the
+// `profile` field attached at stripe.ts:479) and maps it to Railway's
+// POST /register expected shape. Uses safe defaults for required fields
+// the wizard doesn't collect (description, star_rating, review_count).
+
+type RailwayRegisterResult =
+  | { ok: true; api_key: string; slug: string }
+  | { ok: false; error: string };
+
+export async function registerBusinessOnRailway(
+  env: Env,
+  tenant: TenantRecord,
+): Promise<RailwayRegisterResult> {
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+
+  // Read the wizard profile defensively — it's attached as an untyped
+  // field on the KV record, not declared on TenantRecord.
+  const profile = (tenant as unknown as { profile?: Record<string, unknown> }).profile ?? {};
+  const loc = (profile.location as Record<string, unknown>) ?? {};
+  const contact = (profile.contact as Record<string, unknown>) ?? {};
+  const rawServices = Array.isArray(profile.services) ? profile.services : [];
+
+  // Map wizard fields → Railway's POST /register shape
+  const services = rawServices
+    .map((s: unknown) => {
+      if (typeof s === "string") return s;
+      if (s && typeof s === "object" && "name" in s) return String((s as { name: unknown }).name);
+      return null;
+    })
+    .filter((s): s is string => s !== null);
+
+  const city = typeof loc.city === "string" ? loc.city : "";
+  const state = typeof loc.state === "string" ? loc.state : "";
+  const location = [city, state].filter(Boolean).join(", ") || "Not specified";
+
+  // Map wizard pricing_tier → Railway's expected values
+  const pricingMap: Record<string, string> = {
+    under_500: "budget",
+    "500_2000": "mid-range",
+    over_2000: "premium",
+  };
+  const rawPricingTier = typeof profile.pricing_tier === "string" ? profile.pricing_tier : "";
+  const pricingTier = pricingMap[rawPricingTier] ?? null;
+
+  const differentiators = Array.isArray(profile.differentiators) ? profile.differentiators : [];
+
+  const body = {
+    name: tenant.name,
+    description: `${tenant.name} — managed by AdvocateMCP`,
+    services: services.length > 0 ? services : ["General services"],
+    category: typeof profile.category === "string" ? profile.category : "general",
+    location,
+    star_rating: 0,
+    review_count: 0,
+    phone: (typeof contact.phone === "string" ? contact.phone : tenant.phone) || undefined,
+    website: (typeof contact.website === "string" ? contact.website : tenant.website) || undefined,
+    referral_url: (typeof profile.referral_url === "string" ? profile.referral_url : tenant.website) || undefined,
+    tone: "friendly",
+    pricing_tier: pricingTier,
+    availability: typeof profile.availability === "string" ? profile.availability : undefined,
+    differentiator: typeof differentiators[0] === "string" ? differentiators[0] : undefined,
+  };
+
+  try {
+    const res = await fetch(`${base}/register`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}),
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (!res.ok) {
+      let errMsg = `Railway /register ${res.status}`;
+      try {
+        const errBody = (await res.json()) as { error?: string; message?: string };
+        if (errBody.error) errMsg += `: ${errBody.error}`;
+        else if (errBody.message) errMsg += `: ${errBody.message}`;
+      } catch { /* non-JSON response */ }
+      return { ok: false, error: errMsg };
+    }
+
+    const data = (await res.json()) as { slug?: string; api_key?: string };
+    if (!data.api_key) {
+      return { ok: false, error: "Railway /register returned 2xx but no api_key in response" };
+    }
+    return { ok: true, api_key: data.api_key, slug: data.slug ?? tenant.slug };
+  } catch (err) {
+    const isTimeout = err instanceof DOMException && err.name === "AbortError";
+    return {
+      ok: false,
+      error: isTimeout ? "Railway /register timed out after 10s" : `Network error: ${String(err)}`,
+    };
+  }
+}
+
 // ── Phase F Part 1: activation token provisioning ───────────────────────────
 //
 // Mint an activation token for a business and persist it to D1 with
@@ -795,6 +901,55 @@ export async function handleStripeWebhook(
     }));
   }
 
+  // Register the business on Railway so the agent can serve AI crawler
+  // queries and the activation handler's profile check passes. Non-fatal
+  // — if Railway is down, the token still gets minted and the email gets
+  // sent, but the customer's activation will fail until Railway recovers
+  // and the operator manually registers.
+  let railwayResult: "registered" | "failed" | "skipped" = "skipped";
+  if (!env.API_BASE_URL || !env.API_KEY) {
+    console.warn(JSON.stringify({
+      onboarding: true,
+      event: "stripe_webhook_railway_skipped",
+      domain,
+      slug: tenant.slug,
+      reason: !env.API_BASE_URL ? "API_BASE_URL not set" : "API_KEY not set",
+    }));
+  } else {
+    try {
+      const regResult = await registerBusinessOnRailway(env, tenant);
+      if (regResult.ok) {
+        railwayResult = "registered";
+        await updateBusinessApiKey(env.DB, tenant.slug, regResult.api_key);
+        console.log(JSON.stringify({
+          onboarding: true,
+          event: "stripe_webhook_railway_register_success",
+          domain,
+          slug: tenant.slug,
+          api_key_length: regResult.api_key.length,
+        }));
+      } else {
+        railwayResult = "failed";
+        console.warn(JSON.stringify({
+          onboarding: true,
+          event: "stripe_webhook_railway_register_failed",
+          domain,
+          slug: tenant.slug,
+          error: regResult.error,
+        }));
+      }
+    } catch (err) {
+      railwayResult = "failed";
+      console.warn(JSON.stringify({
+        onboarding: true,
+        event: "stripe_webhook_railway_register_error",
+        domain,
+        slug: tenant.slug,
+        error: String(err),
+      }));
+    }
+  }
+
   // Phase F Part 1: mint and store the activation token. Non-fatal on
   // error — a failure here does not revert the Stripe IDs write above
   // and does not trigger a Stripe retry. The operator can manually
@@ -913,6 +1068,7 @@ export async function handleStripeWebhook(
     slug: tenant.slug,
     plan: tenant.stripe.plan,
     status: tenant.status,
+    railway: railwayResult,
     activation: activationResult,
     email: emailResult,
   }));

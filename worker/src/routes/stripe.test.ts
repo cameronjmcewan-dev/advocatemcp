@@ -33,7 +33,7 @@
  * checking, this test turns red.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ── vi.mock declaration — MUST come before imports of the modules
 // under test so vitest hoists it correctly and the stripe.ts import
@@ -58,7 +58,7 @@ vi.mock("../lib/resend", () => ({
   ),
 }));
 
-import { provisionActivationToken } from "./stripe";
+import { provisionActivationToken, registerBusinessOnRailway } from "./stripe";
 import { handleGetActivation, handleResendActivation } from "./activate";
 import { signActivationToken } from "../lib/activation-token";
 import { sendActivationEmail } from "../lib/resend";
@@ -77,6 +77,7 @@ interface FakeBusinessRow {
   activation_token: string | null;
   activation_status: string;
   activation_issued_at: string | null;
+  api_key: string;
 }
 
 function createFakeDb(
@@ -86,6 +87,7 @@ function createFakeDb(
   for (const [slug, row] of Object.entries(initial)) {
     table.set(slug, {
       slug,
+      api_key:              row.api_key ?? "pending",
       activation_token:     row.activation_token ?? null,
       activation_status:    row.activation_status ?? "none",
       activation_issued_at: row.activation_issued_at ?? null,
@@ -155,6 +157,17 @@ function createFakeDb(
                 return { meta: { changes: row ? 1 : 0 } };
               }
 
+              // updateBusinessApiKey — unconditional api_key update
+              if (
+                normalized.startsWith("UPDATE businesses") &&
+                normalized.includes("SET api_key")
+              ) {
+                const [apiKey, slug] = params as [string, string];
+                const row = table.get(slug);
+                if (row) row.api_key = apiKey;
+                return { meta: { changes: row ? 1 : 0 } };
+              }
+
               return { meta: { changes: 0 } };
             },
           };
@@ -172,6 +185,8 @@ function makeEnv(db: D1Database, overrides: Partial<Env> = {}): Env {
     ACTIVATION_SIGNING_KEY: "test-phase-f-key",
     ADMIN_SECRET: "test-admin-secret",
     RESEND_API_KEY: "test-phase-f-key",
+    API_BASE_URL: "https://test-railway.example.com",
+    API_KEY: "test-api-key",
     ...overrides,
   } as unknown as Env;
 }
@@ -592,5 +607,142 @@ describe("handleResendActivation (POST /admin/businesses/:slug/resend-activation
     expect(response.status).toBe(400);
     const body = (await response.json()) as Record<string, unknown>;
     expect(body.error).toContain("email");
+  });
+});
+
+// ── registerBusinessOnRailway tests ──────────────────────────────────────
+
+describe("registerBusinessOnRailway", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function makeTenant(overrides: Record<string, unknown> = {}): import("./onboard").TenantRecord {
+    return {
+      domain: "test-biz.hosted.advocatemcp.com",
+      name: "Test Biz",
+      slug: "test-biz",
+      phone: "555-1234",
+      email: "test@example.com",
+      address: "", city: "", state: "", postalCode: "", country: "US",
+      services: [], website: "https://testbiz.com", notes: "",
+      status: "active" as const,
+      cloudflare: {
+        customHostnameId: null, verificationMethod: "none",
+        verificationStatus: "not_applicable", sslStatus: "not_applicable",
+        txtName: null, txtValue: null, ownershipTxtName: null, ownershipTxtValue: null,
+      },
+      stripe: { customerId: null, subscriptionId: null, checkoutSessionId: null, plan: "base" },
+      skipDns: true,
+      statusLog: [], createdAt: "", updatedAt: "",
+      ...overrides,
+    } as import("./onboard").TenantRecord;
+  }
+
+  it("returns ok:true with api_key on successful Railway registration", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ slug: "test-biz", api_key: "railway-uuid-123" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const { db } = createFakeDb({ "test-biz": {} });
+    const env = makeEnv(db);
+    const tenant = makeTenant();
+
+    const result = await registerBusinessOnRailway(env, tenant);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.api_key).toBe("railway-uuid-123");
+      expect(result.slug).toBe("test-biz");
+    }
+
+    // Verify the fetch was called with the right URL and body shape
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
+    expect(fetchCall[0]).toBe("https://test-railway.example.com/register");
+    const reqInit = fetchCall[1] as RequestInit;
+    const body = JSON.parse(reqInit.body as string) as Record<string, unknown>;
+    expect(body.name).toBe("Test Biz");
+    expect(body.star_rating).toBe(0);
+    expect(body.review_count).toBe(0);
+    expect(body.category).toBe("general");
+    expect((reqInit.headers as Record<string, string>)["X-API-Key"]).toBe("test-api-key");
+  });
+
+  it("returns ok:false with error on Railway 4xx failure", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: "Missing required field: description" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const { db } = createFakeDb({ "test-biz": {} });
+    const env = makeEnv(db);
+    const tenant = makeTenant();
+
+    const result = await registerBusinessOnRailway(env, tenant);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("400");
+      expect(result.error).toContain("Missing required field");
+    }
+  });
+
+  it("returns ok:false on network failure", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("ECONNREFUSED"));
+
+    const { db } = createFakeDb({ "test-biz": {} });
+    const env = makeEnv(db);
+    const tenant = makeTenant();
+
+    const result = await registerBusinessOnRailway(env, tenant);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("ECONNREFUSED");
+    }
+  });
+
+  it("maps wizard profile fields to Railway's expected shape", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ slug: "test-biz", api_key: "key-abc" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const { db } = createFakeDb({ "test-biz": {} });
+    const env = makeEnv(db);
+    const tenant = makeTenant();
+    // Attach a wizard-style profile
+    (tenant as unknown as { profile: unknown }).profile = {
+      category: "legal",
+      location: { city: "Austin", state: "TX", service_areas: ["Austin, TX"] },
+      contact: { website: "https://biz.com", phone: "512-555-0000" },
+      referral_url: "https://biz.com/contact",
+      services: [{ name: "Consultation", description: "Legal advice" }],
+      pricing_tier: "500_2000",
+      differentiators: ["Award-winning"],
+      availability: "Same day",
+    };
+
+    await registerBusinessOnRailway(env, tenant);
+
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
+    const reqInit = fetchCall[1] as RequestInit;
+    const body = JSON.parse(reqInit.body as string) as Record<string, unknown>;
+
+    expect(body.category).toBe("legal");
+    expect(body.location).toBe("Austin, TX");
+    expect(body.services).toEqual(["Consultation"]);
+    expect(body.referral_url).toBe("https://biz.com/contact");
+    expect(body.pricing_tier).toBe("mid-range");
+    expect(body.differentiator).toBe("Award-winning");
+    expect(body.availability).toBe("Same day");
+    expect(body.phone).toBe("512-555-0000");
   });
 });
