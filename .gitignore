@@ -26,3 +26,5 @@ worker/node_modules/
 *.log
 .obsidian/
 .obsidian/
+.obsidian/
+.gitnexus/
