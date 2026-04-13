@@ -40,30 +40,23 @@ API_BASE_URL = "https://advocate-production-2887.up.railway.app"
 #   STRIPE_PRICE_ID_PRO    — Stripe Price ID for $250/mo pro plan
 
 # ── Routes ──────────────────────────────────────────────────────────────────
-# Two routes on the advocatemcp.com zone:
+# customers.advocatemcp.com only. All portal, auth, admin, webhook, and
+# onboarding endpoints are served on this hostname.
 #
-#   1. customers.advocatemcp.com/* — the explicit platform hostname.
-#      Portal, auth, admin, webhook, onboarding endpoints live here.
+# WARNING: do NOT add a wildcard */* route on this zone. A wildcard was
+# attempted on 2026-04-13 (commit 4d78b58) to catch CF for SaaS custom
+# hostnames, but it broke the marketing site — the wildcard captured
+# advocatemcp.com and www.advocatemcp.com traffic ahead of the Cloudflare
+# Pages project, despite Cloudflare's documentation claiming Pages takes
+# routing precedence. The marketing site returned the worker's JSON
+# response instead of the Pages HTML for ~15 minutes until the revert
+# deployed. Additionally, wrangler rollback does NOT revert Workers
+# Routes (only the worker script), so the rollback was ineffective.
 #
-#   2. */* — wildcard catch-all for Cloudflare for SaaS custom hostnames.
-#      When a DNS customer (e.g. www.workmancopyco.com) CNAMEs to
-#      customers.advocatemcp.com, Cloudflare resolves the request to
-#      the advocatemcp.com zone but the Host header stays as the
-#      customer's domain. Without this wildcard, no Workers Route
-#      matches the custom hostname and Cloudflare returns 522 (no
-#      origin to connect to). With it, the worker receives the
-#      request and routes it via BUSINESS_MAP KV lookup.
-#
-# Safety: Cloudflare Pages custom domains (advocatemcp.com,
-# www.advocatemcp.com — the marketing site) take routing precedence
-# over Workers Routes per Cloudflare's documented priority order
-# (Pages custom domains = Priority 1, Workers Routes = Priority 3).
-# The wildcard does not steal traffic from the Pages project.
+# DNS-customer custom hostname routing (e.g. www.workmancopyco.com)
+# needs a different approach: per-hostname custom_origin_server via the
+# CF API, or Workers for Platforms. That's a separate task.
 [[routes]]
 pattern   = "customers.advocatemcp.com/*"
-zone_name = "advocatemcp.com"
-
-[[routes]]
-pattern   = "*/*"
 zone_name = "advocatemcp.com"
 
