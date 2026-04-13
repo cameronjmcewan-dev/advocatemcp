@@ -40,9 +40,30 @@ API_BASE_URL = "https://advocate-production-2887.up.railway.app"
 #   STRIPE_PRICE_ID_PRO    — Stripe Price ID for $250/mo pro plan
 
 # ── Routes ──────────────────────────────────────────────────────────────────
-# customers.advocatemcp.com — fallback origin for Cloudflare for SaaS custom hostnames.
-# All client domains CNAME to this subdomain; the worker handles routing via KV lookup.
+# Two routes on the advocatemcp.com zone:
+#
+#   1. customers.advocatemcp.com/* — the explicit platform hostname.
+#      Portal, auth, admin, webhook, onboarding endpoints live here.
+#
+#   2. */* — wildcard catch-all for Cloudflare for SaaS custom hostnames.
+#      When a DNS customer (e.g. www.workmancopyco.com) CNAMEs to
+#      customers.advocatemcp.com, Cloudflare resolves the request to
+#      the advocatemcp.com zone but the Host header stays as the
+#      customer's domain. Without this wildcard, no Workers Route
+#      matches the custom hostname and Cloudflare returns 522 (no
+#      origin to connect to). With it, the worker receives the
+#      request and routes it via BUSINESS_MAP KV lookup.
+#
+# Safety: Cloudflare Pages custom domains (advocatemcp.com,
+# www.advocatemcp.com — the marketing site) take routing precedence
+# over Workers Routes per Cloudflare's documented priority order
+# (Pages custom domains = Priority 1, Workers Routes = Priority 3).
+# The wildcard does not steal traffic from the Pages project.
 [[routes]]
 pattern   = "customers.advocatemcp.com/*"
+zone_name = "advocatemcp.com"
+
+[[routes]]
+pattern   = "*/*"
 zone_name = "advocatemcp.com"
 
