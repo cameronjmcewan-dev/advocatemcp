@@ -42,11 +42,8 @@ After Stripe checkout succeeds in the wizard flow, customers redirect to the mar
 home page instead of a proper confirmation/activation page. Need to investigate where the
 Stripe success_url is configured and what it should point at. Bug A from earlier today.
 
-### Eight hosted test tenants stuck in pending state
-D1 businesses table has 8 rows with api_key = 'pending' from test wizard runs that never
-completed Railway registration (before tonight's hosted-tenant-onboarding-flow shipped).
-Slugs: asdf, asdf1, debug-test, moreland-property-group, pro-probe, workman,
-test-phase-b-v2-pro, test-free-biz. Produce DELETE statements, review carefully, run by hand.
+### ~~Eight hosted test tenants stuck in pending state~~ RESOLVED
+Apr 12 — cleaned 12 pending test tenants from D1, removed orphaned test user cameronjmcewan@gmail.com.
 
 ## Polish — affects customer experience but not blocking
 
