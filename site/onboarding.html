@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Set Up Your Profile — Advocate</title>
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<style>
+/* ── Reset & Variables ─────────────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root {
+  --bg:          #171614;
+  --surface:     #1c1b19;
+  --surface-2:   #222120;
+  --border:      #393836;
+  --text:        #e8e6e3;
+  --muted:       #7a7875;
+  --accent:      #4f98a3;
+  --accent-dk:   #3d8090;
+  --accent-dim:  rgba(79,152,163,.1);
+  --accent-ring: rgba(79,152,163,.25);
+  --green:       #3fb950;
+  --red:         #f85149;
+  --red-dim:     rgba(248,81,73,.1);
+  --font-serif:  'Instrument Serif', Georgia, serif;
+  --font-body:   'General Sans','Inter',system-ui,-apple-system,sans-serif;
+  --r-sm:4px; --r-md:8px; --r-lg:12px; --r-xl:16px;
+}
+
+html{font-size:16px;-webkit-font-smoothing:antialiased}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:var(--font-body);font-size:.9375rem;line-height:1.6;
+  min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  padding:0 16px 48px;
+}
+
+/* ── Top bar ───────────────────────────────────────────────────────────── */
+.topbar{
+  width:100%;max-width:600px;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:20px 0 32px;
+}
+.logo{display:flex;align-items:center;gap:8px;font-size:.9375rem;font-weight:600;color:var(--text);text-decoration:none}
+.logo svg{flex-shrink:0}
+.topbar-back{font-size:.8125rem;color:var(--muted);text-decoration:none;transition:color .15s}
+.topbar-back:hover{color:var(--text)}
+
+/* ── Progress bar ──────────────────────────────────────────────────────── */
+.progress{width:100%;max-width:600px;margin-bottom:36px}
+.progress-steps{
+  display:flex;align-items:center;gap:0;
+}
+.ps{
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  position:relative;flex:1;
+}
+.ps:not(:last-child)::after{
+  content:'';
+  position:absolute;
+  top:15px;left:calc(50% + 15px);
+  right:calc(-50% + 15px);
+  height:1px;background:var(--border);
+  z-index:0;
+}
+.ps.done:not(:last-child)::after{background:var(--accent)}
+.ps-dot{
+  width:30px;height:30px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:.75rem;font-weight:700;
+  border:1.5px solid var(--border);
+  background:var(--bg);color:var(--muted);
+  position:relative;z-index:1;
+  transition:all .2s;
+  flex-shrink:0;
+}
+.ps.done .ps-dot{
+  background:var(--accent);border-color:var(--accent);color:#fff;
+}
+.ps.active .ps-dot{
+  border-color:var(--accent);color:var(--accent);
+  box-shadow:0 0 0 3px var(--accent-dim);
+}
+.ps-label{
+  font-size:.6875rem;font-weight:500;color:var(--muted);
+  white-space:nowrap;letter-spacing:.02em;
+}
+.ps.active .ps-label{color:var(--accent)}
+.ps.done .ps-label{color:var(--text)}
+
+/* Checkmark SVG */
+.check-icon{display:none}
+.ps.done .check-icon{display:block}
+.ps.done .step-num{display:none}
+
+/* ── Card ──────────────────────────────────────────────────────────────── */
+.card{
+  width:100%;max-width:600px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--r-xl);
+  padding:32px;
+}
+
+/* ── Step header ───────────────────────────────────────────────────────── */
+.step-eyebrow{
+  font-size:.6875rem;font-weight:600;text-transform:uppercase;
+  letter-spacing:.08em;color:var(--accent);margin-bottom:8px;
+}
+.step-title{
+  font-family:var(--font-serif);font-size:1.5rem;line-height:1.15;
+  letter-spacing:-.02em;margin-bottom:6px;
+}
+.step-desc{font-size:.875rem;color:var(--muted);margin-bottom:28px}
+
+/* ── Form fields ───────────────────────────────────────────────────────── */
+.field{margin-bottom:16px}
+.field.half{flex:1}
+.field-row{display:flex;gap:12px}
+label{
+  display:block;font-size:.8125rem;font-weight:500;
+  color:var(--text);margin-bottom:6px;
+}
+label .opt{color:var(--muted);font-weight:400;margin-left:4px}
+label .hint{display:block;font-weight:400;font-size:.75rem;color:var(--muted);margin-top:1px}
+
+input[type=text],input[type=url],input[type=tel],input[type=email],select,textarea{
+  width:100%;
+  background:var(--bg);
+  border:1px solid var(--border);
+  border-radius:var(--r-md);
+  color:var(--text);
+  font-family:var(--font-body);
+  font-size:.875rem;
+  padding:10px 12px;
+  outline:none;
+  transition:border-color .15s,box-shadow .15s;
+  appearance:none;
+  -webkit-appearance:none;
+}
+input::placeholder,textarea::placeholder{color:var(--muted)}
+input:focus,select:focus,textarea:focus{
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px var(--accent-dim);
+}
+select{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237a7875' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 12px center;
+  padding-right:32px;
+  cursor:pointer;
+}
+textarea{resize:vertical;min-height:80px;line-height:1.6}
+
+/* Field error state */
+.field.has-error input,
+.field.has-error select,
+.field.has-error textarea{
+  border-color:var(--red);
+  box-shadow:0 0 0 3px var(--red-dim);
+}
+.field-error{
+  font-size:.75rem;color:var(--red);
+  margin-top:5px;display:none;
+}
+.field.has-error .field-error{display:block}
+
+/* ── Toggle (yes/no) ───────────────────────────────────────────────────── */
+.toggle-group{
+  display:flex;gap:8px;margin-top:2px;
+}
+.toggle-btn{
+  flex:1;padding:9px 12px;
+  font-family:var(--font-body);font-size:.875rem;font-weight:500;
+  border:1.5px solid var(--border);border-radius:var(--r-md);
+  background:transparent;color:var(--muted);
+  cursor:pointer;transition:all .15s;
+  text-align:center;
+}
+.toggle-btn:hover{border-color:var(--muted)}
+.toggle-btn.active{
+  border-color:var(--accent);background:var(--accent-dim);color:var(--accent);
+}
+
+/* ── Radio buttons ─────────────────────────────────────────────────────── */
+.radio-group{display:flex;flex-direction:column;gap:8px;margin-top:2px}
+.radio-opt{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 14px;
+  border:1.5px solid var(--border);border-radius:var(--r-md);
+  cursor:pointer;transition:border-color .15s,background .15s;
+  font-size:.875rem;color:var(--muted);
+  user-select:none;
+}
+.radio-opt:hover{border-color:var(--muted)}
+.radio-opt.selected{
+  border-color:var(--accent);background:var(--accent-dim);color:var(--text);
+}
+.radio-dot{
+  width:16px;height:16px;border-radius:50%;
+  border:1.5px solid var(--border);flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  transition:border-color .15s;
+}
+.radio-opt.selected .radio-dot{border-color:var(--accent)}
+.radio-dot-inner{
+  width:8px;height:8px;border-radius:50%;
+  background:var(--accent);transform:scale(0);transition:transform .15s;
+}
+.radio-opt.selected .radio-dot-inner{transform:scale(1)}
+
+/* ── Navigation buttons ────────────────────────────────────────────────── */
+.nav-row{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-top:28px;gap:12px;
+}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  padding:11px 22px;font-family:var(--font-body);
+  font-size:.9rem;font-weight:500;border-radius:var(--r-md);
+  border:1.5px solid transparent;cursor:pointer;
+  transition:background .15s,border-color .15s,color .15s;
+  white-space:nowrap;text-decoration:none;
+}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn-primary:hover{background:var(--accent-dk);border-color:var(--accent-dk)}
+.btn-primary:disabled{opacity:.55;cursor:not-allowed}
+.btn-ghost{background:transparent;color:var(--muted);border-color:var(--border)}
+.btn-ghost:hover{color:var(--text);border-color:var(--muted)}
+
+/* Spinner */
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{
+  width:16px;height:16px;border-radius:50%;
+  border:2px solid rgba(255,255,255,.25);
+  border-top-color:#fff;
+  animation:spin .65s linear infinite;
+  display:none;
+}
+.btn.loading .btn-label{opacity:0;position:absolute}
+.btn.loading .spinner{display:block}
+.btn-primary.loading{position:relative;pointer-events:none}
+
+/* ── Inline error banner ───────────────────────────────────────────────── */
+.error-banner{
+  background:var(--red-dim);border:1px solid rgba(248,81,73,.25);
+  border-radius:var(--r-md);padding:12px 16px;
+  font-size:.875rem;color:var(--red);
+  margin-top:16px;display:none;
+}
+.error-banner.show{display:flex;align-items:center;gap:10px;justify-content:space-between}
+.retry-btn{
+  font-family:var(--font-body);font-size:.8125rem;font-weight:500;
+  color:var(--red);background:none;border:1px solid rgba(248,81,73,.35);
+  border-radius:var(--r-sm);padding:4px 10px;cursor:pointer;
+  white-space:nowrap;transition:background .15s;
+  flex-shrink:0;
+}
+.retry-btn:hover{background:rgba(248,81,73,.1)}
+
+/* ── Review step ───────────────────────────────────────────────────────── */
+.review-sections{display:flex;flex-direction:column;gap:20px}
+.review-section{
+  background:var(--bg);border:1px solid var(--border);
+  border-radius:var(--r-lg);padding:18px 20px;
+}
+.review-section-hd{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:14px;
+}
+.review-section-title{font-size:.875rem;font-weight:600}
+.edit-link{
+  font-size:.8rem;color:var(--accent);text-decoration:none;cursor:pointer;
+  background:none;border:none;font-family:var(--font-body);
+  transition:opacity .15s;padding:0;
+}
+.edit-link:hover{opacity:.7}
+.review-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:10px 20px;
+}
+.rv{display:flex;flex-direction:column;gap:1px}
+.rv-label{font-size:.75rem;color:var(--muted);font-weight:500}
+.rv-val{font-size:.8125rem;color:var(--text);line-height:1.5}
+.rv.full{grid-column:1/-1}
+
+/* Confirm checkbox */
+.confirm-row{
+  display:flex;align-items:flex-start;gap:10px;
+  margin-top:20px;padding:14px 16px;
+  background:var(--bg);border:1.5px solid var(--border);
+  border-radius:var(--r-md);cursor:pointer;
+  transition:border-color .15s;
+}
+.confirm-row:has(.confirm-check:checked){border-color:var(--accent);background:var(--accent-dim)}
+.confirm-check{
+  width:17px;height:17px;flex-shrink:0;margin-top:2px;
+  accent-color:var(--accent);cursor:pointer;
+}
+.confirm-text{font-size:.875rem;color:var(--text);line-height:1.5}
+
+/* ── Success screen ────────────────────────────────────────────────────── */
+#screen-success{display:none;text-align:center}
+#screen-success.active{
+  display:flex;flex-direction:column;align-items:center;
+  width:100%;max-width:560px;
+}
+.success-icon{
+  width:64px;height:64px;border-radius:50%;
+  background:rgba(63,185,80,.12);border:1px solid rgba(63,185,80,.25);
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 24px;
+}
+.success-title{
+  font-family:var(--font-serif);font-size:2rem;
+  line-height:1.15;letter-spacing:-.02em;margin-bottom:12px;
+}
+.success-sub{
+  font-size:1rem;color:var(--muted);line-height:1.65;
+  max-width:420px;margin:0 auto 32px;
+}
+.ai-icons-row{
+  display:flex;align-items:center;justify-content:center;
+  gap:20px;margin-bottom:36px;flex-wrap:wrap;
+}
+.ai-icon-item{
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  font-size:.75rem;color:var(--muted);
+}
+.ai-icon-item img{
+  width:32px;height:32px;
+  filter:grayscale(1) brightness(1.6);opacity:.6;
+}
+.success-actions{display:flex;flex-direction:column;align-items:center;gap:12px}
+.success-sec-link{
+  font-size:.875rem;color:var(--accent);cursor:pointer;
+  background:none;border:none;font-family:var(--font-body);
+  text-decoration:underline;text-underline-offset:3px;transition:opacity .15s;
+}
+.success-sec-link:hover{opacity:.7}
+
+/* ── Mobile ────────────────────────────────────────────────────────────── */
+@media(max-width:600px){
+  .card{padding:22px 18px}
+  .progress-steps{gap:0}
+  .ps-label{font-size:.625rem}
+  .field-row{flex-direction:column;gap:0}
+  .review-grid{grid-template-columns:1fr}
+  .nav-row{flex-direction:column-reverse}
+  .btn{width:100%}
+  .btn-ghost{width:auto}
+}
+</style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="topbar">
+  <a href="/" class="logo">
+    <svg width="24" height="24" viewBox="0 0 26 26" fill="none"><rect width="26" height="26" rx="6" fill="#4f98a3"/><path d="M13 6.5L20.5 20H5.5L13 6.5Z" stroke="white" stroke-width="1.6" stroke-linejoin="round" fill="none"/><line x1="9.2" y1="15.5" x2="16.8" y2="15.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/></svg>
+    Advocate
+  </a>
+  <a href="/" class="topbar-back">← Back to home</a>
+</div>
+
+<!-- Progress bar (hidden on success) -->
+<div class="progress" id="progress-bar">
+  <div class="progress-steps">
+    <div class="ps active" id="ps-1">
+      <div class="ps-dot">
+        <span class="step-num">1</span>
+        <svg class="check-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <span class="ps-label">Basics</span>
+    </div>
+    <div class="ps" id="ps-2">
+      <div class="ps-dot">
+        <span class="step-num">2</span>
+        <svg class="check-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <span class="ps-label">Services</span>
+    </div>
+    <div class="ps" id="ps-3">
+      <div class="ps-dot">
+        <span class="step-num">3</span>
+        <svg class="check-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <span class="ps-label">Leads</span>
+    </div>
+    <div class="ps" id="ps-4">
+      <div class="ps-dot">
+        <span class="step-num">4</span>
+        <svg class="check-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <span class="ps-label">Review</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══ STEP 1 ══════════════════════════════════════════════════════════════ -->
+<div class="card" id="step-1">
+  <p class="step-eyebrow">Step 1 of 4</p>
+  <h1 class="step-title">Business basics</h1>
+  <p class="step-desc">Tell us about your business so AI can accurately describe you to potential customers.</p>
+
+  <div class="field" id="f-name">
+    <label for="biz-name">Business name</label>
+    <input type="text" id="biz-name" placeholder="e.g. Barton Hills Property Group" autocomplete="organization" />
+    <p class="field-error">Business name is required</p>
+  </div>
+
+  <div class="field" id="f-industry">
+    <label for="biz-industry">Industry / business type</label>
+    <select id="biz-industry">
+      <option value="" disabled selected>Select your industry</option>
+      <option value="property_management">Property Management</option>
+      <option value="legal">Legal</option>
+      <option value="medical">Medical</option>
+      <option value="home_services">Home Services</option>
+      <option value="real_estate">Real Estate</option>
+      <option value="financial_services">Financial Services</option>
+      <option value="ecommerce">E-Commerce</option>
+      <option value="other">Other</option>
+    </select>
+    <p class="field-error">Please select an industry</p>
+  </div>
+
+  <div class="field-row">
+    <div class="field half" id="f-city">
+      <label for="biz-city">City</label>
+      <input type="text" id="biz-city" placeholder="Austin" />
+      <p class="field-error">City is required</p>
+    </div>
+    <div class="field half" id="f-state">
+      <label for="biz-state">State</label>
+      <input type="text" id="biz-state" placeholder="TX" maxlength="2" style="text-transform:uppercase" />
+      <p class="field-error">State is required</p>
+    </div>
+  </div>
+
+  <div class="field" id="f-website">
+    <label for="biz-website">Business website <span class="opt">(optional)</span></label>
+    <input type="url" id="biz-website" placeholder="https://yourbusiness.com" />
+    <p class="field-error">Please enter a valid URL (include https://)</p>
+  </div>
+
+  <div class="nav-row">
+    <span></span>
+    <button class="btn btn-primary" onclick="goNext(1)">
+      <span class="btn-label">Next: Services →</span>
+    </button>
+  </div>
+</div>
+
+<!-- ══ STEP 2 ══════════════════════════════════════════════════════════════ -->
+<div class="card" id="step-2" style="display:none">
+  <p class="step-eyebrow">Step 2 of 4</p>
+  <h1 class="step-title">Services &amp; pricing</h1>
+  <p class="step-desc">AI will use this to describe what you do and match you with the right customers.</p>
+
+  <div class="field" id="f-services">
+    <label for="biz-services">What services do you offer?</label>
+    <textarea id="biz-services" rows="3" placeholder="e.g. Property management for 4–50 unit multifamily buildings. Leasing, maintenance coordination, owner reporting, rent collection."></textarea>
+    <p class="field-error">Please describe your services</p>
+  </div>
+
+  <div class="field" id="f-pricing">
+    <label for="biz-pricing">Pricing range</label>
+    <select id="biz-pricing">
+      <option value="" disabled selected>Select pricing range</option>
+      <option value="under_500">Under $500/mo</option>
+      <option value="500_2000">$500–$2,000/mo</option>
+      <option value="2000_5000">$2,000–$5,000/mo</option>
+      <option value="5000_plus">$5,000+/mo</option>
+      <option value="project_based">Project-based / varies</option>
+    </select>
+    <p class="field-error">Please select a pricing range</p>
+  </div>
+
+  <div class="field">
+    <label>Do you offer a free consultation?</label>
+    <div class="toggle-group">
+      <button class="toggle-btn active" id="consult-yes" onclick="setConsult(true)">Yes</button>
+      <button class="toggle-btn" id="consult-no" onclick="setConsult(false)">No</button>
+    </div>
+  </div>
+
+  <div class="field" id="f-differentiator">
+    <label for="biz-diff">
+      Your unique value
+      <span class="hint">This is what AI will say about you — what sets you apart?</span>
+    </label>
+    <textarea id="biz-diff" rows="2" placeholder="e.g. We're the only property manager in South Austin that offers same-day maintenance dispatch and real-time owner dashboards."></textarea>
+  </div>
+
+  <div class="nav-row">
+    <button class="btn btn-ghost" onclick="goBack(2)">← Back</button>
+    <button class="btn btn-primary" onclick="goNext(2)">
+      <span class="btn-label">Next: Leads →</span>
+    </button>
+  </div>
+</div>
+
+<!-- ══ STEP 3 ══════════════════════════════════════════════════════════════ -->
+<div class="card" id="step-3" style="display:none">
+  <p class="step-eyebrow">Step 3 of 4</p>
+  <h1 class="step-title">Customers &amp; lead routing</h1>
+  <p class="step-desc">Tell AI who to send your way and where to route them when they're ready.</p>
+
+  <div class="field" id="f-ideal-customer">
+    <label for="biz-customer">
+      Who is your ideal customer?
+      <span class="hint">Describe who you want AI to send your way</span>
+    </label>
+    <textarea id="biz-customer" rows="2" placeholder="e.g. Property owners in Austin with 4–20 unit multifamily buildings looking to reduce management overhead."></textarea>
+    <p class="field-error">Please describe your ideal customer</p>
+  </div>
+
+  <div class="field" id="f-lead-type">
+    <label>Where should AI send leads?</label>
+    <div class="radio-group">
+      <div class="radio-opt selected" onclick="setLeadType('website')" data-val="website">
+        <div class="radio-dot"><div class="radio-dot-inner"></div></div>
+        My website
+      </div>
+      <div class="radio-opt" onclick="setLeadType('booking')" data-val="booking">
+        <div class="radio-dot"><div class="radio-dot-inner"></div></div>
+        A booking page
+      </div>
+      <div class="radio-opt" onclick="setLeadType('phone')" data-val="phone">
+        <div class="radio-dot"><div class="radio-dot-inner"></div></div>
+        A phone number
+      </div>
+      <div class="radio-opt" onclick="setLeadType('email')" data-val="email">
+        <div class="radio-dot"><div class="radio-dot-inner"></div></div>
+        An email address
+      </div>
+    </div>
+  </div>
+
+  <div class="field" id="f-lead-dest">
+    <label for="biz-lead-dest" id="lead-dest-label">Website URL</label>
+    <input type="text" id="biz-lead-dest" placeholder="https://yourbusiness.com" />
+    <p class="field-error" id="lead-dest-error">Please enter a destination URL</p>
+  </div>
+
+  <div class="field" id="f-response-time">
+    <label for="biz-response">How quickly do you respond to new leads?</label>
+    <select id="biz-response">
+      <option value="" disabled selected>Select response time</option>
+      <option value="1_hour">Within 1 hour</option>
+      <option value="same_day">Same day</option>
+      <option value="24_hours">Within 24 hours</option>
+      <option value="48_hours">Within 48 hours</option>
+    </select>
+    <p class="field-error">Please select a response time</p>
+  </div>
+
+  <div class="nav-row">
+    <button class="btn btn-ghost" onclick="goBack(3)">← Back</button>
+    <button class="btn btn-primary" onclick="goNext(3)">
+      <span class="btn-label">Review Profile →</span>
+    </button>
+  </div>
+</div>
+
+<!-- ══ STEP 4 — REVIEW ═════════════════════════════════════════════════════ -->
+<div class="card" id="step-4" style="display:none">
+  <p class="step-eyebrow">Step 4 of 4</p>
+  <h1 class="step-title">Review &amp; confirm</h1>
+  <p class="step-desc">Make sure everything looks right before publishing your profile to AI platforms.</p>
+
+  <div class="review-sections">
+
+    <!-- Basics -->
+    <div class="review-section">
+      <div class="review-section-hd">
+        <span class="review-section-title">Business basics</span>
+        <button class="edit-link" onclick="goToStep(1)">Edit</button>
+      </div>
+      <div class="review-grid">
+        <div class="rv"><span class="rv-label">Business name</span><span class="rv-val" id="rv-name">—</span></div>
+        <div class="rv"><span class="rv-label">Industry</span><span class="rv-val" id="rv-industry">—</span></div>
+        <div class="rv"><span class="rv-label">Location</span><span class="rv-val" id="rv-location">—</span></div>
+        <div class="rv"><span class="rv-label">Website</span><span class="rv-val" id="rv-website">—</span></div>
+      </div>
+    </div>
+
+    <!-- Services -->
+    <div class="review-section">
+      <div class="review-section-hd">
+        <span class="review-section-title">Services &amp; pricing</span>
+        <button class="edit-link" onclick="goToStep(2)">Edit</button>
+      </div>
+      <div class="review-grid">
+        <div class="rv full"><span class="rv-label">Services</span><span class="rv-val" id="rv-services">—</span></div>
+        <div class="rv"><span class="rv-label">Pricing range</span><span class="rv-val" id="rv-pricing">—</span></div>
+        <div class="rv"><span class="rv-label">Free consultation</span><span class="rv-val" id="rv-consult">—</span></div>
+        <div class="rv full"><span class="rv-label">Unique value</span><span class="rv-val" id="rv-diff">—</span></div>
+      </div>
+    </div>
+
+    <!-- Leads -->
+    <div class="review-section">
+      <div class="review-section-hd">
+        <span class="review-section-title">Customers &amp; lead routing</span>
+        <button class="edit-link" onclick="goToStep(3)">Edit</button>
+      </div>
+      <div class="review-grid">
+        <div class="rv full"><span class="rv-label">Ideal customer</span><span class="rv-val" id="rv-customer">—</span></div>
+        <div class="rv"><span class="rv-label">Send leads to</span><span class="rv-val" id="rv-leadtype">—</span></div>
+        <div class="rv"><span class="rv-label">Lead destination</span><span class="rv-val" id="rv-leaddest">—</span></div>
+        <div class="rv"><span class="rv-label">Response time</span><span class="rv-val" id="rv-response">—</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Confirm checkbox -->
+  <label class="confirm-row">
+    <input type="checkbox" class="confirm-check" id="confirm-check" />
+    <span class="confirm-text">I confirm this information is accurate and ready to publish to AI platforms.</span>
+  </label>
+
+  <!-- Error banner -->
+  <div class="error-banner" id="submit-error">
+    <span>Something went wrong. Please try again.</span>
+    <button class="retry-btn" onclick="submitProfile()">Retry</button>
+  </div>
+
+  <div class="nav-row">
+    <button class="btn btn-ghost" onclick="goBack(4)">← Back</button>
+    <button class="btn btn-primary" id="publish-btn" onclick="submitProfile()">
+      <span class="btn-label">Publish My Profile</span>
+      <div class="spinner"></div>
+    </button>
+  </div>
+</div>
+
+<!-- ══ SUCCESS SCREEN ══════════════════════════════════════════════════════ -->
+<div id="screen-success">
+  <div class="success-icon">
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+      <path d="M5 14l6 6 12-12" stroke="#3fb950" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </div>
+  <h1 class="success-title">You're live. AI is learning<br>about your business.</h1>
+  <p class="success-sub">Your profile is being published to Claude, ChatGPT, Perplexity, and Gemini. It can take up to 24 hours to appear in AI recommendations.</p>
+
+  <div class="ai-icons-row">
+    <div class="ai-icon-item">
+      <img src="https://cdn.simpleicons.org/anthropic/ffffff" alt="Claude" width="32" height="32" />
+      <span>Claude</span>
+    </div>
+    <div class="ai-icon-item">
+      <img src="https://cdn.simpleicons.org/openai/ffffff" alt="ChatGPT" width="32" height="32" />
+      <span>ChatGPT</span>
+    </div>
+    <div class="ai-icon-item">
+      <img src="https://cdn.simpleicons.org/perplexity/ffffff" alt="Perplexity" width="32" height="32" />
+      <span>Perplexity</span>
+    </div>
+    <div class="ai-icon-item">
+      <img src="https://cdn.simpleicons.org/google/ffffff" alt="Gemini" width="32" height="32" />
+      <span>Gemini</span>
+    </div>
+  </div>
+
+  <div class="success-actions">
+    <a href="/dashboard" class="btn btn-primary" style="font-size:.9375rem;padding:12px 32px">
+      Go to your dashboard →
+    </a>
+    <button class="success-sec-link" onclick="startOver()">Add another business profile</button>
+  </div>
+</div>
+
+<script>
+// ── State ───────────────────────────────────────────────────────────────────
+const state = {
+  step: 1,
+  consultation: true,
+  leadType: 'website',
+};
+
+const INDUSTRY_LABELS = {
+  property_management: 'Property Management',
+  legal: 'Legal',
+  medical: 'Medical',
+  home_services: 'Home Services',
+  real_estate: 'Real Estate',
+  financial_services: 'Financial Services',
+  ecommerce: 'E-Commerce',
+  other: 'Other',
+};
+
+const PRICING_LABELS = {
+  under_500: 'Under $500/mo',
+  '500_2000': '$500–$2,000/mo',
+  '2000_5000': '$2,000–$5,000/mo',
+  '5000_plus': '$5,000+/mo',
+  project_based: 'Project-based / varies',
+};
+
+const RESPONSE_LABELS = {
+  '1_hour': 'Within 1 hour',
+  same_day: 'Same day',
+  '24_hours': 'Within 24 hours',
+  '48_hours': 'Within 48 hours',
+};
+
+const LEAD_TYPE_LABELS = {
+  website: 'My website',
+  booking: 'A booking page',
+  phone: 'A phone number',
+  email: 'An email address',
+};
+
+const LEAD_DEST_PLACEHOLDERS = {
+  website: 'https://yourbusiness.com',
+  booking: 'https://calendly.com/yourname',
+  phone: '+1 (512) 555-0100',
+  email: 'hello@yourbusiness.com',
+};
+
+const LEAD_DEST_LABELS = {
+  website: 'Website URL',
+  booking: 'Booking page URL',
+  phone: 'Phone number',
+  email: 'Email address',
+};
+
+const LEAD_DEST_ERRORS = {
+  website: 'Please enter your website URL',
+  booking: 'Please enter your booking page URL',
+  phone: 'Please enter a phone number',
+  email: 'Please enter an email address',
+};
+
+const API_BASE = 'https://advocate-production-2887.up.railway.app';
+
+// ── Navigation ──────────────────────────────────────────────────────────────
+function goNext(fromStep) {
+  if (!validateStep(fromStep)) return;
+  goToStep(fromStep + 1);
+}
+
+function goBack(fromStep) {
+  goToStep(fromStep - 1);
+}
+
+function goToStep(n) {
+  // Hide current
+  document.getElementById(`step-${state.step}`).style.display = 'none';
+
+  // Update progress dots
+  for (let i = 1; i <= 4; i++) {
+    const ps = document.getElementById(`ps-${i}`);
+    ps.classList.remove('active', 'done');
+    if (i < n) ps.classList.add('done');
+    else if (i === n) ps.classList.add('active');
+  }
+
+  state.step = n;
+
+  // Show target
+  const target = document.getElementById(`step-${n}`);
+  target.style.display = 'block';
+
+  // Populate review on step 4
+  if (n === 4) populateReview();
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ── Toggle helpers ──────────────────────────────────────────────────────────
+function setConsult(val) {
+  state.consultation = val;
+  document.getElementById('consult-yes').classList.toggle('active', val);
+  document.getElementById('consult-no').classList.toggle('active', !val);
+}
+
+function setLeadType(val) {
+  state.leadType = val;
+  document.querySelectorAll('.radio-opt').forEach(el => {
+    el.classList.toggle('selected', el.dataset.val === val);
+  });
+  document.getElementById('lead-dest-label').textContent = LEAD_DEST_LABELS[val];
+  document.getElementById('biz-lead-dest').placeholder = LEAD_DEST_PLACEHOLDERS[val];
+  document.getElementById('lead-dest-error').textContent = LEAD_DEST_ERRORS[val];
+  // Switch input type
+  const inp = document.getElementById('biz-lead-dest');
+  if (val === 'email') inp.type = 'email';
+  else if (val === 'phone') inp.type = 'tel';
+  else inp.type = 'url';
+}
+
+// ── Validation ──────────────────────────────────────────────────────────────
+function setError(fieldId, show) {
+  const el = document.getElementById(fieldId);
+  if (el) el.classList.toggle('has-error', show);
+  return show;
+}
+
+function validateStep(step) {
+  let ok = true;
+
+  if (step === 1) {
+    ok = !setError('f-name',    !v('biz-name').trim())   && ok;
+    ok = !setError('f-industry',!v('biz-industry').trim())&& ok;
+    ok = !setError('f-city',    !v('biz-city').trim())    && ok;
+    ok = !setError('f-state',   !v('biz-state').trim())   && ok;
+    // Website: optional, but if filled must look like a URL
+    const web = v('biz-website').trim();
+    const webBad = web && !isValidUrl(web);
+    ok = !setError('f-website', webBad) && ok;
+  }
+
+  if (step === 2) {
+    ok = !setError('f-services', !v('biz-services').trim()) && ok;
+    ok = !setError('f-pricing',  !v('biz-pricing').trim())  && ok;
+  }
+
+  if (step === 3) {
+    ok = !setError('f-ideal-customer', !v('biz-customer').trim())   && ok;
+    const dest = v('biz-lead-dest').trim();
+    let destBad = !dest;
+    if (!destBad) {
+      if (state.leadType === 'website' || state.leadType === 'booking') destBad = !isValidUrl(dest);
+      if (state.leadType === 'email')  destBad = !isValidEmail(dest);
+    }
+    ok = !setError('f-lead-dest',    destBad) && ok;
+    ok = !setError('f-response-time', !v('biz-response').trim()) && ok;
+  }
+
+  return ok;
+}
+
+function isValidUrl(s) {
+  try { const u = new URL(s); return u.protocol === 'http:' || u.protocol === 'https:'; }
+  catch { return false; }
+}
+
+function isValidEmail(s) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
+
+function v(id) {
+  const el = document.getElementById(id);
+  return el ? el.value : '';
+}
+
+// Clear error on input
+document.addEventListener('input', e => {
+  const field = e.target.closest('.field');
+  if (field && field.classList.contains('has-error')) field.classList.remove('has-error');
+}, true);
+document.addEventListener('change', e => {
+  const field = e.target.closest('.field');
+  if (field && field.classList.contains('has-error')) field.classList.remove('has-error');
+}, true);
+
+// ── Review population ───────────────────────────────────────────────────────
+function populateReview() {
+  setText('rv-name',     v('biz-name') || '—');
+  setText('rv-industry', INDUSTRY_LABELS[v('biz-industry')] || '—');
+  setText('rv-location', [v('biz-city'), v('biz-state')].filter(Boolean).join(', ') || '—');
+  setText('rv-website',  v('biz-website') || '—');
+  setText('rv-services', v('biz-services') || '—');
+  setText('rv-pricing',  PRICING_LABELS[v('biz-pricing')] || '—');
+  setText('rv-consult',  state.consultation ? 'Yes' : 'No');
+  setText('rv-diff',     v('biz-diff') || '—');
+  setText('rv-customer', v('biz-customer') || '—');
+  setText('rv-leadtype', LEAD_TYPE_LABELS[state.leadType] || '—');
+  setText('rv-leaddest', v('biz-lead-dest') || '—');
+  setText('rv-response', RESPONSE_LABELS[v('biz-response')] || '—');
+}
+
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
+// ── Slug generation ─────────────────────────────────────────────────────────
+function slugify(name) {
+  return name.toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+}
+
+// ── Submission ──────────────────────────────────────────────────────────────
+async function submitProfile() {
+  // Confirm checkbox
+  if (!document.getElementById('confirm-check').checked) {
+    document.getElementById('confirm-check').focus();
+    // Briefly flash the confirm row
+    const row = document.querySelector('.confirm-row');
+    row.style.borderColor = 'var(--red)';
+    setTimeout(() => { row.style.borderColor = ''; }, 1200);
+    return;
+  }
+
+  const btn = document.getElementById('publish-btn');
+  btn.classList.add('loading');
+  btn.disabled = true;
+  document.getElementById('submit-error').classList.remove('show');
+
+  // Build payload mapped to backend schema
+  const name = v('biz-name').trim();
+  const city = v('biz-city').trim();
+  const state_val = v('biz-state').trim().toUpperCase();
+  const leadDest = v('biz-lead-dest').trim();
+
+  // Derive referral_url from lead type
+  let referralUrl = leadDest;
+  if (state.leadType === 'phone') referralUrl = `tel:${leadDest}`;
+  if (state.leadType === 'email') referralUrl = `mailto:${leadDest}`;
+
+  const payload = {
+    business_id: slugify(name),
+    name,
+    category: v('biz-industry'),
+    location: {
+      city,
+      state: state_val,
+      service_areas: [`${city}, ${state_val}`],
+    },
+    contact: {
+      website:     state.leadType === 'website' ? leadDest : (v('biz-website').trim() || ''),
+      booking_url: state.leadType === 'booking' ? leadDest : '',
+      phone:       state.leadType === 'phone'   ? leadDest : '',
+      email:       state.leadType === 'email'   ? leadDest : '',
+    },
+    referral_url: referralUrl,
+    services: [
+      {
+        name: 'Our Services',
+        description: v('biz-services').trim(),
+        price_range: PRICING_LABELS[v('biz-pricing')] || '',
+      }
+    ],
+    pricing_tier: v('biz-pricing'),
+    free_consultation: state.consultation,
+    differentiators: v('biz-diff').trim() ? [v('biz-diff').trim()] : [],
+    ideal_customer: v('biz-customer').trim(),
+    response_time: RESPONSE_LABELS[v('biz-response')] || '',
+    availability: RESPONSE_LABELS[v('biz-response')] || '',
+    onboarded_via: 'advocatemcp_wizard',
+  };
+
+  try {
+    const res = await fetch(`${API_BASE}/api/businesses`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    // 409 = already exists — treat as success (idempotent)
+    if (res.ok || res.status === 409) {
+      showSuccess();
+      return;
+    }
+
+    throw new Error(`${res.status}`);
+  } catch (err) {
+    btn.classList.remove('loading');
+    btn.disabled = false;
+    document.getElementById('submit-error').classList.add('show');
+  }
+}
+
+function showSuccess() {
+  // Hide all steps and progress
+  for (let i = 1; i <= 4; i++) {
+    const el = document.getElementById(`step-${i}`);
+    if (el) el.style.display = 'none';
+  }
+  document.getElementById('progress-bar').style.display = 'none';
+
+  const success = document.getElementById('screen-success');
+  success.style.display = 'flex';
+  success.classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function startOver() {
+  // Reset all fields
+  ['biz-name','biz-city','biz-state','biz-website','biz-services',
+   'biz-diff','biz-customer','biz-lead-dest'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  ['biz-industry','biz-pricing','biz-response'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.selectedIndex = 0;
+  });
+  setConsult(true);
+  setLeadType('website');
+  document.getElementById('confirm-check').checked = false;
+
+  // Hide success, show step 1
+  document.getElementById('screen-success').style.display = 'none';
+  document.getElementById('screen-success').classList.remove('active');
+  document.getElementById('progress-bar').style.display = 'block';
+
+  state.step = 1;
+  for (let i = 1; i <= 4; i++) {
+    const ps = document.getElementById(`ps-${i}`);
+    ps.classList.remove('active', 'done');
+    if (i === 1) ps.classList.add('active');
+    const el = document.getElementById(`step-${i}`);
+    if (el) el.style.display = i === 1 ? 'block' : 'none';
+  }
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+</script>
+</body>
+</html>
