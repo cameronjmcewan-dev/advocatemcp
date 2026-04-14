@@ -199,3 +199,13 @@ curl http://localhost:8787/api/onboard/draft/test@example.com
 2. **No TTL/cleanup for abandoned drafts.** Rows accumulate in `onboarding_drafts` indefinitely. Add a cron to sweep rows where `updated_at < now() - 90 days`, or a DELETE endpoint.
 
 3. **No rate limiting on POST /api/onboard/draft.** Unauthenticated, can be hammered to fill D1. Consistent with `/api/onboard/public` (also unrated) — solve together.
+
+## Task 9 — builder followups
+
+From code review of `server/src/agent/builder.ts` (commit `78254ed`):
+
+- **Ratings platform gap.** `ratings_json` schema supports `facebook` and `bbb` keys (see `server/src/schemas/business.ts` RatingsSchema) but `builder.ts` only emits Google and Yelp lines. Iterate the known sources or add explicit cases so BBB/Facebook/Angi ratings surface in prompts.
+- **Double-parse of JSON blobs.** `buildSystemPrompt` and `getIntentEmphasis` each call `parseJsonSafe` on the same 4 blobs. Small perf win + cleaner code to parse once in `buildSystemPrompt` and pass the parsed values into `getIntentEmphasis` as parameters.
+- **Extract `formatProfileBlock(business)` helper.** `buildSystemPrompt` is ~90 lines and half is parse/push logic. Next wizard session (customer_quotes_json, case_stories_json) will push it past readable. Extract before then.
+- **Duplicate "Availability" label.** When both `business.availability` and `hours_json.emergency_24_7` are set, the prompt emits two `- Availability: ...` lines. Rename the structured one to `- Emergency availability:` to disambiguate.
+- **"standard hours" fallback in getIntentEmphasis emergency branch** may mislead Claude when no availability data exists. Consider neutral wording like "check the business for hours" or fall through to a shorter emphasis string.
