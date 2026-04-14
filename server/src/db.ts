@@ -3,21 +3,33 @@ import "dotenv/config";
 import fs   from "fs";
 import path from "path";
 
-const DB_PATH = process.env.DATABASE_PATH ?? "/app/data/dev.db";
-
-// Ensure the parent directory exists (Railway persistent volume or local)
-fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-
 let _db: Database.Database | undefined;
 
 export function getDb(): Database.Database {
   if (_db) return _db;
 
-  _db = new Database(DB_PATH);
+  // Read path lazily so tests can set process.env.DATABASE_PATH before first call.
+  const dbPath = process.env.DATABASE_PATH ?? "/app/data/dev.db";
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+
+  _db = new Database(dbPath);
   _db.pragma("journal_mode = WAL");
   _db.pragma("foreign_keys = ON");
   _initSchema(_db);
   return _db;
+}
+
+/**
+ * Test-only helper: close the current handle and drop the module-level cache so
+ * a subsequent `getDb()` re-reads `process.env.DATABASE_PATH`. Lets test files
+ * point at different tmp DBs without the first `import` binding the cache.
+ * NEVER call this from production code.
+ */
+export function _resetDbForTests(): void {
+  if (_db) {
+    try { _db.close(); } catch { /* ignore close errors in tests */ }
+    _db = undefined;
+  }
 }
 
 function _addColumnIfNotExists(

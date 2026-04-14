@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import { getDb } from "../db.js";
 import crypto from "crypto";
 import { requireApiKey } from "../middleware/auth.js";
+import { OnboardingPayloadSchema } from "../schemas/business.js";
 
 export const registerRouter = Router();
 
@@ -17,76 +18,30 @@ function slugify(name: string): string {
 }
 
 /**
- * POST /register
+ * POST /register — onboard a new business.
  *
- * Onboard a new business. Auto-generates a slug and API key.
- * Returns the slug, API key, and all endpoint URLs.
+ * Validates the request body against OnboardingPayloadSchema (zod), auto-generates
+ * a slug + API key, and persists the flat profile columns plus the 9-step wizard
+ * JSON blobs. Returns slug, API key, and public endpoint URLs.
  */
 registerRouter.post("/register", requireApiKey, (req: Request, res: Response) => {
-  const {
-    name,
-    description,
-    services,
-    pricing,
-    location,
-    phone,
-    website,
-    referral_url,
-    tone,
-    // Section 1: rich profile fields
-    category,
-    star_rating,
-    review_count,
-    years_in_business,
-    top_services,
-    availability,
-    differentiator,
-    service_radius_miles,
-    certifications,
-    pricing_tier,
-    service_area_keywords,
-  } = req.body as Record<string, unknown>;
-
-  // Validate required fields
-  if (!name || typeof name !== "string") {
-    res.status(400).json({ error: "Missing required field: name (string)" });
-    return;
-  }
-  if (!description || typeof description !== "string") {
-    res.status(400).json({ error: "Missing required field: description (string)" });
-    return;
-  }
-  if (!services) {
+  const parsed = OnboardingPayloadSchema.safeParse(req.body);
+  if (!parsed.success) {
     res.status(400).json({
-      error: "Missing required field: services (string[] or string)",
+      error: "validation_error",
+      issues: parsed.error.issues.map((i) => ({
+        path: i.path.join("."),
+        message: i.message,
+      })),
     });
     return;
   }
-  if (!category || typeof category !== "string") {
-    res.status(400).json({ error: "Missing required field: category (string)" });
-    return;
-  }
-  if (!location || typeof location !== "string") {
-    res.status(400).json({ error: "Missing required field: location (string)" });
-    return;
-  }
-  if (star_rating == null || typeof star_rating !== "number" || star_rating < 0 || star_rating > 5) {
-    res.status(400).json({ error: "Missing or invalid field: star_rating (number 0-5)" });
-    return;
-  }
-  if (review_count == null || typeof review_count !== "number" || review_count < 0) {
-    res.status(400).json({ error: "Missing or invalid field: review_count (number >= 0)" });
-    return;
-  }
-  if (pricing_tier != null && !["budget", "mid-range", "premium"].includes(pricing_tier as string)) {
-    res.status(400).json({ error: "Invalid pricing_tier: must be 'budget', 'mid-range', or 'premium'" });
-    return;
-  }
+  const p = parsed.data;
 
   const db = getDb();
 
   // Generate a unique slug (append -1, -2, … on collision)
-  const baseSlug = slugify(name);
+  const baseSlug = slugify(p.name);
   let slug = baseSlug;
   let attempt = 0;
   while (db.prepare("SELECT id FROM businesses WHERE slug = ?").get(slug)) {
@@ -95,60 +50,57 @@ registerRouter.post("/register", requireApiKey, (req: Request, res: Response) =>
   }
 
   const apiKey = crypto.randomUUID();
-  const servicesJson = Array.isArray(services)
-    ? JSON.stringify(services)
-    : JSON.stringify([String(services)]);
+  const j = (v: unknown): string | null =>
+    v === undefined ? null : JSON.stringify(v);
 
   try {
     db.prepare(
       `INSERT INTO businesses
-         (slug, name, description, services, pricing, location, phone, website, referral_url, tone, api_key,
-          category, star_rating, review_count, years_in_business, top_services, availability,
-          differentiator, service_radius_miles, certifications, pricing_tier, service_area_keywords)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (slug, name, description, services, pricing, location, phone, website,
+          referral_url, tone, api_key,
+          category, star_rating, review_count, years_in_business, top_services,
+          availability, differentiator, service_radius_miles, certifications,
+          pricing_tier, service_area_keywords,
+          hours_json, services_json_v2, pricing_json_v2, credentials_json,
+          ratings_json, differentiators_text, customer_quotes_json,
+          guarantee_text, case_stories_json, lead_routing_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       slug,
-      name,
-      description,
-      servicesJson,
-      typeof pricing === "string" ? pricing : null,
-      typeof location === "string" ? location : null,
-      typeof phone === "string" ? phone : null,
-      typeof website === "string" ? website : null,
-      typeof referral_url === "string"
-        ? referral_url
-        : typeof website === "string"
-          ? website
-          : null,
-      typeof tone === "string" ? tone : "friendly",
+      p.name,
+      p.description,
+      JSON.stringify(p.services),
+      p.pricing ?? null,
+      p.location,
+      p.phone ?? null,
+      p.website ?? null,
+      p.referral_url ?? p.website ?? null,
+      p.tone,
       apiKey,
-      category as string,
-      star_rating as number,
-      review_count as number,
-      typeof years_in_business === "number" ? years_in_business : null,
-      typeof top_services === "string"
-        ? top_services
-        : Array.isArray(top_services)
-          ? (top_services as string[]).join(", ")
-          : null,
-      typeof availability === "string" ? availability : null,
-      typeof differentiator === "string" ? differentiator : null,
-      typeof service_radius_miles === "number" ? service_radius_miles : null,
-      typeof certifications === "string"
-        ? certifications
-        : Array.isArray(certifications)
-          ? (certifications as string[]).join(", ")
-          : null,
-      typeof pricing_tier === "string" ? pricing_tier : null,
-      typeof service_area_keywords === "string"
-        ? service_area_keywords
-        : Array.isArray(service_area_keywords)
-          ? (service_area_keywords as string[]).join(", ")
-          : null
+      p.category,
+      p.star_rating,
+      p.review_count,
+      p.years_in_business ?? null,
+      p.top_services ?? null,
+      p.availability ?? null,
+      p.differentiator ?? null,
+      p.service_radius_miles ?? null,
+      p.certifications ?? null,
+      p.pricing_tier ?? null,
+      p.service_area_keywords ?? null,
+      j(p.hours_json),
+      j(p.services_json_v2),
+      j(p.pricing_json_v2),
+      j(p.credentials_json),
+      j(p.ratings_json),
+      p.differentiators_text ?? null,
+      j(p.customer_quotes_json),
+      p.guarantee_text ?? null,
+      j(p.case_stories_json),
+      j(p.lead_routing_json),
     );
 
     const base = process.env.API_BASE_URL ?? "https://api.advocatemcp.com";
-
     res.status(201).json({
       slug,
       api_key: apiKey,
@@ -156,18 +108,11 @@ registerRouter.post("/register", requireApiKey, (req: Request, res: Response) =>
       profile_endpoint: `${base}/agents/${slug}/profile`,
       mcp_endpoint: `${base}/mcp`,
       wellknown_url: `https://<your-domain>/.well-known/ai-agent.json`,
-      instructions: {
-        query_agent: `POST ${base}/agents/${slug}/query — body: { "query": "...", "crawler": "YourBotName" }`,
-        view_profile: `GET ${base}/agents/${slug}/profile — public structured profile`,
-        view_analytics: `GET ${base}/analytics/${slug} — header: Authorization: Bearer ${apiKey}`,
-        connect_mcp: `Add ${base}/mcp to your MCP client (Claude Desktop, Cursor, etc.)`,
-        install_worker: `Deploy the Cloudflare Worker and add "${slug}" to your BUSINESS_MAP KV store with your domain as the key`,
-      },
     });
   } catch (err) {
     console.error("[register] Error:", err);
     res.status(500).json({
-      error: "Registration failed",
+      error: "registration_failed",
       message: err instanceof Error ? err.message : "Unknown error",
     });
   }
