@@ -154,7 +154,7 @@ function _initSchema(db: Database.Database): void {
       FOREIGN KEY(query_basket_id) REFERENCES competitor_query_baskets(id)
     );
     CREATE INDEX IF NOT EXISTS idx_cp_slug_polled ON competitor_polls(slug, polled_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_cp_slug_lost   ON competitor_polls(slug, our_domain_cited);
+    CREATE INDEX IF NOT EXISTS idx_cp_slug_lost   ON competitor_polls(slug, our_domain_cited, polled_at DESC);
 
     CREATE TABLE IF NOT EXISTS competitor_citations (
       id      INTEGER PRIMARY KEY AUTOINCREMENT,
