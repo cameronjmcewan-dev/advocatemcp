@@ -728,6 +728,10 @@ export async function registerBusinessOnRailway(
     differentiator: typeof profile.differentiator === "string"
       ? profile.differentiator
       : (typeof differentiators[0] === "string" ? differentiators[0] : undefined),
+    // P3: tenant plan tier — forwarded so Railway can filter plan='pro' tenants
+    // for competitor radar. `"free"` collapses to `"base"` since Railway's
+    // schema only accepts `"base" | "pro"`.
+    plan: tenant.stripe?.plan === "pro" ? "pro" : "base",
   };
 
   // Forward 9-step wizard JSON blobs — only when present so undefined keys

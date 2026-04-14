@@ -98,6 +98,8 @@ function _initSchema(db: Database.Database): void {
     ["guarantee_text", "TEXT"],
     ["case_stories_json", "TEXT"],
     ["lead_routing_json", "TEXT"],
+    // P3: competitor radar — tenant plan tier
+    ["plan", "TEXT NOT NULL DEFAULT 'base'"],
   ];
   for (const [col, type] of bizCols) {
     _addColumnIfNotExists(db, "businesses", col, type);
@@ -162,6 +164,7 @@ export interface BusinessRow {
   guarantee_text: string | null;
   case_stories_json: string | null;
   lead_routing_json: string | null;
+  plan: string;   // 'base' | 'pro'
 }
 
 export interface QueryRow {

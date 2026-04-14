@@ -63,8 +63,8 @@ registerRouter.post("/register", requireApiKey, (req: Request, res: Response) =>
           pricing_tier, service_area_keywords,
           hours_json, services_json_v2, pricing_json_v2, credentials_json,
           ratings_json, differentiators_text, customer_quotes_json,
-          guarantee_text, case_stories_json, lead_routing_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          guarantee_text, case_stories_json, lead_routing_json, plan)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       slug,
       p.name,
@@ -98,6 +98,7 @@ registerRouter.post("/register", requireApiKey, (req: Request, res: Response) =>
       p.guarantee_text ?? null,
       j(p.case_stories_json),
       j(p.lead_routing_json),
+      p.plan,
     );
 
     const base = process.env.API_BASE_URL ?? "https://api.advocatemcp.com";

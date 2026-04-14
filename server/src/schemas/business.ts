@@ -126,5 +126,8 @@ export const OnboardingPayloadSchema = z.object({
 
   // Step 8 — lead routing
   lead_routing_json: LeadRoutingSchema.optional(),
+
+  // P3: tenant plan tier — forwarded by Worker on Stripe checkout
+  plan: z.enum(["base", "pro"]).optional().default("base"),
 });
 export type OnboardingPayload = z.infer<typeof OnboardingPayloadSchema>;

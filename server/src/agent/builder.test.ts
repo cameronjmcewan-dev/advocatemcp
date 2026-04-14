@@ -18,6 +18,7 @@ function mkBiz(overrides: Partial<BusinessRow> = {}): BusinessRow {
     credentials_json: null, ratings_json: null, differentiators_text: null,
     customer_quotes_json: null, guarantee_text: null, case_stories_json: null,
     lead_routing_json: null,
+    plan: "base",
     ...overrides,
   };
 }

@@ -96,4 +96,51 @@ describe("POST /register", () => {
     expect(res.status).toBe(201);
     expect(res.body.slug).toBe("minimal-biz");
   });
+
+  it("persists plan='pro' when supplied in payload", async () => {
+    const payload = {
+      name: "Pro Plumb",
+      description: "d",
+      category: "plumber",
+      location: "Boise, ID",
+      services: ["drain"],
+      star_rating: 4.5,
+      review_count: 10,
+      plan: "pro",
+    };
+    const res = await request(app)
+      .post("/register")
+      .set("Authorization", "Bearer test-admin-key")
+      .send(payload);
+    expect(res.status).toBe(201);
+
+    const { getDb } = await import("../db.js");
+    const row = getDb()
+      .prepare("SELECT plan FROM businesses WHERE slug = ?")
+      .get(res.body.slug) as { plan: string };
+    expect(row.plan).toBe("pro");
+  });
+
+  it("defaults plan to 'base' when omitted", async () => {
+    const payload = {
+      name: "Base Plumb",
+      description: "d",
+      category: "plumber",
+      location: "Boise, ID",
+      services: ["drain"],
+      star_rating: 4.5,
+      review_count: 10,
+    };
+    const res = await request(app)
+      .post("/register")
+      .set("Authorization", "Bearer test-admin-key")
+      .send(payload);
+    expect(res.status).toBe(201);
+
+    const { getDb } = await import("../db.js");
+    const row = getDb()
+      .prepare("SELECT plan FROM businesses WHERE slug = ?")
+      .get(res.body.slug) as { plan: string };
+    expect(row.plan).toBe("base");
+  });
 });
