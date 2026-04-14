@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { requireApiKey } from "../middleware/auth.js";
+import { requireSlugOrAdminKey } from "../middleware/auth.js";
 import { getDb } from "../db.js";
 import { canonicalDomain } from "../lib/domainMatch.js";
 
@@ -26,7 +26,7 @@ function daysAgoIso(days: number): string {
  */
 competitorRadarRouter.get(
   "/api/competitor-radar/:slug/summary",
-  requireApiKey,
+  requireSlugOrAdminKey,
   (req: Request, res: Response) => {
     const { slug } = req.params;
     const days = parseDays(req.query.days, 30);
@@ -77,7 +77,7 @@ competitorRadarRouter.get(
  */
 competitorRadarRouter.get(
   "/api/competitor-radar/:slug/losses",
-  requireApiKey,
+  requireSlugOrAdminKey,
   (req: Request, res: Response) => {
     const { slug } = req.params;
     const days  = parseDays(req.query.days, 7);

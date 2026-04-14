@@ -96,4 +96,25 @@ describe("GET /api/competitor-radar/:slug/summary + /losses", () => {
     expect(res.status).toBe(200);
     expect(res.body.losses.length).toBeLessThanOrEqual(200);
   });
+
+  it("allows a slug-bound business key", async () => {
+    const res = await request(app)
+      .get("/api/competitor-radar/t1/summary?days=30")
+      .set("Authorization", "Bearer tenant-key");
+    expect(res.status).toBe(200);
+    expect(res.body.total_polls).toBe(30);
+  });
+
+  it("rejects a business key used against a foreign slug", async () => {
+    // Create a second tenant with a different key to prove isolation.
+    const { getDb } = await import("../db.js");
+    getDb().prepare(`INSERT INTO businesses
+      (slug, name, description, services, api_key, category, location, website, star_rating, review_count, plan)
+      VALUES ('t2', 'T2', 'd', '[]', 'other-tenant-key', 'plumber', 'Boise', 'https://t2.com', 4.5, 10, 'pro')`).run();
+
+    const res = await request(app)
+      .get("/api/competitor-radar/t1/summary?days=30")
+      .set("Authorization", "Bearer other-tenant-key");
+    expect(res.status).toBe(401);
+  });
 });
