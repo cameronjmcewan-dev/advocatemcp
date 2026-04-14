@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { requireSlugOrAdminKey } from "../middleware/auth.js";
+import { requireSlugOrAdminKey, requireApiKey } from "../middleware/auth.js";
 import { getDb } from "../db.js";
 import { canonicalDomain } from "../lib/domainMatch.js";
 
@@ -109,5 +109,85 @@ competitorRadarRouter.get(
     }));
 
     res.json({ range_days: days, losses });
+  },
+);
+
+const BASKET_CAP = 15;
+const QUERY_MAX  = 200;
+
+/**
+ * GET /api/competitor-basket/:slug
+ */
+competitorRadarRouter.get(
+  "/api/competitor-basket/:slug",
+  requireApiKey,
+  (req: Request, res: Response) => {
+    const { slug } = req.params;
+    const db = getDb();
+    const queries = db.prepare(
+      `SELECT id, query, source FROM competitor_query_baskets
+        WHERE slug=? AND enabled=1
+        ORDER BY created_at ASC`
+    ).all(slug) as { id: number; query: string; source: string }[];
+    res.json({ slug, queries });
+  },
+);
+
+/**
+ * POST /api/competitor-basket/:slug/queries
+ */
+competitorRadarRouter.post(
+  "/api/competitor-basket/:slug/queries",
+  requireApiKey,
+  (req: Request, res: Response) => {
+    const { slug } = req.params;
+    const raw = typeof req.body?.query === "string" ? req.body.query.trim() : "";
+    if (!raw || raw.length > QUERY_MAX) {
+      res.status(400).json({ error: "query must be 1..200 chars" });
+      return;
+    }
+
+    const db = getDb();
+    const { count } = db.prepare(
+      "SELECT COUNT(*) AS count FROM competitor_query_baskets WHERE slug=? AND enabled=1"
+    ).get(slug) as { count: number };
+    if (count >= BASKET_CAP) {
+      res.status(400).json({ error: `basket cap reached (${BASKET_CAP} enabled queries)` });
+      return;
+    }
+
+    try {
+      const info = db.prepare(
+        `INSERT INTO competitor_query_baskets (slug, query, source, enabled, created_at)
+         VALUES (?, ?, 'tenant', 1, ?)`
+      ).run(slug, raw, new Date().toISOString());
+      res.status(201).json({ id: Number(info.lastInsertRowid), slug, query: raw, source: "tenant" });
+    } catch (err) {
+      if (err instanceof Error && /UNIQUE/i.test(err.message)) {
+        res.status(409).json({ error: "duplicate query for this tenant" });
+        return;
+      }
+      throw err;
+    }
+  },
+);
+
+/**
+ * DELETE /api/competitor-basket/:slug/queries/:id  — soft delete
+ */
+competitorRadarRouter.delete(
+  "/api/competitor-basket/:slug/queries/:id",
+  requireApiKey,
+  (req: Request, res: Response) => {
+    const { slug, id } = req.params;
+    const numId = Number(id);
+    if (!Number.isFinite(numId)) { res.status(404).json({ error: "not_found" }); return; }
+
+    const db = getDb();
+    const info = db.prepare(
+      "UPDATE competitor_query_baskets SET enabled=0 WHERE id=? AND slug=? AND enabled=1"
+    ).run(numId, slug);
+    if (info.changes === 0) { res.status(404).json({ error: "not_found" }); return; }
+    res.json({ ok: true });
   },
 );

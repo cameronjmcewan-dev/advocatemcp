@@ -118,3 +118,123 @@ describe("GET /api/competitor-radar/:slug/summary + /losses", () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe("basket CRUD", () => {
+  const tmp = path.join(os.tmpdir(), `p3-basket-${Date.now()}.db`);
+  let app: express.Express;
+
+  beforeAll(async () => {
+    process.env.DATABASE_PATH = tmp;
+    process.env.API_KEY = "admin-key";
+    const { _resetDbForTests, getDb } = await import("../db.js");
+    _resetDbForTests();
+    const db = getDb();
+    db.prepare(`INSERT INTO businesses
+      (slug, name, description, services, api_key, category, location, star_rating, review_count, plan)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pro')`).run(
+        "tb", "TB", "d", "[]", "tenant-key", "plumber", "Boise, ID", 4.5, 10
+      );
+    db.prepare(`INSERT INTO competitor_query_baskets (slug, query, source, enabled, created_at)
+      VALUES ('tb', 'seeded auto', 'auto', 1, datetime('now'))`).run();
+    db.prepare(`INSERT INTO competitor_query_baskets (slug, query, source, enabled, created_at)
+      VALUES ('tb', 'disabled old', 'tenant', 0, datetime('now'))`).run();
+
+    const { competitorRadarRouter } = await import("./competitorRadar.js");
+    app = express();
+    app.use(express.json());
+    app.use(competitorRadarRouter);
+  });
+
+  afterAll(async () => {
+    const { _resetDbForTests } = await import("../db.js");
+    _resetDbForTests();
+    for (const suffix of ["", "-wal", "-shm"]) fs.rmSync(tmp + suffix, { force: true });
+    delete process.env.API_KEY;
+    delete process.env.DATABASE_PATH;
+  });
+
+  it("GET returns only enabled queries", async () => {
+    const res = await request(app)
+      .get("/api/competitor-basket/tb")
+      .set("X-API-Key", "admin-key");
+    expect(res.status).toBe(200);
+    expect(res.body.queries).toHaveLength(1);
+    expect(res.body.queries[0].query).toBe("seeded auto");
+  });
+
+  it("POST creates a tenant-source query", async () => {
+    const res = await request(app)
+      .post("/api/competitor-basket/tb/queries")
+      .set("X-API-Key", "admin-key")
+      .send({ query: "24/7 emergency plumber" });
+    expect(res.status).toBe(201);
+    expect(res.body.query).toBe("24/7 emergency plumber");
+    expect(res.body.source).toBe("tenant");
+  });
+
+  it("POST rejects empty/long queries", async () => {
+    const r1 = await request(app)
+      .post("/api/competitor-basket/tb/queries")
+      .set("X-API-Key", "admin-key")
+      .send({ query: "" });
+    expect(r1.status).toBe(400);
+
+    const r2 = await request(app)
+      .post("/api/competitor-basket/tb/queries")
+      .set("X-API-Key", "admin-key")
+      .send({ query: "x".repeat(201) });
+    expect(r2.status).toBe(400);
+  });
+
+  it("POST 409s on duplicate", async () => {
+    const res = await request(app)
+      .post("/api/competitor-basket/tb/queries")
+      .set("X-API-Key", "admin-key")
+      .send({ query: "seeded auto" });
+    expect(res.status).toBe(409);
+  });
+
+  it("POST 400s past 15-row cap", async () => {
+    const { getDb } = await import("../db.js");
+    const db = getDb();
+    const stmt = db.prepare(`INSERT INTO competitor_query_baskets (slug, query, source, enabled, created_at)
+      VALUES ('tb', ?, 'tenant', 1, datetime('now'))`);
+    for (let i = 0; i < 14; i++) stmt.run(`filler ${i}`);
+    const res = await request(app)
+      .post("/api/competitor-basket/tb/queries")
+      .set("X-API-Key", "admin-key")
+      .send({ query: "one too many" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/cap/);
+  });
+
+  it("DELETE soft-deletes (enabled=0) a tenant row", async () => {
+    const { getDb } = await import("../db.js");
+    const db = getDb();
+    const info = db.prepare(`INSERT INTO competitor_query_baskets (slug, query, source, enabled, created_at)
+      VALUES ('tb', 'to-delete', 'tenant', 1, datetime('now'))`).run();
+    const id = Number(info.lastInsertRowid);
+
+    const res = await request(app)
+      .delete(`/api/competitor-basket/tb/queries/${id}`)
+      .set("X-API-Key", "admin-key");
+    expect(res.status).toBe(200);
+
+    const row = db.prepare("SELECT enabled FROM competitor_query_baskets WHERE id=?")
+      .get(id) as { enabled: number };
+    expect(row.enabled).toBe(0);
+  });
+
+  it("DELETE returns 404 for another tenant's id", async () => {
+    const { getDb } = await import("../db.js");
+    const db = getDb();
+    const info = db.prepare(`INSERT INTO competitor_query_baskets (slug, query, source, enabled, created_at)
+      VALUES ('other-tenant', 'cross', 'tenant', 1, datetime('now'))`).run();
+    const id = Number(info.lastInsertRowid);
+
+    const res = await request(app)
+      .delete(`/api/competitor-basket/tb/queries/${id}`)
+      .set("X-API-Key", "admin-key");
+    expect(res.status).toBe(404);
+  });
+});
