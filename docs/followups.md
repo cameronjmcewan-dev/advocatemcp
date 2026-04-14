@@ -304,3 +304,14 @@ Re-run the emergency and affordable intent queries against the production Railwa
 ### Rollback
 
 Worker rollback: `wrangler rollback` reverts the worker script but NOT Workers Routes — if routes were changed, redeploy from the prior wrangler.toml commit. Railway is additive-safe: the new D1/SQLite columns (`hours_json`, `services_json_v2`, `pricing_json_v2`, `credentials_json`, `ratings_json`, `customer_quotes_json`, `case_stories_json`, `lead_routing_json`) are all optional nullable columns, so the old handler simply ignores them — no data loss from reverting the Railway deploy. To fully roll back Railway, redeploy the prior git SHA via the Railway dashboard.
+
+## P3 Competitor Radar — v1.1 candidates
+
+- **Subdomain-root matching.** Strict v1 match treats `shop.tenant.com` as NOT `tenant.com`. Revisit after 30 days of production data if false-negative rate is material.
+- **Owned-presence aliases.** If tenants report "Perplexity cited my Yelp/Google Biz/Facebook/BBB listing and you didn't count it," add `tenant_domain_aliases` table and widen `isCitationOfTenant`. Belongs in P4.
+- **LLM-generated phrasing variants.** v1 uses 3 fixed templates. If citation rates are bimodal (consistently cited vs. never), swap in LLM-generated variants. Producer-function swap — no schema change.
+- **OpenAI Responses API (P3 v1.1).** Add `bot='openai'` polling once the web-search tool-call output schema stabilizes.
+- **Per-tenant budget caps.** v1 uses a single global daily cap. Add per-tenant caps keyed by plan tier if one tenant dominates spend.
+- **Poll + citation outer transaction (Task 10 deferred).** `pollAll` inserts the poll row and then inserts citations in a separate transaction. A process crash between the two leaves an orphan poll row with zero citations that still counts in `citation_rate`. Wrap both in a single outer transaction.
+- **Losses endpoint N+1 (Task 11 deferred).** `GET /api/competitor-radar/:slug/losses?limit=200` issues 1 + N queries (one per loss poll to fetch its top citations). Rewrite as a single `LEFT JOIN LATERAL` or window-function query when row counts grow.
+- **Pro-plan gate on basket/summary/losses routes (Task 12 deferred).** The three HTTP read/write endpoints in `competitorRadarRouter` gate on API key only, not on `businesses.plan='pro'`. `seedBasketIfEmpty` and `pollAll` already enforce Pro — a base-tier tenant can still GET an empty `/summary` or POST to the basket with no effect on polling, but adding a `requirePlan('pro')` middleware would close the loop and return 403.
