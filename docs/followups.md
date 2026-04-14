@@ -209,3 +209,98 @@ From code review of `server/src/agent/builder.ts` (commit `78254ed`):
 - **Extract `formatProfileBlock(business)` helper.** `buildSystemPrompt` is ~90 lines and half is parse/push logic. Next wizard session (customer_quotes_json, case_stories_json) will push it past readable. Extract before then.
 - **Duplicate "Availability" label.** When both `business.availability` and `hours_json.emergency_24_7` are set, the prompt emits two `- Availability: ...` lines. Rename the structured one to `- Emergency availability:` to disambiguate.
 - **"standard hours" fallback in getIntentEmphasis emergency branch** may mislead Claude when no availability data exists. Consider neutral wording like "check the business for hours" or fall through to a shorter emphasis string.
+
+## Task 10 — deploy + smoke checklist
+
+Run these before and after deploying the `onboarding-schema-extension` branch to production.
+
+### Pre-deploy smoke test (local Railway server)
+
+Start the local Railway server (`cd server && npm run dev`) then run the full round-trip:
+
+**Step 1 — register a test business with wizard blob fields:**
+
+```bash
+curl -X POST http://localhost:3000/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Apex Plumbing",
+    "description": "Licensed plumber in Austin TX serving residential and commercial customers.",
+    "category": "plumber",
+    "location": "Austin, TX",
+    "services": ["drain cleaning", "water heater repair", "leak detection"],
+    "phone": "512-555-0100",
+    "website": "https://apexplumbing.example.com",
+    "hours_json": {
+      "mon": {"open":"07:00","close":"19:00"},
+      "tue": {"open":"07:00","close":"19:00"},
+      "wed": {"open":"07:00","close":"19:00"},
+      "thu": {"open":"07:00","close":"19:00"},
+      "fri": {"open":"07:00","close":"19:00"},
+      "sat": {"open":"08:00","close":"15:00"},
+      "sun": null,
+      "emergency_24_7": true
+    },
+    "credentials_json": {
+      "licenses": [{"name": "Master Plumber", "number": "TX-MP-88421"}],
+      "insured": true,
+      "bonded": true,
+      "certifications": ["Backflow Prevention"]
+    },
+    "pricing_json_v2": {
+      "ranges": [{"service": "drain cleaning", "low": 150, "high": 400, "unit": "flat"}],
+      "free_estimates": true,
+      "call_for_quote": false
+    },
+    "ratings_json": {
+      "google": {"rating": 4.8, "count": 312},
+      "yelp": {"rating": 4.6, "count": 88}
+    }
+  }'
+```
+
+Save the returned `slug` and `api_key` for the queries below.
+
+**Step 2 — emergency intent query (replace SLUG and API_KEY):**
+
+```bash
+curl -X POST http://localhost:3000/agents/SLUG/query \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer API_KEY" \
+  -d '{"query": "I have a burst pipe emergency right now, who can help 24/7?", "crawler_agent": "PerplexityBot"}'
+```
+
+Expected assertion: response mentions 24/7 emergency availability and references the licensed/insured status.
+
+**Step 3 — affordable intent query:**
+
+```bash
+curl -X POST http://localhost:3000/agents/SLUG/query \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer API_KEY" \
+  -d '{"query": "How much does drain cleaning cost? Looking for affordable plumber.", "crawler_agent": "GPTBot"}'
+```
+
+Expected assertion: response mentions the $150–$400 range and free estimates.
+
+### Production deploy sequence
+
+Run from `worker/` after merging `onboarding-schema-extension` to `main`:
+
+```bash
+# 1. Apply the D1 migration for the new onboarding blob columns
+npx wrangler d1 execute advocatemcp-auth --remote --file=migrations/0006_onboarding_profile.sql
+
+# 2. Deploy the worker
+npx wrangler deploy
+```
+
+Verify the deploy with the Task 7 and Task 8 smoke tests in this file (sections above), pointing at the production worker URL instead of localhost.
+
+### Post-deploy verification
+
+Re-run the emergency and affordable intent queries against the production Railway URL to confirm the builder is correctly reading wizard blob fields from the live SQLite database.
+
+### Rollback
+
+Worker rollback: `wrangler rollback` reverts the worker script but NOT Workers Routes — if routes were changed, redeploy from the prior wrangler.toml commit. Railway is additive-safe: the new D1/SQLite columns (`hours_json`, `services_json_v2`, `pricing_json_v2`, `credentials_json`, `ratings_json`, `customer_quotes_json`, `case_stories_json`, `lead_routing_json`) are all optional nullable columns, so the old handler simply ignores them — no data loss from reverting the Railway deploy. To fully roll back Railway, redeploy the prior git SHA via the Railway dashboard.
