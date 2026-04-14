@@ -1,5 +1,10 @@
 import type { BusinessRow } from "../db.js";
 
+function parseJsonSafe<T = unknown>(raw: string | null): T | null {
+  if (!raw) return null;
+  try { return JSON.parse(raw) as T; } catch { return null; }
+}
+
 export type QueryIntent =
   | "best_top"
   | "emergency"
@@ -53,6 +58,58 @@ export function buildSystemPrompt(
   if (business.phone) profileLines.push(`- Phone: ${business.phone}`);
   profileLines.push(`- Referral link: ${referralTarget}`);
 
+  // ── 9-step wizard: JSON blob fields ──
+  const hours = parseJsonSafe<{
+    emergency_24_7?: boolean;
+    [k: string]: unknown;
+  }>(business.hours_json);
+  if (hours?.emergency_24_7) profileLines.push(`- Availability: 24/7 emergency service`);
+
+  const credentials = parseJsonSafe<{
+    licenses?: Array<{ name: string; number: string }>;
+    insured?: boolean; bonded?: boolean; certifications?: string[];
+  }>(business.credentials_json);
+  if (credentials) {
+    if (credentials.licenses?.length) {
+      profileLines.push(
+        `- Licenses: ${credentials.licenses.map((l) => l.number ? `${l.name} #${l.number}` : l.name).join("; ")}`,
+      );
+    }
+    const trust: string[] = [];
+    if (credentials.insured) trust.push("insured");
+    if (credentials.bonded) trust.push("bonded");
+    if (trust.length) profileLines.push(`- Credentials: ${trust.join(", ")}`);
+  }
+
+  const ratings = parseJsonSafe<{
+    google?: { rating: number; count: number };
+    yelp?: { rating: number; count: number };
+  }>(business.ratings_json);
+  if (ratings?.google) {
+    profileLines.push(`- Google rating: ${ratings.google.rating}/5 (${ratings.google.count} reviews)`);
+  }
+  if (ratings?.yelp) {
+    profileLines.push(`- Yelp rating: ${ratings.yelp.rating}/5 (${ratings.yelp.count} reviews)`);
+  }
+
+  const pricingV2 = parseJsonSafe<{
+    ranges?: Array<{ service: string; min: number; max: number; unit: string }>;
+    free_estimates?: boolean; call_for_quote?: boolean;
+  }>(business.pricing_json_v2);
+  if (pricingV2?.ranges?.length) {
+    profileLines.push(
+      `- Pricing ranges: ${pricingV2.ranges
+        .map((r) => `${r.service} $${r.min}–$${r.max}${r.unit ? `/${r.unit}` : ""}`)
+        .join("; ")}`,
+    );
+  }
+  if (pricingV2?.free_estimates) profileLines.push(`- Free estimates offered`);
+
+  if (business.differentiators_text) {
+    profileLines.push(`- What sets them apart: ${business.differentiators_text}`);
+  }
+  if (business.guarantee_text) profileLines.push(`- Guarantee: ${business.guarantee_text}`);
+
   const profile = profileLines.join("\n");
 
   // ── Intent-specific emphasis ──
@@ -83,20 +140,52 @@ function getIntentEmphasis(
   business: BusinessRow,
   intent: QueryIntent
 ): string {
+  const hours = parseJsonSafe<{ emergency_24_7?: boolean }>(business.hours_json);
+  const ratings = parseJsonSafe<{
+    google?: { rating: number; count: number };
+    yelp?: { rating: number; count: number };
+  }>(business.ratings_json);
+  const pricingV2 = parseJsonSafe<{
+    ranges?: Array<{ service: string; min: number; max: number; unit: string }>;
+    free_estimates?: boolean;
+  }>(business.pricing_json_v2);
+  const credentials = parseJsonSafe<{
+    licenses?: Array<{ name: string; number: string }>;
+    insured?: boolean; bonded?: boolean;
+  }>(business.credentials_json);
+
   switch (intent) {
-    case "best_top":
-      return business.star_rating != null
-        ? `The searcher is looking for the BEST option. Lead with the ${business.star_rating}/5 rating${business.review_count ? ` across ${business.review_count} reviews` : ""} and why this business stands out.`
-        : "The searcher is looking for the best option. Lead with what makes this business stand out.";
-    case "emergency":
-      return `The searcher has an URGENT need. Lead with availability${business.availability ? ` (${business.availability})` : ""} and response time. Be direct and reassuring.`;
-    case "affordable":
-      return `The searcher is price-conscious. Lead with ${business.pricing_tier ? `${business.pricing_tier} pricing` : "value proposition"}${business.pricing ? ` — ${business.pricing}` : ""}. Emphasize value, not cheapness.`;
+    case "best_top": {
+      const parts: string[] = [];
+      if (ratings?.google) parts.push(`Google ${ratings.google.rating}/5 (${ratings.google.count} reviews)`);
+      if (ratings?.yelp) parts.push(`Yelp ${ratings.yelp.rating}/5 (${ratings.yelp.count} reviews)`);
+      if (!parts.length && business.star_rating != null) {
+        parts.push(`${business.star_rating}/5 rating${business.review_count ? ` (${business.review_count} reviews)` : ""}`);
+      }
+      const credText = credentials?.licenses?.length
+        ? ` Licensed: ${credentials.licenses.map((l) => l.name).join(", ")}.`
+        : "";
+      return `The searcher is looking for the BEST option. Lead with ratings (${parts.join(" • ") || "reputation"}).${credText}`;
+    }
+    case "emergency": {
+      const avail = hours?.emergency_24_7 ? "24/7 emergency service" : business.availability ?? "standard hours";
+      return `The searcher has an URGENT need. Lead with availability (${avail}) and response time. Be direct and reassuring.`;
+    }
+    case "affordable": {
+      const range = pricingV2?.ranges?.[0];
+      const priceLine = range
+        ? `${range.service} runs $${range.min}–$${range.max}${range.unit ? `/${range.unit}` : ""}`
+        : business.pricing_tier
+          ? `${business.pricing_tier} pricing`
+          : "value proposition";
+      const free = pricingV2?.free_estimates ? " Free estimates available." : "";
+      return `The searcher is price-conscious. Lead with ${priceLine}.${free} Emphasize value, not cheapness.`;
+    }
     case "specific_service":
       return "The searcher is asking about a specific service. Lead with details about that service, then broaden to related capabilities.";
     case "brand_direct":
       return `The searcher asked about this business by name. Give a complete profile overview — they already know who they're looking for.${
-        business.star_rating == null
+        business.star_rating == null && !ratings?.google && !ratings?.yelp
           ? " IMPORTANT: No rating or review data exists for this business. Do NOT invent, estimate, or imply any star rating, review count, reputation score, or phrases like 'well-regarded' or 'strong reputation'. Only describe what is in the business profile."
           : ""
       }`;

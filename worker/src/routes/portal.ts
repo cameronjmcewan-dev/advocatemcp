@@ -37,6 +37,7 @@ import {
   handleStripeWebhook,
   handleSessionStatus,
 } from "./stripe";
+import { handleSaveDraft, handleLoadDraft } from "./onboardDraft";
 
 // ── Public route dispatcher ────────────────────────────────────────────────
 // Returns a Response if this is a portal path, or null to fall through to
@@ -106,6 +107,13 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   const sessionMatch = pathname.match(/^\/api\/onboard\/session\/([^/]+)$/);
   if (sessionMatch && method === "OPTIONS") return handlePublicOnboardPreflight(request);
   if (sessionMatch && method === "GET") return handleSessionStatus(request, env, sessionMatch[1]);
+
+  // Save & Exit — wizard draft persistence (Task 8)
+  if (pathname === "/api/onboard/draft" && method === "OPTIONS") return handlePublicOnboardPreflight(request);
+  if (pathname === "/api/onboard/draft" && method === "POST")    return handleSaveDraft(request, env);
+  const draftLoadMatch = pathname.match(/^\/api\/onboard\/draft\/([^/]+)$/);
+  if (draftLoadMatch && method === "OPTIONS") return handlePublicOnboardPreflight(request);
+  if (draftLoadMatch && method === "GET")     return handleLoadDraft(request, env, decodeURIComponent(draftLoadMatch[1]));
 
   // ── Onboarding API (legacy + admin) ────────────────────────────────────
   if (pathname === "/api/onboard"           && method === "POST") return handleOnboard(request, env);

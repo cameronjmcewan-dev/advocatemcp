@@ -3,21 +3,33 @@ import "dotenv/config";
 import fs   from "fs";
 import path from "path";
 
-const DB_PATH = process.env.DATABASE_PATH ?? "/app/data/dev.db";
-
-// Ensure the parent directory exists (Railway persistent volume or local)
-fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-
 let _db: Database.Database | undefined;
 
 export function getDb(): Database.Database {
   if (_db) return _db;
 
-  _db = new Database(DB_PATH);
+  // Read path lazily so tests can set process.env.DATABASE_PATH before first call.
+  const dbPath = process.env.DATABASE_PATH ?? "/app/data/dev.db";
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+
+  _db = new Database(dbPath);
   _db.pragma("journal_mode = WAL");
   _db.pragma("foreign_keys = ON");
   _initSchema(_db);
   return _db;
+}
+
+/**
+ * Test-only helper: close the current handle and drop the module-level cache so
+ * a subsequent `getDb()` re-reads `process.env.DATABASE_PATH`. Lets test files
+ * point at different tmp DBs without the first `import` binding the cache.
+ * NEVER call this from production code.
+ */
+export function _resetDbForTests(): void {
+  if (_db) {
+    try { _db.close(); } catch { /* ignore close errors in tests */ }
+    _db = undefined;
+  }
 }
 
 function _addColumnIfNotExists(
@@ -75,6 +87,17 @@ function _initSchema(db: Database.Database): void {
     ["certifications", "TEXT"],
     ["pricing_tier", "TEXT"],
     ["service_area_keywords", "TEXT"],
+    // ── 9-step wizard: JSON blobs ──
+    ["hours_json", "TEXT"],
+    ["services_json_v2", "TEXT"],
+    ["pricing_json_v2", "TEXT"],
+    ["credentials_json", "TEXT"],
+    ["ratings_json", "TEXT"],
+    ["differentiators_text", "TEXT"],
+    ["customer_quotes_json", "TEXT"],
+    ["guarantee_text", "TEXT"],
+    ["case_stories_json", "TEXT"],
+    ["lead_routing_json", "TEXT"],
   ];
   for (const [col, type] of bizCols) {
     _addColumnIfNotExists(db, "businesses", col, type);
@@ -128,6 +151,17 @@ export interface BusinessRow {
   certifications: string | null;
   pricing_tier: string | null;
   service_area_keywords: string | null;
+  // 9-step wizard JSON blobs (stringified)
+  hours_json: string | null;
+  services_json_v2: string | null;
+  pricing_json_v2: string | null;
+  credentials_json: string | null;
+  ratings_json: string | null;
+  differentiators_text: string | null;
+  customer_quotes_json: string | null;
+  guarantee_text: string | null;
+  case_stories_json: string | null;
+  lead_routing_json: string | null;
 }
 
 export interface QueryRow {

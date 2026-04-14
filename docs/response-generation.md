@@ -45,3 +45,15 @@ Session 2 will branch the system prompt by detected crawler (one file per bot fa
 ## Updating this doc
 
 Update this file at the end of any session that touches `builder.ts`, `query.ts`, or adds per-bot prompt files.
+
+## 9-step wizard fields (April 2026)
+
+The onboarding wizard now persists these JSON blobs on the business row:
+- `hours_json` — week schedule + `emergency_24_7` flag
+- `services_json_v2` — inclusions / exclusions / specialties / not_offered
+- `pricing_json_v2` — ranges, `free_estimates`, `call_for_quote`
+- `credentials_json` — licenses, insured, bonded, certifications
+- `ratings_json` — Google + Yelp separately
+- `customer_quotes_json`, `case_stories_json`, `lead_routing_json`
+
+`buildSystemPrompt` surfaces them via `parseJsonSafe`; malformed JSON is silently ignored. Intent branching: emergency → `hours_json.emergency_24_7`; affordable → `pricing_json_v2.ranges`; best_top → `ratings_json` + `credentials_json.licenses`.

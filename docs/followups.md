@@ -124,3 +124,183 @@ to introduce as new brand color alongside existing teal or do a wholesale rebran
    the origin — that's a separate `custom_origin_server` setting.
 4. The `/admin/create-client` endpoint only updates password on existing users; it does not
    change role or full_name. Consider this when reusing the endpoint.
+
+## Onboarding schema extension — deferred hardening (April 2026)
+
+From code review of the Task 3 `/register` rewrite (commit `013b8d6`):
+
+1. **Slug race condition.** `registerRouter.post("/register", ...)` does a `SELECT` for slug uniqueness then an `INSERT` — not atomic. Two concurrent requests with the same business name can both pass the check and one hits `SQLITE_CONSTRAINT_UNIQUE`, currently returning a generic 500. Fix: either wrap pick+INSERT in `db.transaction()` with bounded retries on unique violation, or append `crypto.randomBytes(2).toString('hex')` to collisions. Low practical risk today, important before onboarding scales.
+2. **Error response shape inconsistency.** `/register` returns `{ error, issues[] }` on 400 and `{ error, message }` on 500; sibling routes (`agent.ts`, `analytics.ts`) return flat `{ error: string }`. Standardize across Express routes in a dedicated pass.
+3. **`wellknown_url` placeholder in /register response.** Currently returns literal `"https://<your-domain>/.well-known/ai-agent.json"`. Either derive from the business's `website` or drop the field entirely.
+4. **32-column INSERT fragility.** The `INSERT INTO businesses` statement in `register.ts` has three parallel lists (columns, placeholders, bind values) that must stay aligned as the schema grows. Consider a schema-driven INSERT helper (`[["col", value], ...]`) or add a parity test asserting list lengths match.
+
+## Task 7 — manual smoke test
+
+Run this before deploying the onboarding schema extension to production. It verifies that the
+public onboard endpoint correctly writes blob columns to D1 when a full wizard payload is
+submitted. Start a local wrangler dev session in one terminal, then in a second terminal:
+
+```bash
+curl -X POST http://localhost:8787/api/onboard/public \
+  -H "Content-Type: application/json" \
+  -d '{
+    "slug":"smoke-plumbing-co",
+    "name":"Smoke Test Biz",
+    "email":"owner@smoke.example.com",
+    "plan":"base",
+    "profile":{
+      "name":"Smoke Test Biz",
+      "description":"smoke",
+      "category":"plumber",
+      "location":"Boise, ID",
+      "services":["drain"],
+      "star_rating":4.5,
+      "review_count":10,
+      "hours_json":{"mon":{"open":"08:00","close":"17:00"},"tue":null,"wed":null,"thu":null,"fri":null,"sat":null,"sun":null,"emergency_24_7":true},
+      "credentials_json":{"licenses":[{"name":"ID","number":"1"}],"insured":true,"bonded":false,"certifications":[]}
+    }
+  }'
+```
+
+Expected: 201 response with `checkoutUrl`. Then confirm D1 received the blob columns:
+
+```bash
+npx wrangler d1 execute advocatemcp-auth --local \
+  --command="SELECT slug, hours_json, credentials_json FROM businesses WHERE business_name='Smoke Test Biz'"
+```
+
+Expected: one row with populated JSON columns containing `emergency_24_7` and `insured` fields.
+
+## Task 6 code-review followups (commit 33ffb52)
+
+1. **Railway forward DRY / drift test** — `worker/src/routes/stripe.ts` `registerBusinessOnRailway` has ~15 repetitive `if (profile.X !== undefined) body.X = …` lines. Silent-drift hazard vs `server/src/schemas/business.ts`. Consider extracting `FORWARDED_BLOBS` + `FORWARDED_STRINGS` tuples and looping. OR lean on the new shape-assertion test to catch drift at PR time.
+
+2. **Empty-string string handling in Railway forward** — `typeof X === "string"` accepts `""` which may violate downstream zod `.min(1)` on some fields (`description`, `category`, `tone`, etc.). Decide whether to tighten at ingress (validator) or at forward (non-empty check). Add `.trim().length > 0` guard if needed.
+
+## Task 8 — manual smoke test
+
+Run these against `npx wrangler dev` from `worker/`:
+
+```bash
+# Save a draft at step 3
+curl -X POST http://localhost:8787/api/onboard/draft \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","step":3,"payload":{"name":"Acme","category":"plumber"}}'
+# Expected: 200 { ok: true, email: "test@example.com", step: 3, updated_at: "..." }
+
+curl http://localhost:8787/api/onboard/draft/test@example.com
+# Expected: 200 with the saved payload
+```
+
+## Task 8 — hardening followups
+
+1. **256 KB payload cap uses string length, not UTF-8 bytes.** `TextEncoder().encode(payloadJson).byteLength` would be correct. Low severity since wizard payloads are ASCII-heavy, but adversarial clients could push ~1 MB via 4-byte emoji.
+
+2. **No TTL/cleanup for abandoned drafts.** Rows accumulate in `onboarding_drafts` indefinitely. Add a cron to sweep rows where `updated_at < now() - 90 days`, or a DELETE endpoint.
+
+3. **No rate limiting on POST /api/onboard/draft.** Unauthenticated, can be hammered to fill D1. Consistent with `/api/onboard/public` (also unrated) — solve together.
+
+## Task 9 — builder followups
+
+From code review of `server/src/agent/builder.ts` (commit `78254ed`):
+
+- **Ratings platform gap.** `ratings_json` schema supports `facebook` and `bbb` keys (see `server/src/schemas/business.ts` RatingsSchema) but `builder.ts` only emits Google and Yelp lines. Iterate the known sources or add explicit cases so BBB/Facebook/Angi ratings surface in prompts.
+- **Double-parse of JSON blobs.** `buildSystemPrompt` and `getIntentEmphasis` each call `parseJsonSafe` on the same 4 blobs. Small perf win + cleaner code to parse once in `buildSystemPrompt` and pass the parsed values into `getIntentEmphasis` as parameters.
+- **Extract `formatProfileBlock(business)` helper.** `buildSystemPrompt` is ~90 lines and half is parse/push logic. Next wizard session (customer_quotes_json, case_stories_json) will push it past readable. Extract before then.
+- **Duplicate "Availability" label.** When both `business.availability` and `hours_json.emergency_24_7` are set, the prompt emits two `- Availability: ...` lines. Rename the structured one to `- Emergency availability:` to disambiguate.
+- **"standard hours" fallback in getIntentEmphasis emergency branch** may mislead Claude when no availability data exists. Consider neutral wording like "check the business for hours" or fall through to a shorter emphasis string.
+
+## Task 10 — deploy + smoke checklist
+
+Run these before and after deploying the `onboarding-schema-extension` branch to production.
+
+### Pre-deploy smoke test (local Railway server)
+
+Start the local Railway server (`cd server && npm run dev`) then run the full round-trip:
+
+**Step 1 — register a test business with wizard blob fields:**
+
+```bash
+curl -X POST http://localhost:3000/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Apex Plumbing",
+    "description": "Licensed plumber in Austin TX serving residential and commercial customers.",
+    "category": "plumber",
+    "location": "Austin, TX",
+    "services": ["drain cleaning", "water heater repair", "leak detection"],
+    "phone": "512-555-0100",
+    "website": "https://apexplumbing.example.com",
+    "hours_json": {
+      "mon": {"open":"07:00","close":"19:00"},
+      "tue": {"open":"07:00","close":"19:00"},
+      "wed": {"open":"07:00","close":"19:00"},
+      "thu": {"open":"07:00","close":"19:00"},
+      "fri": {"open":"07:00","close":"19:00"},
+      "sat": {"open":"08:00","close":"15:00"},
+      "sun": null,
+      "emergency_24_7": true
+    },
+    "credentials_json": {
+      "licenses": [{"name": "Master Plumber", "number": "TX-MP-88421"}],
+      "insured": true,
+      "bonded": true,
+      "certifications": ["Backflow Prevention"]
+    },
+    "pricing_json_v2": {
+      "ranges": [{"service": "drain cleaning", "low": 150, "high": 400, "unit": "flat"}],
+      "free_estimates": true,
+      "call_for_quote": false
+    },
+    "ratings_json": {
+      "google": {"rating": 4.8, "count": 312},
+      "yelp": {"rating": 4.6, "count": 88}
+    }
+  }'
+```
+
+Save the returned `slug` and `api_key` for the queries below.
+
+**Step 2 — emergency intent query (replace SLUG and API_KEY):**
+
+```bash
+curl -X POST http://localhost:3000/agents/SLUG/query \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer API_KEY" \
+  -d '{"query": "I have a burst pipe emergency right now, who can help 24/7?", "crawler_agent": "PerplexityBot"}'
+```
+
+Expected assertion: response mentions 24/7 emergency availability and references the licensed/insured status.
+
+**Step 3 — affordable intent query:**
+
+```bash
+curl -X POST http://localhost:3000/agents/SLUG/query \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer API_KEY" \
+  -d '{"query": "How much does drain cleaning cost? Looking for affordable plumber.", "crawler_agent": "GPTBot"}'
+```
+
+Expected assertion: response mentions the $150–$400 range and free estimates.
+
+### Production deploy sequence
+
+Run from `worker/` after merging `onboarding-schema-extension` to `main`:
+
+```bash
+# 1. Apply the D1 migration for the new onboarding blob columns
+npx wrangler d1 execute advocatemcp-auth --remote --file=migrations/0006_onboarding_profile.sql
+
+# 2. Deploy the worker
+npx wrangler deploy
+```
+
+Verify the deploy with the Task 7 and Task 8 smoke tests in this file (sections above), pointing at the production worker URL instead of localhost.
+
+### Post-deploy verification
+
+Re-run the emergency and affordable intent queries against the production Railway URL to confirm the builder is correctly reading wizard blob fields from the live SQLite database.
+
+### Rollback
+
+Worker rollback: `wrangler rollback` reverts the worker script but NOT Workers Routes — if routes were changed, redeploy from the prior wrangler.toml commit. Railway is additive-safe: the new D1/SQLite columns (`hours_json`, `services_json_v2`, `pricing_json_v2`, `credentials_json`, `ratings_json`, `customer_quotes_json`, `case_stories_json`, `lead_routing_json`) are all optional nullable columns, so the old handler simply ignores them — no data loss from reverting the Railway deploy. To fully roll back Railway, redeploy the prior git SHA via the Railway dashboard.

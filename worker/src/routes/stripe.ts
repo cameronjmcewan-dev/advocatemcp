@@ -24,6 +24,7 @@ import {
   requireAdmin,
 } from "./onboard";
 import { signActivationToken } from "../lib/activation-token";
+import { validateOnboardingPayload } from "../lib/validateOnboarding";
 import { sendActivationEmail } from "../lib/resend";
 import {
   getActivationRecord,
@@ -369,12 +370,21 @@ export async function handlePublicOnboard(
   const email = (body.email as string ?? "").trim().toLowerCase();
   const plan = ((body.plan as string ?? "base").toLowerCase()) as "base" | "pro";
   const referralUrl = (body.referral_url as string ?? "").trim();
-  // Optional full business profile — persisted on the tenant and pushed to
-  // Railway server-side (best-effort, non-blocking). Keeps the browser on a
-  // single origin so Railway's broken CORS preflight can never break checkout.
-  const profilePayload = (body.profile && typeof body.profile === "object")
-    ? (body.profile as Record<string, unknown>)
-    : null;
+  // Optional full business profile — validated at ingress, then persisted on
+  // the tenant and pushed to Railway server-side (best-effort, non-blocking).
+  // Keeps the browser on a single origin so Railway's CORS preflight cannot
+  // break checkout. Legacy minimal onboard (no profile) still works.
+  let profilePayload: Record<string, unknown> | null = null;
+  if (body.profile !== undefined && body.profile !== null) {
+    const validation = validateOnboardingPayload(body.profile);
+    if (!validation.ok) {
+      return withCors(
+        jsonErr(400, "validation_error", validation.errors.join("; ")),
+        request,
+      );
+    }
+    profilePayload = validation.value;
+  }
 
   const errors: string[] = [];
   if (!rawSlug || !/^[a-z0-9][a-z0-9-]*[a-z0-9]?$/.test(rawSlug) || rawSlug.length > 60) {
@@ -481,10 +491,10 @@ export async function handlePublicOnboard(
     tenant.stripe.plan = plan;
   }
 
-  // Attach the full profile payload to the tenant (if provided) so the webhook
-  // handler has everything it needs to push to Railway once payment succeeds.
+  // Attach the validated profile to the tenant so the webhook handler has
+  // everything it needs to push to Railway once payment succeeds.
   if (profilePayload) {
-    (tenant as unknown as { profile?: Record<string, unknown> }).profile = profilePayload;
+    tenant.profile = profilePayload;
   }
 
   console.log(JSON.stringify({
@@ -574,7 +584,7 @@ export async function handlePublicOnboard(
 
 // ── D1 business registration helper ──────────────────────────────────────────
 
-async function registerBusinessInD1(
+export async function registerBusinessInD1(
   env: Env,
   tenant: TenantRecord,
   plan: string,
@@ -586,20 +596,55 @@ async function registerBusinessInD1(
       .bind(tenant.slug)
       .first<{ slug: string }>();
 
+    // Helper: JSON-stringify objects/arrays, pass null for missing values.
+    // TEXT columns (differentiators_text, guarantee_text) must NOT be stringified.
+    const j = (v: unknown): string | null => (v === undefined || v === null ? null : JSON.stringify(v));
+    const p = tenant.profile ?? {};
+
     if (!existingBiz) {
       const bizId = crypto.randomUUID().replace(/-/g, "");
       await env.DB
         .prepare(
-          `INSERT INTO businesses (id, slug, business_name, api_key, created_at, plan, domain)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO businesses
+             (id, slug, business_name, api_key, created_at, plan, domain,
+              hours_json, services_json_v2, pricing_json_v2, credentials_json,
+              ratings_json, differentiators_text, customer_quotes_json,
+              guarantee_text, case_stories_json, lead_routing_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .bind(bizId, tenant.slug, tenant.name, "pending", now, plan, tenant.domain)
+        .bind(
+          bizId, tenant.slug, tenant.name, "pending", now, plan, tenant.domain,
+          j(p.hours_json), j(p.services_json_v2), j(p.pricing_json_v2), j(p.credentials_json),
+          j(p.ratings_json), p.differentiators_text ?? null, j(p.customer_quotes_json),
+          p.guarantee_text ?? null, j(p.case_stories_json), j(p.lead_routing_json),
+        )
         .run();
     } else {
-      // Update plan and domain on re-onboard
+      // COALESCE(?, col) means re-onboard can only ADD or OVERWRITE values, never CLEAR them.
+      // An explicit clear must go through a separate admin path — prevents a partial re-onboard payload from wiping fields set on a richer previous onboard.
       await env.DB
-        .prepare("UPDATE businesses SET plan = ?, domain = ? WHERE slug = ?")
-        .bind(plan, tenant.domain, tenant.slug)
+        .prepare(
+          `UPDATE businesses
+           SET plan = ?, domain = ?,
+               hours_json = COALESCE(?, hours_json),
+               services_json_v2 = COALESCE(?, services_json_v2),
+               pricing_json_v2 = COALESCE(?, pricing_json_v2),
+               credentials_json = COALESCE(?, credentials_json),
+               ratings_json = COALESCE(?, ratings_json),
+               differentiators_text = COALESCE(?, differentiators_text),
+               customer_quotes_json = COALESCE(?, customer_quotes_json),
+               guarantee_text = COALESCE(?, guarantee_text),
+               case_stories_json = COALESCE(?, case_stories_json),
+               lead_routing_json = COALESCE(?, lead_routing_json)
+           WHERE slug = ?`,
+        )
+        .bind(
+          plan, tenant.domain,
+          j(p.hours_json), j(p.services_json_v2), j(p.pricing_json_v2), j(p.credentials_json),
+          j(p.ratings_json), p.differentiators_text ?? null, j(p.customer_quotes_json),
+          p.guarantee_text ?? null, j(p.case_stories_json), j(p.lead_routing_json),
+          tenant.slug,
+        )
         .run();
     }
   } catch (err) {
@@ -635,9 +680,8 @@ export async function registerBusinessOnRailway(
 ): Promise<RailwayRegisterResult> {
   const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
 
-  // Read the wizard profile defensively — it's attached as an untyped
-  // field on the KV record, not declared on TenantRecord.
-  const profile = (tenant as unknown as { profile?: Record<string, unknown> }).profile ?? {};
+  // Read the wizard profile defensively — may be undefined for legacy tenants.
+  const profile = tenant.profile ?? {};
   const loc = (profile.location as Record<string, unknown>) ?? {};
   const contact = (profile.contact as Record<string, unknown>) ?? {};
   const rawServices = Array.isArray(profile.services) ? profile.services : [];
@@ -666,22 +710,44 @@ export async function registerBusinessOnRailway(
 
   const differentiators = Array.isArray(profile.differentiators) ? profile.differentiators : [];
 
-  const body = {
+  // Build base body — always present
+  const body: Record<string, unknown> = {
     name: tenant.name,
-    description: `${tenant.name} — managed by AdvocateMCP`,
+    description: typeof profile.description === "string" ? profile.description : `${tenant.name} — managed by AdvocateMCP`,
     services: services.length > 0 ? services : ["General services"],
     category: typeof profile.category === "string" ? profile.category : "general",
     location,
-    star_rating: 0,
-    review_count: 0,
+    star_rating: typeof profile.star_rating === "number" ? profile.star_rating : 0,
+    review_count: typeof profile.review_count === "number" ? profile.review_count : 0,
     phone: (typeof contact.phone === "string" ? contact.phone : tenant.phone) || undefined,
     website: (typeof contact.website === "string" ? contact.website : tenant.website) || undefined,
     referral_url: (typeof profile.referral_url === "string" ? profile.referral_url : tenant.website) || undefined,
-    tone: "friendly",
+    tone: typeof profile.tone === "string" ? profile.tone : "friendly",
     pricing_tier: pricingTier,
     availability: typeof profile.availability === "string" ? profile.availability : undefined,
-    differentiator: typeof differentiators[0] === "string" ? differentiators[0] : undefined,
+    differentiator: typeof profile.differentiator === "string"
+      ? profile.differentiator
+      : (typeof differentiators[0] === "string" ? differentiators[0] : undefined),
   };
+
+  // Forward 9-step wizard JSON blobs — only when present so undefined keys
+  // are omitted from the serialized body and zod .optional() does not reject.
+  if (profile.hours_json !== undefined) body.hours_json = profile.hours_json;
+  if (profile.services_json_v2 !== undefined) body.services_json_v2 = profile.services_json_v2;
+  if (profile.pricing_json_v2 !== undefined) body.pricing_json_v2 = profile.pricing_json_v2;
+  if (profile.credentials_json !== undefined) body.credentials_json = profile.credentials_json;
+  if (profile.ratings_json !== undefined) body.ratings_json = profile.ratings_json;
+  if (typeof profile.differentiators_text === "string") body.differentiators_text = profile.differentiators_text;
+  if (profile.customer_quotes_json !== undefined) body.customer_quotes_json = profile.customer_quotes_json;
+  if (typeof profile.guarantee_text === "string") body.guarantee_text = profile.guarantee_text;
+  if (profile.case_stories_json !== undefined) body.case_stories_json = profile.case_stories_json;
+  if (profile.lead_routing_json !== undefined) body.lead_routing_json = profile.lead_routing_json;
+  // Scalar fields accepted by OnboardingPayloadSchema
+  if (typeof profile.years_in_business === "number") body.years_in_business = profile.years_in_business;
+  if (typeof profile.certifications === "string") body.certifications = profile.certifications;
+  if (typeof profile.service_radius_miles === "number") body.service_radius_miles = profile.service_radius_miles;
+  if (typeof profile.service_area_keywords === "string") body.service_area_keywords = profile.service_area_keywords;
+  if (typeof profile.top_services === "string") body.top_services = profile.top_services;
 
   try {
     const res = await fetch(`${base}/register`, {
