@@ -1046,3 +1046,57 @@ describe("registerBusinessOnRailway — Task 6: Railway forward shape", () => {
     expect(Object.prototype.hasOwnProperty.call(body, "availability")).toBe(false);
   });
 });
+
+// ── Task 1 (P3): plan tier forwarding to Railway ────────────────────────────
+
+describe("registerBusinessOnRailway — P3 Task 1: plan forwarding", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("forwards plan:\"pro\" to Railway when tenant.stripe.plan is \"pro\"", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ slug: "test-biz", api_key: "key-pro" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const { db } = createFakeDb({ "test-biz": {} });
+    const env = makeEnv(db);
+    const tenant = makeTenant({
+      stripe: { customerId: null, subscriptionId: null, checkoutSessionId: null, plan: "pro" },
+    });
+
+    await registerBusinessOnRailway(env, tenant);
+
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
+    const reqInit = fetchCall[1] as RequestInit;
+    const body = JSON.parse(reqInit.body as string) as Record<string, unknown>;
+
+    expect(body.plan).toBe("pro");
+  });
+
+  it("collapses plan:\"free\" to \"base\" when forwarding to Railway", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ slug: "test-biz", api_key: "key-free" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const { db } = createFakeDb({ "test-biz": {} });
+    const env = makeEnv(db);
+    const tenant = makeTenant({
+      stripe: { customerId: null, subscriptionId: null, checkoutSessionId: null, plan: "free" },
+    });
+
+    await registerBusinessOnRailway(env, tenant);
+
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
+    const reqInit = fetchCall[1] as RequestInit;
+    const body = JSON.parse(reqInit.body as string) as Record<string, unknown>;
+
+    expect(body.plan).toBe("base");
+  });
+});
