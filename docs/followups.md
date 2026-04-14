@@ -176,3 +176,18 @@ Expected: one row with populated JSON columns containing `emergency_24_7` and `i
 1. **Railway forward DRY / drift test** — `worker/src/routes/stripe.ts` `registerBusinessOnRailway` has ~15 repetitive `if (profile.X !== undefined) body.X = …` lines. Silent-drift hazard vs `server/src/schemas/business.ts`. Consider extracting `FORWARDED_BLOBS` + `FORWARDED_STRINGS` tuples and looping. OR lean on the new shape-assertion test to catch drift at PR time.
 
 2. **Empty-string string handling in Railway forward** — `typeof X === "string"` accepts `""` which may violate downstream zod `.min(1)` on some fields (`description`, `category`, `tone`, etc.). Decide whether to tighten at ingress (validator) or at forward (non-empty check). Add `.trim().length > 0` guard if needed.
+
+## Task 8 — manual smoke test
+
+Run these against `npx wrangler dev` from `worker/`:
+
+```bash
+# Save a draft at step 3
+curl -X POST http://localhost:8787/api/onboard/draft \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","step":3,"payload":{"name":"Acme","category":"plumber"}}'
+# Expected: 200 { ok: true, email: "test@example.com", step: 3, updated_at: "..." }
+
+curl http://localhost:8787/api/onboard/draft/test@example.com
+# Expected: 200 with the saved payload
+```
