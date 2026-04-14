@@ -522,10 +522,9 @@ export async function handlePublicOnboard(
     );
   }
 
-  // Determine success/cancel URLs from request origin (same pattern as admin flow)
-  const origin = new URL(request.url).origin;
-  const successUrl = `${origin}/onboard?session_id={CHECKOUT_SESSION_ID}`;
-  const cancelUrl = `${origin}/onboard?cancelled=true`;
+  // Fixed success/cancel URLs — always land back on the marketing brand.
+  const successUrl = "https://advocatemcp.com/onboarding/complete.html?session_id={CHECKOUT_SESSION_ID}";
+  const cancelUrl  = "https://advocatemcp.com/onboarding.html?cancelled=true";
 
   const stripeResult = await stripeApi(env.STRIPE_SECRET_KEY, "POST", "/checkout/sessions", {
     mode: "subscription",
