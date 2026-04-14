@@ -191,3 +191,11 @@ curl -X POST http://localhost:8787/api/onboard/draft \
 curl http://localhost:8787/api/onboard/draft/test@example.com
 # Expected: 200 with the saved payload
 ```
+
+## Task 8 — hardening followups
+
+1. **256 KB payload cap uses string length, not UTF-8 bytes.** `TextEncoder().encode(payloadJson).byteLength` would be correct. Low severity since wizard payloads are ASCII-heavy, but adversarial clients could push ~1 MB via 4-byte emoji.
+
+2. **No TTL/cleanup for abandoned drafts.** Rows accumulate in `onboarding_drafts` indefinitely. Add a cron to sweep rows where `updated_at < now() - 90 days`, or a DELETE endpoint.
+
+3. **No rate limiting on POST /api/onboard/draft.** Unauthenticated, can be hammered to fill D1. Consistent with `/api/onboard/public` (also unrated) — solve together.
