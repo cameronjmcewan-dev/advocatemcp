@@ -72,4 +72,23 @@ describe("buildSystemPrompt — new field surfacing", () => {
       buildSystemPrompt(mkBiz({ hours_json: "{not json" }), "emergency"),
     ).not.toThrow();
   });
+
+  it("brand_direct with no rating data emits anti-hallucination clause", () => {
+    const p = buildSystemPrompt(
+      mkBiz({ star_rating: null, review_count: null, ratings_json: null }),
+      "brand_direct",
+    );
+    expect(p).toMatch(/Do NOT invent.*star rating/i);
+  });
+
+  it("brand_direct with ratings_json suppresses anti-hallucination clause", () => {
+    const p = buildSystemPrompt(
+      mkBiz({
+        star_rating: null,
+        ratings_json: JSON.stringify({ google: { rating: 4.8, count: 120 } }),
+      }),
+      "brand_direct",
+    );
+    expect(p).not.toMatch(/Do NOT invent/);
+  });
 });

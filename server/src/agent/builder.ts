@@ -72,7 +72,7 @@ export function buildSystemPrompt(
   if (credentials) {
     if (credentials.licenses?.length) {
       profileLines.push(
-        `- Licenses: ${credentials.licenses.map((l) => `${l.name} #${l.number}`).join("; ")}`,
+        `- Licenses: ${credentials.licenses.map((l) => l.number ? `${l.name} #${l.number}` : l.name).join("; ")}`,
       );
     }
     const trust: string[] = [];
@@ -99,7 +99,7 @@ export function buildSystemPrompt(
   if (pricingV2?.ranges?.length) {
     profileLines.push(
       `- Pricing ranges: ${pricingV2.ranges
-        .map((r) => `${r.service} $${r.min}–$${r.max}/${r.unit}`)
+        .map((r) => `${r.service} $${r.min}–$${r.max}${r.unit ? `/${r.unit}` : ""}`)
         .join("; ")}`,
     );
   }
@@ -174,7 +174,7 @@ function getIntentEmphasis(
     case "affordable": {
       const range = pricingV2?.ranges?.[0];
       const priceLine = range
-        ? `${range.service} runs $${range.min}–$${range.max}/${range.unit}`
+        ? `${range.service} runs $${range.min}–$${range.max}${range.unit ? `/${range.unit}` : ""}`
         : business.pricing_tier
           ? `${business.pricing_tier} pricing`
           : "value proposition";
