@@ -124,3 +124,12 @@ to introduce as new brand color alongside existing teal or do a wholesale rebran
    the origin — that's a separate `custom_origin_server` setting.
 4. The `/admin/create-client` endpoint only updates password on existing users; it does not
    change role or full_name. Consider this when reusing the endpoint.
+
+## Onboarding schema extension — deferred hardening (April 2026)
+
+From code review of the Task 3 `/register` rewrite (commit `013b8d6`):
+
+1. **Slug race condition.** `registerRouter.post("/register", ...)` does a `SELECT` for slug uniqueness then an `INSERT` — not atomic. Two concurrent requests with the same business name can both pass the check and one hits `SQLITE_CONSTRAINT_UNIQUE`, currently returning a generic 500. Fix: either wrap pick+INSERT in `db.transaction()` with bounded retries on unique violation, or append `crypto.randomBytes(2).toString('hex')` to collisions. Low practical risk today, important before onboarding scales.
+2. **Error response shape inconsistency.** `/register` returns `{ error, issues[] }` on 400 and `{ error, message }` on 500; sibling routes (`agent.ts`, `analytics.ts`) return flat `{ error: string }`. Standardize across Express routes in a dedicated pass.
+3. **`wellknown_url` placeholder in /register response.** Currently returns literal `"https://<your-domain>/.well-known/ai-agent.json"`. Either derive from the business's `website` or drop the field entirely.
+4. **32-column INSERT fragility.** The `INSERT INTO businesses` statement in `register.ts` has three parallel lists (columns, placeholders, bind values) that must stay aligned as the schema grows. Consider a schema-driven INSERT helper (`[["col", value], ...]`) or add a parity test asserting list lengths match.

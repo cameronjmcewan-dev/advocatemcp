@@ -26,6 +26,8 @@ describe("POST /register", () => {
     for (const suffix of ["", "-wal", "-shm"]) {
       fs.rmSync(tmp + suffix, { force: true });
     }
+    delete process.env.API_KEY;
+    delete process.env.DATABASE_PATH;
   });
 
   it("401 without API key", async () => {
