@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -8,6 +8,12 @@ describe("db schema migrations", () => {
 
   beforeAll(() => {
     process.env.DATABASE_PATH = tmp;
+  });
+
+  afterAll(() => {
+    for (const suffix of ["", "-wal", "-shm"]) {
+      fs.rmSync(tmp + suffix, { force: true });
+    }
   });
 
   it("adds the new onboarding profile columns to businesses", async () => {
@@ -31,6 +37,5 @@ describe("db schema migrations", () => {
     ]) {
       expect(names).toContain(col);
     }
-    fs.rmSync(tmp, { force: true });
   });
 });
