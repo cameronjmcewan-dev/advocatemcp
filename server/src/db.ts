@@ -75,6 +75,17 @@ function _initSchema(db: Database.Database): void {
     ["certifications", "TEXT"],
     ["pricing_tier", "TEXT"],
     ["service_area_keywords", "TEXT"],
+    // ── 9-step wizard: JSON blobs ──
+    ["hours_json", "TEXT"],
+    ["services_json_v2", "TEXT"],
+    ["pricing_json_v2", "TEXT"],
+    ["credentials_json", "TEXT"],
+    ["ratings_json", "TEXT"],
+    ["differentiators_text", "TEXT"],
+    ["customer_quotes_json", "TEXT"],
+    ["guarantee_text", "TEXT"],
+    ["case_stories_json", "TEXT"],
+    ["lead_routing_json", "TEXT"],
   ];
   for (const [col, type] of bizCols) {
     _addColumnIfNotExists(db, "businesses", col, type);
@@ -128,6 +139,17 @@ export interface BusinessRow {
   certifications: string | null;
   pricing_tier: string | null;
   service_area_keywords: string | null;
+  // 9-step wizard JSON blobs (stringified)
+  hours_json: string | null;
+  services_json_v2: string | null;
+  pricing_json_v2: string | null;
+  credentials_json: string | null;
+  ratings_json: string | null;
+  differentiators_text: string | null;
+  customer_quotes_json: string | null;
+  guarantee_text: string | null;
+  case_stories_json: string | null;
+  lead_routing_json: string | null;
 }
 
 export interface QueryRow {
