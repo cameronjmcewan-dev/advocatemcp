@@ -7,6 +7,11 @@
  */
 
 import { getDb } from "../db.js";
+import pLimit from "p-limit";
+import { perplexitySearch } from "../lib/perplexity.js";
+import { canonicalDomain, isCitationOfTenant } from "../lib/domainMatch.js";
+import { sendBudgetAlert } from "../lib/alert.js";
+import { TokenBucket } from "../lib/tokenBucket.js";
 
 export interface ProfileForSeeding {
   category: string;
@@ -87,4 +92,111 @@ export function seedBasketIfEmpty(slug: string): void {
     for (const q of queries) insert.run(s, q, now);
   });
   seed(slug);
+}
+
+const BOT          = "perplexity";
+const CONCURRENCY  = 4;
+const RATE_INTERVAL_MS = 1000;
+
+interface TenantRow { slug: string; website: string | null }
+interface BasketRow { id: number; query: string }
+
+function todayStartIso(): string {
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
+function budgetCapUsd(): number {
+  const raw = process.env.COMPETITOR_POLL_DAILY_BUDGET_USD;
+  const n = raw ? Number(raw) : 10;
+  return Number.isFinite(n) && n > 0 ? n : 10;
+}
+
+/**
+ * Main cron entry point. Called by node-cron; also callable manually for smoke tests.
+ */
+export async function pollAll(): Promise<void> {
+  const db = getDb();
+
+  // 1. Budget gate.
+  const cap = budgetCapUsd();
+  const { spent } = db
+    .prepare(`SELECT COALESCE(SUM(cost_usd), 0) AS spent FROM competitor_polls WHERE polled_at >= ?`)
+    .get(todayStartIso()) as { spent: number };
+  if (spent >= cap) {
+    console.warn(`[radar] budget_cap_hit spent=$${spent.toFixed(2)} cap=$${cap}`);
+    await sendBudgetAlert(
+      `[radar] daily budget cap hit ($${cap})`,
+      `Today's Perplexity spend: $${spent.toFixed(2)}. Polling skipped.`,
+    );
+    return;
+  }
+
+  // 2. Load Pro tenants.
+  const tenants = db
+    .prepare(`SELECT slug, website FROM businesses WHERE plan='pro' AND api_key <> 'pending'`)
+    .all() as TenantRow[];
+
+  // 3. Seed + poll each tenant with bounded concurrency.
+  const limit  = pLimit(CONCURRENCY);
+  const bucket = new TokenBucket({ intervalMs: RATE_INTERVAL_MS });
+
+  let totalPolls = 0, totalCitations = 0, totalErrors = 0, totalCost = 0;
+
+  await Promise.all(tenants.map((t) => limit(async () => {
+    seedBasketIfEmpty(t.slug);
+
+    const basket = db
+      .prepare(`SELECT id, query FROM competitor_query_baskets WHERE slug=? AND enabled=1`)
+      .all(t.slug) as BasketRow[];
+
+    for (const row of basket) {
+      for (const [variantIdx, phrasing] of phrasingVariants(row.query).entries()) {
+        await bucket.acquire();
+
+        let citations: string[] = [];
+        let errorMsg: string | null = null;
+        let costUsd = 0;
+        try {
+          const r = await perplexitySearch(phrasing);
+          citations = r.citations;
+          costUsd   = r.costUsd;
+        } catch (err) {
+          errorMsg = err instanceof Error ? err.message : String(err);
+          totalErrors++;
+        }
+
+        const cited      = citations.findIndex((c) => isCitationOfTenant(c, t.website));
+        const citedRank  = cited >= 0 ? cited + 1 : null;
+        const pollInsert = db.prepare(
+          `INSERT INTO competitor_polls
+             (slug, query_basket_id, bot, phrasing, phrasing_variant, polled_at,
+              our_domain_cited, our_cited_rank, citation_count, cost_usd, error)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        );
+        const info = pollInsert.run(
+          t.slug, row.id, BOT, phrasing, variantIdx, new Date().toISOString(),
+          citedRank !== null ? 1 : 0, citedRank, citations.length, costUsd, errorMsg,
+        );
+        const pollId = Number(info.lastInsertRowid);
+
+        if (citations.length > 0) {
+          const citInsert = db.prepare(
+            `INSERT INTO competitor_citations (poll_id, rank, url, domain, title) VALUES (?, ?, ?, ?, ?)`
+          );
+          const tx = db.transaction((rows: { rank: number; url: string }[]) => {
+            for (const c of rows) citInsert.run(pollId, c.rank, c.url, canonicalDomain(c.url), null);
+          });
+          tx(citations.map((url, i) => ({ rank: i + 1, url })));
+          totalCitations += citations.length;
+        }
+
+        totalPolls++;
+        totalCost += costUsd;
+      }
+    }
+  })));
+
+  console.log(`[radar] run_complete tenants=${tenants.length} polls=${totalPolls} citations=${totalCitations} errors=${totalErrors} cost=$${totalCost.toFixed(4)}`);
 }
