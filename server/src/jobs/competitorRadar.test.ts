@@ -126,6 +126,25 @@ describe("seedBasketIfEmpty", () => {
     expect(rows[0]!.query).toBe("best plumber in Boise, ID");
   });
 
+  it("is a no-op for base-tier tenants", async () => {
+    const { getDb } = await import("../db.js");
+    const { seedBasketIfEmpty } = await import("./competitorRadar.js");
+    const db = getDb();
+    db.prepare(`INSERT INTO businesses
+      (slug, name, description, services, api_key, category, location, star_rating, review_count, plan)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'base')`).run(
+        "t3", "T3", "d", JSON.stringify(["drain"]),
+        "k3", "plumber", "Boise, ID", 4.5, 10
+      );
+
+    seedBasketIfEmpty("t3");
+
+    const { count } = db.prepare(
+      "SELECT COUNT(*) AS count FROM competitor_query_baskets WHERE slug='t3'"
+    ).get() as { count: number };
+    expect(count).toBe(0);
+  });
+
   it("is a no-op when basket already has rows", async () => {
     const { getDb } = await import("../db.js");
     const { seedBasketIfEmpty } = await import("./competitorRadar.js");

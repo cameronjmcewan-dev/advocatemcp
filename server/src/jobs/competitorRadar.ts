@@ -48,35 +48,43 @@ export function phrasingVariants(query: string): string[] {
 }
 
 /**
- * Idempotently seed the auto-query basket for one tenant. No-op if any
+ * Idempotently seed the auto-query basket for one Pro tenant. No-op if any
  * enabled row already exists (handles Base→Pro→Base→Pro re-activation).
+ * Also a no-op for base-tier tenants (defense-in-depth; cron should already filter).
+ *
+ * Wrapped in a single better-sqlite3 transaction to eliminate the TOCTOU
+ * window between COUNT and INSERT when two iterations race.
  */
 export function seedBasketIfEmpty(slug: string): void {
   const db = getDb();
-  const { count } = db
-    .prepare("SELECT COUNT(*) AS count FROM competitor_query_baskets WHERE slug=? AND enabled=1")
-    .get(slug) as { count: number };
-  if (count > 0) return;
+  const seed = db.transaction((s: string) => {
+    const { count } = db
+      .prepare("SELECT COUNT(*) AS count FROM competitor_query_baskets WHERE slug=? AND enabled=1")
+      .get(s) as { count: number };
+    if (count > 0) return;
 
-  const biz = db
-    .prepare("SELECT category, location, services FROM businesses WHERE slug=?")
-    .get(slug) as { category: string | null; location: string | null; services: string } | undefined;
-  if (!biz) return;
+    const biz = db
+      .prepare("SELECT category, location, services, plan FROM businesses WHERE slug=?")
+      .get(s) as { category: string | null; location: string | null; services: string; plan: string } | undefined;
+    if (!biz) return;
+    if (biz.plan !== "pro") return;
 
-  let services: string[] = [];
-  try { services = JSON.parse(biz.services ?? "[]"); } catch { services = []; }
+    let services: string[] = [];
+    try { services = JSON.parse(biz.services ?? "[]"); } catch { services = []; }
 
-  const queries = generateAutoQueries({
-    category: biz.category ?? "",
-    location: biz.location ?? "",
-    services,
+    const queries = generateAutoQueries({
+      category: biz.category ?? "",
+      location: biz.location ?? "",
+      services,
+    });
+
+    const now = new Date().toISOString();
+    const insert = db.prepare(
+      `INSERT OR IGNORE INTO competitor_query_baskets
+         (slug, query, source, enabled, created_at)
+       VALUES (?, ?, 'auto', 1, ?)`
+    );
+    for (const q of queries) insert.run(s, q, now);
   });
-
-  const now = new Date().toISOString();
-  const insert = db.prepare(
-    `INSERT OR IGNORE INTO competitor_query_baskets
-       (slug, query, source, enabled, created_at)
-     VALUES (?, ?, 'auto', 1, ?)`
-  );
-  for (const q of queries) insert.run(slug, q, now);
+  seed(slug);
 }
