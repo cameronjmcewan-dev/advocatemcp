@@ -20,10 +20,11 @@ export async function sendBudgetAlert(subject: string, body: string): Promise<vo
         "Content-Type":  "application/json",
       },
       body: JSON.stringify({ from, to: [to], subject, text: body }),
+      signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) {
       const resBody = await res.text().catch(() => "");
-      console.error(`[alert] resend ${res.status}: ${resBody.slice(0, 200)}`);
+      console.error(`[alert] resend ${res.status}: ${resBody.slice(0, 120)}`);
     }
   } catch (err) {
     console.error(`[alert] resend threw:`, err);

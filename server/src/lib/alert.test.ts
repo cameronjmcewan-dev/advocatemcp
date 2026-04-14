@@ -36,4 +36,16 @@ describe("sendBudgetAlert", () => {
     await sendBudgetAlert("subject", "body");
     expect(errSpy).toHaveBeenCalled();
   });
+
+  it("does not throw when fetch rejects (network error)", async () => {
+    process.env.RESEND_API_KEY  = "re_test";
+    process.env.ALERT_EMAIL_TO  = "ops@example.com";
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    globalThis.fetch = vi.fn(async () => {
+      throw new Error("ECONNREFUSED");
+    }) as unknown as typeof fetch;
+
+    await expect(sendBudgetAlert("s", "b")).resolves.toBeUndefined();
+    expect(errSpy).toHaveBeenCalled();
+  });
 });
