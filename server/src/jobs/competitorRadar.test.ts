@@ -1,4 +1,7 @@
-import { describe, it, expect } from "vitest";
+import fs from "fs";
+import os from "os";
+import path from "path";
+import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import { generateAutoQueries, phrasingVariants } from "./competitorRadar.js";
 
 describe("generateAutoQueries", () => {
@@ -83,5 +86,63 @@ describe("phrasingVariants", () => {
       "top-rated plumber",
       "top-rated plumber reviews",
     ]);
+  });
+});
+
+describe("seedBasketIfEmpty", () => {
+  const tmp = path.join(os.tmpdir(), `p3-seed-${Date.now()}.db`);
+
+  beforeEach(async () => {
+    process.env.DATABASE_PATH = tmp;
+    const { _resetDbForTests } = await import("../db.js");
+    _resetDbForTests();
+    const { getDb } = await import("../db.js");
+    getDb(); // init schema
+  });
+
+  afterAll(() => {
+    for (const suffix of ["", "-wal", "-shm"]) fs.rmSync(tmp + suffix, { force: true });
+    delete process.env.DATABASE_PATH;
+  });
+
+  it("seeds 6 auto rows for a fresh Pro tenant", async () => {
+    const { getDb } = await import("../db.js");
+    const { seedBasketIfEmpty } = await import("./competitorRadar.js");
+    const db = getDb();
+    db.prepare(`INSERT INTO businesses
+      (slug, name, description, services, api_key, category, location, star_rating, review_count, plan)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pro')`).run(
+        "t1", "T1", "d", JSON.stringify(["drain","pipe","heater"]),
+        "k1", "plumber", "Boise, ID", 4.5, 10
+      );
+
+    seedBasketIfEmpty("t1");
+
+    const rows = db.prepare(
+      "SELECT query, source FROM competitor_query_baskets WHERE slug=? AND enabled=1 ORDER BY id"
+    ).all("t1") as { query: string; source: string }[];
+    expect(rows).toHaveLength(6);
+    expect(rows.every((r) => r.source === "auto")).toBe(true);
+    expect(rows[0]!.query).toBe("best plumber in Boise, ID");
+  });
+
+  it("is a no-op when basket already has rows", async () => {
+    const { getDb } = await import("../db.js");
+    const { seedBasketIfEmpty } = await import("./competitorRadar.js");
+    const db = getDb();
+    db.prepare(`INSERT INTO businesses
+      (slug, name, description, services, api_key, category, location, star_rating, review_count, plan)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pro')`).run(
+        "t2", "T2", "d", JSON.stringify([]), "k2", "plumber", "Boise, ID", 4.5, 10
+      );
+    db.prepare(`INSERT INTO competitor_query_baskets (slug, query, source, enabled, created_at)
+      VALUES ('t2', 'custom q', 'tenant', 1, datetime('now'))`).run();
+
+    seedBasketIfEmpty("t2");
+
+    const { count } = db.prepare(
+      "SELECT COUNT(*) AS count FROM competitor_query_baskets WHERE slug='t2'"
+    ).get() as { count: number };
+    expect(count).toBe(1);
   });
 });
