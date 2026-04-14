@@ -151,6 +151,19 @@ export async function pollAll(): Promise<void> {
       .prepare(`SELECT id, query FROM competitor_query_baskets WHERE slug=? AND enabled=1`)
       .all(t.slug) as BasketRow[];
 
+    const pollInsert = db.prepare(
+      `INSERT INTO competitor_polls
+         (slug, query_basket_id, bot, phrasing, phrasing_variant, polled_at,
+          our_domain_cited, our_cited_rank, citation_count, cost_usd, error)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    const citInsert = db.prepare(
+      `INSERT INTO competitor_citations (poll_id, rank, url, domain, title) VALUES (?, ?, ?, ?, ?)`
+    );
+    const insertCitations = db.transaction((pollId: number, rows: { rank: number; url: string }[]) => {
+      for (const c of rows) citInsert.run(pollId, c.rank, c.url, canonicalDomain(c.url), null);
+    });
+
     for (const row of basket) {
       for (const [variantIdx, phrasing] of phrasingVariants(row.query).entries()) {
         await bucket.acquire();
@@ -169,12 +182,6 @@ export async function pollAll(): Promise<void> {
 
         const cited      = citations.findIndex((c) => isCitationOfTenant(c, t.website));
         const citedRank  = cited >= 0 ? cited + 1 : null;
-        const pollInsert = db.prepare(
-          `INSERT INTO competitor_polls
-             (slug, query_basket_id, bot, phrasing, phrasing_variant, polled_at,
-              our_domain_cited, our_cited_rank, citation_count, cost_usd, error)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        );
         const info = pollInsert.run(
           t.slug, row.id, BOT, phrasing, variantIdx, new Date().toISOString(),
           citedRank !== null ? 1 : 0, citedRank, citations.length, costUsd, errorMsg,
@@ -182,13 +189,7 @@ export async function pollAll(): Promise<void> {
         const pollId = Number(info.lastInsertRowid);
 
         if (citations.length > 0) {
-          const citInsert = db.prepare(
-            `INSERT INTO competitor_citations (poll_id, rank, url, domain, title) VALUES (?, ?, ?, ?, ?)`
-          );
-          const tx = db.transaction((rows: { rank: number; url: string }[]) => {
-            for (const c of rows) citInsert.run(pollId, c.rank, c.url, canonicalDomain(c.url), null);
-          });
-          tx(citations.map((url, i) => ({ rank: i + 1, url })));
+          insertCitations(pollId, citations.map((url, i) => ({ rank: i + 1, url })));
           totalCitations += citations.length;
         }
 
