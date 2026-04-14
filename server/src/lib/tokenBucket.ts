@@ -1,13 +1,20 @@
 /**
  * Simple serial token bucket: each acquire() returns at least `intervalMs`
  * after the previous acquire(). Used to rate-limit outbound Perplexity calls
- * across parallel workers.
+ * across concurrent promises in a single Node.js event loop.
+ *
+ * Single-process, single-event-loop only — not safe across worker_threads
+ * or child processes. If we ever scale the cron across workers, replace
+ * with a Redis-backed rate limiter.
  */
 export class TokenBucket {
   private readonly intervalMs: number;
   private nextAvailable = 0;
 
   constructor(opts: { intervalMs: number }) {
+    if (opts.intervalMs <= 0) {
+      throw new RangeError(`intervalMs must be positive, got ${opts.intervalMs}`);
+    }
     this.intervalMs = opts.intervalMs;
   }
 

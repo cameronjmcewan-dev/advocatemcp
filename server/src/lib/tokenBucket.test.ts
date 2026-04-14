@@ -17,4 +17,9 @@ describe("TokenBucket", () => {
     expect(elapsed).toBeGreaterThanOrEqual(200);
     expect(elapsed).toBeLessThan(400);
   });
+
+  it("throws RangeError on non-positive intervalMs", () => {
+    expect(() => new TokenBucket({ intervalMs: 0 })).toThrow(RangeError);
+    expect(() => new TokenBucket({ intervalMs: -5 })).toThrow(/positive/);
+  });
 });
