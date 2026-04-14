@@ -134,6 +134,43 @@ From code review of the Task 3 `/register` rewrite (commit `013b8d6`):
 3. **`wellknown_url` placeholder in /register response.** Currently returns literal `"https://<your-domain>/.well-known/ai-agent.json"`. Either derive from the business's `website` or drop the field entirely.
 4. **32-column INSERT fragility.** The `INSERT INTO businesses` statement in `register.ts` has three parallel lists (columns, placeholders, bind values) that must stay aligned as the schema grows. Consider a schema-driven INSERT helper (`[["col", value], ...]`) or add a parity test asserting list lengths match.
 
+## Task 7 — manual smoke test
+
+Run this before deploying the onboarding schema extension to production. It verifies that the
+public onboard endpoint correctly writes blob columns to D1 when a full wizard payload is
+submitted. Start a local wrangler dev session in one terminal, then in a second terminal:
+
+```bash
+curl -X POST http://localhost:8787/api/onboard/public \
+  -H "Content-Type: application/json" \
+  -d '{
+    "slug":"smoke-plumbing-co",
+    "name":"Smoke Test Biz",
+    "email":"owner@smoke.example.com",
+    "plan":"base",
+    "profile":{
+      "name":"Smoke Test Biz",
+      "description":"smoke",
+      "category":"plumber",
+      "location":"Boise, ID",
+      "services":["drain"],
+      "star_rating":4.5,
+      "review_count":10,
+      "hours_json":{"mon":{"open":"08:00","close":"17:00"},"tue":null,"wed":null,"thu":null,"fri":null,"sat":null,"sun":null,"emergency_24_7":true},
+      "credentials_json":{"licenses":[{"name":"ID","number":"1"}],"insured":true,"bonded":false,"certifications":[]}
+    }
+  }'
+```
+
+Expected: 201 response with `checkoutUrl`. Then confirm D1 received the blob columns:
+
+```bash
+npx wrangler d1 execute advocatemcp-auth --local \
+  --command="SELECT slug, hours_json, credentials_json FROM businesses WHERE business_name='Smoke Test Biz'"
+```
+
+Expected: one row with populated JSON columns containing `emergency_24_7` and `insured` fields.
+
 ## Task 6 code-review followups (commit 33ffb52)
 
 1. **Railway forward DRY / drift test** — `worker/src/routes/stripe.ts` `registerBusinessOnRailway` has ~15 repetitive `if (profile.X !== undefined) body.X = …` lines. Silent-drift hazard vs `server/src/schemas/business.ts`. Consider extracting `FORWARDED_BLOBS` + `FORWARDED_STRINGS` tuples and looping. OR lean on the new shape-assertion test to catch drift at PR time.
