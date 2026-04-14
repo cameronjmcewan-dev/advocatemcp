@@ -612,32 +612,32 @@ describe("handleResendActivation (POST /admin/businesses/:slug/resend-activation
 
 // ── registerBusinessOnRailway tests ──────────────────────────────────────
 
+function makeTenant(overrides: Record<string, unknown> = {}): import("./onboard").TenantRecord {
+  return {
+    domain: "test-biz.hosted.advocatemcp.com",
+    name: "Test Biz",
+    slug: "test-biz",
+    phone: "555-1234",
+    email: "test@example.com",
+    address: "", city: "", state: "", postalCode: "", country: "US",
+    services: [], website: "https://testbiz.com", notes: "",
+    status: "active" as const,
+    cloudflare: {
+      customHostnameId: null, verificationMethod: "none",
+      verificationStatus: "not_applicable", sslStatus: "not_applicable",
+      txtName: null, txtValue: null, ownershipTxtName: null, ownershipTxtValue: null,
+    },
+    stripe: { customerId: null, subscriptionId: null, checkoutSessionId: null, plan: "base" },
+    skipDns: true,
+    statusLog: [], createdAt: "", updatedAt: "",
+    ...overrides,
+  } as import("./onboard").TenantRecord;
+}
+
 describe("registerBusinessOnRailway", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
-
-  function makeTenant(overrides: Record<string, unknown> = {}): import("./onboard").TenantRecord {
-    return {
-      domain: "test-biz.hosted.advocatemcp.com",
-      name: "Test Biz",
-      slug: "test-biz",
-      phone: "555-1234",
-      email: "test@example.com",
-      address: "", city: "", state: "", postalCode: "", country: "US",
-      services: [], website: "https://testbiz.com", notes: "",
-      status: "active" as const,
-      cloudflare: {
-        customHostnameId: null, verificationMethod: "none",
-        verificationStatus: "not_applicable", sslStatus: "not_applicable",
-        txtName: null, txtValue: null, ownershipTxtName: null, ownershipTxtValue: null,
-      },
-      stripe: { customerId: null, subscriptionId: null, checkoutSessionId: null, plan: "base" },
-      skipDns: true,
-      statusLog: [], createdAt: "", updatedAt: "",
-      ...overrides,
-    } as import("./onboard").TenantRecord;
-  }
 
   it("returns ok:true with api_key on successful Railway registration", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
@@ -756,7 +756,7 @@ describe("registerBusinessOnRailway", () => {
 //   - valid profile   → passes validation; 500 for missing Stripe key
 //     confirms we got past the validation gate without a 400.
 
-import { handlePublicOnboard } from "./stripe";
+import { handlePublicOnboard, registerBusinessInD1 } from "./stripe";
 
 function makePublicOnboardRequest(body: unknown, origin = "https://advocatemcp.com"): Request {
   return new Request("https://customers.advocatemcp.com/api/onboard/public", {
@@ -898,5 +898,151 @@ describe("handlePublicOnboard — Task 6: profile validation (9-step wizard)", (
     const body = (await resp.json()) as { error?: string };
     expect(body.error).not.toBe("validation_error");
     expect(body.error).toBe("stripe_not_configured");
+  });
+});
+
+// ── Task 6: registerBusinessInD1 — INSERT shape assertions ──────────────────
+
+describe("registerBusinessInD1 — Task 6: INSERT shape", () => {
+  it("INSERT binds 17 columns in expected order with correct JSON encoding", async () => {
+    // Capture SQL and bind args for the INSERT statement only.
+    // registerBusinessInD1 first does a SELECT (returns null → new row),
+    // then does the INSERT. We record the last prepare call's SQL and bind args.
+    let insertSql = "";
+    const insertBindArgs: unknown[] = [];
+
+    const fakeD1 = {
+      prepare(sql: string) {
+        const normalized = sql.replace(/\s+/g, " ").trim();
+        if (normalized.startsWith("SELECT")) {
+          // SELECT for existence check — return null so the INSERT branch runs.
+          return {
+            bind() {
+              return { first: async () => null };
+            },
+          };
+        }
+        // INSERT branch — capture SQL and bind args.
+        insertSql = sql;
+        return {
+          bind(...args: unknown[]) {
+            insertBindArgs.push(...args);
+            return { run: vi.fn(async () => ({ success: true, meta: { changes: 1 } })) };
+          },
+        };
+      },
+    } as unknown as D1Database;
+
+    const env = makeEnv(fakeD1);
+    const tenant = makeTenant({
+      profile: {
+        hours_json: { mon: "9-5" },
+        differentiators_text: "fast",
+        // all other profile fields left undefined
+      },
+    });
+
+    await registerBusinessInD1(env, tenant, "base", "2026-04-14T00:00:00Z");
+
+    // SQL must reference all 17 columns in the INSERT column list.
+    const expectedCols = [
+      "id", "slug", "business_name", "api_key", "created_at", "plan", "domain",
+      "hours_json", "services_json_v2", "pricing_json_v2", "credentials_json",
+      "ratings_json", "differentiators_text", "customer_quotes_json",
+      "guarantee_text", "case_stories_json", "lead_routing_json",
+    ];
+    for (const col of expectedCols) {
+      expect(insertSql).toContain(col);
+    }
+
+    // bind must have been called with exactly 17 values.
+    expect(insertBindArgs).toHaveLength(17);
+
+    // hours_json is at bind index 7 (0-based: id=0 slug=1 name=2 api_key=3 created_at=4 plan=5 domain=6 hours_json=7).
+    expect(insertBindArgs[7]).toBe('{"mon":"9-5"}');
+
+    // differentiators_text at index 12 must be the plain string, NOT JSON-encoded.
+    expect(insertBindArgs[12]).toBe("fast");
+
+    // Fields not supplied bind as null — services_json_v2 is at index 8.
+    expect(insertBindArgs[8]).toBeNull();
+  });
+});
+
+// ── Task 6: registerBusinessOnRailway — Railway forward shape assertions ─────
+
+describe("registerBusinessOnRailway — Task 6: Railway forward shape", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("body includes all supplied profile blob/text and scalar fields; absent fields omitted", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ slug: "test-biz", api_key: "key-xyz" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const { db } = createFakeDb({ "test-biz": {} });
+    const env = makeEnv(db);
+    const tenant = makeTenant();
+
+    // Attach a fully-populated profile covering all 10 blob/text fields + 5 scalars.
+    (tenant as unknown as { profile: unknown }).profile = {
+      // 10 blob/text fields
+      hours_json: { mon: "9-5" },
+      services_json_v2: [{ name: "Plumbing" }],
+      pricing_json_v2: { tier: "mid" },
+      credentials_json: { license: "TX-123" },
+      ratings_json: { avg: 4.9 },
+      differentiators_text: "fast and reliable",
+      customer_quotes_json: [{ quote: "Great work!" }],
+      guarantee_text: "100% satisfaction guaranteed",
+      case_stories_json: [{ title: "Fixed a leak" }],
+      lead_routing_json: { preferred_channel: "phone" },
+      // 5 scalar fields
+      years_in_business: 12,
+      certifications: "Master Plumber TX",
+      service_radius_miles: 25,
+      service_area_keywords: "Austin Pflugerville",
+      top_services: "Pipe repair, Drain cleaning",
+      // required base fields so forward mapping doesn't error
+      category: "plumbing",
+      location: { city: "Austin", state: "TX", service_areas: ["Austin, TX"] },
+      referral_url: "https://biz.com/contact",
+      description: "Expert plumbing",
+      star_rating: 4.9,
+      review_count: 80,
+    };
+
+    await registerBusinessOnRailway(env, tenant);
+
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
+    const reqInit = fetchCall[1] as RequestInit;
+    const body = JSON.parse(reqInit.body as string) as Record<string, unknown>;
+
+    // All 10 blob/text fields must be present by key.
+    expect(body).toHaveProperty("hours_json");
+    expect(body).toHaveProperty("services_json_v2");
+    expect(body).toHaveProperty("pricing_json_v2");
+    expect(body).toHaveProperty("credentials_json");
+    expect(body).toHaveProperty("ratings_json");
+    expect(body).toHaveProperty("differentiators_text");
+    expect(body).toHaveProperty("customer_quotes_json");
+    expect(body).toHaveProperty("guarantee_text");
+    expect(body).toHaveProperty("case_stories_json");
+    expect(body).toHaveProperty("lead_routing_json");
+
+    // All 5 scalar fields present with supplied values.
+    expect(body.years_in_business).toBe(12);
+    expect(body.certifications).toBe("Master Plumber TX");
+    expect(body.service_radius_miles).toBe(25);
+    expect(body.service_area_keywords).toBe("Austin Pflugerville");
+    expect(body.top_services).toBe("Pipe repair, Drain cleaning");
+
+    // A field not supplied on the profile must be absent from the serialized body
+    // (not serialized as null). We use a known-optional field that is not set above.
+    expect(Object.prototype.hasOwnProperty.call(body, "availability")).toBe(false);
   });
 });

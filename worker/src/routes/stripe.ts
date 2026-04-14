@@ -584,7 +584,7 @@ export async function handlePublicOnboard(
 
 // ── D1 business registration helper ──────────────────────────────────────────
 
-async function registerBusinessInD1(
+export async function registerBusinessInD1(
   env: Env,
   tenant: TenantRecord,
   plan: string,
@@ -620,7 +620,8 @@ async function registerBusinessInD1(
         )
         .run();
     } else {
-      // Update plan, domain, and profile blobs on re-onboard
+      // COALESCE(?, col) means re-onboard can only ADD or OVERWRITE values, never CLEAR them.
+      // An explicit clear must go through a separate admin path — prevents a partial re-onboard payload from wiping fields set on a richer previous onboard.
       await env.DB
         .prepare(
           `UPDATE businesses
