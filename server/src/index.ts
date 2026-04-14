@@ -1,12 +1,15 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import cron from "node-cron";
 import { getDb } from "./db.js";
 import { agentRouter } from "./routes/agent.js";
 import { mcpRouter } from "./routes/mcp.js";
 import { registerRouter } from "./routes/register.js";
 import { analyticsRouter } from "./routes/analytics.js";
 import { wellknownRouter } from "./routes/wellknown.js";
+import { competitorRadarRouter } from "./routes/competitorRadar.js";
+import { pollAll } from "./jobs/competitorRadar.js";
 import { rateLimitMiddleware } from "./middleware/rateLimit.js";
 
 // ── Validate required env vars at startup ──
@@ -41,7 +44,7 @@ app.use(cors({
     if (!origin || origin === WORKER_ORIGIN) { cb(null, true); return; }
     cb(new Error("CORS: origin not allowed"));
   },
-  methods: ["GET", "POST", "PATCH", "OPTIONS"],
+  methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "X-API-Key"],
 }));
 
@@ -58,6 +61,7 @@ app.use(registerRouter);    // POST /register                          (requireA
 app.use(agentRouter);       // GET /agents/:slug/profile, POST /query  (requireApiKey)
 app.use(analyticsRouter);   // GET /analytics, GET /analytics/:slug    (requireApiKey)
 app.use(mcpRouter);         // POST /mcp, GET /mcp
+app.use(competitorRadarRouter); // GET summary/losses, basket CRUD (requireApiKey)
 
 // ── Health check (public) ──
 app.get("/health", (_req, res) => {
@@ -99,6 +103,17 @@ app.get("/", (_req, res) => {
 app.use((_req, res) => {
   res.status(404).json({ error: "Not found" });
 });
+
+// ── P3: competitor radar cron ──
+const CRON_SCHEDULE = process.env.POLL_SCHEDULE_CRON ?? "0 4 * * 1,3,5";
+if (process.env.PERPLEXITY_API_KEY && cron.validate(CRON_SCHEDULE)) {
+  cron.schedule(CRON_SCHEDULE, () => {
+    pollAll().catch((err) => console.error("[radar] pollAll threw:", err));
+  });
+  console.log(`[radar] scheduled: ${CRON_SCHEDULE}`);
+} else {
+  console.warn("[radar] cron NOT scheduled — missing PERPLEXITY_API_KEY or invalid POLL_SCHEDULE_CRON");
+}
 
 // ── Start server ──
 app.listen(PORT, () => {
