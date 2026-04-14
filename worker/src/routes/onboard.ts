@@ -74,6 +74,39 @@ export interface TenantRecord {
    * care which path set it.
    */
   origin_url?: string;
+  // 9-step wizard profile blobs (opaque JSON strings, validated at ingress)
+  profile?: {
+    hours_json?: unknown;
+    services_json_v2?: unknown;
+    pricing_json_v2?: unknown;
+    credentials_json?: unknown;
+    ratings_json?: unknown;
+    differentiators_text?: string;
+    customer_quotes_json?: unknown;
+    guarantee_text?: string;
+    case_stories_json?: unknown;
+    lead_routing_json?: unknown;
+    star_rating?: number;
+    review_count?: number;
+    category?: string;
+    years_in_business?: number;
+    certifications?: string;
+    pricing_tier?: string;
+    availability?: string;
+    service_radius_miles?: number;
+    service_area_keywords?: string;
+    top_services?: string;
+    differentiator?: string;
+    tone?: string;
+    pricing?: string;
+    referral_url?: string;
+    description?: string;
+    // Legacy wizard fields present in old KV records — kept for Railway mapping
+    location?: unknown;
+    contact?: unknown;
+    services?: unknown;
+    differentiators?: unknown;
+  };
   statusLog: Array<{ status: string; timestamp: string; detail: string }>;
   createdAt: string;
   updatedAt: string;

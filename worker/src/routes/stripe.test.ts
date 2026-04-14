@@ -746,3 +746,157 @@ describe("registerBusinessOnRailway", () => {
     expect(body.phone).toBe("512-555-0000");
   });
 });
+
+// ── Task 6: handlePublicOnboard — profile validation ────────────────────────
+//
+// Tests that the 9-step wizard profile is validated at ingress by
+// validateOnboardingPayload before being attached to the tenant.
+// Both test cases deliberately stop before Stripe API calls:
+//   - invalid profile → 400 before any KV or Stripe work
+//   - valid profile   → passes validation; 500 for missing Stripe key
+//     confirms we got past the validation gate without a 400.
+
+import { handlePublicOnboard } from "./stripe";
+
+function makePublicOnboardRequest(body: unknown, origin = "https://advocatemcp.com"): Request {
+  return new Request("https://customers.advocatemcp.com/api/onboard/public", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Origin": origin,
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+function makePublicEnv(overrides: Partial<Env> = {}): Env {
+  const kvStore = (): KVNamespace => {
+    const store = new Map<string, string>();
+    return {
+      get: vi.fn(async (key: string) => store.get(key) ?? null),
+      put: vi.fn(async (key: string, value: string) => { store.set(key, value); }),
+      delete: vi.fn(async (key: string) => { store.delete(key); }),
+      list: vi.fn(async () => ({ keys: [], list_complete: true, cursor: "" })),
+      getWithMetadata: vi.fn(async (key: string) => ({ value: store.get(key) ?? null, metadata: null })),
+    } as unknown as KVNamespace;
+  };
+
+  const fakeD1 = {
+    prepare: vi.fn(() => ({
+      bind: vi.fn(() => ({
+        first: vi.fn(async () => null),
+        run: vi.fn(async () => ({ success: true, meta: { changes: 0 } })),
+        all: vi.fn(async () => ({ results: [] })),
+      })),
+    })),
+    exec: vi.fn(),
+    batch: vi.fn(),
+    dump: vi.fn(),
+  } as unknown as D1Database;
+
+  return {
+    BUSINESS_MAP: kvStore(),
+    TENANT_DATA: kvStore(),
+    DB: fakeD1,
+    STRIPE_SECRET_KEY: undefined,
+    STRIPE_WEBHOOK_SECRET: undefined,
+    STRIPE_PRICE_ID_BASE: undefined,
+    STRIPE_PRICE_ID_PRO: undefined,
+    ADMIN_SECRET: undefined,
+    API_KEY: undefined,
+    API_BASE_URL: undefined,
+    TOKEN_SIGNING_KEY: undefined,
+    ACTIVATION_SIGNING_KEY: undefined,
+    ACCESS_TOKEN_SIGNING_KEY: undefined,
+    RESEND_API_KEY: undefined,
+    CF_API_TOKEN: undefined,
+    CF_ZONE_ID: undefined,
+    ...overrides,
+  } as unknown as Env;
+}
+
+describe("handlePublicOnboard — Task 6: profile validation (9-step wizard)", () => {
+  it("returns 400 validation_error when profile is present but missing required name field", async () => {
+    const req = makePublicOnboardRequest({
+      slug: "testbiz",
+      name: "Test Biz",
+      email: "owner@testbiz.com",
+      plan: "base",
+      profile: {
+        // name is required by validateOnboardingPayload — intentionally omitted
+        description: "A test business",
+        category: "plumbing",
+        location: "Austin, TX",
+        services: ["Pipe repair"],
+        star_rating: 4.5,
+        review_count: 10,
+      },
+    });
+
+    const resp = await handlePublicOnboard(req, makePublicEnv());
+    expect(resp.status).toBe(400);
+
+    const body = (await resp.json()) as { error: string; message: string };
+    expect(body.error).toBe("validation_error");
+    expect(body.message).toMatch(/name/);
+  });
+
+  it("passes validation and does not return 400 when a valid profile is supplied", async () => {
+    // A complete valid profile. Because STRIPE_SECRET_KEY is absent the
+    // handler returns 500 stripe_not_configured — but crucially NOT 400
+    // validation_error, proving the profile passed the validation gate.
+    const req = makePublicOnboardRequest({
+      slug: "austinplumbing",
+      name: "Austin Plumbing Co",
+      email: "owner@austinplumbing.com",
+      plan: "base",
+      profile: {
+        name: "Austin Plumbing Co",
+        description: "Expert plumbing services in Austin, TX",
+        category: "plumbing",
+        location: "Austin, TX",
+        services: ["Pipe repair", "Drain cleaning"],
+        star_rating: 4.8,
+        review_count: 42,
+        hours_json: {
+          mon: { open: "08:00", close: "17:00" },
+          tue: { open: "08:00", close: "17:00" },
+          wed: null,
+          thu: null,
+          fri: { open: "08:00", close: "17:00" },
+          sat: null,
+          sun: null,
+        },
+        lead_routing_json: {
+          preferred_channel: "phone",
+          phone: "512-555-0100",
+        },
+      },
+    });
+
+    const resp = await handlePublicOnboard(req, makePublicEnv());
+    // Must not be a profile validation failure
+    expect(resp.status).not.toBe(400);
+    const body = (await resp.json()) as { error?: string };
+    expect(body.error).not.toBe("validation_error");
+    // With no Stripe key the handler short-circuits with this specific error
+    expect(body.error).toBe("stripe_not_configured");
+  });
+
+  it("passes without profile for legacy minimal onboard (profile absent)", async () => {
+    const req = makePublicOnboardRequest({
+      slug: "legacybiz",
+      name: "Legacy Biz",
+      email: "owner@legacy.com",
+      plan: "base",
+      // no profile field — old wizard, must still work
+    });
+
+    const resp = await handlePublicOnboard(req, makePublicEnv());
+    // Must not be a validation error
+    expect(resp.status).not.toBe(400);
+    const body = (await resp.json()) as { error?: string };
+    expect(body.error).not.toBe("validation_error");
+    expect(body.error).toBe("stripe_not_configured");
+  });
+});
