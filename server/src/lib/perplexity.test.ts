@@ -47,4 +47,23 @@ describe("perplexitySearch", () => {
     delete process.env.PERPLEXITY_API_KEY;
     await expect(perplexitySearch("q")).rejects.toThrow(/PERPLEXITY_API_KEY/);
   });
+
+  it("surfaces Retry-After header in 429 error message", async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({ error: { message: "rate limited" } }), {
+        status: 429,
+        headers: { "Retry-After": "30" },
+      }),
+    ) as unknown as typeof fetch;
+
+    await expect(perplexitySearch("q")).rejects.toThrow(/retry-after=30/);
+  });
+
+  it("throws descriptive error when 200 body is not JSON", async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response("<html>cloudflare error</html>", { status: 200 }),
+    ) as unknown as typeof fetch;
+
+    await expect(perplexitySearch("q")).rejects.toThrow(/json parse failed/);
+  });
 });

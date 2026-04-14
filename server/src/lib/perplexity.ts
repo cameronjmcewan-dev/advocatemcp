@@ -31,10 +31,19 @@ export async function perplexitySearch(query: string): Promise<PerplexityResult>
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`perplexity ${res.status}: ${body.slice(0, 200)}`);
+    const retryAfter = res.headers.get("Retry-After") ?? "unknown";
+    throw new Error(`perplexity ${res.status} (retry-after=${retryAfter}): ${body.slice(0, 200)}`);
   }
 
-  const json = (await res.json()) as { citations?: string[] };
-  const citations = Array.isArray(json.citations) ? json.citations.filter((c): c is string => typeof c === "string") : [];
+  const rawBody = await res.text();
+  let json: { citations?: unknown };
+  try {
+    json = JSON.parse(rawBody) as { citations?: unknown };
+  } catch {
+    throw new Error(`perplexity json parse failed (status ${res.status}): ${rawBody.slice(0, 200)}`);
+  }
+  const citations = Array.isArray(json.citations)
+    ? json.citations.filter((c): c is string => typeof c === "string")
+    : [];
   return { citations, costUsd: FLAT_COST_USD };
 }
