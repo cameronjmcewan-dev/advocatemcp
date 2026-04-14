@@ -35,6 +35,20 @@ describe("generateAutoQueries", () => {
     expect(generateAutoQueries({ category: "", location: "Boise", services: [] })).toEqual([]);
     expect(generateAutoQueries({ category: "plumber", location: "", services: [] })).toEqual([]);
   });
+
+  it("returns base queries when services is not an array (defensive guard)", () => {
+    const qs = generateAutoQueries({
+      category: "plumber",
+      location: "Boise, ID",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      services: null as any,
+    });
+    expect(qs).toEqual([
+      "best plumber in Boise, ID",
+      "top plumber in Boise",
+      "plumber near me in Boise, ID",
+    ]);
+  });
 });
 
 describe("phrasingVariants", () => {
@@ -62,5 +76,12 @@ describe("phrasingVariants", () => {
 
   it("returns only the base variant when both affixes already present", () => {
     expect(phrasingVariants("top rated plumber reviews")).toEqual(["top rated plumber reviews"]);
+  });
+
+  it("skips 'top rated' variant when query contains hyphenated 'top-rated'", () => {
+    expect(phrasingVariants("top-rated plumber")).toEqual([
+      "top-rated plumber",
+      "top-rated plumber reviews",
+    ]);
   });
 });

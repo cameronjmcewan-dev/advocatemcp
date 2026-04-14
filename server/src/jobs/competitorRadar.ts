@@ -27,7 +27,8 @@ export function generateAutoQueries(p: ProfileForSeeding): string[] {
     `top ${cat} in ${city}`,
     `${cat} near me in ${loc}`,
   ];
-  const services = (p.services ?? []).slice(0, 3).map((s) => s.trim()).filter(Boolean);
+  const servicesRaw = Array.isArray(p.services) ? p.services : [];
+  const services = servicesRaw.slice(0, 3).map((s) => s.trim()).filter(Boolean);
   for (const svc of services) base.push(`${svc} ${cat} ${loc}`);
   return base;
 }
@@ -40,6 +41,6 @@ export function phrasingVariants(query: string): string[] {
   const lower = query.toLowerCase();
   const out: string[] = [query];
   if (!lower.includes("reviews")) out.push(`${query} reviews`);
-  if (!lower.includes("top rated")) out.push(`top rated ${query}`);
+  if (!lower.includes("top rated") && !lower.includes("top-rated")) out.push(`top rated ${query}`);
   return out;
 }
