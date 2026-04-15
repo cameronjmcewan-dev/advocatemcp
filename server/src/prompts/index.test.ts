@@ -78,4 +78,14 @@ describe("getBotPromptBlock dispatch", () => {
   it("dispatches Google-Extended to google module", () => {
     expect(getBotPromptBlock("Google-Extended").name).toBe("google");
   });
+
+  it("dispatches anthropic-ai to training module", () => {
+    expect(getBotPromptBlock("anthropic-ai").name).toBe("training");
+  });
+  it("dispatches cohere-ai to training module", () => {
+    expect(getBotPromptBlock("cohere-ai").name).toBe("training");
+  });
+  it("dispatches meta-externalagent to training module", () => {
+    expect(getBotPromptBlock("meta-externalagent").name).toBe("training");
+  });
 });

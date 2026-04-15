@@ -4,6 +4,7 @@ import { perplexityBlock } from "./perplexity.js";
 import { openaiBlock } from "./openai.js";
 import { claudeBlock } from "./claude.js";
 import { googleBlock } from "./google.js";
+import { trainingBlock } from "./training.js";
 
 // Source of truth for canonical bot identifiers. Mirrors worker/src/index.ts AI_CRAWLERS.
 export const CANONICALS = [
@@ -40,8 +41,8 @@ export function getBotPromptBlock(
   const canonical = normalize(input);
   if (canonical === null) return defaultBlock;
 
-  // Dispatch per canonical bot identity. Per-bot module content lands in Tasks 2-6;
-  // until then every canonical match still returns defaultBlock so behavior is unchanged.
+  // Dispatch per canonical bot identity. Each arm returns a bot-specific emphasis block
+  // merged into the system prompt by the agent route.
   switch (canonical) {
     case "PerplexityBot":
       return perplexityBlock;
@@ -56,7 +57,7 @@ export function getBotPromptBlock(
     case "anthropic-ai":
     case "cohere-ai":
     case "meta-externalagent":
-      return defaultBlock;
+      return trainingBlock;
   }
 }
 
