@@ -9,16 +9,21 @@
  * for now by design (out of scope for this change).
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ── Mock the CF API at the module boundary ─────────────────────────────────
 // activateDomain calls the internal cfRequest fn, which calls fetch().
 // We stub fetch() globally to control CF API responses per-test.
+// afterEach unstubs so we don't leak a stale fetch mock into other test files
+// (matches the pattern in onboard.test.ts, stripe.test.ts, resend.test.ts).
 
 const fetchMock = vi.fn();
 beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 // Mock origin discovery so we don't need to stub a full HTTP redirect chain.
@@ -98,6 +103,10 @@ describe("activateDomain — self-healing spec", () => {
     });
 
     expect(result.ok).toBe(true);
+    // Tighten the success assertion: this is the new-hostname path, not
+    // already_exists, and the CF id from the mock should round-trip verbatim.
+    expect(result.body.status).toBe("pending_verification");
+    expect(result.body.cf_hostname_id).toBe("cf-hostname-123");
 
     const cfPost = fetchMock.mock.calls.find(
       ([url, init]) => typeof url === "string" && url.includes("api.cloudflare.com") && (init as RequestInit)?.method === "POST",
