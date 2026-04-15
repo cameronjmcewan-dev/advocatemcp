@@ -40,7 +40,11 @@ describe("POST /mcp — initialize carries _meta.advocatemcp", () => {
     expect(meta.manifest_url).toMatch(/\/\.well-known\/mcp\.json$/);
     expect(Array.isArray(meta.tools)).toBe(true);
     expect((meta.tools as { name: string }[]).map((t) => t.name).sort()).toEqual([
+      "get_availability",
+      "get_quote",
+      "initiate_handoff",
       "query_business_agent",
+      "reserve_slot",
       "search_businesses",
     ]);
   });

@@ -19,12 +19,17 @@ import { z, ZodTypeAny } from "zod";
  */
 export type JsonSchemaNode =
   | { type: "string"; description?: string; minLength?: number }
+  | { type: "number"; description?: string }
+  | { type: "array"; items?: JsonSchemaNode; description?: string }
   | {
       type: "object";
-      properties: Record<string, JsonSchemaNode>;
-      required: string[];
-      additionalProperties: false;
-    };
+      properties?: Record<string, JsonSchemaNode>;
+      required?: string[];
+      additionalProperties?: false | JsonSchemaNode;
+      description?: string;
+    }
+  | { const: unknown }
+  | { oneOf: JsonSchemaNode[] };
 
 export function zodToJsonSchema(node: ZodTypeAny): JsonSchemaNode {
   // `_def` is a zod internal — stable across the 3.23 line we depend on. If
@@ -36,6 +41,7 @@ export function zodToJsonSchema(node: ZodTypeAny): JsonSchemaNode {
     checks?: Array<{ kind: string; value?: number }>;
     innerType?: ZodTypeAny;
     shape?: () => Record<string, ZodTypeAny>;
+    valueType?: ZodTypeAny;
   };
 
   // Unwrap ZodOptional by recursing into innerType — optionality is a
@@ -55,6 +61,20 @@ export function zodToJsonSchema(node: ZodTypeAny): JsonSchemaNode {
     return out;
   }
 
+  if (def.typeName === "ZodNumber") {
+    const out: JsonSchemaNode = { type: "number" };
+    if (def.description) out.description = def.description;
+    return out;
+  }
+
+  if (def.typeName === "ZodRecord") {
+    if (!def.valueType) throw new Error(`zodToJsonSchema: ZodRecord missing valueType`);
+    return {
+      type: "object",
+      additionalProperties: zodToJsonSchema(def.valueType),
+    };
+  }
+
   if (def.typeName === "ZodObject" && def.shape) {
     const shape = def.shape();
     const properties: Record<string, JsonSchemaNode> = {};
@@ -65,6 +85,16 @@ export function zodToJsonSchema(node: ZodTypeAny): JsonSchemaNode {
       if (childDef.typeName !== "ZodOptional") required.push(key);
     }
     return { type: "object", properties, required, additionalProperties: false };
+  }
+
+  if (def.typeName === "ZodLiteral") {
+    const value = (def as { value?: unknown }).value;
+    return { const: value } as JsonSchemaNode;
+  }
+
+  if (def.typeName === "ZodDiscriminatedUnion") {
+    const options = (def as { options?: ZodTypeAny[] }).options ?? [];
+    return { oneOf: options.map((o) => zodToJsonSchema(o)) } as JsonSchemaNode;
   }
 
   throw new Error(

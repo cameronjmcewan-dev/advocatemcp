@@ -40,3 +40,47 @@ export const searchBusinessesInput = z.object({
 
 export type QueryBusinessAgentInput = z.infer<typeof queryBusinessAgentInput>;
 export type SearchBusinessesInput = z.infer<typeof searchBusinessesInput>;
+
+export const getAvailabilityInput = z.object({
+  slug: z.string().min(1).describe("business slug"),
+  window_start: z.number().int().positive().optional().describe("Unix seconds; default now"),
+  window_end: z.number().int().positive().optional().describe("Unix seconds; default now + 7 days"),
+});
+export type GetAvailabilityInput = z.infer<typeof getAvailabilityInput>;
+
+export const getQuoteInput = z.object({
+  slug: z.string().min(1).describe("business slug"),
+  service: z.string().min(1).describe("requested service name"),
+  params: z.record(z.string()).optional().describe("optional service parameters (e.g., {size:'large'})"),
+});
+export type GetQuoteInput = z.infer<typeof getQuoteInput>;
+
+export const reserveSlotInput = z.object({
+  slug: z.string().min(1),
+  window_start: z.number().int().positive(),
+  window_end: z.number().int().positive(),
+  agent_id: z.string().optional(),
+  customer_contact: z.object({
+    name: z.string().optional(),
+    email: z.string().optional(),
+    phone: z.string().optional(),
+  }),
+  idempotency_key: z.string().min(1),
+});
+export type ReserveSlotInput = z.infer<typeof reserveSlotInput>;
+
+export const initiateHandoffInput = z.discriminatedUnion("mode", [
+  z.object({
+    slug: z.string().min(1),
+    reservation_id: z.string().optional(),
+    mode: z.literal("human"),
+    payload: z.object({ message: z.string().min(1) }),
+  }),
+  z.object({
+    slug: z.string().min(1),
+    reservation_id: z.string().optional(),
+    mode: z.literal("agent"),
+    payload: z.object({ purpose: z.string().min(1) }),
+  }),
+]);
+export type InitiateHandoffInput = z.infer<typeof initiateHandoffInput>;

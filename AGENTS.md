@@ -67,6 +67,54 @@ npx @modelcontextprotocol/inspector
 # Transport: HTTP
 ```
 
+## Transactional tool surface (Session 9)
+
+Four MCP tools let an agent acting on behalf of a user move from discovery to
+commitment without leaving MCP:
+
+| Tool | Shape | Side effect |
+|---|---|---|
+| `get_availability` | `{slug, window_start?, window_end?}` → `{slots[], source, generated_at}` | None (read-only) |
+| `get_quote` | `{slug, service, params?}` → `{quote{low,high,currency,confidence,basis,disclaimer?}}` | None (may call Claude for fallback) |
+| `reserve_slot` | `{slug, window_*, agent_id?, customer_contact, idempotency_key}` → `{reservation_id, status:"held", confirmation_token, expires_at}` | Writes `reservations` row; 15-min hold |
+| `initiate_handoff` | `{slug, mode:"human"\|"agent", ...}` → human: `{delivered_via, ticket_id}`; agent: `{continuation_url, expires_at, handshake_token}` | Writes `handoffs` row; notify side effect on human mode |
+
+### Two extra endpoints
+
+- `POST /a2a/confirm` — body `{confirmation_token}`. Flips reservation `held`→`confirmed`.
+- `POST /a2a/continue/:token` — consumes the agent-mode handoff URL; returns the decoded continuation payload.
+
+### HMAC domain separation
+
+Attribution tokens (`/r/:token` on the worker) and continuation tokens
+(confirmation + handoff) share the same `TOKEN_SIGNING_KEY` but are
+domain-separated by an HMAC prefix (`"a2a-continuation:v1:"`). A token minted
+for one purpose CANNOT verify for the other. This means one env var to rotate,
+zero cross-use attack surface.
+
+### Notify adapters
+
+- SMS: Twilio REST via fetch (HTTP Basic auth). Gate:
+  `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`. Absent env →
+  `{delivered:false, reason:"not_configured"}`. Twilio response missing `sid`
+  → `{delivered:false, reason:"missing_sid"}`.
+- Email: deferred to v1.x — SES via AWS SigV4 is >200 lines hand-rolled and the
+  project forbids new SDK dependencies without approval.
+
+Human-mode `initiate_handoff` adds one upstream reason: if the business's
+`lead_routing_json` does not configure a recipient for the preferred channel
+(e.g. `{"preferred":"sms"}` with no `sms_to`), the handoff short-circuits with
+`{delivered:false, reason:"no_recipient_configured", channel}` **without**
+calling the notify adapter. The audit row is still written to `handoffs` so
+the failed attempt is visible in analytics.
+
+### Idempotency
+
+`reserve_slot` is the only tool with mutation-idempotency — repeated calls with
+the same `idempotency_key` return the existing reservation. `initiate_handoff`
+is NOT idempotent (each call writes a new `handoffs` row + notify side effect);
+agents should not retry on timeout without user consent.
+
 ## Hard design decisions locked in for Session 8
 
 | Question | Decision | Rationale |

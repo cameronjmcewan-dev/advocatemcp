@@ -1,6 +1,10 @@
 import {
   queryBusinessAgentInput,
   searchBusinessesInput,
+  getAvailabilityInput,
+  getQuoteInput,
+  reserveSlotInput,
+  initiateHandoffInput,
 } from "./tools.js";
 import {
   zodToJsonSchema,
@@ -24,7 +28,7 @@ import {
 export interface ToolDescriptor {
   name: string;
   description: string;
-  inputZod: typeof queryBusinessAgentInput | typeof searchBusinessesInput;
+  inputZod: typeof queryBusinessAgentInput | typeof searchBusinessesInput | typeof getAvailabilityInput | typeof getQuoteInput | typeof reserveSlotInput | typeof initiateHandoffInput;
   outputSchema: JsonSchemaNode;
   idempotent: boolean;
   estimated_latency_ms: number;
@@ -75,6 +79,102 @@ export const DESCRIPTORS: ToolDescriptor[] = [
     },
     idempotent: true, // read-only SQL over businesses table
     estimated_latency_ms: 50,
+    estimated_cost_cents: 0,
+  },
+  {
+    name: "get_availability",
+    description: "30-minute slot windows derived from business hours_json (v1 synthetic).",
+    inputZod: getAvailabilityInput,
+    outputSchema: {
+      type: "object",
+      properties: {
+        slots: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              start: { type: "number" },
+              end: { type: "number" },
+              capacity: { type: "number" },
+            },
+          },
+        },
+        source: { type: "string" },
+        generated_at: { type: "number" },
+      },
+    },
+    idempotent: true,
+    estimated_latency_ms: 150,
+    estimated_cost_cents: 0,
+  },
+  {
+    name: "get_quote",
+    description: "Quote a service price from pricing_json_v2; exact|range|estimate labelled.",
+    inputZod: getQuoteInput,
+    outputSchema: {
+      type: "object",
+      properties: {
+        quote: {
+          type: "object",
+          properties: {
+            low: { type: "number" },
+            high: { type: "number" },
+            currency: { type: "string" },
+            confidence: { type: "string" },
+            basis: { type: "string" },
+            disclaimer: { type: "string" },
+          },
+        },
+      },
+    },
+    idempotent: true,
+    estimated_latency_ms: 200,
+    estimated_cost_cents: 0, // deterministic=0; LLM fallback ~1–2¢ per call; averaged assumes ≥70% deterministic hit
+  },
+  {
+    name: "initiate_handoff",
+    description: "Start a handoff to a human (SMS/email via tenant routing) or another agent (signed continuation URL).",
+    inputZod: initiateHandoffInput,
+    outputSchema: {
+      oneOf: [
+        {
+          type: "object",
+          properties: {
+            mode: { const: "human" },
+            delivered_via: { type: "string" },
+            ticket_id: { type: "string" },
+          },
+        },
+        {
+          type: "object",
+          properties: {
+            mode: { const: "agent" },
+            continuation_url: { type: "string" },
+            expires_at: { type: "number" },
+            handshake_token: { type: "string" },
+          },
+        },
+      ],
+    },
+    idempotent: false,
+    estimated_latency_ms: 300,
+    estimated_cost_cents: 1,
+  },
+  {
+    name: "reserve_slot",
+    description: "Create a 15-min HELD reservation; returns a signed confirmation_token for the agent to post back to /a2a/confirm.",
+    inputZod: reserveSlotInput,
+    outputSchema: {
+      type: "object",
+      properties: {
+        reservation_id: { type: "string" },
+        status: { type: "string" },
+        confirmation_token: { type: "string" },
+        expires_at: { type: "number" },
+      },
+    },
+    idempotent: true,
+    estimated_latency_ms: 100,
     estimated_cost_cents: 0,
   },
 ];
