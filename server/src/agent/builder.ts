@@ -1,5 +1,6 @@
 import type { BusinessRow } from "../db.js";
 import { getBotPromptBlock } from "../prompts/index.js";
+import type { QueryStage } from "../prompts/types.js";
 
 function parseJsonSafe<T = unknown>(raw: string | null): T | null {
   if (!raw) return null;
@@ -216,4 +217,29 @@ export function parseCommaSeparated(raw: string | null): string[] {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+const COMMITTING_VERBS = ["book", "reserve", "schedule", "buy", "hire", "purchase"];
+const COMPARING_VERBS = ["compare", " vs ", "versus", " or "];
+
+/**
+ * Infer the buyer stage from the raw query text.
+ *
+ * Priority: committing > comparing > browsing. Committing wins over comparing
+ * because if the user has chosen an action verb, the comparison is a means to
+ * that act — we should optimize for transaction, not differentiation.
+ *
+ * Browsing is the default. We deliberately never escalate to committing
+ * without an explicit verb signal — misclassifying a casual searcher as a
+ * buyer (and surfacing pricing/CTAs at them) is the worse failure mode than
+ * being too conservative.
+ *
+ * Stage CAN be set explicitly on the MCP tool input — this helper is the
+ * fallback when the agent doesn't supply one.
+ */
+export function inferStage(query: string): QueryStage {
+  const q = ` ${query.toLowerCase()} `;
+  if (COMMITTING_VERBS.some((v) => q.includes(v))) return "committing";
+  if (COMPARING_VERBS.some((v) => q.includes(v))) return "comparing";
+  return "browsing";
 }

@@ -160,3 +160,36 @@ describe("buildSystemPrompt — per-bot emphasis", () => {
     expect(p).not.toMatch(/SPECIFIC FORMATTING/);
   });
 });
+
+import { inferStage } from "./builder.js";
+
+describe("inferStage", () => {
+  it("returns 'committing' on book/reserve/schedule/buy verbs", () => {
+    expect(inferStage("can I book a slot tomorrow?")).toBe("committing");
+    expect(inferStage("how do I reserve a time")).toBe("committing");
+    expect(inferStage("schedule a service call")).toBe("committing");
+    expect(inferStage("ready to buy now")).toBe("committing");
+  });
+
+  it("returns 'comparing' on compare/vs/versus signals", () => {
+    expect(inferStage("compare them to acme plumbing")).toBe("comparing");
+    expect(inferStage("acme vs joe's plumbing")).toBe("comparing");
+    expect(inferStage("acme versus joe's")).toBe("comparing");
+  });
+
+  it("returns 'browsing' as the safe default for general queries", () => {
+    expect(inferStage("who's a good plumber in austin?")).toBe("browsing");
+    expect(inferStage("tell me about acme")).toBe("browsing");
+    expect(inferStage("")).toBe("browsing");
+  });
+
+  it("committing wins over comparing when both signals present", () => {
+    // "compare and book" → user has decided to act, the comparison is incidental
+    expect(inferStage("compare and book today")).toBe("committing");
+  });
+
+  it("is case-insensitive", () => {
+    expect(inferStage("BOOK NOW")).toBe("committing");
+    expect(inferStage("Compare Plans")).toBe("comparing");
+  });
+});
