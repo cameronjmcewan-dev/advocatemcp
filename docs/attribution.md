@@ -31,6 +31,36 @@ encodedSig     = base64url(HMAC-SHA256(ASCII_bytes(encodedPayload), TOKEN_SIGNIN
 
 Token lifetime is 90 days (`ts` checked at verification time).
 
+## Session 0 primitives — request_id and `aid` token claim
+
+Two small primitives threaded through the attribution path so every request has a stable correlation handle and every token can (optionally) carry one. Both are additive — they do not change any existing on-wire format for callers that ignore them.
+
+### `x-advocate-request-id` header
+
+Every request into Railway goes through the `requestId` helper at [server/src/lib/requestId.ts](server/src/lib/requestId.ts), which:
+
+- Accepts an inbound `x-advocate-request-id` header if present **and** well-formed (ULID — 26 chars, Crockford base32). Malformed values are discarded silently rather than rejected, so an upstream caller passing garbage never breaks the request.
+- Mints a fresh ULID if no valid inbound ID is present.
+- Echoes the resolved ID back on the response as the same `x-advocate-request-id` header, so clients and the Worker can pin logs to the same ID the server persisted.
+- Persists the resolved ID into the `queries.request_id` column on the `queries` insert, giving every query row an end-to-end correlation handle that spans Worker logs, Railway logs, and the DB.
+
+ULID is chosen (over UUIDv4) for lexicographic time-ordering — useful for log scans and for debugging bot-burst patterns without a separate timestamp join. The helper's header read is case-insensitive per HTTP semantics; header writes use the lowercase canonical form.
+
+### Optional `aid?: string` claim on the signed token
+
+The token `TokenPayload` in [server/src/lib/tracked-url.ts](server/src/lib/tracked-url.ts) and [worker/src/lib/tracked-url.ts](worker/src/lib/tracked-url.ts) gains an **optional** `aid?: string` field for per-assistant / per-agent attribution (e.g. distinguishing different Claude-powered surfaces that share a slug).
+
+**Back-compat guarantee — byte-identical tokens when `aid` is absent.**
+
+A token minted before Session 0 and a post-Session-0 token built from the same `{dest, ref, slug, query_id, ts}` payload with `aid` omitted must be byte-for-byte identical — same `encodedPayload`, same signature, same full token string. This matters because:
+
+- Cached / in-flight tracking URLs issued before Session 0 must continue to verify without re-signing.
+- The cross-env parity test vector (`KNOWN_TOKEN`) in both `tracked-url.test.ts` files is an existing pre-`aid` token and must not change.
+
+The `buildToken` implementation achieves this by omitting `aid` from the JSON payload when the caller does not pass it (i.e. `aid` is `undefined`, not `null` or `""`). `JSON.stringify` already drops `undefined` property values, so the serialized string is identical to the pre-Session-0 form. Do not "normalize" the payload by inserting `aid: null` — that would break every pre-Session-0 token on the next verification.
+
+Verification on the Worker side accepts tokens with and without `aid` — the field is only read when present, and its absence is not a rejection reason.
+
 ## Structured log metrics on /track
 
 | Metric | When emitted | Key fields |
