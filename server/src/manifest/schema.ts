@@ -18,7 +18,7 @@ import { z, ZodTypeAny } from "zod";
  * when Session 9 introduces tools with numbers/arrays/enums/unions.
  */
 export type JsonSchemaNode =
-  | { type: "string"; description?: string; minLength?: number }
+  | { type: "string"; description?: string; minLength?: number; enum?: string[] }
   | { type: "number"; description?: string }
   | { type: "array"; items?: JsonSchemaNode; description?: string }
   | {
@@ -85,6 +85,16 @@ export function zodToJsonSchema(node: ZodTypeAny): JsonSchemaNode {
       if (childDef.typeName !== "ZodOptional") required.push(key);
     }
     return { type: "object", properties, required, additionalProperties: false };
+  }
+
+  if (def.typeName === "ZodEnum") {
+    // zod stores the enum members at `_def.values`. Always strings (zod's
+    // ZodEnum is string-only; for numeric enums it surfaces as ZodNativeEnum,
+    // which we don't use today).
+    const values = (def as { values?: string[] }).values ?? [];
+    const out: JsonSchemaNode = { type: "string", enum: values };
+    if (def.description) out.description = def.description;
+    return out;
   }
 
   if (def.typeName === "ZodLiteral") {

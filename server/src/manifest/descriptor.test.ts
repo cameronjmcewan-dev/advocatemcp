@@ -177,6 +177,30 @@ describe("drift: MCP registry ↔ DESCRIPTORS", () => {
   });
 });
 
+describe("query_business_agent input_schema includes Session 10 fields", () => {
+  it("declares agent_id as optional string", () => {
+    const tool = MANIFEST.tools.find((t) => t.name === "query_business_agent");
+    expect(tool).toBeDefined();
+    const props = (tool!.input_schema as { properties: Record<string, { type?: string }> }).properties;
+    expect(props.agent_id).toBeDefined();
+    expect(props.agent_id.type).toBe("string");
+  });
+
+  it("declares stage as optional enum (browsing|comparing|committing)", () => {
+    const tool = MANIFEST.tools.find((t) => t.name === "query_business_agent");
+    const props = (tool!.input_schema as { properties: Record<string, { enum?: string[] }> }).properties;
+    expect(props.stage).toBeDefined();
+    expect(props.stage.enum).toEqual(["browsing", "comparing", "committing"]);
+  });
+
+  it("does not list agent_id or stage as required", () => {
+    const tool = MANIFEST.tools.find((t) => t.name === "query_business_agent");
+    const required = ((tool!.input_schema as { required?: string[] }).required ?? []);
+    expect(required).not.toContain("agent_id");
+    expect(required).not.toContain("stage");
+  });
+});
+
 describe("rate_limits sourced from middleware constants", () => {
   it("per_ip_per_minute matches middleware PER_IP_LIMIT_PER_MINUTE", () => {
     expect(MANIFEST.rate_limits.per_ip_per_minute).toBe(
