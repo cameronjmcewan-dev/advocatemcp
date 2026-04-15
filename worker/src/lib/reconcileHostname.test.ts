@@ -27,7 +27,7 @@ describe("reconcileHostname", () => {
     const actual = {
       id: "abc123",
       hostname: "www.example.com",
-      custom_origin_server: "advocatemcp-worker.advocatecameron.workers.dev",
+      custom_origin_server: "customers.advocatemcp.com",
       ssl: { method: "txt", settings: { min_tls_version: "1.2" } },
     };
     const cfRequest = cfRequestOk({});
@@ -47,7 +47,7 @@ describe("reconcileHostname", () => {
       // custom_origin_server missing entirely (legacy record)
       ssl: { method: "txt", settings: { min_tls_version: "1.2" } },
     };
-    const patched = { ...actual, custom_origin_server: "advocatemcp-worker.advocatecameron.workers.dev" };
+    const patched = { ...actual, custom_origin_server: "customers.advocatemcp.com" };
     const cfRequest = cfRequestOk({ result: patched });
     const result = await reconcileHostname(env, actual, desired, cfRequest);
 
@@ -60,7 +60,7 @@ describe("reconcileHostname", () => {
       env,
       "PATCH",
       "/abc123",
-      { custom_origin_server: "advocatemcp-worker.advocatecameron.workers.dev" },
+      { custom_origin_server: "customers.advocatemcp.com" },
     );
   });
 
@@ -68,7 +68,7 @@ describe("reconcileHostname", () => {
     const actual = {
       id: "abc123",
       hostname: "www.example.com",
-      custom_origin_server: "advocatemcp-worker.advocatecameron.workers.dev",
+      custom_origin_server: "customers.advocatemcp.com",
       ssl: { method: "txt", settings: { min_tls_version: "1.0" } },
     };
     const cfRequest = cfRequestOk({ result: { ...actual, ssl: { method: "txt", settings: { min_tls_version: "1.2" } } } });

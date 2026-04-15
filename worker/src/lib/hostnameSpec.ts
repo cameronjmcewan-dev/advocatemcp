@@ -22,19 +22,15 @@ export interface CustomHostnameSpec {
 // CF SaaS custom_origin_server — where Cloudflare forwards traffic AFTER
 // accepting a request on the tenant's custom hostname.
 //
-// This is DIFFERENT from CNAME_TARGET in worker/src/routes/domains.ts, which
-// is the DNS target customers point their domain at. Both used to be
-// "customers.advocatemcp.com" until we hit CF SaaS's same-account-zone
-// loopback: when custom_origin_server pointed at another proxied zone on our
-// own CF account, the edge refused to forward and returned 522 on every bot
-// request (observed on www.workmancopyco.com, Apr 14 2026).
+// Must be a DNS record (A/AAAA/CNAME) within the SaaS zone (advocatemcp.com).
+// CF silently rejects out-of-zone origins with verification_errors like
+// "custom origin hostname does not exist on Cloudflare as a DNS record in
+// your zone". workers.dev URLs fail this check — observed via diagnostic
+// /admin/domains/:slug/raw on Apr 14 2026.
 //
-// Pointing custom_origin_server at the Worker's *.workers.dev URL escapes
-// the SaaS layer cleanly — workers.dev is on the Workers Platform, not a
-// SaaS zone, so CF treats it as an ordinary external origin. The Worker
-// reads the cf-custom-hostname header (injected by SaaS) to recover the
-// original tenant domain for BUSINESS_MAP lookup.
-const ORIGIN_SERVER = "advocatemcp-worker.advocatecameron.workers.dev";
+// customers.advocatemcp.com satisfies the constraint: proxied A record in
+// advocatemcp.com zone, bound to the Worker Route customers.advocatemcp.com/*.
+const ORIGIN_SERVER = "customers.advocatemcp.com";
 
 export function desiredHostnameSpec(hostname: string): CustomHostnameSpec {
   return {

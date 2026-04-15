@@ -546,6 +546,164 @@ export async function handleActivateDomain(
   });
 }
 
+// ── GET /admin/domains/:slug/raw ──────────────────────────────────────────
+//
+// Diagnostic endpoint: returns the full raw CF custom_hostname record plus
+// the zone-level SaaS fallback_origin. Used when /status's synthesized view
+// hides a field we need to debug. Admin-gated, read-only.
+
+export async function handleDomainRaw(
+  request: Request,
+  env: Env,
+  slug: string
+): Promise<Response> {
+  if (!requireAdminSecret(request, env)) {
+    return jsonErr(401, "Unauthorized — X-Admin-Secret header required");
+  }
+
+  const biz = await env.DB
+    .prepare("SELECT slug, cf_hostname_id FROM businesses WHERE slug = ? LIMIT 1")
+    .bind(slug)
+    .first<{ slug: string; cf_hostname_id: string | null }>();
+
+  if (!biz) return jsonErr(404, `No business found: ${slug}`);
+  if (!biz.cf_hostname_id) return jsonErr(404, "No CF hostname registered");
+
+  const [hostnameRes, fallbackRes] = await Promise.all([
+    cfRequest(env, "GET", `/${biz.cf_hostname_id}`),
+    cfRequest(env, "GET", `/fallback_origin`),
+  ]);
+
+  return jsonOk({
+    slug,
+    cf_hostname_id: biz.cf_hostname_id,
+    hostname_record: hostnameRes.ok ? hostnameRes.data.result : { error: hostnameRes.data },
+    fallback_origin: fallbackRes.ok ? fallbackRes.data.result : { error: fallbackRes.data },
+  });
+}
+
+// ── POST /admin/domains/saas-fallback-origin ──────────────────────────────
+//
+// Sets the zone-wide CF SaaS fallback origin. Required before custom
+// hostnames will route at all — even per-hostname custom_origin_server
+// overrides only work once a zone-level fallback is configured.
+//
+// Idempotent PUT. Body: { "origin": "hostname" }. If body empty, defaults
+// to "customers.advocatemcp.com" (the Worker-bound zone hostname).
+
+export async function handleSetFallbackOrigin(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  if (!requireAdminSecret(request, env)) {
+    return jsonErr(401, "Unauthorized — X-Admin-Secret header required");
+  }
+
+  let origin = "customers.advocatemcp.com";
+  try {
+    const body = await request.json<{ origin?: string }>();
+    if (typeof body.origin === "string" && body.origin.trim()) {
+      origin = body.origin.trim();
+    }
+  } catch { /* empty body → use default */ }
+
+  const before = await cfRequest(env, "GET", `/fallback_origin`);
+  const put    = await cfRequest(env, "PUT", `/fallback_origin`, { origin });
+
+  if (!put.ok) {
+    return jsonErr(502, "CF fallback_origin PUT failed", put.data);
+  }
+
+  return jsonOk({
+    origin_set_to: origin,
+    before: before.ok ? before.data.result : { error: before.data },
+    after:  put.data.result,
+  });
+}
+
+// ── POST /admin/domains/ensure-worker-route ───────────────────────────────
+//
+// Creates a Worker Route binding a tenant hostname directly to this Worker.
+// Per Cloudflare's SaaS+Worker docs: SaaS custom_origin_server alone isn't
+// enough when the origin is a Worker-bound hostname on the same account —
+// CF also needs an explicit Worker Route pattern claiming the tenant's
+// hostname. Without it, SaaS forwarding loops internally and the edge
+// returns a fast 522 without reaching the Worker.
+//
+// Body: { "hostname": "www.workmancopyco.com" }. Idempotent: checks for an
+// existing matching route before creating.
+
+export async function handleEnsureWorkerRoute(
+  request: Request,
+  env: Env
+): Promise<Response> {
+  if (!requireAdminSecret(request, env)) {
+    return jsonErr(401, "Unauthorized — X-Admin-Secret header required");
+  }
+
+  if (!env.CF_API_TOKEN || !env.CF_ZONE_ID) {
+    return jsonErr(500, "CF_API_TOKEN and CF_ZONE_ID secrets are not configured");
+  }
+
+  let hostname: string;
+  try {
+    const body = await request.json<{ hostname?: string }>();
+    if (typeof body.hostname !== "string" || !body.hostname.trim()) {
+      return jsonErr(400, "Missing required field: hostname");
+    }
+    hostname = body.hostname.trim().toLowerCase();
+  } catch {
+    return jsonErr(400, "Invalid JSON body");
+  }
+
+  const pattern = `${hostname}/*`;
+  const script  = "advocatemcp-worker";
+  const routesUrl = `https://api.cloudflare.com/client/v4/zones/${env.CF_ZONE_ID}/workers/routes`;
+
+  // 1. List existing routes and check for duplicate
+  const listResp = await fetch(routesUrl, {
+    headers: { Authorization: `Bearer ${env.CF_API_TOKEN}` },
+  });
+  const listData = await listResp.json() as { success?: boolean; result?: Array<{ id: string; pattern: string; script: string }> };
+  if (!listResp.ok || !listData.success) {
+    return jsonErr(502, "CF workers/routes list failed", listData);
+  }
+
+  const existing = listData.result?.find((r) => r.pattern === pattern);
+  if (existing) {
+    return jsonOk({
+      hostname,
+      pattern,
+      script,
+      created: false,
+      route_id: existing.id,
+      note: "route already existed",
+    });
+  }
+
+  // 2. Create the route
+  const createResp = await fetch(routesUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.CF_API_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ pattern, script }),
+  });
+  const createData = await createResp.json() as { success?: boolean; result?: { id: string }; errors?: unknown };
+  if (!createResp.ok || !createData.success) {
+    return jsonErr(502, "CF workers/routes create failed", createData);
+  }
+
+  return jsonOk({
+    hostname,
+    pattern,
+    script,
+    created: true,
+    route_id: createData.result?.id,
+  });
+}
+
 // ── GET /admin/domains/:slug/status ───────────────────────────────────────
 
 export async function handleDomainStatus(

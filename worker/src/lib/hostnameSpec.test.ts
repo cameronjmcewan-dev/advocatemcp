@@ -6,7 +6,7 @@ describe("desiredHostnameSpec", () => {
     const spec = desiredHostnameSpec("www.workmancopyco.com");
     expect(spec).toEqual({
       hostname: "www.workmancopyco.com",
-      custom_origin_server: "advocatemcp-worker.advocatecameron.workers.dev",
+      custom_origin_server: "customers.advocatemcp.com",
       ssl: {
         method: "txt",
         type: "dv",

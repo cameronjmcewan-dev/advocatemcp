@@ -13,7 +13,7 @@ import {
 } from "../portalDb";
 import type { Business, User, SessionWithUser } from "../portalDb";
 import { buildDashboard, type AnalyticsData } from "./dashboard";
-import { handleActivateDomain, handleDomainStatus } from "./domains";
+import { handleActivateDomain, handleDomainStatus, handleDomainRaw, handleSetFallbackOrigin, handleEnsureWorkerRoute } from "./domains";
 import {
   handleOnboard, handleOnboardStatus, handleOnboardList,
   handleVerifyDomain, handleVerifyAll, handleDisableTenant,
@@ -56,7 +56,9 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/activity"   && method === "GET")  return apiActivity(request, env);
   if (pathname === "/api/client/rotate-key" && method === "POST") return apiRotateKey(request, env);
   if (pathname === "/admin/create-client"      && method === "POST") return adminCreateClient(request, env);
-  if (pathname === "/admin/domains/activate"   && method === "POST") return handleActivateDomain(request, env);
+  if (pathname === "/admin/domains/activate"              && method === "POST") return handleActivateDomain(request, env);
+  if (pathname === "/admin/domains/saas-fallback-origin"  && method === "POST") return handleSetFallbackOrigin(request, env);
+  if (pathname === "/admin/domains/ensure-worker-route"   && method === "POST") return handleEnsureWorkerRoute(request, env);
   if (pathname === "/status"                   && method === "GET")  return statusPage(request, env);
   if (pathname === "/onboard"                  && method === "GET")  return handleOnboardPage(request, env);
 
@@ -133,6 +135,12 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   const domainStatusMatch = pathname.match(/^\/admin\/domains\/([^/]+)\/status$/);
   if (domainStatusMatch && method === "GET") {
     return handleDomainStatus(request, env, domainStatusMatch[1]);
+  }
+
+  // GET /admin/domains/:slug/raw (diagnostic — full CF record + fallback origin)
+  const domainRawMatch = pathname.match(/^\/admin\/domains\/([^/]+)\/raw$/);
+  if (domainRawMatch && method === "GET") {
+    return handleDomainRaw(request, env, domainRawMatch[1]);
   }
 
   // GET /admin/businesses/:slug/activation (Phase F Part 1 — read
