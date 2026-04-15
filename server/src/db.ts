@@ -97,6 +97,21 @@ export interface BusinessRow {
   lead_routing_json: string | null;
 }
 
+export interface ReservationRow {
+  id: string;
+  business_slug: string;
+  agent_id: string | null;
+  requested_at: number;
+  window_start: number;
+  window_end: number;
+  status: 'held' | 'confirmed' | 'rejected' | 'expired';
+  confirmation_token: string;
+  customer_contact_json: string;
+  idempotency_key: string;
+  expires_at: number;
+  created_at: number;
+}
+
 export interface QueryRow {
   id: number;
   business_slug: string;
