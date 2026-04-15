@@ -127,7 +127,7 @@ export const DESCRIPTORS: ToolDescriptor[] = [
     },
     idempotent: true,
     estimated_latency_ms: 200,
-    estimated_cost_cents: 0,
+    estimated_cost_cents: 0, // deterministic=0; LLM fallback ~1–2¢ per call; averaged assumes ≥70% deterministic hit
   },
 ];
 
