@@ -60,4 +60,11 @@ describe("getBotPromptBlock dispatch", () => {
     const b = getBotPromptBlock("Mozilla/5.0 PerplexityBot/1.0");
     expect(b.name).toBe("perplexity");
   });
+
+  it("dispatches GPTBot to openai module", () => {
+    expect(getBotPromptBlock("GPTBot").name).toBe("openai");
+  });
+  it("dispatches OAI-SearchBot to openai module", () => {
+    expect(getBotPromptBlock("OAI-SearchBot").name).toBe("openai");
+  });
 });
