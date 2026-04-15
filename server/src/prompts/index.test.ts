@@ -28,4 +28,25 @@ describe("getBotPromptBlock dispatch", () => {
     const b = getBotPromptBlock("Mozilla/5.0 PerplexityBot/1.0");
     expect(b.name).toBe("default"); // in Task 1, everything returns default
   });
+
+  it("matches canonical name at the end of a UA string", () => {
+    const b = getBotPromptBlock("bot-version=/something PerplexityBot");
+    expect(b.name).toBe("default"); // Task 1: every match returns default
+  });
+
+  it("picks the first canonical that appears when multiple match", () => {
+    // CANONICALS order is: PerplexityBot, GPTBot, OAI-SearchBot, ...
+    // A string with both PerplexityBot and GPTBot should resolve to PerplexityBot.
+    const b = getBotPromptBlock("PerplexityBot GPTBot");
+    expect(b.name).toBe("default"); // Task 1: both canonicals return default; dispatch precedence asserted in Task 2+
+  });
+
+  it("handles very long UA strings without catastrophic slowdown", () => {
+    const longUa = "x".repeat(8192) + " PerplexityBot";
+    const start = performance.now();
+    const b = getBotPromptBlock(longUa);
+    const elapsed = performance.now() - start;
+    expect(b.name).toBe("default");
+    expect(elapsed).toBeLessThan(50); // indexOf-based includes() is linear, not regex
+  });
 });

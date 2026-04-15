@@ -1,7 +1,8 @@
 import type { BotPromptBlock } from "./types.js";
 import { defaultBlock } from "./default.js";
 
-const CANONICALS = [
+// Source of truth for canonical bot identifiers. Mirrors worker/src/index.ts AI_CRAWLERS.
+export const CANONICALS = [
   "PerplexityBot",
   "GPTBot",
   "OAI-SearchBot",
@@ -13,11 +14,18 @@ const CANONICALS = [
   "meta-externalagent",
 ] as const;
 
-function normalize(input: string | null | undefined): string | null {
+export type CanonicalBotName = (typeof CANONICALS)[number];
+
+const CANONICALS_LOWER: readonly string[] = CANONICALS.map((c) => c.toLowerCase());
+
+function normalize(input: string | null | undefined): CanonicalBotName | null {
   if (!input) return null;
   const lower = input.toLowerCase();
-  for (const c of CANONICALS) {
-    if (lower.includes(c.toLowerCase())) return c;
+  // Substring match is intentional: a User-Agent like
+  // "Mozilla/5.0 ... PerplexityBot/1.0" should match "PerplexityBot".
+  // Bot detection is a routing signal, never auth (per CLAUDE.md).
+  for (let i = 0; i < CANONICALS_LOWER.length; i++) {
+    if (lower.includes(CANONICALS_LOWER[i]!)) return CANONICALS[i]!;
   }
   return null;
 }
@@ -26,10 +34,22 @@ export function getBotPromptBlock(
   input: string | null | undefined
 ): BotPromptBlock {
   const canonical = normalize(input);
-  if (!canonical) return defaultBlock;
-  // Per-bot modules wired in later tasks; falls through until then.
-  return defaultBlock;
+  if (canonical === null) return defaultBlock;
+
+  // Dispatch per canonical bot identity. Per-bot module content lands in Tasks 2-6;
+  // until then every canonical match still returns defaultBlock so behavior is unchanged.
+  switch (canonical) {
+    case "PerplexityBot":
+    case "GPTBot":
+    case "OAI-SearchBot":
+    case "ClaudeBot":
+    case "Google-Extended":
+    case "Googlebot":
+    case "anthropic-ai":
+    case "cohere-ai":
+    case "meta-externalagent":
+      return defaultBlock;
+  }
 }
 
-export { CANONICALS };
 export type { BotPromptBlock } from "./types.js";
