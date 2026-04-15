@@ -6,6 +6,7 @@ import { mcpRouter } from "./routes/mcp.js";
 import { registerRouter } from "./routes/register.js";
 import { analyticsRouter } from "./routes/analytics.js";
 import { wellknownRouter } from "./routes/wellknown.js";
+import { wellknownMcpRouter } from "./routes/wellknownMcp.js";
 import { rateLimitMiddleware } from "./middleware/rateLimit.js";
 import { requestIdMiddleware } from "./lib/requestId.js";
 
@@ -49,6 +50,7 @@ export function createTestApp(): express.Express {
   getDb();
 
   app.use(wellknownRouter);
+  app.use(wellknownMcpRouter);
   app.use(registerRouter);
   app.use(agentRouter);
   app.use(analyticsRouter);
