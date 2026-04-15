@@ -460,7 +460,7 @@ export default {
           "Content-Type": "application/json",
           ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}),
         },
-        body: JSON.stringify({ query, crawler: userAgent }),
+        body: JSON.stringify({ query, crawler: botType ?? "" }),
       });
     } catch (err) {
       ctx.waitUntil(

@@ -5,6 +5,12 @@ import { queryAgent } from "../agent/query.js";
 import { requireApiKey } from "../middleware/auth.js";
 import { buildToken } from "../lib/tracked-url.js";
 import crypto from "crypto";
+import { z } from "zod";
+
+const QueryBodySchema = z.object({
+  query: z.string().trim().min(1, "query must be a non-empty string").max(2000),
+  crawler: z.string().max(200).optional(),
+});
 
 export const agentRouter = Router();
 
@@ -160,18 +166,16 @@ agentRouter.post("/agents/:slug/rotate-key", (req: Request, res: Response) => {
 
 agentRouter.post("/agents/:slug/query", requireApiKey, async (req: Request, res: Response) => {
   const { slug } = req.params;
-  const { query, crawler } = req.body as {
-    query?: string;
-    crawler?: string;
-  };
 
-  if (!query || typeof query !== "string" || !query.trim()) {
+  const parsed = QueryBodySchema.safeParse(req.body);
+  if (!parsed.success) {
     res.status(400).json({
-      error: "Missing required field: query",
-      required: { query: "string", crawler: "string (optional)" },
+      error: "invalid_body",
+      details: parsed.error.flatten(),
     });
     return;
   }
+  const { query, crawler } = parsed.data;
 
   const db = getDb();
   const business = db
@@ -187,7 +191,7 @@ agentRouter.post("/agents/:slug/query", requireApiKey, async (req: Request, res:
   }
 
   try {
-    const result = await queryAgent(business, query.trim(), crawler);
+    const result = await queryAgent(business, query, crawler);
 
     // Build signed attribution token if TOKEN_SIGNING_KEY is configured.
     // Additive — omitted gracefully when key is absent so existing callers
