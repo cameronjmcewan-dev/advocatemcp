@@ -1,7 +1,9 @@
 import "dotenv/config";
+import cron from "node-cron";
 import { createTestApp } from "./testApp.js";
 import { getDb } from "./db.js";
 import { startReputationRollupSchedule } from "./jobs/reputationRollup.js";
+import { pollAll } from "./jobs/competitorRadar.js";
 
 if (!process.env.ANTHROPIC_API_KEY) {
   console.error("❌ ANTHROPIC_API_KEY is not set. Copy .env.example to .env and add your key.");
@@ -46,6 +48,19 @@ app.use((_req, res) => {
 // Session 11: kick off the 15-minute agent_reputation rollup so /admin/agents
 // has fresh data without depending on an external cron. Idempotent + unref'd.
 startReputationRollupSchedule(getDb());
+
+// Session 4 (Competitor Radar): cron-driven Perplexity poll loop.
+// Default schedule = Mon/Wed/Fri at 04:00 UTC. Cron is gated on
+// PERPLEXITY_API_KEY presence so dev/test deploys without the key are silent.
+const CRON_SCHEDULE = process.env.POLL_SCHEDULE_CRON ?? "0 4 * * 1,3,5";
+if (process.env.PERPLEXITY_API_KEY && cron.validate(CRON_SCHEDULE)) {
+  cron.schedule(CRON_SCHEDULE, () => {
+    pollAll().catch((err) => console.error("[radar] pollAll threw:", err));
+  });
+  console.log(`[radar] scheduled: ${CRON_SCHEDULE}`);
+} else {
+  console.warn("[radar] cron NOT scheduled — missing PERPLEXITY_API_KEY or invalid POLL_SCHEDULE_CRON");
+}
 
 app.listen(PORT, () => {
   console.log(`

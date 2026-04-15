@@ -83,3 +83,42 @@ export function requireSlugApiKey(
   req.business = business;
   next();
 }
+
+/**
+ * Accept EITHER the server admin key (X-API-Key: <API_KEY>) OR a slug-bound
+ * business key (Authorization: Bearer <business_api_key> matching :slug).
+ *
+ * Use for per-tenant read endpoints where admin tools and tenant portals
+ * both need access but business keys must be scoped to their own slug.
+ */
+export function requireSlugOrAdminKey(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+  // 1. Server admin key fast-path
+  const xKey = req.headers["x-api-key"];
+  const serverKey = process.env.API_KEY;
+  if (typeof xKey === "string" && serverKey && xKey === serverKey) {
+    next();
+    return;
+  }
+
+  // 2. Slug-bound business key
+  const authHeader = req.headers.authorization;
+  const { slug } = req.params;
+  if (!authHeader?.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Invalid or missing api_key" });
+    return;
+  }
+  const apiKey = authHeader.slice(7).trim();
+  const db = getDb();
+  const row = db
+    .prepare("SELECT id FROM businesses WHERE slug = ? AND api_key = ?")
+    .get(slug, apiKey);
+  if (!row) {
+    res.status(401).json({ error: "Invalid api_key for this business" });
+    return;
+  }
+  next();
+}

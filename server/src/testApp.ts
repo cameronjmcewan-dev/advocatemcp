@@ -9,6 +9,7 @@ import { wellknownRouter } from "./routes/wellknown.js";
 import { wellknownMcpRouter } from "./routes/wellknownMcp.js";
 import { a2aRouter } from "./routes/a2a.js";
 import { adminRouter } from "./routes/admin/index.js";
+import { competitorRadarRouter } from "./routes/competitorRadar.js";
 import { rateLimitMiddleware } from "./middleware/rateLimit.js";
 import { requestIdMiddleware } from "./lib/requestId.js";
 
@@ -59,6 +60,7 @@ export function createTestApp(): express.Express {
   app.use(mcpRouter);
   app.use(a2aRouter);
   app.use(adminRouter);
+  app.use(competitorRadarRouter);
 
   app.get("/health", (_req, res) => {
     const db = getDb();
