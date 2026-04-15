@@ -122,3 +122,119 @@ describe("activateDomain — self-healing spec", () => {
     });
   });
 });
+
+describe("activateDomain — reconcile on existing hostname", () => {
+  it("PATCHes an existing hostname missing custom_origin_server", async () => {
+    fetchMock
+      .mockResolvedValueOnce(respond({ ok: true }))  // Railway profile 200
+      .mockResolvedValueOnce(respond({                 // CF POST — returns 1406 (already exists)
+        success: false,
+        errors: [{ code: 1406, message: "hostname already exists" }],
+      }))
+      .mockResolvedValueOnce(respond({                 // CF GET ?hostname= — return the legacy record
+        success: true,
+        result: [{
+          id: "cf-legacy-456",
+          hostname: "www.legacy.com",
+          // custom_origin_server MISSING — this is the broken state
+          ssl: { method: "txt", settings: { min_tls_version: "1.2" } },
+        }],
+      }))
+      .mockResolvedValueOnce(respond({                 // CF PATCH — return the reconciled record
+        success: true,
+        result: {
+          id: "cf-legacy-456",
+          hostname: "www.legacy.com",
+          custom_origin_server: "customers.advocatemcp.com",
+          ssl: { method: "txt", settings: { min_tls_version: "1.2" } },
+        },
+      }));
+
+    const env = mockEnv();
+    const result = await activateDomain(env, {
+      domain: "www.legacy.com",
+      slug: "legacy-slug",
+      originUrl: null,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.body.reconcile_summary).toEqual({
+      patched: true,
+      drift: ["custom_origin_server"],
+    });
+
+    // Confirm one PATCH fired with only the drifting field
+    const cfPatch = fetchMock.mock.calls.find(
+      ([url, init]) => typeof url === "string" && url.includes("api.cloudflare.com") && (init as RequestInit)?.method === "PATCH",
+    );
+    expect(cfPatch).toBeDefined();
+    expect(JSON.parse((cfPatch![1] as RequestInit).body as string)).toEqual({
+      custom_origin_server: "customers.advocatemcp.com",
+    });
+  });
+
+  it("fires NO PATCH when the existing hostname already matches the spec", async () => {
+    fetchMock
+      .mockResolvedValueOnce(respond({ ok: true }))
+      .mockResolvedValueOnce(respond({
+        success: false,
+        errors: [{ code: 1406, message: "hostname already exists" }],
+      }))
+      .mockResolvedValueOnce(respond({
+        success: true,
+        result: [{
+          id: "cf-healthy-789",
+          hostname: "www.healthy.com",
+          custom_origin_server: "customers.advocatemcp.com",
+          ssl: { method: "txt", settings: { min_tls_version: "1.2" } },
+        }],
+      }));
+
+    const env = mockEnv();
+    const result = await activateDomain(env, {
+      domain: "www.healthy.com",
+      slug: "healthy-slug",
+      originUrl: null,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.body.reconcile_summary).toBeUndefined();
+
+    const cfPatch = fetchMock.mock.calls.find(
+      ([url, init]) => typeof url === "string" && url.includes("api.cloudflare.com") && (init as RequestInit)?.method === "PATCH",
+    );
+    expect(cfPatch).toBeUndefined();
+  });
+
+  it("returns 502 cf_reconcile_error when the PATCH fails", async () => {
+    fetchMock
+      .mockResolvedValueOnce(respond({ ok: true }))
+      .mockResolvedValueOnce(respond({
+        success: false,
+        errors: [{ code: 1406, message: "hostname already exists" }],
+      }))
+      .mockResolvedValueOnce(respond({
+        success: true,
+        result: [{
+          id: "cf-broken-999",
+          hostname: "www.broken.com",
+          ssl: { method: "txt", settings: { min_tls_version: "1.2" } },
+        }],
+      }))
+      .mockResolvedValueOnce(respond({
+        success: false,
+        errors: [{ code: 9999, message: "cf unreachable" }],
+      }, 502));
+
+    const env = mockEnv();
+    const result = await activateDomain(env, {
+      domain: "www.broken.com",
+      slug: "broken-slug",
+      originUrl: null,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe(502);
+    expect(result.reason).toBe("cf_reconcile_error");
+  });
+});
