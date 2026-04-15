@@ -1,15 +1,22 @@
 import { describe, it, expect } from "vitest";
 import Database from "better-sqlite3";
 import { applyMigrations } from "../db/migrations.js";
-import { sweepExpiredReservations } from "./expirySweeper.js";
+import { sweepExpiredReservations, redactStalePii } from "./expirySweeper.js";
 
-function seed(db: Database.Database, rows: Array<{ id: string; status: string; expires_at: number }>) {
+function seed(db: Database.Database, rows: Array<{ id: string; status: string; expires_at: number; window_end?: number; contact?: string | null }>) {
   const stmt = db.prepare(`
     INSERT INTO reservations (id, business_slug, requested_at, window_start, window_end,
       status, confirmation_token, customer_contact_json, idempotency_key, expires_at)
-    VALUES (?, 'x', 0, 0, 0, ?, 't', '{}', ?, ?)
+    VALUES (?, 'x', 0, 0, ?, ?, 't', ?, ?, ?)
   `);
-  for (const r of rows) stmt.run(r.id, r.status, r.id + "-key", r.expires_at);
+  for (const r of rows) stmt.run(
+    r.id,
+    r.window_end ?? 0,
+    r.status,
+    r.contact === undefined ? '{"name":"Alice","email":"a@x.com"}' : r.contact,
+    r.id + "-key",
+    r.expires_at,
+  );
 }
 
 describe("sweepExpiredReservations", () => {
@@ -38,5 +45,93 @@ describe("sweepExpiredReservations", () => {
     applyMigrations(db);
     seed(db, [{ id: "r1", status: "held", expires_at: Math.floor(Date.now()/1000) + 1000 }]);
     expect(sweepExpiredReservations(db)).toBe(0);
+  });
+});
+
+describe("redactStalePii", () => {
+  // Policy (see AGENTS.md, Session 9):
+  // - status='held'      AND expires_at < now - 24h:  replace with redaction sentinel
+  // - status='expired'   AND expires_at < now - 7d:   replace with redaction sentinel
+  // - status='confirmed' AND window_end < now - 90d:  replace with redaction sentinel
+  // Sentinel: {"redacted":true,"redacted_at":<unix>} — preserves NOT NULL constraint
+  // and provides an audit trail of when retention fired.
+  const HOUR = 3600;
+  const DAY = 86400;
+  const now = Math.floor(Date.now() / 1000);
+  const isRedacted = (s: string | null): boolean =>
+    typeof s === "string" && /"redacted"\s*:\s*true/.test(s);
+
+  it("redacts customer_contact_json on stale held rows (>24h past expires_at) but leaves fresh holds alone", () => {
+    const db = new Database(":memory:");
+    applyMigrations(db);
+    seed(db, [
+      { id: "r_old_held",   status: "held", expires_at: now - 25 * HOUR }, // stale → redact
+      { id: "r_fresh_held", status: "held", expires_at: now - 1  * HOUR }, // <24h post-lapse → keep
+      { id: "r_future_held",status: "held", expires_at: now + 10 * HOUR }, // not lapsed → keep
+    ]);
+    const n = redactStalePii(db);
+    expect(n).toBe(1);
+    const stale  = db.prepare("SELECT customer_contact_json FROM reservations WHERE id='r_old_held'").get() as { customer_contact_json: string };
+    const fresh  = db.prepare("SELECT customer_contact_json FROM reservations WHERE id='r_fresh_held'").get() as { customer_contact_json: string };
+    const future = db.prepare("SELECT customer_contact_json FROM reservations WHERE id='r_future_held'").get() as { customer_contact_json: string };
+    expect(isRedacted(stale.customer_contact_json)).toBe(true);
+    expect(isRedacted(fresh.customer_contact_json)).toBe(false);
+    expect(isRedacted(future.customer_contact_json)).toBe(false);
+    // Sentinel is parseable JSON with a redacted_at timestamp
+    const parsed = JSON.parse(stale.customer_contact_json) as { redacted: boolean; redacted_at: number };
+    expect(parsed.redacted).toBe(true);
+    expect(parsed.redacted_at).toBeGreaterThan(now - 60);
+  });
+
+  it("redacts customer_contact_json on expired rows >7d past expires_at; leaves fresh expired alone", () => {
+    const db = new Database(":memory:");
+    applyMigrations(db);
+    seed(db, [
+      { id: "r_old_expired",   status: "expired", expires_at: now - 8 * DAY }, // stale → redact
+      { id: "r_fresh_expired", status: "expired", expires_at: now - 6 * DAY }, // <7d → keep
+    ]);
+    const n = redactStalePii(db);
+    expect(n).toBe(1);
+    const stale = db.prepare("SELECT customer_contact_json FROM reservations WHERE id='r_old_expired'").get() as { customer_contact_json: string };
+    const fresh = db.prepare("SELECT customer_contact_json FROM reservations WHERE id='r_fresh_expired'").get() as { customer_contact_json: string };
+    expect(isRedacted(stale.customer_contact_json)).toBe(true);
+    expect(isRedacted(fresh.customer_contact_json)).toBe(false);
+  });
+
+  it("redacts customer_contact_json on confirmed rows >90d past window_end; leaves fresh confirmed alone", () => {
+    const db = new Database(":memory:");
+    applyMigrations(db);
+    seed(db, [
+      { id: "r_old_confirmed",   status: "confirmed", expires_at: now, window_end: now - 91 * DAY }, // >90d → redact
+      { id: "r_fresh_confirmed", status: "confirmed", expires_at: now, window_end: now - 30 * DAY }, // <90d → keep
+    ]);
+    const n = redactStalePii(db);
+    expect(n).toBe(1);
+    const stale = db.prepare("SELECT customer_contact_json FROM reservations WHERE id='r_old_confirmed'").get() as { customer_contact_json: string };
+    const fresh = db.prepare("SELECT customer_contact_json FROM reservations WHERE id='r_fresh_confirmed'").get() as { customer_contact_json: string };
+    expect(isRedacted(stale.customer_contact_json)).toBe(true);
+    expect(isRedacted(fresh.customer_contact_json)).toBe(false);
+  });
+
+  it("is idempotent — re-running on already-redacted rows returns 0 changes", () => {
+    const db = new Database(":memory:");
+    applyMigrations(db);
+    seed(db, [
+      { id: "r1", status: "held", expires_at: now - 25 * HOUR },
+    ]);
+    expect(redactStalePii(db)).toBe(1);
+    expect(redactStalePii(db)).toBe(0); // sentinel already present — WHERE clause skips it
+  });
+
+  it("does not touch rejected status (operational-audit-only — no contact stored at reject time anyway)", () => {
+    const db = new Database(":memory:");
+    applyMigrations(db);
+    seed(db, [
+      { id: "r_rejected", status: "rejected", expires_at: now - 365 * DAY, contact: '{"name":"X"}' },
+    ]);
+    const n = redactStalePii(db);
+    expect(n).toBe(0);
+    const row = db.prepare("SELECT customer_contact_json FROM reservations WHERE id='r_rejected'").get() as { customer_contact_json: string };
+    expect(row.customer_contact_json).toBe('{"name":"X"}');
   });
 });

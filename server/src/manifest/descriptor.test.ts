@@ -229,20 +229,26 @@ describe("rate_limits — Session 11 tiered shape", () => {
 });
 
 describe("transports — explicit wiring", () => {
-  it("lists http and sse with identical /mcp URL (Streamable HTTP covers both)", () => {
+  it("lists only http transport at /mcp (SSE dropped Apr 15 2026 — Cloudflare idles SSE channels)", () => {
     const m = buildManifest({
       apiBase: "https://api.x",
       trackBase: "https://track.x",
     });
     expect(m.transports).toEqual([
       { kind: "http", url: "https://api.x/mcp" },
-      { kind: "sse", url: "https://api.x/mcp" },
     ]);
+    // Defensive: assert SSE is not present so a future regression that
+    // re-adds it is caught loudly. The /mcp GET route still serves SSE on
+    // request for backward-compat — we just don't advertise it.
+    expect(m.transports.find((t) => t.kind === "sse")).toBeUndefined();
   });
 
-  it("MANIFEST.transports URLs use API_BASE_URL env var (or the default)", () => {
-    const expected = process.env.API_BASE_URL ?? "https://api.advocatemcp.com";
+  it("MANIFEST.transports URL uses API_BASE_URL env var (or the localhost dev fallback)", () => {
+    // Mirrors getApiBaseUrl(): env value if set, otherwise the dev/test fallback
+    // localhost:3000. The "https://api.advocatemcp.com" placeholder used in the
+    // pre-Apr-15 fallback is gone — see server/src/lib/baseUrl.ts.
+    const expected = process.env.API_BASE_URL ?? "http://localhost:3000";
     expect(MANIFEST.transports[0].url).toBe(`${expected}/mcp`);
-    expect(MANIFEST.transports[1].url).toBe(`${expected}/mcp`);
+    expect(MANIFEST.transports.length).toBe(1);
   });
 });

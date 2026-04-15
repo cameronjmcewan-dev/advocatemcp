@@ -4,6 +4,7 @@ import { getDb } from "../db.js";
 import crypto from "crypto";
 import { requireApiKey } from "../middleware/auth.js";
 import { OnboardingPayloadSchema } from "../schemas/business.js";
+import { getApiBaseUrl } from "../lib/baseUrl.js";
 
 export const registerRouter = Router();
 
@@ -105,7 +106,7 @@ registerRouter.post("/register", requireApiKey, (req: Request, res: Response) =>
       p.plan ?? "base",
     );
 
-    const base = process.env.API_BASE_URL ?? "https://api.advocatemcp.com";
+    const base = getApiBaseUrl();
     res.status(201).json({
       slug,
       api_key: apiKey,

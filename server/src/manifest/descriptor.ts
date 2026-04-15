@@ -12,6 +12,7 @@ import {
   type JsonSchemaNode,
   type Manifest,
 } from "./schema.js";
+import { getApiBaseUrl } from "../lib/baseUrl.js";
 import {
   PER_IP_LIMIT_PER_MINUTE,
   PER_API_KEY_LIMIT_PER_HOUR,
@@ -191,8 +192,13 @@ export function buildManifest(opts: BuildManifestOptions): Manifest {
     agent_id: "advocatemcp-central",
     protocol_versions: ["2025-03-26"], // current MCP spec version; array per Session 8 risk callout
     transports: [
+      // HTTP only. SSE was advertised pre-Apr-15 but Cloudflare/Railway closes
+      // idle SSE channels around 30s and we never push server-initiated events
+      // (all tools are request/response). The /mcp GET route still SERVES SSE
+      // on request for backward-compat with Inspector-class clients that
+      // default to SSE — we just don't advertise it so spec-compliant agents
+      // pick the transport that actually works.
       { kind: "http", url: `${opts.apiBase}/mcp` },
-      { kind: "sse", url: `${opts.apiBase}/mcp` },
     ],
     tools: DESCRIPTORS.map((d) => ({
       name: d.name,
@@ -221,7 +227,7 @@ export function buildManifest(opts: BuildManifestOptions): Manifest {
   return m;
 }
 
-const API_BASE = process.env.API_BASE_URL ?? "https://api.advocatemcp.com";
+const API_BASE = getApiBaseUrl();
 const TRACK_BASE =
   process.env.WORKER_BASE_URL ?? "https://customers.advocatemcp.com";
 
