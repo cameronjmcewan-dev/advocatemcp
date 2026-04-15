@@ -95,14 +95,20 @@ export async function queryAgent(
   crawlerAgent?: string
 ): Promise<AgentQueryResult> {
   const intent = detectIntent(query, business);
-  const systemPrompt = buildSystemPrompt(business, intent);
+  const systemPrompt = buildSystemPrompt(business, intent, crawlerAgent ?? null);
 
   const model = process.env.MODEL ?? "claude-sonnet-4-6";
 
   const message = await anthropic.messages.create({
     model,
     max_tokens: 512,
-    system: systemPrompt,
+    system: [
+      {
+        type: "text",
+        text: systemPrompt,
+        cache_control: { type: "ephemeral" },
+      },
+    ],
     messages: [{ role: "user", content: query }],
   });
 
