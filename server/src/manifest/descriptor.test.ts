@@ -155,3 +155,22 @@ describe("rate_limits sourced from middleware constants", () => {
     );
   });
 });
+
+describe("transports — explicit wiring", () => {
+  it("lists http and sse with identical /mcp URL (Streamable HTTP covers both)", () => {
+    const m = buildManifest({
+      apiBase: "https://api.x",
+      trackBase: "https://track.x",
+    });
+    expect(m.transports).toEqual([
+      { kind: "http", url: "https://api.x/mcp" },
+      { kind: "sse", url: "https://api.x/mcp" },
+    ]);
+  });
+
+  it("MANIFEST.transports URLs use API_BASE_URL env var (or the default)", () => {
+    const expected = process.env.API_BASE_URL ?? "https://api.advocatemcp.com";
+    expect(MANIFEST.transports[0].url).toBe(`${expected}/mcp`);
+    expect(MANIFEST.transports[1].url).toBe(`${expected}/mcp`);
+  });
+});
