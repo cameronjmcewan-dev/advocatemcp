@@ -749,6 +749,17 @@ export async function registerBusinessOnRailway(
   if (typeof profile.service_area_keywords === "string") body.service_area_keywords = profile.service_area_keywords;
   if (typeof profile.top_services === "string") body.top_services = profile.top_services;
 
+  // Session 4 followup: forward the Stripe-side plan tier so Railway's
+  // businesses.plan column matches what the customer is paying for. Only
+  // 'base' and 'pro' are valid values on the wire (the server's zod schema
+  // rejects anything else); 'free' (or no stripe block at all) means we
+  // intentionally omit the field and let the server's column default ('base')
+  // apply, so the on-wire body stays back-compat for non-Stripe register paths.
+  const stripePlan = tenant.stripe?.plan;
+  if (stripePlan === "base" || stripePlan === "pro") {
+    body.plan = stripePlan;
+  }
+
   try {
     const res = await fetch(`${base}/register`, {
       method: "POST",
