@@ -56,6 +56,31 @@ describe("POST /a2a/confirm", () => {
     const res = await request(app).post("/a2a/confirm").send({});
     expect(res.status).toBe(400);
   });
+
+  it("returns 404 when token.business_slug does not match the reservation's owner", async () => {
+    // Seed a second held reservation belonging to a different tenant.
+    const { getDb } = await import("../db.js");
+    getDb().prepare(`
+      INSERT INTO businesses (slug, name, api_key, description, services)
+      VALUES ('other','Other','k2','d','s')
+      ON CONFLICT(slug) DO NOTHING
+    `).run();
+    getDb().prepare(`
+      INSERT INTO reservations (id, business_slug, requested_at, window_start, window_end,
+        status, confirmation_token, customer_contact_json, idempotency_key, expires_at)
+      VALUES ('r_cross', 'other', 1, 1, 2, 'held', 'x', '{}', 'ik-a2a-cross', 9999999999)
+    `).run();
+    // Mint a token that claims the ticket but lies about the tenant.
+    const tok = mintContinuationToken(
+      { ticket: "r_cross", business_slug: "acme", scope: "confirm" },
+      "test-key-a2a"
+    );
+    const res = await request(app).post("/a2a/confirm").send({ confirmation_token: tok });
+    expect(res.status).toBe(404);
+    // Row must remain 'held' — cross-tenant write would be a security bug.
+    const row = getDb().prepare(`SELECT status FROM reservations WHERE id='r_cross'`).get() as { status: string };
+    expect(row.status).toBe("held");
+  });
 });
 
 describe("POST /a2a/continue/:token", () => {
