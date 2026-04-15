@@ -4,6 +4,7 @@ import { getDb, type BusinessRow } from "../db.js";
 import { queryAgent } from "../agent/query.js";
 import { requireApiKey } from "../middleware/auth.js";
 import { buildToken } from "../lib/tracked-url.js";
+import { resolveAgentId } from "../lib/agentIdentity.js";
 import crypto from "crypto";
 import { z } from "zod";
 
@@ -192,11 +193,26 @@ agentRouter.post("/agents/:slug/query", requireApiKey, async (req: Request, res:
 
   try {
     const requestId = res.locals.requestId as string | undefined;
-    const result = await queryAgent(business, query, crawler, requestId);
+    // Session 11.5: REST callers may self-identify via x-agent-identity. The
+    // MCP path already does this (Session 10) — without it here, every direct
+    // API caller looks anonymous to the reputation system. Header-only on the
+    // REST surface (no tool-arg equivalent on this endpoint).
+    const agentId = resolveAgentId(req, null);
+    const result = await queryAgent(
+      business,
+      query,
+      crawler,
+      requestId,
+      agentId,
+    );
 
     // Build signed attribution token if TOKEN_SIGNING_KEY is configured.
     // Additive — omitted gracefully when key is absent so existing callers
     // are unaffected until the Worker is updated to consume it.
+    //
+    // `aid` is undefined when the caller didn't self-identify; JSON.stringify
+    // drops the key, so legacy tokens stay byte-identical (see
+    // tracked-url.aid.test.ts back-compat assertions).
     const signingKey = process.env.TOKEN_SIGNING_KEY;
     const attributionToken = signingKey && result.referral_url
       ? buildToken(
@@ -206,6 +222,7 @@ agentRouter.post("/agents/:slug/query", requireApiKey, async (req: Request, res:
             slug: result.business_slug,
             query_id: result.query_id,
             ts: Math.floor(Date.now() / 1000),
+            aid: agentId,
           },
           signingKey
         )

@@ -63,8 +63,9 @@ registerRouter.post("/register", requireApiKey, (req: Request, res: Response) =>
           pricing_tier, service_area_keywords,
           hours_json, services_json_v2, pricing_json_v2, credentials_json,
           ratings_json, differentiators_text, customer_quotes_json,
-          guarantee_text, case_stories_json, lead_routing_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          guarantee_text, case_stories_json, lead_routing_json,
+          plan)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       slug,
       p.name,
@@ -98,6 +99,10 @@ registerRouter.post("/register", requireApiKey, (req: Request, res: Response) =>
       p.guarantee_text ?? null,
       j(p.case_stories_json),
       j(p.lead_routing_json),
+      // Session 4: 'pro' tenants are picked up by the competitor-radar cron;
+      // 'base' is the default at the column level too — we pass the literal
+      // here only so an explicit forwarding from the wizard takes effect.
+      p.plan ?? "base",
     );
 
     const base = process.env.API_BASE_URL ?? "https://api.advocatemcp.com";

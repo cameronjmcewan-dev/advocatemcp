@@ -80,6 +80,72 @@ describe("POST /register", () => {
     expect(JSON.parse(row.credentials_json).licenses[0].number).toBe("P1");
   });
 
+  it("Session 4 followup: persists plan='pro' when wizard forwards it", async () => {
+    // Without this wiring every wizard-onboarded tenant lands at the default
+    // 'base' plan, so competitorRadar.pollAll's `WHERE plan='pro'` filter
+    // silently skips them — the loop never closes for paying customers.
+    const res = await request(app)
+      .post("/register")
+      .set("Authorization", "Bearer test-admin-key")
+      .send({
+        name: "Pro Biz",
+        description: "d",
+        category: "plumber",
+        location: "Boise",
+        services: ["x"],
+        star_rating: 0,
+        review_count: 0,
+        plan: "pro",
+      });
+    expect(res.status).toBe(201);
+
+    const { getDb } = await import("../db.js");
+    const row = getDb()
+      .prepare("SELECT plan FROM businesses WHERE slug = ?")
+      .get(res.body.slug) as { plan: string };
+    expect(row.plan).toBe("pro");
+  });
+
+  it("Session 4 followup: defaults plan='base' when omitted", async () => {
+    const res = await request(app)
+      .post("/register")
+      .set("Authorization", "Bearer test-admin-key")
+      .send({
+        name: "Default Plan Biz",
+        description: "d",
+        category: "plumber",
+        location: "Boise",
+        services: ["x"],
+        star_rating: 0,
+        review_count: 0,
+      });
+    expect(res.status).toBe(201);
+
+    const { getDb } = await import("../db.js");
+    const row = getDb()
+      .prepare("SELECT plan FROM businesses WHERE slug = ?")
+      .get(res.body.slug) as { plan: string };
+    expect(row.plan).toBe("base");
+  });
+
+  it("Session 4 followup: rejects an unknown plan value", async () => {
+    const res = await request(app)
+      .post("/register")
+      .set("Authorization", "Bearer test-admin-key")
+      .send({
+        name: "Bogus Plan Biz",
+        description: "d",
+        category: "plumber",
+        location: "Boise",
+        services: ["x"],
+        star_rating: 0,
+        review_count: 0,
+        plan: "enterprise",
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("validation_error");
+  });
+
   it("201 with minimal payload (no nested JSON)", async () => {
     const res = await request(app)
       .post("/register")

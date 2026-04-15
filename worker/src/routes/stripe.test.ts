@@ -1045,4 +1045,63 @@ describe("registerBusinessOnRailway — Task 6: Railway forward shape", () => {
     // (not serialized as null). We use a known-optional field that is not set above.
     expect(Object.prototype.hasOwnProperty.call(body, "availability")).toBe(false);
   });
+
+  // Session 4 followup: the worker must forward tenant.stripe.plan so the
+  // Railway businesses.plan column matches the Stripe tier. Without this
+  // every wizard tenant lands at the schema default ('base') and the
+  // competitor-radar cron `WHERE plan='pro'` filter silently skips them.
+  it("forwards plan='pro' when tenant.stripe.plan is 'pro'", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ slug: "pro-biz", api_key: "k" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const { db } = createFakeDb({ "pro-biz": {} });
+    const env = makeEnv(db);
+    const tenant = makeTenant({
+      stripe: { customerId: null, subscriptionId: null, checkoutSessionId: null, plan: "pro" },
+    });
+    await registerBusinessOnRailway(env, tenant);
+    const body = JSON.parse(
+      (vi.mocked(globalThis.fetch).mock.calls[0][1] as RequestInit).body as string,
+    ) as Record<string, unknown>;
+    expect(body.plan).toBe("pro");
+  });
+
+  it("forwards plan='base' when tenant.stripe.plan is 'base'", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ slug: "base-biz", api_key: "k" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const { db } = createFakeDb({ "base-biz": {} });
+    const env = makeEnv(db);
+    const tenant = makeTenant();
+    await registerBusinessOnRailway(env, tenant);
+    const body = JSON.parse(
+      (vi.mocked(globalThis.fetch).mock.calls[0][1] as RequestInit).body as string,
+    ) as Record<string, unknown>;
+    expect(body.plan).toBe("base");
+  });
+
+  it("omits plan from the body when tenant.stripe is missing entirely", async () => {
+    // 'free' tier (or no stripe block at all) means no Railway-side intent
+    // about plan — let the server's column default ('base') win.
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ slug: "no-stripe-biz", api_key: "k" }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const { db } = createFakeDb({ "no-stripe-biz": {} });
+    const env = makeEnv(db);
+    const tenant = makeTenant({ stripe: undefined });
+    await registerBusinessOnRailway(env, tenant);
+    const body = JSON.parse(
+      (vi.mocked(globalThis.fetch).mock.calls[0][1] as RequestInit).body as string,
+    ) as Record<string, unknown>;
+    expect(Object.prototype.hasOwnProperty.call(body, "plan")).toBe(false);
+  });
 });

@@ -221,16 +221,31 @@ analyticsRouter.post(
     // belongs to this slug before touching anything. Rejects forged
     // slug+query_id combinations without leaking whether the row exists
     // under a different slug.
+    //
+    // Session 11.5: same lookup hydrates agent_id + request_id from the
+    // queries row when the worker didn't carry them in the body. Body
+    // values still win (the worker is closer to the actual click event)
+    // — the queries row is a fallback, not an override.
+    let derivedAgentId: string | null = null;
+    let derivedRequestId: string | null = null;
     if (query_id !== undefined) {
       const qRow = db
-        .prepare("SELECT business_slug FROM queries WHERE id = ?")
-        .get(query_id) as { business_slug: string } | undefined;
+        .prepare(
+          "SELECT business_slug, agent_id, request_id FROM queries WHERE id = ?",
+        )
+        .get(query_id) as
+        | { business_slug: string; agent_id: string | null; request_id: string | null }
+        | undefined;
 
       if (!qRow || qRow.business_slug !== slug) {
         res.status(400).json({ error: "query_id does not belong to this slug" });
         return;
       }
+      derivedAgentId = qRow.agent_id;
+      derivedRequestId = qRow.request_id;
     }
+    const effectiveAgentId = agent_id ?? derivedAgentId;
+    const effectiveRequestId = request_id ?? derivedRequestId;
 
     // Transactional: INSERT click + UPDATE referral_clicked atomically so
     // analytics counts are always consistent even if the process crashes
@@ -247,8 +262,8 @@ analyticsRouter.post(
         destination ?? null,
         query_id ?? null,
         legacy ?? 0,
-        agent_id ?? null,
-        request_id ?? null
+        effectiveAgentId,
+        effectiveRequestId
       );
 
       if (query_id !== undefined) {
@@ -260,8 +275,8 @@ analyticsRouter.post(
       // Backfill: if the click can be tied back to a known MCP tool call,
       // promote that audit row's outcome to 'click'. Best-effort — anonymous
       // clicks (no matching agent_requests row) are fine.
-      if (request_id) {
-        const ar = findByRequestId(db, request_id);
+      if (effectiveRequestId) {
+        const ar = findByRequestId(db, effectiveRequestId);
         if (ar) setOutcome(db, { id: ar.id, outcomeSignal: "click" });
       }
     });

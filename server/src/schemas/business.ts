@@ -126,5 +126,10 @@ export const OnboardingPayloadSchema = z.object({
 
   // Step 8 — lead routing
   lead_routing_json: LeadRoutingSchema.optional(),
+
+  // Plan tier (Session 4: gates competitor-radar to 'pro' tenants).
+  // Optional on the wire — server defaults to 'base' if omitted so legacy
+  // callers (CLI, manual onboard scripts) continue to work without change.
+  plan: z.enum(["base", "pro"]).optional(),
 });
 export type OnboardingPayload = z.infer<typeof OnboardingPayloadSchema>;
