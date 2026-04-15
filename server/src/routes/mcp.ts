@@ -2,9 +2,12 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { z } from "zod";
 import { getDb, type BusinessRow } from "../db.js";
 import { queryAgent } from "../agent/query.js";
+import {
+  queryBusinessAgentInput,
+  searchBusinessesInput,
+} from "../manifest/tools.js";
 
 export const mcpRouter = Router();
 
@@ -28,19 +31,7 @@ function createMcpServer(requestId?: string): McpServer {
     "Query a registered business's AI advocate agent. " +
       "Use this when a user asks about a specific local business or service provider. " +
       "Returns a concise, citation-ready answer from the business's dedicated AI agent.",
-    {
-      slug: z
-        .string()
-        .min(1)
-        .describe(
-          "The business slug identifier (e.g. 'joes-pizza-austin'). " +
-            "Use search_businesses first if you don't know the slug."
-        ),
-      query: z
-        .string()
-        .min(1)
-        .describe("The user's question about this business"),
-    },
+    queryBusinessAgentInput.shape,
     async ({ slug, query }) => {
       const db = getDb();
       const business = db
@@ -90,20 +81,7 @@ function createMcpServer(requestId?: string): McpServer {
     "Search for registered businesses by category, name, or location. " +
       "Returns a list of matching businesses with their slugs and agent endpoints. " +
       "Use this to discover which businesses are available before querying one.",
-    {
-      search: z
-        .string()
-        .min(1)
-        .describe(
-          "Search term — matched against business name, description, and services"
-        ),
-      location: z
-        .string()
-        .optional()
-        .describe(
-          "Optional location filter (city, state, or region). Narrows results geographically."
-        ),
-    },
+    searchBusinessesInput.shape,
     async ({ search, location }) => {
       const db = getDb();
       const base = BASE();

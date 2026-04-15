@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import { zodToJsonSchema, ManifestSchema } from "./schema.js";
+import { queryBusinessAgentInput, searchBusinessesInput } from "./tools.js";
 
 describe("zodToJsonSchema — minimal converter", () => {
   it("converts z.string() to { type: 'string' }", () => {
@@ -85,5 +86,23 @@ describe("ManifestSchema", () => {
         attribution_endpoint: "https://x",
       })
     ).toThrow();
+  });
+});
+
+describe("shared tool input shapes", () => {
+  it("queryBusinessAgentInput validates slug + query", () => {
+    expect(() =>
+      queryBusinessAgentInput.parse({ slug: "joes-pizza", query: "hours?" })
+    ).not.toThrow();
+    expect(() => queryBusinessAgentInput.parse({ slug: "", query: "x" })).toThrow();
+    expect(() => queryBusinessAgentInput.parse({ slug: "x" })).toThrow();
+  });
+
+  it("searchBusinessesInput makes location optional", () => {
+    expect(() => searchBusinessesInput.parse({ search: "pizza" })).not.toThrow();
+    expect(() =>
+      searchBusinessesInput.parse({ search: "pizza", location: "Austin" })
+    ).not.toThrow();
+    expect(() => searchBusinessesInput.parse({ search: "" })).toThrow();
   });
 });
