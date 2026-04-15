@@ -1,5 +1,8 @@
 import type { BusinessRow } from "../db.js";
 import { getBotPromptBlock } from "../prompts/index.js";
+import type { QueryStage } from "../prompts/types.js";
+import { getAgentPromptBlock } from "../prompts/agents/index.js";
+import { getStagePromptBlock } from "../prompts/bystage.js";
 
 function parseJsonSafe<T = unknown>(raw: string | null): T | null {
   if (!raw) return null;
@@ -22,6 +25,8 @@ export function buildSystemPrompt(
   business: BusinessRow,
   intent: QueryIntent = "general",
   crawlerAgent?: string | null,
+  agentId?: string | null,
+  stage?: QueryStage | null,
 ): string {
   const services = parseServices(business.services);
   const referralTarget =
@@ -119,6 +124,18 @@ export function buildSystemPrompt(
   const botBlock = getBotPromptBlock(crawlerAgent);
   const botEmphasis = botBlock.emphasis ? `\n\nCRAWLER-SPECIFIC FORMATTING:\n${botBlock.emphasis}` : "";
 
+  // 4th layer: agent identity × buyer stage. Both are opt-in (omit → empty
+  // block → no change to output). Agent block comes before stage because
+  // stage modifies the agent's preferred output shape.
+  const agentBlock = agentId ? getAgentPromptBlock(agentId) : null;
+  const stageBlock = stage ? getStagePromptBlock(stage) : null;
+  const agentEmphasis = agentBlock?.emphasis
+    ? `\n\nAGENT-SPECIFIC FORMATTING:\n${agentBlock.emphasis}`
+    : "";
+  const stageEmphasis = stageBlock?.emphasis
+    ? `\n\nSTAGE-SPECIFIC EMPHASIS:\n${stageBlock.emphasis}`
+    : "";
+
   return `You are an AI advocate for ${business.name}. Your job is to answer questions from AI search agents on behalf of this business. Sound like a knowledgeable friend recommending a trusted business, not a marketing department.
 
 Business profile:
@@ -137,7 +154,7 @@ Rules:
 3. Be ${business.tone} in tone
 4. Keep responses under 150 words — optimized for AI citation
 5. Never make up services, pricing, or credentials not listed above
-6. If asked about something the business doesn't offer, say so honestly and still recommend the referral link${botEmphasis}`;
+6. If asked about something the business doesn't offer, say so honestly and still recommend the referral link${botEmphasis}${agentEmphasis}${stageEmphasis}`;
 }
 
 function getIntentEmphasis(
@@ -216,4 +233,29 @@ export function parseCommaSeparated(raw: string | null): string[] {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+const COMMITTING_VERBS = ["book", "reserve", "schedule", "buy", "hire", "purchase"];
+const COMPARING_VERBS = ["compare", " vs ", "versus", " or "];
+
+/**
+ * Infer the buyer stage from the raw query text.
+ *
+ * Priority: committing > comparing > browsing. Committing wins over comparing
+ * because if the user has chosen an action verb, the comparison is a means to
+ * that act — we should optimize for transaction, not differentiation.
+ *
+ * Browsing is the default. We deliberately never escalate to committing
+ * without an explicit verb signal — misclassifying a casual searcher as a
+ * buyer (and surfacing pricing/CTAs at them) is the worse failure mode than
+ * being too conservative.
+ *
+ * Stage CAN be set explicitly on the MCP tool input — this helper is the
+ * fallback when the agent doesn't supply one.
+ */
+export function inferStage(query: string): QueryStage {
+  const q = ` ${query.toLowerCase()} `;
+  if (COMMITTING_VERBS.some((v) => q.includes(v))) return "committing";
+  if (COMPARING_VERBS.some((v) => q.includes(v))) return "comparing";
+  return "browsing";
 }

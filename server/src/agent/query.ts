@@ -3,9 +3,11 @@ import {
   buildSystemPrompt,
   parseServices,
   parseCommaSeparated,
+  inferStage,
   type QueryIntent,
 } from "./builder.js";
 import { getDb, type BusinessRow } from "../db.js";
+import type { QueryStage } from "../prompts/types.js";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -93,10 +95,21 @@ export async function queryAgent(
   business: BusinessRow,
   query: string,
   crawlerAgent?: string,
-  requestId?: string
+  requestId?: string,
+  agentId?: string | null,
+  stage?: QueryStage | null,
 ): Promise<AgentQueryResult> {
   const intent = detectIntent(query, business);
-  const systemPrompt = buildSystemPrompt(business, intent, crawlerAgent ?? null);
+  // Stage: explicit > inferred. Inference only fires when the caller did not
+  // supply one — and only the EXPLICIT value gets persisted (see INSERT below).
+  const resolvedStage: QueryStage = stage ?? inferStage(query);
+  const systemPrompt = buildSystemPrompt(
+    business,
+    intent,
+    crawlerAgent ?? null,
+    agentId ?? null,
+    resolvedStage,
+  );
 
   const model = process.env.MODEL ?? "claude-sonnet-4-6";
 
@@ -120,18 +133,23 @@ export async function queryAgent(
 
   const timestamp = new Date().toISOString();
 
-  // Persist to DB (synchronous — better-sqlite3)
+  // Persist to DB (synchronous — better-sqlite3).
+  // Persist the EXPLICIT stage only — the inferred fallback is a runtime aid,
+  // not an audit-trail truth. Session 11 reputation reads this column to
+  // distinguish caller-supplied signal from server-side guess.
   const db = getDb();
   const { lastInsertRowid } = db.prepare(
-    `INSERT INTO queries (business_slug, crawler_agent, query_text, response_text, intent, request_id)
-     VALUES (?, ?, ?, ?, ?, ?)`
+    `INSERT INTO queries (business_slug, crawler_agent, query_text, response_text, intent, request_id, agent_id, stage)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     business.slug,
     crawlerAgent ?? null,
     query,
     responseText,
     intent,
-    requestId ?? null
+    requestId ?? null,
+    agentId ?? null,
+    stage ?? null,
   );
 
   return {

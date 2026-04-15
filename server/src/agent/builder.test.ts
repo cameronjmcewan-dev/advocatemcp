@@ -160,3 +160,116 @@ describe("buildSystemPrompt — per-bot emphasis", () => {
     expect(p).not.toMatch(/SPECIFIC FORMATTING/);
   });
 });
+
+import { inferStage } from "./builder.js";
+
+describe("inferStage", () => {
+  it("returns 'committing' on book/reserve/schedule/buy verbs", () => {
+    expect(inferStage("can I book a slot tomorrow?")).toBe("committing");
+    expect(inferStage("how do I reserve a time")).toBe("committing");
+    expect(inferStage("schedule a service call")).toBe("committing");
+    expect(inferStage("ready to buy now")).toBe("committing");
+  });
+
+  it("returns 'comparing' on compare/vs/versus signals", () => {
+    expect(inferStage("compare them to acme plumbing")).toBe("comparing");
+    expect(inferStage("acme vs joe's plumbing")).toBe("comparing");
+    expect(inferStage("acme versus joe's")).toBe("comparing");
+  });
+
+  it("returns 'browsing' as the safe default for general queries", () => {
+    expect(inferStage("who's a good plumber in austin?")).toBe("browsing");
+    expect(inferStage("tell me about acme")).toBe("browsing");
+    expect(inferStage("")).toBe("browsing");
+  });
+
+  it("committing wins over comparing when both signals present", () => {
+    // "compare and book" → user has decided to act, the comparison is incidental
+    expect(inferStage("compare and book today")).toBe("committing");
+  });
+
+  it("is case-insensitive", () => {
+    expect(inferStage("BOOK NOW")).toBe("committing");
+    expect(inferStage("Compare Plans")).toBe("comparing");
+  });
+});
+
+describe("buildSystemPrompt 4th-layer (agent + stage)", () => {
+  const stubBiz: BusinessRow = {
+    id: 1,
+    slug: "acme-plumbing",
+    name: "Acme Plumbing",
+    description: "Licensed plumber in Austin TX",
+    services: '["drain cleaning"]',
+    category: "plumber",
+    location: "Austin, TX",
+    tone: "friendly",
+    api_key: "x",
+    created_at: "2026-01-01",
+    star_rating: 4.8,
+    review_count: 100,
+    years_in_business: 10,
+    top_services: null,
+    availability: null,
+    differentiator: null,
+    certifications: null,
+    pricing_tier: null,
+    pricing: null,
+    service_radius_miles: null,
+    service_area_keywords: null,
+    phone: null,
+    website: "https://acme.example.com",
+    referral_url: null,
+    hours_json: null,
+    services_json_v2: null,
+    pricing_json_v2: null,
+    credentials_json: null,
+    ratings_json: null,
+    customer_quotes_json: null,
+    case_stories_json: null,
+    lead_routing_json: null,
+    guarantee_text: null,
+    differentiators_text: null,
+    availability_webhook_url: null,
+  } as BusinessRow;
+
+  it("appends agent emphasis when agentId provided", () => {
+    const p = buildSystemPrompt(stubBiz, "general", null, "claude-desktop");
+    expect(p).toMatch(/AGENT: CLAUDE DESKTOP/);
+  });
+
+  it("appends stage emphasis when stage provided", () => {
+    const p = buildSystemPrompt(stubBiz, "general", null, undefined, "committing");
+    expect(p).toMatch(/STAGE: COMMITTING/);
+  });
+
+  it("appends both agent and stage emphasis when both provided", () => {
+    const p = buildSystemPrompt(stubBiz, "general", null, "cursor", "comparing");
+    expect(p).toMatch(/AGENT: CURSOR/);
+    expect(p).toMatch(/STAGE: COMPARING/);
+    // Agent block before stage block
+    const aIdx = p.indexOf("AGENT: CURSOR");
+    const sIdx = p.indexOf("STAGE: COMPARING");
+    expect(aIdx).toBeLessThan(sIdx);
+  });
+
+  it("omits agent block when agentId is null/undefined", () => {
+    const p = buildSystemPrompt(stubBiz, "general", null, null, "browsing");
+    expect(p).not.toMatch(/AGENT:/);
+    expect(p).toMatch(/STAGE: BROWSING/);
+  });
+
+  it("omits stage block when stage is null/undefined (back-compat)", () => {
+    const p = buildSystemPrompt(stubBiz, "general", null);
+    expect(p).not.toMatch(/STAGE:/);
+    expect(p).not.toMatch(/AGENT:/);
+  });
+
+  it("produces snapshot-distinct output for (claude-desktop, browsing) vs (cursor, committing)", () => {
+    const a = buildSystemPrompt(stubBiz, "general", null, "claude-desktop", "browsing");
+    const b = buildSystemPrompt(stubBiz, "general", null, "cursor", "committing");
+    expect(a).not.toBe(b);
+    expect(a).toMatch(/CLAUDE DESKTOP[\s\S]*BROWSING/);
+    expect(b).toMatch(/CURSOR[\s\S]*COMMITTING/);
+  });
+});

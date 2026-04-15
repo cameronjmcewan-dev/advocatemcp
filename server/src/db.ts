@@ -39,6 +39,21 @@ export function __getRawForTest(): unknown {
   return getDb();
 }
 
+/**
+ * Test-only helper: inject (or clear) a pre-built better-sqlite3 handle as the
+ * module-level cache. Lets integration tests build an in-memory DB, run
+ * migrations on it, and have route handlers (which call `getDb()`) read/write
+ * the same DB without touching the filesystem. Pass `null` to clear.
+ * NEVER call this from production code.
+ */
+export function _setDbForTesting(db: Database.Database | null): void {
+  if (db === null) {
+    _db = undefined;
+    return;
+  }
+  _db = db;
+}
+
 // Retained as dead code pending full migration rollout. Once every
 // environment's DB has been stamped with the schema_migrations bootstrap
 // row (Task 7), this helper and its callers can be removed entirely. Until
@@ -141,4 +156,6 @@ export interface QueryRow {
   timestamp: string;
   intent: string | null;
   request_id: string | null;
+  agent_id: string | null;
+  stage: string | null;
 }

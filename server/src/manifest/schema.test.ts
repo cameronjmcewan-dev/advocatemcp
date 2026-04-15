@@ -60,7 +60,22 @@ describe("zodToJsonSchema — minimal converter", () => {
   it("throws on unsupported zod types", () => {
     expect(() => zodToJsonSchema(z.array(z.string()))).toThrow(/unsupported zod type/i);
     expect(() => zodToJsonSchema(z.boolean())).toThrow(/unsupported zod type/i);
-    expect(() => zodToJsonSchema(z.enum(["a", "b"]))).toThrow(/unsupported zod type/i);
+  });
+
+  it("converts z.enum([...]) to { type: 'string', enum: [...] }", () => {
+    expect(zodToJsonSchema(z.enum(["a", "b", "c"]))).toEqual({
+      type: "string",
+      enum: ["a", "b", "c"],
+    });
+  });
+
+  it("preserves description on z.enum", () => {
+    const out = zodToJsonSchema(z.enum(["x", "y"]).describe("pick one"));
+    expect(out).toEqual({
+      type: "string",
+      enum: ["x", "y"],
+      description: "pick one",
+    });
   });
 
   it("converts z.record(z.string()) to object with additionalProperties", () => {

@@ -21,6 +21,23 @@ export const queryBusinessAgentInput = z.object({
     .string()
     .min(1)
     .describe("The user's question about this business"),
+  agent_id: z
+    .string()
+    .optional()
+    .describe(
+      "Optional caller-asserted agent identifier (e.g. 'claude-desktop', " +
+        "'cursor', 'gpt-agent'). Used to tune the response shape. May be " +
+        "overridden by the x-agent-identity header. Self-asserted only in " +
+        "v1 — not used for auth or rate limiting."
+    ),
+  stage: z
+    .enum(["browsing", "comparing", "committing"])
+    .optional()
+    .describe(
+      "Optional buyer stage. 'browsing' (default) — exploring options. " +
+        "'comparing' — weighing alternatives. 'committing' — ready to act. " +
+        "When omitted, the server infers from query verbs (e.g. 'book'/'reserve' → committing)."
+    ),
 });
 
 export const searchBusinessesInput = z.object({
