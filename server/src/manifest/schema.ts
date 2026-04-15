@@ -19,11 +19,14 @@ import { z, ZodTypeAny } from "zod";
  */
 export type JsonSchemaNode =
   | { type: "string"; description?: string; minLength?: number }
+  | { type: "number"; description?: string }
+  | { type: "array"; items?: JsonSchemaNode; description?: string }
   | {
       type: "object";
-      properties: Record<string, JsonSchemaNode>;
-      required: string[];
-      additionalProperties: false;
+      properties?: Record<string, JsonSchemaNode>;
+      required?: string[];
+      additionalProperties?: false;
+      description?: string;
     };
 
 export function zodToJsonSchema(node: ZodTypeAny): JsonSchemaNode {
@@ -52,6 +55,12 @@ export function zodToJsonSchema(node: ZodTypeAny): JsonSchemaNode {
         out.minLength = check.value;
       }
     }
+    return out;
+  }
+
+  if (def.typeName === "ZodNumber") {
+    const out: JsonSchemaNode = { type: "number" };
+    if (def.description) out.description = def.description;
     return out;
   }
 

@@ -9,6 +9,7 @@ import {
   searchBusinessesInput,
 } from "../manifest/tools.js";
 import { MANIFEST } from "../manifest/descriptor.js";
+import { registerGetAvailability } from "../mcp/tools/getAvailability.js";
 
 export const mcpRouter = Router();
 
@@ -139,6 +140,9 @@ export function createMcpServer(requestId?: string): McpServer {
       return { content: [{ type: "text", text }] };
     }
   );
+
+  // ── Tool 3: get_availability ──────────────────────────────────────────────
+  registerGetAvailability(server);
 
   // Decorate initialize responses with an A2A manifest summary under `_meta`.
   // MCP clients that don't understand `_meta` ignore it; clients that do (ours

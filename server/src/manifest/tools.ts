@@ -40,3 +40,10 @@ export const searchBusinessesInput = z.object({
 
 export type QueryBusinessAgentInput = z.infer<typeof queryBusinessAgentInput>;
 export type SearchBusinessesInput = z.infer<typeof searchBusinessesInput>;
+
+export const getAvailabilityInput = z.object({
+  slug: z.string().min(1).describe("business slug"),
+  window_start: z.number().int().positive().optional().describe("Unix seconds; default now"),
+  window_end: z.number().int().positive().optional().describe("Unix seconds; default now + 7 days"),
+});
+export type GetAvailabilityInput = z.infer<typeof getAvailabilityInput>;

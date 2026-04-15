@@ -1,6 +1,7 @@
 import {
   queryBusinessAgentInput,
   searchBusinessesInput,
+  getAvailabilityInput,
 } from "./tools.js";
 import {
   zodToJsonSchema,
@@ -24,7 +25,7 @@ import {
 export interface ToolDescriptor {
   name: string;
   description: string;
-  inputZod: typeof queryBusinessAgentInput | typeof searchBusinessesInput;
+  inputZod: typeof queryBusinessAgentInput | typeof searchBusinessesInput | typeof getAvailabilityInput;
   outputSchema: JsonSchemaNode;
   idempotent: boolean;
   estimated_latency_ms: number;
@@ -75,6 +76,32 @@ export const DESCRIPTORS: ToolDescriptor[] = [
     },
     idempotent: true, // read-only SQL over businesses table
     estimated_latency_ms: 50,
+    estimated_cost_cents: 0,
+  },
+  {
+    name: "get_availability",
+    description: "30-minute slot windows derived from business hours_json (v1 synthetic).",
+    inputZod: getAvailabilityInput,
+    outputSchema: {
+      type: "object",
+      properties: {
+        slots: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              start: { type: "number" },
+              end: { type: "number" },
+              capacity: { type: "number" },
+            },
+          },
+        },
+        source: { type: "string" },
+        generated_at: { type: "number" },
+      },
+    },
+    idempotent: true,
+    estimated_latency_ms: 150,
     estimated_cost_cents: 0,
   },
 ];

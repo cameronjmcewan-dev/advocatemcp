@@ -53,8 +53,11 @@ describe("zodToJsonSchema — minimal converter", () => {
     });
   });
 
+  it("converts z.number() to { type: 'number' }", () => {
+    expect(zodToJsonSchema(z.number())).toEqual({ type: "number" });
+  });
+
   it("throws on unsupported zod types", () => {
-    expect(() => zodToJsonSchema(z.number())).toThrow(/unsupported zod type/i);
     expect(() => zodToJsonSchema(z.array(z.string()))).toThrow(/unsupported zod type/i);
     expect(() => zodToJsonSchema(z.boolean())).toThrow(/unsupported zod type/i);
     expect(() => zodToJsonSchema(z.enum(["a", "b"]))).toThrow(/unsupported zod type/i);
