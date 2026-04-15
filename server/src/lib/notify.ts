@@ -24,6 +24,7 @@ export async function sendSms(opts: { to: string; body: string }): Promise<Notif
     });
     if (!resp.ok) return { delivered: false, reason: `http_${resp.status}` };
     const body = (await resp.json()) as { sid?: string };
+    if (!body.sid) return { delivered: false, reason: "missing_sid" };
     return { delivered: true, reason: "ok", ticket_id: body.sid };
   } catch {
     return { delivered: false, reason: "fetch_error" };
