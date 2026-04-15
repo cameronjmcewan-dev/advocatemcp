@@ -407,7 +407,10 @@ export async function activateDomain(
         ok: false,
         status: 502,
         reason: "cf_reconcile_error",
-        body: { error: "Reconcile PATCH failed", detail: reconcile.error },
+        body: {
+          error: "Reconcile PATCH failed",
+          detail: { message: reconcile.error, drift: reconcile.drift },
+        },
       };
     }
     if (reconcile.patched) {
