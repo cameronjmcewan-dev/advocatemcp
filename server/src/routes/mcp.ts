@@ -16,7 +16,7 @@ const BASE = () => process.env.API_BASE_URL ?? "https://api.advocatemcp.com";
  * A new instance is created per request (stateless mode) to avoid any
  * shared-transport concurrency issues with the SDK.
  */
-function createMcpServer(): McpServer {
+function createMcpServer(requestId?: string): McpServer {
   const server = new McpServer({
     name: "AdvocateMCP Central",
     version: "1.0.0",
@@ -63,7 +63,7 @@ function createMcpServer(): McpServer {
       }
 
       try {
-        const result = await queryAgent(business, query, "mcp-client");
+        const result = await queryAgent(business, query, "mcp-client", requestId);
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };
@@ -175,7 +175,8 @@ function createMcpServer(): McpServer {
  */
 mcpRouter.post("/mcp", async (req: Request, res: Response) => {
   try {
-    const server = createMcpServer();
+    const requestId = res.locals.requestId as string | undefined;
+    const server = createMcpServer(requestId);
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined, // stateless — no session state between requests
     });
@@ -207,7 +208,8 @@ mcpRouter.get("/mcp", async (req: Request, res: Response) => {
   // If the request looks like an MCP initialize via GET, handle it
   if (req.headers.accept?.includes("text/event-stream")) {
     try {
-      const server = createMcpServer();
+      const requestId = res.locals.requestId as string | undefined;
+      const server = createMcpServer(requestId);
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
       });

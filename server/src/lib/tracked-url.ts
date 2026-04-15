@@ -43,6 +43,9 @@ export interface TokenPayload {
   slug: string;      // business slug
   query_id: number;  // queries.id row that generated this token
   ts: number;        // Unix timestamp in seconds (Math.floor(Date.now() / 1000))
+  aid?: string;      // optional agent id (e.g. "claude-desktop") — omitted from
+                     // the serialized JSON when undefined so legacy tokens remain
+                     // byte-identical. JSON.stringify drops undefined properties.
 }
 
 function base64urlEncode(input: string | Buffer): string {

@@ -22,6 +22,9 @@ worker/.wrangler/
 worker/dist/
 worker/node_modules/
 
+# Worktrees
+.worktrees/
+
 # Logs
 *.log
 .obsidian/

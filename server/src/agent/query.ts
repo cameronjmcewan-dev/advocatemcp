@@ -92,7 +92,8 @@ export function detectIntent(
 export async function queryAgent(
   business: BusinessRow,
   query: string,
-  crawlerAgent?: string
+  crawlerAgent?: string,
+  requestId?: string
 ): Promise<AgentQueryResult> {
   const intent = detectIntent(query, business);
   const systemPrompt = buildSystemPrompt(business, intent, crawlerAgent ?? null);
@@ -122,9 +123,16 @@ export async function queryAgent(
   // Persist to DB (synchronous — better-sqlite3)
   const db = getDb();
   const { lastInsertRowid } = db.prepare(
-    `INSERT INTO queries (business_slug, crawler_agent, query_text, response_text, intent)
-     VALUES (?, ?, ?, ?, ?)`
-  ).run(business.slug, crawlerAgent ?? null, query, responseText, intent);
+    `INSERT INTO queries (business_slug, crawler_agent, query_text, response_text, intent, request_id)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).run(
+    business.slug,
+    crawlerAgent ?? null,
+    query,
+    responseText,
+    intent,
+    requestId ?? null
+  );
 
   return {
     response: responseText,
