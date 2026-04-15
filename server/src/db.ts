@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import "dotenv/config";
 import fs   from "fs";
 import path from "path";
+import { applyMigrations } from "./db/migrations.js";
 
 let _db: Database.Database | undefined;
 
@@ -32,6 +33,11 @@ export function _resetDbForTests(): void {
   }
 }
 
+// Retained as dead code pending full migration rollout. Once every
+// environment's DB has been stamped with the schema_migrations bootstrap
+// row (Task 7), this helper and its callers can be removed entirely. Until
+// then it's kept in the tree so a revert to the old _initSchema path
+// remains a one-line flip if the migrations runner needs to be disabled.
 function _addColumnIfNotExists(
   db: Database.Database,
   table: string,
@@ -44,84 +50,11 @@ function _addColumnIfNotExists(
     // Column already exists — safe to ignore
   }
 }
+// Keep the symbol alive so TS/lint won't prune it while it's dead.
+void _addColumnIfNotExists;
 
 function _initSchema(db: Database.Database): void {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS businesses (
-      id           INTEGER PRIMARY KEY AUTOINCREMENT,
-      slug         TEXT UNIQUE NOT NULL,
-      name         TEXT NOT NULL,
-      description  TEXT NOT NULL,
-      services     TEXT NOT NULL,          -- JSON array of service strings
-      pricing      TEXT,
-      location     TEXT,
-      phone        TEXT,
-      website      TEXT,
-      referral_url TEXT,                   -- the CTA link to send AI searchers to
-      tone         TEXT DEFAULT 'friendly',-- friendly | professional | luxury
-      api_key      TEXT UNIQUE NOT NULL,
-      created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS queries (
-      id               INTEGER PRIMARY KEY AUTOINCREMENT,
-      business_slug    TEXT NOT NULL,
-      crawler_agent    TEXT,               -- e.g. "PerplexityBot"
-      query_text       TEXT NOT NULL,
-      response_text    TEXT NOT NULL,
-      referral_clicked INTEGER DEFAULT 0,
-      timestamp        DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  // ── Section 1 migrations: rich SMB profile columns ──
-  const bizCols: [string, string][] = [
-    ["category", "TEXT"],
-    ["star_rating", "REAL"],
-    ["review_count", "INTEGER"],
-    ["years_in_business", "INTEGER"],
-    ["top_services", "TEXT"],
-    ["availability", "TEXT"],
-    ["differentiator", "TEXT"],
-    ["service_radius_miles", "INTEGER"],
-    ["certifications", "TEXT"],
-    ["pricing_tier", "TEXT"],
-    ["service_area_keywords", "TEXT"],
-    // ── 9-step wizard: JSON blobs ──
-    ["hours_json", "TEXT"],
-    ["services_json_v2", "TEXT"],
-    ["pricing_json_v2", "TEXT"],
-    ["credentials_json", "TEXT"],
-    ["ratings_json", "TEXT"],
-    ["differentiators_text", "TEXT"],
-    ["customer_quotes_json", "TEXT"],
-    ["guarantee_text", "TEXT"],
-    ["case_stories_json", "TEXT"],
-    ["lead_routing_json", "TEXT"],
-  ];
-  for (const [col, type] of bizCols) {
-    _addColumnIfNotExists(db, "businesses", col, type);
-  }
-
-  // ── Section 2 migration: intent column on queries ──
-  _addColumnIfNotExists(db, "queries", "intent", "TEXT");
-
-  // ── Section 3: click events log ──
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS click_events (
-      id            INTEGER PRIMARY KEY AUTOINCREMENT,
-      business_slug TEXT NOT NULL,
-      ref           TEXT,        -- bot name that sourced the response (e.g. "PerplexityBot")
-      user_agent    TEXT,        -- UA of the human who clicked
-      ip_hash       TEXT,        -- SHA-256(IP) for deduplication
-      timestamp     DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-  `);
-
-  // ── Session 1 migrations: attribution hardening columns on click_events ──
-  _addColumnIfNotExists(db, "click_events", "destination", "TEXT");
-  _addColumnIfNotExists(db, "click_events", "query_id", "INTEGER");
-  _addColumnIfNotExists(db, "click_events", "legacy", "INTEGER NOT NULL DEFAULT 0");
+  applyMigrations(db);
 }
 
 /** Type that mirrors the businesses table row. */
