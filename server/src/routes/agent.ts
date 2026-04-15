@@ -191,7 +191,8 @@ agentRouter.post("/agents/:slug/query", requireApiKey, async (req: Request, res:
   }
 
   try {
-    const result = await queryAgent(business, query, crawler);
+    const requestId = res.locals.requestId as string | undefined;
+    const result = await queryAgent(business, query, crawler, requestId);
 
     // Build signed attribution token if TOKEN_SIGNING_KEY is configured.
     // Additive — omitted gracefully when key is absent so existing callers
