@@ -71,4 +71,11 @@ describe("getBotPromptBlock dispatch", () => {
   it("dispatches ClaudeBot to claude module", () => {
     expect(getBotPromptBlock("ClaudeBot").name).toBe("claude");
   });
+
+  it("dispatches Googlebot to google module", () => {
+    expect(getBotPromptBlock("Googlebot").name).toBe("google");
+  });
+  it("dispatches Google-Extended to google module", () => {
+    expect(getBotPromptBlock("Google-Extended").name).toBe("google");
+  });
 });
