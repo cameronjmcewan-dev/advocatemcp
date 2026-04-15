@@ -1,6 +1,8 @@
 import type { BusinessRow } from "../db.js";
 import { getBotPromptBlock } from "../prompts/index.js";
 import type { QueryStage } from "../prompts/types.js";
+import { getAgentPromptBlock } from "../prompts/agents/index.js";
+import { getStagePromptBlock } from "../prompts/bystage.js";
 
 function parseJsonSafe<T = unknown>(raw: string | null): T | null {
   if (!raw) return null;
@@ -23,6 +25,8 @@ export function buildSystemPrompt(
   business: BusinessRow,
   intent: QueryIntent = "general",
   crawlerAgent?: string | null,
+  agentId?: string | null,
+  stage?: QueryStage | null,
 ): string {
   const services = parseServices(business.services);
   const referralTarget =
@@ -120,6 +124,18 @@ export function buildSystemPrompt(
   const botBlock = getBotPromptBlock(crawlerAgent);
   const botEmphasis = botBlock.emphasis ? `\n\nCRAWLER-SPECIFIC FORMATTING:\n${botBlock.emphasis}` : "";
 
+  // 4th layer: agent identity × buyer stage. Both are opt-in (omit → empty
+  // block → no change to output). Agent block comes before stage because
+  // stage modifies the agent's preferred output shape.
+  const agentBlock = agentId ? getAgentPromptBlock(agentId) : null;
+  const stageBlock = stage ? getStagePromptBlock(stage) : null;
+  const agentEmphasis = agentBlock?.emphasis
+    ? `\n\nAGENT-SPECIFIC FORMATTING:\n${agentBlock.emphasis}`
+    : "";
+  const stageEmphasis = stageBlock?.emphasis
+    ? `\n\nSTAGE-SPECIFIC EMPHASIS:\n${stageBlock.emphasis}`
+    : "";
+
   return `You are an AI advocate for ${business.name}. Your job is to answer questions from AI search agents on behalf of this business. Sound like a knowledgeable friend recommending a trusted business, not a marketing department.
 
 Business profile:
@@ -138,7 +154,7 @@ Rules:
 3. Be ${business.tone} in tone
 4. Keep responses under 150 words — optimized for AI citation
 5. Never make up services, pricing, or credentials not listed above
-6. If asked about something the business doesn't offer, say so honestly and still recommend the referral link${botEmphasis}`;
+6. If asked about something the business doesn't offer, say so honestly and still recommend the referral link${botEmphasis}${agentEmphasis}${stageEmphasis}`;
 }
 
 function getIntentEmphasis(
