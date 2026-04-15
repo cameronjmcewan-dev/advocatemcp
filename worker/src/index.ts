@@ -17,6 +17,7 @@ import type { Env } from "./types";
 import { handlePortal } from "./routes/portal";
 import { handleDemo } from "./routes/demo";
 import { verifyToken, base64urlToBytes } from "./lib/tracked-url";
+import { buildSignedClickBody } from "./lib/clickBody";
 import { getTenant } from "./routes/onboard";
 import { proxyToOrigin, WORKER_HOSTNAMES } from "./lib/proxy";
 
@@ -216,14 +217,14 @@ export default {
                 fetch(`${apiBase(env)}/analytics/${payload.slug}/referral-click`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    ref: payload.ref,
-                    user_agent: userAgent,
-                    ip_hash,
-                    destination: payload.dest,
-                    query_id: payload.query_id,
-                    legacy: 0,
-                  }),
+                  body: JSON.stringify(
+                    // Session 11.5: forward the verified token's aid claim so
+                    // the server can stamp click_events.agent_id directly.
+                    // Body shape stays back-compat (aid-less tokens omit the
+                    // key entirely so server-side derivation from queries
+                    // remains the fallback).
+                    buildSignedClickBody({ payload, userAgent, ipHash: ip_hash }),
+                  ),
                 }).catch(() => { /* best-effort */ })
               )
             );
