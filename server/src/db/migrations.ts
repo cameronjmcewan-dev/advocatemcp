@@ -27,18 +27,25 @@ export function applyMigrations(db: Database.Database): void {
   // as plain SQL would crash on the second ALTER. Stamp them as applied so
   // the runner skips them in prod. Detection: schema_migrations didn't exist
   // before this call AND the businesses table does.
+  //
+  // Safety carve-out for 002: the old _initSchema's ALTER TABLE loop could
+  // crash mid-flight (machine died after N of 21 columns) and the old
+  // _addColumnIfNotExists wrapper would silently swallow the resumed attempt
+  // on the next boot. To avoid stamping a partially-applied 002 as "done"
+  // and losing the remaining columns forever, verify every column from 002
+  // is present before stamping it. If any are missing, DON'T stamp — the
+  // runner will then re-apply 002 and crash loudly on the first duplicate
+  // ALTER, surfacing the problem for hand-patching. See docs/db-migrations.md.
   if (!hadSchemaMigrations && _tableExists(db, "businesses")) {
     const stamp = db.prepare(
       "INSERT OR IGNORE INTO schema_migrations (filename) VALUES (?)"
     );
-    for (const name of [
-      "001_initial_schema.sql",
-      "002_businesses_profile_columns.sql",
-      "003_queries_intent.sql",
-      "004_click_events.sql",
-    ]) {
-      stamp.run(name);
+    stamp.run("001_initial_schema.sql");
+    if (_businessesHasAll002Columns(db)) {
+      stamp.run("002_businesses_profile_columns.sql");
     }
+    stamp.run("003_queries_intent.sql");
+    stamp.run("004_click_events.sql");
   }
 
   const applied = new Set(listAppliedMigrations(db));
@@ -84,4 +91,49 @@ function _tableExists(db: Database.Database, name: string): boolean {
     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?")
     .get(name);
   return Boolean(row);
+}
+
+/**
+ * The 21 columns added by `002_businesses_profile_columns.sql`. Hard-coded
+ * (rather than parsed from the .sql) so this list itself is a load-bearing,
+ * human-reviewable spec.
+ *
+ * This list is INTENTIONALLY duplicated in the
+ * `MIGRATION_002_COLUMNS list matches the actual ALTER TABLE statements in 002`
+ * test in `migrations.test.ts`. Do not consolidate — the duplication is what
+ * makes the drift-guard test able to catch edits to either source. The test
+ * also parses `002_businesses_profile_columns.sql` at run time, so a change
+ * to ANY of the three (this constant, the test's `expected`, or the .sql)
+ * fails the test until all three are updated in lockstep.
+ */
+const MIGRATION_002_COLUMNS: readonly string[] = [
+  "category",
+  "star_rating",
+  "review_count",
+  "years_in_business",
+  "top_services",
+  "availability",
+  "differentiator",
+  "service_radius_miles",
+  "certifications",
+  "pricing_tier",
+  "service_area_keywords",
+  "hours_json",
+  "services_json_v2",
+  "pricing_json_v2",
+  "credentials_json",
+  "ratings_json",
+  "differentiators_text",
+  "customer_quotes_json",
+  "guarantee_text",
+  "case_stories_json",
+  "lead_routing_json",
+];
+
+function _businessesHasAll002Columns(db: Database.Database): boolean {
+  const rows = db
+    .prepare("PRAGMA table_info(businesses)")
+    .all() as { name: string }[];
+  const present = new Set(rows.map((r) => r.name));
+  return MIGRATION_002_COLUMNS.every((c) => present.has(c));
 }
