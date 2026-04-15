@@ -12,6 +12,7 @@ import {
   type TenantRecord,
 } from "./onboard";
 import { discoverOriginUrl } from "../lib/origin-discovery.js";
+import { desiredHostnameSpec } from "../lib/hostnameSpec.js";
 
 const CNAME_TARGET = "customers.advocatemcp.com";
 
@@ -50,7 +51,7 @@ interface CfResponse {
   data: Record<string, unknown>;
 }
 
-async function cfRequest(
+export async function cfRequest(
   env: Env,
   method: string,
   path: string,
@@ -333,14 +334,7 @@ export async function activateDomain(
   }
 
   // ── Call Cloudflare for SaaS API ───────────────────────────────────────────
-  const { ok, data } = await cfRequest(env, "POST", "", {
-    hostname: domain,
-    ssl: {
-      method: "txt",
-      type: "dv",
-      settings: { min_tls_version: "1.2" },
-    },
-  });
+  const { ok, data } = await cfRequest(env, "POST", "", desiredHostnameSpec(domain));
 
   if (!ok) {
     const errors = data.errors as Array<{ code: number; message: string }> | undefined;
