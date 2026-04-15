@@ -143,6 +143,15 @@ export const ManifestSchema = z.object({
   rate_limits: z.object({
     per_agent_per_minute: z.number().int().positive(),
     per_ip_per_minute: z.number().int().positive(),
+    // Session 11: tiered ceilings keyed on agent reputation. Optional so a
+    // bare `{per_agent_per_minute, per_ip_per_minute}` parses (back-compat).
+    tiers: z
+      .object({
+        unverified: z.number().int().positive(),
+        known: z.number().int().positive(),
+        trusted: z.number().int().positive(),
+      })
+      .optional(),
   }),
   auth_model: z.object({
     modes: z.array(
