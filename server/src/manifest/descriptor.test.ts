@@ -215,6 +215,19 @@ describe("rate_limits sourced from middleware constants", () => {
   });
 });
 
+describe("rate_limits — Session 11 tiered shape", () => {
+  it("MANIFEST.rate_limits exposes tiered per-agent-per-minute ceilings", () => {
+    expect(MANIFEST.rate_limits.tiers).toEqual({
+      unverified: 100,
+      known: 250,
+      trusted: 1000,
+    });
+  });
+  it("retains the flat per_agent_per_minute key for back-compat clients", () => {
+    expect(typeof MANIFEST.rate_limits.per_agent_per_minute).toBe("number");
+  });
+});
+
 describe("transports — explicit wiring", () => {
   it("lists http and sse with identical /mcp URL (Streamable HTTP covers both)", () => {
     const m = buildManifest({

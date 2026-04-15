@@ -101,6 +101,11 @@ describe("migrations runner", () => {
       CREATE TABLE queries (id INTEGER PRIMARY KEY, intent TEXT);
       CREATE TABLE click_events (
         id INTEGER PRIMARY KEY,
+        business_slug TEXT,
+        ref TEXT,
+        user_agent TEXT,
+        ip_hash TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         destination TEXT,
         query_id INTEGER,
         legacy INTEGER NOT NULL DEFAULT 0
@@ -187,6 +192,11 @@ describe("migration 002 partial-application safety", () => {
       CREATE TABLE queries (id INTEGER PRIMARY KEY, intent TEXT);
       CREATE TABLE click_events (
         id INTEGER PRIMARY KEY,
+        business_slug TEXT,
+        ref TEXT,
+        user_agent TEXT,
+        ip_hash TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         destination TEXT,
         query_id INTEGER,
         legacy INTEGER NOT NULL DEFAULT 0

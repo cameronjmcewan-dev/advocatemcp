@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import { requireSlugApiKey, requireApiKey } from "../middleware/auth.js";
 import { getDb, type QueryRow } from "../db.js";
+import { findByRequestId, setOutcome } from "../repos/agentRequests.js";
 
 export const analyticsRouter = Router();
 
@@ -204,13 +205,15 @@ analyticsRouter.post(
   "/analytics/:slug/referral-click",
   (req: Request, res: Response) => {
     const { slug } = req.params;
-    const { ref, user_agent, ip_hash, destination, query_id, legacy } = (req.body ?? {}) as {
+    const { ref, user_agent, ip_hash, destination, query_id, legacy, agent_id, request_id } = (req.body ?? {}) as {
       ref?: string;
       user_agent?: string;
       ip_hash?: string;
       destination?: string;
       query_id?: number;
       legacy?: 0 | 1;
+      agent_id?: string;
+      request_id?: string;
     };
     const db = getDb();
 
@@ -234,8 +237,8 @@ analyticsRouter.post(
     // between the two writes.
     const transaction = db.transaction(() => {
       db.prepare(
-        `INSERT INTO click_events (business_slug, ref, user_agent, ip_hash, destination, query_id, legacy)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO click_events (business_slug, ref, user_agent, ip_hash, destination, query_id, legacy, agent_id, request_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
         slug,
         ref ?? null,
@@ -243,13 +246,23 @@ analyticsRouter.post(
         ip_hash ?? null,
         destination ?? null,
         query_id ?? null,
-        legacy ?? 0
+        legacy ?? 0,
+        agent_id ?? null,
+        request_id ?? null
       );
 
       if (query_id !== undefined) {
         db.prepare(
           "UPDATE queries SET referral_clicked = 1 WHERE id = ? AND business_slug = ?"
         ).run(query_id, slug);
+      }
+
+      // Backfill: if the click can be tied back to a known MCP tool call,
+      // promote that audit row's outcome to 'click'. Best-effort — anonymous
+      // clicks (no matching agent_requests row) are fine.
+      if (request_id) {
+        const ar = findByRequestId(db, request_id);
+        if (ar) setOutcome(db, { id: ar.id, outcomeSignal: "click" });
       }
     });
 

@@ -1,10 +1,12 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
+import type { Request } from "express";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getDb } from "../../db.js";
 import { initiateHandoffInput } from "../../manifest/tools.js";
 import { mintContinuationToken, getSigningKey } from "../../lib/continuationToken.js";
 import { sendSms, sendEmail } from "../../lib/notify.js";
+import { withAgentRequestLog } from "../../lib/agentRequestLogger.js";
 
 function apiBase(): string {
   return process.env.API_BASE_URL ?? "https://api.advocatemcp.com";
@@ -131,7 +133,11 @@ export async function handleInitiateHandoff(
   };
 }
 
-export function registerInitiateHandoff(server: McpServer): void {
+export function registerInitiateHandoff(
+  server: McpServer,
+  req?: Request,
+  requestId?: string,
+): void {
   // The discriminated union doesn't have a .shape property, so we wrap it in a
   // z.object() schema that the MCP SDK can understand, but parse internally
   // with the stricter discriminated union for validation.
@@ -147,9 +153,26 @@ export function registerInitiateHandoff(server: McpServer): void {
     "Begin a handoff from the agent to either a human operator (SMS/email via lead_routing_json) or another agent (signed continuation URL).",
     wrapper.shape,
     async (args) => {
-      // Validate and narrow using the strict discriminated union
-      const validated = initiateHandoffInput.parse(args);
-      return handleInitiateHandoff(validated);
+      const run = async () => {
+        // Validate and narrow using the strict discriminated union
+        const validated = initiateHandoffInput.parse(args);
+        return handleInitiateHandoff(validated);
+      };
+      if (!req) return run();
+      const slug =
+        typeof (args as { slug?: unknown }).slug === "string"
+          ? ((args as { slug: string }).slug)
+          : null;
+      return withAgentRequestLog(
+        {
+          toolName: "initiate_handoff",
+          req,
+          requestId,
+          toolArgAgentId: null,
+          businessSlug: slug,
+        },
+        run,
+      );
     }
   );
 }

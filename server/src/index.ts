@@ -1,5 +1,7 @@
 import "dotenv/config";
 import { createTestApp } from "./testApp.js";
+import { getDb } from "./db.js";
+import { startReputationRollupSchedule } from "./jobs/reputationRollup.js";
 
 if (!process.env.ANTHROPIC_API_KEY) {
   console.error("❌ ANTHROPIC_API_KEY is not set. Copy .env.example to .env and add your key.");
@@ -40,6 +42,10 @@ app.get("/", (_req, res) => {
 app.use((_req, res) => {
   res.status(404).json({ error: "Not found" });
 });
+
+// Session 11: kick off the 15-minute agent_reputation rollup so /admin/agents
+// has fresh data without depending on an external cron. Idempotent + unref'd.
+startReputationRollupSchedule(getDb());
 
 app.listen(PORT, () => {
   console.log(`

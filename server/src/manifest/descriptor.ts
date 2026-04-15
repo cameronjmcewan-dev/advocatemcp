@@ -16,6 +16,7 @@ import {
   PER_IP_LIMIT_PER_MINUTE,
   PER_API_KEY_LIMIT_PER_HOUR,
 } from "../middleware/rateLimit.js";
+import { TIER_LIMITS } from "../lib/agentTier.js";
 
 /**
  * Typed descriptor for a single tool. This is the registry row; the MCP
@@ -208,6 +209,8 @@ export function buildManifest(opts: BuildManifestOptions): Manifest {
       // per_agent_per_minute derives from the hourly per-api-key limit.
       per_ip_per_minute: PER_IP_LIMIT_PER_MINUTE,
       per_agent_per_minute: Math.floor(PER_API_KEY_LIMIT_PER_HOUR / 60),
+      // Session 11: per-tier ceilings actually enforced by the middleware.
+      tiers: TIER_LIMITS,
     },
     auth_model: {
       modes: ["open", "api_key"],

@@ -1,11 +1,14 @@
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
+import type { Request } from "express";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getDb } from "../../db.js";
 import { reserveSlotInput } from "../../manifest/tools.js";
 import { mintContinuationToken, getSigningKey } from "../../lib/continuationToken.js";
 import { sweepExpiredReservations } from "../../jobs/expirySweeper.js";
 import type { ReservationRow } from "../../db.js";
+import { withAgentRequestLog } from "../../lib/agentRequestLogger.js";
+import { setOutcomeAndRelated } from "../../repos/agentRequests.js";
 
 const HOLD_SECONDS = 900; // 15 min
 
@@ -138,11 +141,66 @@ export async function handleReserveSlot(
   };
 }
 
-export function registerReserveSlot(server: McpServer): void {
+/**
+ * Pull reservation_id out of the JSON-stringified MCP tool response so the
+ * logger wrapper can stamp `related_id` and `outcome_signal='reservation_held'`
+ * on the matching agent_requests row in one UPDATE.
+ *
+ * Returns null when the response shape changed (defensive — keep the row even
+ * without back-link rather than throw).
+ */
+function extractReservationId(
+  res: Awaited<ReturnType<typeof handleReserveSlot>>,
+): string | null {
+  try {
+    const raw = res.content?.[0]?.text;
+    if (typeof raw !== "string") return null;
+    const parsed = JSON.parse(raw) as { reservation_id?: unknown };
+    return typeof parsed.reservation_id === "string" ? parsed.reservation_id : null;
+  } catch {
+    return null;
+  }
+}
+
+export function registerReserveSlot(
+  server: McpServer,
+  req?: Request,
+  requestId?: string,
+): void {
   server.tool(
     "reserve_slot",
     "Create a 15-minute HELD reservation. Return a confirmation_token the agent posts to /a2a/confirm to flip to CONFIRMED.",
     reserveSlotInput.shape,
-    async (args) => handleReserveSlot(args)
+    async (args) => {
+      if (!req) return handleReserveSlot(args);
+      let logId: string | null = null;
+      const result = await withAgentRequestLog(
+        {
+          toolName: "reserve_slot",
+          req,
+          requestId,
+          toolArgAgentId: args.agent_id ?? null,
+          businessSlug: args.slug,
+          onLogged: (id) => {
+            logId = id;
+          },
+        },
+        () => handleReserveSlot(args),
+      );
+      // Backfill outcome + related_id in one UPDATE so the rollup job sees
+      // reservation_held outcomes attributed to the originating audit row.
+      // Skipped on isError so a business_not_found row stays as 'none'.
+      if (logId && !result.isError) {
+        const reservationId = extractReservationId(result);
+        if (reservationId) {
+          setOutcomeAndRelated(getDb(), {
+            id: logId,
+            outcomeSignal: "reservation_held",
+            relatedId: reservationId,
+          });
+        }
+      }
+      return result;
+    }
   );
 }

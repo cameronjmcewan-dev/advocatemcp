@@ -1,7 +1,9 @@
 import { z } from "zod";
+import type { Request } from "express";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getDb } from "../../db.js";
 import { getAvailabilityInput } from "../../manifest/tools.js";
+import { withAgentRequestLog } from "../../lib/agentRequestLogger.js";
 
 export interface DaySpec { open: string; close: string }
 export type HoursJson = Partial<Record<
@@ -84,11 +86,27 @@ export async function handleGetAvailability(
   };
 }
 
-export function registerGetAvailability(server: McpServer): void {
+export function registerGetAvailability(
+  server: McpServer,
+  req?: Request,
+  requestId?: string,
+): void {
   server.tool(
     "get_availability",
     "Return 30-minute availability windows for a business from its hours_json. v1 is synthetic; v2 will consult availability_webhook_url when set.",
     getAvailabilityInput.shape,
-    async (args) => handleGetAvailability(args)
+    async (args) => {
+      if (!req) return handleGetAvailability(args);
+      return withAgentRequestLog(
+        {
+          toolName: "get_availability",
+          req,
+          requestId,
+          toolArgAgentId: null,
+          businessSlug: args.slug,
+        },
+        () => handleGetAvailability(args),
+      );
+    }
   );
 }
