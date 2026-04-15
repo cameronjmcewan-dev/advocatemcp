@@ -90,7 +90,7 @@ describe("activateDomain — self-healing spec", () => {
         result: {
           id: "cf-hostname-123",
           hostname: "www.example.com",
-          custom_origin_server: "customers.advocatemcp.com",
+          custom_origin_server: "advocatemcp-worker.advocatecameron.workers.dev",
           ssl: { method: "txt", settings: { min_tls_version: "1.2" }, txt_name: "_acme.example.com", txt_value: "abc" },
         },
       }));
@@ -113,7 +113,7 @@ describe("activateDomain — self-healing spec", () => {
     );
     expect(cfPost).toBeDefined();
     const body = JSON.parse((cfPost![1] as RequestInit).body as string);
-    expect(body.custom_origin_server).toBe("customers.advocatemcp.com");
+    expect(body.custom_origin_server).toBe("advocatemcp-worker.advocatecameron.workers.dev");
     expect(body.hostname).toBe("www.example.com");
     expect(body.ssl).toEqual({
       method: "txt",
@@ -145,7 +145,7 @@ describe("activateDomain — reconcile on existing hostname", () => {
         result: {
           id: "cf-legacy-456",
           hostname: "www.legacy.com",
-          custom_origin_server: "customers.advocatemcp.com",
+          custom_origin_server: "advocatemcp-worker.advocatecameron.workers.dev",
           ssl: { method: "txt", settings: { min_tls_version: "1.2" } },
         },
       }));
@@ -169,7 +169,7 @@ describe("activateDomain — reconcile on existing hostname", () => {
     );
     expect(cfPatch).toBeDefined();
     expect(JSON.parse((cfPatch![1] as RequestInit).body as string)).toEqual({
-      custom_origin_server: "customers.advocatemcp.com",
+      custom_origin_server: "advocatemcp-worker.advocatecameron.workers.dev",
     });
   });
 
@@ -185,7 +185,7 @@ describe("activateDomain — reconcile on existing hostname", () => {
         result: [{
           id: "cf-healthy-789",
           hostname: "www.healthy.com",
-          custom_origin_server: "customers.advocatemcp.com",
+          custom_origin_server: "advocatemcp-worker.advocatecameron.workers.dev",
           ssl: { method: "txt", settings: { min_tls_version: "1.2" } },
         }],
       }));
