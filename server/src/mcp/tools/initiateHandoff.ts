@@ -46,9 +46,35 @@ export async function handleInitiateHandoff(
       }
     }
     const channel: "sms" | "email" = routing.preferred ?? "sms";
+
+    // Guard: business has no recipient configured for the chosen channel. Return
+    // a clear, machine-readable reason so the caller (agent) can react, rather
+    // than letting the notify adapter fail downstream with an opaque http_* code.
+    const recipient = channel === "sms" ? routing.sms_to : routing.email_to;
+    if (!recipient) {
+      db.prepare(`
+        INSERT INTO handoffs (id, business_slug, reservation_id, mode, delivered_via, ticket_id, agent_id)
+        VALUES (?, ?, ?, 'human', ?, ?, ?)
+      `).run(handoff_id, input.slug, input.reservation_id ?? null, channel, handoff_id, null);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              mode: "human",
+              delivered: false,
+              reason: "no_recipient_configured",
+              channel,
+              handoff_id,
+            }),
+          },
+        ],
+      };
+    }
+
     const notifyRes = channel === "sms"
-      ? await sendSms({ to: routing.sms_to ?? "", body: input.payload.message })
-      : await sendEmail({ to: routing.email_to ?? "", subject: "New lead", body: input.payload.message });
+      ? await sendSms({ to: recipient, body: input.payload.message })
+      : await sendEmail({ to: recipient, subject: "New lead", body: input.payload.message });
 
     db.prepare(`
       INSERT INTO handoffs (id, business_slug, reservation_id, mode, delivered_via, ticket_id, agent_id)

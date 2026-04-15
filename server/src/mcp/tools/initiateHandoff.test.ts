@@ -44,6 +44,49 @@ describe("initiate_handoff — human mode", () => {
     expect(body.ticket_id).toBe("SM1");
   });
 
+  it("returns delivered:false with reason:no_recipient_configured when lead_routing has no sms_to", async () => {
+    const sendSmsSpy = vi.fn();
+    vi.doMock("../../lib/notify.js", () => ({
+      sendSms: sendSmsSpy,
+      sendEmail: vi.fn(),
+    }));
+    process.env.DATABASE_PATH = ":memory:";
+    process.env.TOKEN_SIGNING_KEY = "test-key-ih";
+    process.env.API_BASE_URL = "https://api.test";
+    const dbMod = await import("../../db.js");
+    const { applyMigrations } = await import("../../db/migrations.js");
+    applyMigrations(
+      (dbMod as unknown as { __getRawForTest: () => import("better-sqlite3").Database }).__getRawForTest()
+    );
+    // Business with SMS preferred but no sms_to configured.
+    dbMod.getDb().prepare(`
+      INSERT INTO businesses (slug, name, api_key, description, services, lead_routing_json)
+      VALUES ('noroute','NoRoute','k','d','s', json('{"preferred":"sms"}'))
+      ON CONFLICT(slug) DO NOTHING
+    `).run();
+    const { handleInitiateHandoff } = await import("./initiateHandoff.js");
+    const res = await handleInitiateHandoff({
+      slug: "noroute",
+      mode: "human",
+      payload: { message: "test" },
+    } as unknown as Parameters<typeof handleInitiateHandoff>[0]);
+    expect(res.isError).toBeFalsy();
+    // Must NOT have called the notify adapter with an empty recipient —
+    // that would let Twilio reject with an opaque http_400.
+    expect(sendSmsSpy).not.toHaveBeenCalled();
+    const body = JSON.parse((res.content[0] as { text: string }).text) as {
+      delivered: boolean;
+      reason: string;
+      channel: string;
+    };
+    expect(body.delivered).toBe(false);
+    expect(body.reason).toBe("no_recipient_configured");
+    expect(body.channel).toBe("sms");
+    // Row still written for audit.
+    const row = dbMod.getDb().prepare(`SELECT delivered_via FROM handoffs WHERE business_slug='noroute'`).get() as { delivered_via: string } | undefined;
+    expect(row?.delivered_via).toBe("sms");
+  });
+
   it("returns delivered:false, writes row, does not isError on not_configured", async () => {
     vi.doMock("../../lib/notify.js", () => ({
       sendSms: vi.fn().mockResolvedValue({ delivered: false, reason: "not_configured" }),
