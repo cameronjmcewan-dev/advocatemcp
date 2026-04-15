@@ -3,6 +3,7 @@ import {
   searchBusinessesInput,
   getAvailabilityInput,
   getQuoteInput,
+  reserveSlotInput,
 } from "./tools.js";
 import {
   zodToJsonSchema,
@@ -26,7 +27,7 @@ import {
 export interface ToolDescriptor {
   name: string;
   description: string;
-  inputZod: typeof queryBusinessAgentInput | typeof searchBusinessesInput | typeof getAvailabilityInput | typeof getQuoteInput;
+  inputZod: typeof queryBusinessAgentInput | typeof searchBusinessesInput | typeof getAvailabilityInput | typeof getQuoteInput | typeof reserveSlotInput;
   outputSchema: JsonSchemaNode;
   idempotent: boolean;
   estimated_latency_ms: number;
@@ -128,6 +129,23 @@ export const DESCRIPTORS: ToolDescriptor[] = [
     idempotent: true,
     estimated_latency_ms: 200,
     estimated_cost_cents: 0, // deterministic=0; LLM fallback ~1–2¢ per call; averaged assumes ≥70% deterministic hit
+  },
+  {
+    name: "reserve_slot",
+    description: "Create a 15-min HELD reservation; returns a signed confirmation_token for the agent to post back to /a2a/confirm.",
+    inputZod: reserveSlotInput,
+    outputSchema: {
+      type: "object",
+      properties: {
+        reservation_id: { type: "string" },
+        status: { type: "string" },
+        confirmation_token: { type: "string" },
+        expires_at: { type: "number" },
+      },
+    },
+    idempotent: true,
+    estimated_latency_ms: 100,
+    estimated_cost_cents: 0,
   },
 ];
 

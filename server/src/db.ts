@@ -33,6 +33,12 @@ export function _resetDbForTests(): void {
   }
 }
 
+// Test-only: expose the raw better-sqlite3 handle so tests can run migrations
+// inline without importing the private module state. Not for production callers.
+export function __getRawForTest(): unknown {
+  return getDb();
+}
+
 // Retained as dead code pending full migration rollout. Once every
 // environment's DB has been stamped with the schema_migrations bootstrap
 // row (Task 7), this helper and its callers can be removed entirely. Until

@@ -43,6 +43,7 @@ describe("POST /mcp — initialize carries _meta.advocatemcp", () => {
       "get_availability",
       "get_quote",
       "query_business_agent",
+      "reserve_slot",
       "search_businesses",
     ]);
   });
