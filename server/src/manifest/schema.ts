@@ -25,7 +25,7 @@ export type JsonSchemaNode =
       type: "object";
       properties?: Record<string, JsonSchemaNode>;
       required?: string[];
-      additionalProperties?: false;
+      additionalProperties?: false | JsonSchemaNode;
       description?: string;
     };
 
@@ -39,6 +39,7 @@ export function zodToJsonSchema(node: ZodTypeAny): JsonSchemaNode {
     checks?: Array<{ kind: string; value?: number }>;
     innerType?: ZodTypeAny;
     shape?: () => Record<string, ZodTypeAny>;
+    valueType?: ZodTypeAny;
   };
 
   // Unwrap ZodOptional by recursing into innerType — optionality is a
@@ -62,6 +63,14 @@ export function zodToJsonSchema(node: ZodTypeAny): JsonSchemaNode {
     const out: JsonSchemaNode = { type: "number" };
     if (def.description) out.description = def.description;
     return out;
+  }
+
+  if (def.typeName === "ZodRecord") {
+    if (!def.valueType) throw new Error(`zodToJsonSchema: ZodRecord missing valueType`);
+    return {
+      type: "object",
+      additionalProperties: zodToJsonSchema(def.valueType),
+    };
   }
 
   if (def.typeName === "ZodObject" && def.shape) {

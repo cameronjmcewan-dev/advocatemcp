@@ -41,6 +41,7 @@ describe("POST /mcp — initialize carries _meta.advocatemcp", () => {
     expect(Array.isArray(meta.tools)).toBe(true);
     expect((meta.tools as { name: string }[]).map((t) => t.name).sort()).toEqual([
       "get_availability",
+      "get_quote",
       "query_business_agent",
       "search_businesses",
     ]);

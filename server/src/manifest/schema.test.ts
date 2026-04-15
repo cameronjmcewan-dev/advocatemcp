@@ -62,6 +62,11 @@ describe("zodToJsonSchema — minimal converter", () => {
     expect(() => zodToJsonSchema(z.boolean())).toThrow(/unsupported zod type/i);
     expect(() => zodToJsonSchema(z.enum(["a", "b"]))).toThrow(/unsupported zod type/i);
   });
+
+  it("converts z.record(z.string()) to object with additionalProperties", () => {
+    const out = zodToJsonSchema(z.record(z.string()));
+    expect(out).toEqual({ type: "object", additionalProperties: { type: "string" } });
+  });
 });
 
 describe("ManifestSchema", () => {

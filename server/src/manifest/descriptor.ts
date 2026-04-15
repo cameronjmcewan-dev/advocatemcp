@@ -2,6 +2,7 @@ import {
   queryBusinessAgentInput,
   searchBusinessesInput,
   getAvailabilityInput,
+  getQuoteInput,
 } from "./tools.js";
 import {
   zodToJsonSchema,
@@ -25,7 +26,7 @@ import {
 export interface ToolDescriptor {
   name: string;
   description: string;
-  inputZod: typeof queryBusinessAgentInput | typeof searchBusinessesInput | typeof getAvailabilityInput;
+  inputZod: typeof queryBusinessAgentInput | typeof searchBusinessesInput | typeof getAvailabilityInput | typeof getQuoteInput;
   outputSchema: JsonSchemaNode;
   idempotent: boolean;
   estimated_latency_ms: number;
@@ -102,6 +103,30 @@ export const DESCRIPTORS: ToolDescriptor[] = [
     },
     idempotent: true,
     estimated_latency_ms: 150,
+    estimated_cost_cents: 0,
+  },
+  {
+    name: "get_quote",
+    description: "Quote a service price from pricing_json_v2; exact|range|estimate labelled.",
+    inputZod: getQuoteInput,
+    outputSchema: {
+      type: "object",
+      properties: {
+        quote: {
+          type: "object",
+          properties: {
+            low: { type: "number" },
+            high: { type: "number" },
+            currency: { type: "string" },
+            confidence: { type: "string" },
+            basis: { type: "string" },
+            disclaimer: { type: "string" },
+          },
+        },
+      },
+    },
+    idempotent: true,
+    estimated_latency_ms: 200,
     estimated_cost_cents: 0,
   },
 ];

@@ -2,16 +2,17 @@ import { describe, it, expect } from "vitest";
 import { buildManifest, DESCRIPTORS, MANIFEST } from "./descriptor.js";
 import { ManifestSchema } from "./schema.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { queryBusinessAgentInput, searchBusinessesInput, getAvailabilityInput } from "./tools.js";
+import { queryBusinessAgentInput, searchBusinessesInput, getAvailabilityInput, getQuoteInput } from "./tools.js";
 import {
   PER_IP_LIMIT_PER_MINUTE,
   PER_API_KEY_LIMIT_PER_HOUR,
 } from "../middleware/rateLimit.js";
 
 describe("descriptor registry", () => {
-  it("lists exactly three tools today", () => {
+  it("lists exactly four tools today", () => {
     expect(DESCRIPTORS.map((d) => d.name).sort()).toEqual([
       "get_availability",
+      "get_quote",
       "query_business_agent",
       "search_businesses",
     ]);
@@ -35,9 +36,9 @@ describe("buildManifest", () => {
   });
 
   it("includes all tools with JSON Schema input_schema", () => {
-    expect(m.tools).toHaveLength(3);
+    expect(m.tools).toHaveLength(4);
     const names = m.tools.map((t) => t.name).sort();
-    expect(names).toEqual(["get_availability", "query_business_agent", "search_businesses"]);
+    expect(names).toEqual(["get_availability", "get_quote", "query_business_agent", "search_businesses"]);
 
     const qba = m.tools.find((t) => t.name === "query_business_agent")!;
     expect(qba.input_schema).toMatchObject({
@@ -113,6 +114,12 @@ describe("drift: MCP registry ↔ DESCRIPTORS", () => {
       "get_availability",
       "drift probe",
       getAvailabilityInput.shape,
+      async () => ({ content: [{ type: "text", text: "" }] })
+    );
+    server.tool(
+      "get_quote",
+      "drift probe",
+      getQuoteInput.shape,
       async () => ({ content: [{ type: "text", text: "" }] })
     );
 

@@ -47,3 +47,10 @@ export const getAvailabilityInput = z.object({
   window_end: z.number().int().positive().optional().describe("Unix seconds; default now + 7 days"),
 });
 export type GetAvailabilityInput = z.infer<typeof getAvailabilityInput>;
+
+export const getQuoteInput = z.object({
+  slug: z.string().min(1).describe("business slug"),
+  service: z.string().min(1).describe("requested service name"),
+  params: z.record(z.string()).optional().describe("optional service parameters (e.g., {size:'large'})"),
+});
+export type GetQuoteInput = z.infer<typeof getQuoteInput>;

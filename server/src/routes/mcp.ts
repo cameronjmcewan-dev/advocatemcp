@@ -10,6 +10,7 @@ import {
 } from "../manifest/tools.js";
 import { MANIFEST } from "../manifest/descriptor.js";
 import { registerGetAvailability } from "../mcp/tools/getAvailability.js";
+import { registerGetQuote } from "../mcp/tools/getQuote.js";
 
 export const mcpRouter = Router();
 
@@ -143,6 +144,9 @@ export function createMcpServer(requestId?: string): McpServer {
 
   // ── Tool 3: get_availability ──────────────────────────────────────────────
   registerGetAvailability(server);
+
+  // ── Tool 4: get_quote ─────────────────────────────────────────────────────
+  registerGetQuote(server);
 
   // Decorate initialize responses with an A2A manifest summary under `_meta`.
   // MCP clients that don't understand `_meta` ignore it; clients that do (ours
