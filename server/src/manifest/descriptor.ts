@@ -1,0 +1,130 @@
+import {
+  queryBusinessAgentInput,
+  searchBusinessesInput,
+} from "./tools.js";
+import {
+  zodToJsonSchema,
+  ManifestSchema,
+  type JsonSchemaNode,
+  type Manifest,
+} from "./schema.js";
+
+/**
+ * Typed descriptor for a single tool. This is the registry row; the MCP
+ * server and the A2A manifest both read from the same list.
+ *
+ * `estimated_latency_ms` and `estimated_cost_cents` are advisory static
+ * numbers for v1 — they guide clients' scheduling/budgeting decisions but
+ * are not SLOs. A runtime-measured version is Session 11+ work.
+ */
+export interface ToolDescriptor {
+  name: string;
+  description: string;
+  inputZod: typeof queryBusinessAgentInput | typeof searchBusinessesInput;
+  outputSchema: JsonSchemaNode;
+  idempotent: boolean;
+  estimated_latency_ms: number;
+  estimated_cost_cents: number;
+}
+
+export const DESCRIPTORS: ToolDescriptor[] = [
+  {
+    name: "query_business_agent",
+    description:
+      "Query a registered business's AI advocate agent. " +
+      "Use this when a user asks about a specific local business or service provider. " +
+      "Returns a concise, citation-ready answer from the business's dedicated AI agent.",
+    inputZod: queryBusinessAgentInput,
+    outputSchema: {
+      type: "object",
+      properties: {
+        answer: { type: "string", description: "Citation-ready answer text" },
+        referral_url: {
+          type: "string",
+          description: "Tracked URL to the business's site",
+        },
+      },
+      required: ["answer"],
+      additionalProperties: false,
+    },
+    idempotent: false, // each call logs to queries table + consumes Claude tokens
+    estimated_latency_ms: 1500,
+    estimated_cost_cents: 2,
+  },
+  {
+    name: "search_businesses",
+    description:
+      "Search for registered businesses by category, name, or location. " +
+      "Returns a list of matching businesses with their slugs and agent endpoints. " +
+      "Use this to discover which businesses are available before querying one.",
+    inputZod: searchBusinessesInput,
+    outputSchema: {
+      type: "object",
+      properties: {
+        results: {
+          type: "string",
+          description: "JSON-encoded array of business records",
+        },
+      },
+      required: ["results"],
+      additionalProperties: false,
+    },
+    idempotent: true, // read-only SQL over businesses table
+    estimated_latency_ms: 50,
+    estimated_cost_cents: 0,
+  },
+];
+
+export interface BuildManifestOptions {
+  apiBase: string; // e.g. https://api.advocatemcp.com
+  trackBase: string; // e.g. https://customers.advocatemcp.com
+}
+
+export function buildManifest(opts: BuildManifestOptions): Manifest {
+  const m: Manifest = {
+    spec_version: "2026-04-14",
+    agent_id: "advocatemcp-central",
+    protocol_versions: ["2025-03-26"], // current MCP spec version; array per Session 8 risk callout
+    transports: [
+      { kind: "http", url: `${opts.apiBase}/mcp` },
+      { kind: "sse", url: `${opts.apiBase}/mcp` },
+    ],
+    tools: DESCRIPTORS.map((d) => ({
+      name: d.name,
+      description: d.description,
+      input_schema: zodToJsonSchema(d.inputZod),
+      output_schema: d.outputSchema,
+      idempotent: d.idempotent,
+      estimated_latency_ms: d.estimated_latency_ms,
+      estimated_cost_cents: d.estimated_cost_cents,
+    })),
+    rate_limits: {
+      // Interim defaults matching current middleware config. Task 7 sources
+      // these from `server/src/middleware/rateLimit.ts` so the manifest
+      // stays in lockstep with real per-IP / per-agent limits.
+      per_agent_per_minute: 100,
+      per_ip_per_minute: 100,
+    },
+    auth_model: {
+      modes: ["open", "api_key"],
+    },
+    attribution_endpoint: `${opts.trackBase}/track`,
+  };
+  // Belt-and-suspenders: throw loudly at module load if the manifest is malformed.
+  // Will be re-parsed with real rate limits in Task 7.
+  return m;
+}
+
+const API_BASE = process.env.API_BASE_URL ?? "https://api.advocatemcp.com";
+const TRACK_BASE =
+  process.env.WORKER_BASE_URL ?? "https://customers.advocatemcp.com";
+
+/**
+ * Cached, module-scoped manifest built once at boot from env. The well-known
+ * route and the MCP `initialize` hook both read this constant — the handler
+ * never rebuilds per-request. Task 7 will source rate_limits from the real
+ * middleware config so this stays in lockstep with enforced limits.
+ */
+export const MANIFEST: Manifest = ManifestSchema.parse(
+  buildManifest({ apiBase: API_BASE, trackBase: TRACK_BASE })
+);
