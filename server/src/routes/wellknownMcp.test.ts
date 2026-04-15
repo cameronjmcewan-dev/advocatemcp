@@ -40,10 +40,15 @@ describe("GET /.well-known/mcp.json", () => {
     expect(names).toEqual(["get_availability", "get_quote", "initiate_handoff", "query_business_agent", "reserve_slot", "search_businesses"]);
   });
 
-  it("transports lists both http and sse pointing at /mcp", async () => {
+  it("transports lists only http pointing at /mcp (SSE dropped — see descriptor.ts)", async () => {
     const res = await request(app).get("/.well-known/mcp.json");
     const transports = res.body.transports as { kind: string; url: string }[];
     expect(transports.some((t) => t.kind === "http" && t.url.endsWith("/mcp"))).toBe(true);
-    expect(transports.some((t) => t.kind === "sse" && t.url.endsWith("/mcp"))).toBe(true);
+    // SSE is no longer advertised: Cloudflare/Railway closes idle SSE channels
+    // around 30s, and we never push server-initiated events. The /mcp GET
+    // handler still serves SSE for backward-compat with Inspector-class clients
+    // that default to SSE on connect — but discoverable manifests advertise
+    // only HTTP so spec-compliant agents pick the working transport.
+    expect(transports.some((t) => t.kind === "sse")).toBe(false);
   });
 });
