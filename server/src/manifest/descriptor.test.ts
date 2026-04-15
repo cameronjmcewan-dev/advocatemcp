@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { buildManifest, DESCRIPTORS, MANIFEST } from "./descriptor.js";
 import { ManifestSchema } from "./schema.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { queryBusinessAgentInput, searchBusinessesInput } from "./tools.js";
 
 describe("descriptor registry", () => {
   it("lists exactly two tools today", () => {
@@ -75,5 +77,63 @@ describe("MANIFEST cached const", () => {
     // Re-importing yields the same object reference (ESM module cache)
     const again = (await import("./descriptor.js")).MANIFEST;
     expect(again).toBe(MANIFEST);
+  });
+});
+
+/**
+ * Drift test: the set of tool names registered with McpServer must equal the
+ * set of tool names in DESCRIPTORS. If they diverge, the manifest is lying
+ * and agent clients will get either missing tools or 404s on claimed ones.
+ */
+describe("drift: MCP registry ↔ DESCRIPTORS", () => {
+  it("every registered MCP tool appears in DESCRIPTORS and vice versa", async () => {
+    // Build an isolated McpServer mirroring createMcpServer() without the
+    // Express transport wiring. We tolerate some duplication here — this
+    // test deliberately doesn't import createMcpServer() so a buggy mcp.ts
+    // refactor can't silently "pass" by reading from the same broken source.
+    const server = new McpServer({ name: "drift-check", version: "0.0.0" });
+    server.tool(
+      "query_business_agent",
+      "drift probe",
+      queryBusinessAgentInput.shape,
+      async () => ({ content: [{ type: "text", text: "" }] })
+    );
+    server.tool(
+      "search_businesses",
+      "drift probe",
+      searchBusinessesInput.shape,
+      async () => ({ content: [{ type: "text", text: "" }] })
+    );
+
+    // The SDK stores registered tools at `server._registeredTools`. This is
+    // the supported read path as of @modelcontextprotocol/sdk ^1.10 (see
+    // node_modules/@modelcontextprotocol/sdk/server/mcp.d.ts).
+    const registered = Object.keys(
+      (server as unknown as { _registeredTools: Record<string, unknown> })
+        ._registeredTools
+    ).sort();
+
+    const descripted = DESCRIPTORS.map((d) => d.name).sort();
+
+    expect(registered).toEqual(descripted);
+  });
+
+  it("createMcpServer's real registration matches DESCRIPTORS (prod path)", async () => {
+    // Import the actual production factory and verify it registers every
+    // descripted tool — not a parallel-universe server.
+    const mcpModule = await import("../routes/mcp.js");
+    // createMcpServer is currently not exported. If this test fails with a
+    // missing-export, export it from mcp.ts (it's already exported-shaped,
+    // and this test becomes the forcing function).
+    const factory = (mcpModule as unknown as {
+      createMcpServer?: (rid?: string) => import("@modelcontextprotocol/sdk/server/mcp.js").McpServer;
+    }).createMcpServer;
+    expect(factory, "createMcpServer must be exported from routes/mcp.ts so the drift test can introspect it").toBeDefined();
+
+    const s = factory!();
+    const regKeys = Object.keys(
+      (s as unknown as { _registeredTools: Record<string, unknown> })._registeredTools
+    ).sort();
+    expect(regKeys).toEqual(DESCRIPTORS.map((d) => d.name).sort());
   });
 });

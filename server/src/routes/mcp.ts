@@ -20,7 +20,7 @@ const BASE = () => process.env.API_BASE_URL ?? "https://api.advocatemcp.com";
  * A new instance is created per request (stateless mode) to avoid any
  * shared-transport concurrency issues with the SDK.
  */
-function createMcpServer(requestId?: string): McpServer {
+export function createMcpServer(requestId?: string): McpServer {
   const server = new McpServer({
     name: "AdvocateMCP Central",
     version: "1.0.0",
