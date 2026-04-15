@@ -3,6 +3,10 @@ import { buildManifest, DESCRIPTORS, MANIFEST } from "./descriptor.js";
 import { ManifestSchema } from "./schema.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { queryBusinessAgentInput, searchBusinessesInput } from "./tools.js";
+import {
+  PER_IP_LIMIT_PER_MINUTE,
+  PER_API_KEY_LIMIT_PER_HOUR,
+} from "../middleware/rateLimit.js";
 
 describe("descriptor registry", () => {
   it("lists exactly two tools today", () => {
@@ -135,5 +139,19 @@ describe("drift: MCP registry ↔ DESCRIPTORS", () => {
       (s as unknown as { _registeredTools: Record<string, unknown> })._registeredTools
     ).sort();
     expect(regKeys).toEqual(DESCRIPTORS.map((d) => d.name).sort());
+  });
+});
+
+describe("rate_limits sourced from middleware constants", () => {
+  it("per_ip_per_minute matches middleware PER_IP_LIMIT_PER_MINUTE", () => {
+    expect(MANIFEST.rate_limits.per_ip_per_minute).toBe(
+      PER_IP_LIMIT_PER_MINUTE
+    );
+  });
+
+  it("per_agent_per_minute derives from PER_API_KEY_LIMIT_PER_HOUR / 60", () => {
+    expect(MANIFEST.rate_limits.per_agent_per_minute).toBe(
+      Math.floor(PER_API_KEY_LIMIT_PER_HOUR / 60)
+    );
   });
 });

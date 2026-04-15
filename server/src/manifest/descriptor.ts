@@ -8,6 +8,10 @@ import {
   type JsonSchemaNode,
   type Manifest,
 } from "./schema.js";
+import {
+  PER_IP_LIMIT_PER_MINUTE,
+  PER_API_KEY_LIMIT_PER_HOUR,
+} from "../middleware/rateLimit.js";
 
 /**
  * Typed descriptor for a single tool. This is the registry row; the MCP
@@ -99,11 +103,11 @@ export function buildManifest(opts: BuildManifestOptions): Manifest {
       estimated_cost_cents: d.estimated_cost_cents,
     })),
     rate_limits: {
-      // Interim defaults matching current middleware config. Task 7 sources
-      // these from `server/src/middleware/rateLimit.ts` so the manifest
-      // stays in lockstep with real per-IP / per-agent limits.
-      per_agent_per_minute: 100,
-      per_ip_per_minute: 100,
+      // Sourced from `server/src/middleware/rateLimit.ts` so the published
+      // manifest stays in lockstep with real per-IP / per-agent enforcement.
+      // per_agent_per_minute derives from the hourly per-api-key limit.
+      per_ip_per_minute: PER_IP_LIMIT_PER_MINUTE,
+      per_agent_per_minute: Math.floor(PER_API_KEY_LIMIT_PER_HOUR / 60),
     },
     auth_model: {
       modes: ["open", "api_key"],
@@ -111,7 +115,6 @@ export function buildManifest(opts: BuildManifestOptions): Manifest {
     attribution_endpoint: `${opts.trackBase}/track`,
   };
   // Belt-and-suspenders: throw loudly at module load if the manifest is malformed.
-  // Will be re-parsed with real rate limits in Task 7.
   return m;
 }
 
@@ -122,8 +125,9 @@ const TRACK_BASE =
 /**
  * Cached, module-scoped manifest built once at boot from env. The well-known
  * route and the MCP `initialize` hook both read this constant — the handler
- * never rebuilds per-request. Task 7 will source rate_limits from the real
- * middleware config so this stays in lockstep with enforced limits.
+ * never rebuilds per-request. rate_limits are sourced from
+ * `server/src/middleware/rateLimit.ts` so enforcement and advertisement stay
+ * in lockstep.
  */
 export const MANIFEST: Manifest = ManifestSchema.parse(
   buildManifest({ apiBase: API_BASE, trackBase: TRACK_BASE })

@@ -1,5 +1,12 @@
 import type { Request, Response, NextFunction } from "express";
 
+/**
+ * Public rate-limit constants. The A2A manifest (`server/src/manifest/descriptor.ts`)
+ * reads these so published rate_limits stay in lockstep with enforcement.
+ */
+export const PER_IP_LIMIT_PER_MINUTE = 100;
+export const PER_API_KEY_LIMIT_PER_HOUR = 1000;
+
 interface Bucket { count: number; resetAt: number }
 
 const ipBuckets  = new Map<string, Bucket>();
@@ -53,8 +60,8 @@ export function rateLimitMiddleware(req: Request, res: Response, next: NextFunct
 
   const ip = clientIp(req);
 
-  if (!consume(ipBuckets, ip, 100, 60_000)) {
-    console.info(`[rate-limit] IP ${ip} exceeded 100 req/min`);
+  if (!consume(ipBuckets, ip, PER_IP_LIMIT_PER_MINUTE, 60_000)) {
+    console.info(`[rate-limit] IP ${ip} exceeded ${PER_IP_LIMIT_PER_MINUTE} req/min`);
     res.setHeader("Retry-After", String(retryAfter(ipBuckets, ip)));
     res.status(429).json({ error: "Rate limit exceeded — try again shortly", retry_after: retryAfter(ipBuckets, ip) });
     return;
@@ -62,8 +69,8 @@ export function rateLimitMiddleware(req: Request, res: Response, next: NextFunct
 
   const apiKey = extractKey(req);
   if (apiKey) {
-    if (!consume(keyBuckets, apiKey, 1000, 3_600_000)) {
-      console.info(`[rate-limit] api_key ${apiKey.slice(0, 8)}… exceeded 1000 req/hour`);
+    if (!consume(keyBuckets, apiKey, PER_API_KEY_LIMIT_PER_HOUR, 3_600_000)) {
+      console.info(`[rate-limit] api_key ${apiKey.slice(0, 8)}… exceeded ${PER_API_KEY_LIMIT_PER_HOUR} req/hour`);
       res.setHeader("Retry-After", String(retryAfter(keyBuckets, apiKey)));
       res.status(429).json({ error: "API key hourly limit exceeded", retry_after: retryAfter(keyBuckets, apiKey) });
       return;
