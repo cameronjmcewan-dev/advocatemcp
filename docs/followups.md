@@ -7,7 +7,9 @@ Last updated: 2026-04-13 (Sunday night sprint)
 
 ## Blockers — ship before the next real paying customer
 
-### DNS custom hostname routing
+### ~~DNS custom hostname routing~~ RESOLVED
+**Resolved in feature/dns-self-healing-activation** — self-healing reconcile on `POST /admin/domains/activate`. See `docs/dns-routing.md` for the full design, or `docs/superpowers/specs/2026-04-14-dns-self-healing-activation-design.md` for the original spec.
+
 Workman Copy Co's domain (www.workmancopyco.com) currently returns 522 for AI crawler traffic.
 The worker code is fully prepared to handle custom hostname requests (BUSINESS_MAP KV lookup,
 cf-custom-hostname header fallback, getTenant proxy logic), but Cloudflare's Workers Routes

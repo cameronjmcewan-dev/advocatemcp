@@ -12,6 +12,8 @@ import {
   type TenantRecord,
 } from "./onboard";
 import { discoverOriginUrl } from "../lib/origin-discovery.js";
+import { desiredHostnameSpec } from "../lib/hostnameSpec.js";
+import { reconcileHostname, type ReconcileResult } from "../lib/reconcileHostname.js";
 
 const CNAME_TARGET = "customers.advocatemcp.com";
 
@@ -50,7 +52,7 @@ interface CfResponse {
   data: Record<string, unknown>;
 }
 
-async function cfRequest(
+export async function cfRequest(
   env: Env,
   method: string,
   path: string,
@@ -182,7 +184,8 @@ export type ActivateFailReason =
   | "worker_loop"
   | "http_scheme"
   | "origin_5xx"
-  | "cf_api_error";
+  | "cf_api_error"
+  | "cf_reconcile_error";
 
 export interface ActivateDomainResult {
   ok: boolean;
@@ -333,14 +336,7 @@ export async function activateDomain(
   }
 
   // ── Call Cloudflare for SaaS API ───────────────────────────────────────────
-  const { ok, data } = await cfRequest(env, "POST", "", {
-    hostname: domain,
-    ssl: {
-      method: "txt",
-      type: "dv",
-      settings: { min_tls_version: "1.2" },
-    },
-  });
+  const { ok, data } = await cfRequest(env, "POST", "", desiredHostnameSpec(domain));
 
   if (!ok) {
     const errors = data.errors as Array<{ code: number; message: string }> | undefined;
@@ -388,8 +384,56 @@ export async function activateDomain(
         body: { error: "Hostname already exists in CF but could not be retrieved", detail: data },
       };
     }
-    // Idempotent success — reuse existing CF hostname record
-    return buildActivateSuccess(env, domain, slug, existing, validatedOriginUrl, originUrlSource, /* alreadyExisted */ true);
+
+    // Reconcile existing hostname against the declared spec. Fires at most one
+    // PATCH if any of { custom_origin_server, ssl.settings.min_tls_version }
+    // differs. No-op when already matching.
+    const reconcile = await reconcileHostname(
+      env,
+      existing,
+      desiredHostnameSpec(domain),
+      cfRequest,
+    );
+    if (!reconcile.ok) {
+      console.error(JSON.stringify({
+        domains: true,
+        event: "hostname_reconcile_failed",
+        domain,
+        slug,
+        drift: reconcile.drift,
+        error: reconcile.error,
+      }));
+      return {
+        ok: false,
+        status: 502,
+        reason: "cf_reconcile_error",
+        body: {
+          error: "Reconcile PATCH failed",
+          detail: { message: reconcile.error, drift: reconcile.drift },
+        },
+      };
+    }
+    if (reconcile.patched) {
+      console.log(JSON.stringify({
+        domains: true,
+        event: "hostname_reconciled",
+        domain,
+        slug,
+        drift: reconcile.drift,
+      }));
+    }
+
+    // Idempotent success — reuse (reconciled) CF hostname record
+    return buildActivateSuccess(
+      env,
+      domain,
+      slug,
+      reconcile.cfResult,
+      validatedOriginUrl,
+      originUrlSource,
+      /* alreadyExisted */ true,
+      reconcile,
+    );
   }
 
   const cfResult = data.result as Record<string, unknown>;
@@ -405,6 +449,7 @@ async function buildActivateSuccess(
   validatedOriginUrl: string | null,
   originUrlSource: "explicit" | "discovered" | "none",
   alreadyExisted = false,
+  reconcile: ReconcileResult | null = null,
 ): Promise<ActivateDomainResult> {
   const cfHostnameId = cfResult.id as string | null;
 
@@ -459,6 +504,9 @@ async function buildActivateSuccess(
         : null,
       status: alreadyExisted ? "already_exists" : "pending_verification",
       instructions: generateDnsInstructions(domain, verificationTxt),
+      ...(reconcile?.patched
+        ? { reconcile_summary: { patched: true, drift: reconcile.drift } }
+        : {}),
     },
   };
 }
