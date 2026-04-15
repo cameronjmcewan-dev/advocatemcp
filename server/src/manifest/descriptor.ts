@@ -4,6 +4,7 @@ import {
   getAvailabilityInput,
   getQuoteInput,
   reserveSlotInput,
+  initiateHandoffInput,
 } from "./tools.js";
 import {
   zodToJsonSchema,
@@ -27,7 +28,7 @@ import {
 export interface ToolDescriptor {
   name: string;
   description: string;
-  inputZod: typeof queryBusinessAgentInput | typeof searchBusinessesInput | typeof getAvailabilityInput | typeof getQuoteInput | typeof reserveSlotInput;
+  inputZod: typeof queryBusinessAgentInput | typeof searchBusinessesInput | typeof getAvailabilityInput | typeof getQuoteInput | typeof reserveSlotInput | typeof initiateHandoffInput;
   outputSchema: JsonSchemaNode;
   idempotent: boolean;
   estimated_latency_ms: number;
@@ -129,6 +130,35 @@ export const DESCRIPTORS: ToolDescriptor[] = [
     idempotent: true,
     estimated_latency_ms: 200,
     estimated_cost_cents: 0, // deterministic=0; LLM fallback ~1–2¢ per call; averaged assumes ≥70% deterministic hit
+  },
+  {
+    name: "initiate_handoff",
+    description: "Start a handoff to a human (SMS/email via tenant routing) or another agent (signed continuation URL).",
+    inputZod: initiateHandoffInput,
+    outputSchema: {
+      oneOf: [
+        {
+          type: "object",
+          properties: {
+            mode: { const: "human" },
+            delivered_via: { type: "string" },
+            ticket_id: { type: "string" },
+          },
+        },
+        {
+          type: "object",
+          properties: {
+            mode: { const: "agent" },
+            continuation_url: { type: "string" },
+            expires_at: { type: "number" },
+            handshake_token: { type: "string" },
+          },
+        },
+      ],
+    },
+    idempotent: false,
+    estimated_latency_ms: 300,
+    estimated_cost_cents: 1,
   },
   {
     name: "reserve_slot",

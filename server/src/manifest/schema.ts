@@ -27,7 +27,9 @@ export type JsonSchemaNode =
       required?: string[];
       additionalProperties?: false | JsonSchemaNode;
       description?: string;
-    };
+    }
+  | { const: unknown }
+  | { oneOf: JsonSchemaNode[] };
 
 export function zodToJsonSchema(node: ZodTypeAny): JsonSchemaNode {
   // `_def` is a zod internal — stable across the 3.23 line we depend on. If
@@ -83,6 +85,16 @@ export function zodToJsonSchema(node: ZodTypeAny): JsonSchemaNode {
       if (childDef.typeName !== "ZodOptional") required.push(key);
     }
     return { type: "object", properties, required, additionalProperties: false };
+  }
+
+  if (def.typeName === "ZodLiteral") {
+    const value = (def as { value?: unknown }).value;
+    return { const: value } as JsonSchemaNode;
+  }
+
+  if (def.typeName === "ZodDiscriminatedUnion") {
+    const options = (def as { options?: ZodTypeAny[] }).options ?? [];
+    return { oneOf: options.map((o) => zodToJsonSchema(o)) } as JsonSchemaNode;
   }
 
   throw new Error(

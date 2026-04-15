@@ -2,17 +2,19 @@ import { describe, it, expect } from "vitest";
 import { buildManifest, DESCRIPTORS, MANIFEST } from "./descriptor.js";
 import { ManifestSchema } from "./schema.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { queryBusinessAgentInput, searchBusinessesInput, getAvailabilityInput, getQuoteInput, reserveSlotInput } from "./tools.js";
+import { queryBusinessAgentInput, searchBusinessesInput, getAvailabilityInput, getQuoteInput, reserveSlotInput, initiateHandoffInput } from "./tools.js";
+import { z } from "zod";
 import {
   PER_IP_LIMIT_PER_MINUTE,
   PER_API_KEY_LIMIT_PER_HOUR,
 } from "../middleware/rateLimit.js";
 
 describe("descriptor registry", () => {
-  it("lists exactly five tools today", () => {
+  it("lists exactly six tools today", () => {
     expect(DESCRIPTORS.map((d) => d.name).sort()).toEqual([
       "get_availability",
       "get_quote",
+      "initiate_handoff",
       "query_business_agent",
       "reserve_slot",
       "search_businesses",
@@ -37,9 +39,9 @@ describe("buildManifest", () => {
   });
 
   it("includes all tools with JSON Schema input_schema", () => {
-    expect(m.tools).toHaveLength(5);
+    expect(m.tools).toHaveLength(6);
     const names = m.tools.map((t) => t.name).sort();
-    expect(names).toEqual(["get_availability", "get_quote", "query_business_agent", "reserve_slot", "search_businesses"]);
+    expect(names).toEqual(["get_availability", "get_quote", "initiate_handoff", "query_business_agent", "reserve_slot", "search_businesses"]);
 
     const qba = m.tools.find((t) => t.name === "query_business_agent")!;
     expect(qba.input_schema).toMatchObject({
@@ -127,6 +129,18 @@ describe("drift: MCP registry ↔ DESCRIPTORS", () => {
       "reserve_slot",
       "drift probe",
       reserveSlotInput.shape,
+      async () => ({ content: [{ type: "text", text: "" }] })
+    );
+    const initiateHandoffWrapper = z.object({
+      slug: z.string().min(1),
+      reservation_id: z.string().optional(),
+      mode: z.enum(["human", "agent"]),
+      payload: z.record(z.unknown()),
+    });
+    server.tool(
+      "initiate_handoff",
+      "drift probe",
+      initiateHandoffWrapper.shape,
       async () => ({ content: [{ type: "text", text: "" }] })
     );
 

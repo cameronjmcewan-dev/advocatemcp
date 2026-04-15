@@ -37,7 +37,7 @@ describe("GET /.well-known/mcp.json", () => {
   it("tools[].name includes all current MCP tools", async () => {
     const res = await request(app).get("/.well-known/mcp.json");
     const names = (res.body.tools as { name: string }[]).map((t) => t.name).sort();
-    expect(names).toEqual(["get_availability", "get_quote", "query_business_agent", "reserve_slot", "search_businesses"]);
+    expect(names).toEqual(["get_availability", "get_quote", "initiate_handoff", "query_business_agent", "reserve_slot", "search_businesses"]);
   });
 
   it("transports lists both http and sse pointing at /mcp", async () => {

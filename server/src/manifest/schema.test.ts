@@ -67,6 +67,21 @@ describe("zodToJsonSchema — minimal converter", () => {
     const out = zodToJsonSchema(z.record(z.string()));
     expect(out).toEqual({ type: "object", additionalProperties: { type: "string" } });
   });
+
+  it("converts ZodLiteral to { const }", () => {
+    const out = zodToJsonSchema(z.literal("human"));
+    expect(out).toEqual({ const: "human" });
+  });
+
+  it("converts ZodDiscriminatedUnion to oneOf", () => {
+    const u = z.discriminatedUnion("k", [
+      z.object({ k: z.literal("a"), a: z.string() }),
+      z.object({ k: z.literal("b"), b: z.string() }),
+    ]);
+    const out = zodToJsonSchema(u);
+    expect(out).toHaveProperty("oneOf");
+    expect((out as { oneOf: unknown[] }).oneOf).toHaveLength(2);
+  });
 });
 
 describe("ManifestSchema", () => {

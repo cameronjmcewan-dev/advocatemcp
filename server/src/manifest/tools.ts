@@ -68,3 +68,19 @@ export const reserveSlotInput = z.object({
   idempotency_key: z.string().min(1),
 });
 export type ReserveSlotInput = z.infer<typeof reserveSlotInput>;
+
+export const initiateHandoffInput = z.discriminatedUnion("mode", [
+  z.object({
+    slug: z.string().min(1),
+    reservation_id: z.string().optional(),
+    mode: z.literal("human"),
+    payload: z.object({ message: z.string().min(1) }),
+  }),
+  z.object({
+    slug: z.string().min(1),
+    reservation_id: z.string().optional(),
+    mode: z.literal("agent"),
+    payload: z.object({ purpose: z.string().min(1) }),
+  }),
+]);
+export type InitiateHandoffInput = z.infer<typeof initiateHandoffInput>;
