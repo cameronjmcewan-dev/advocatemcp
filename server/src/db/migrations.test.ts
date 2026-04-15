@@ -264,3 +264,22 @@ describe("migrations — 005_queries_request_id", () => {
     db.close();
   });
 });
+
+describe("migrations — 009_queries_request_id_index", () => {
+  it("creates idx_queries_request_id on queries(request_id)", () => {
+    const db = new Database(":memory:");
+    applyMigrations(db);
+    const idx = db
+      .prepare(
+        "SELECT name, tbl_name FROM sqlite_master WHERE type='index' AND name=?"
+      )
+      .get("idx_queries_request_id") as { name: string; tbl_name: string } | undefined;
+    expect(idx).toBeDefined();
+    expect(idx?.tbl_name).toBe("queries");
+    const info = db
+      .prepare("PRAGMA index_info(idx_queries_request_id)")
+      .all() as { name: string }[];
+    expect(info.map((c) => c.name)).toEqual(["request_id"]);
+    db.close();
+  });
+});
