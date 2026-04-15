@@ -78,4 +78,13 @@ describe("verifyToken — aid claim", () => {
     const parsed = JSON.parse(jsonStr) as Record<string, unknown>;
     expect("aid" in parsed).toBe(false);
   });
+
+  it("rejects a token whose aid is a non-string value as malformed", async () => {
+    // Mint a token where aid is a number — the payload type is Record-shaped
+    // for this test so we bypass TypeScript's string constraint; on the wire
+    // anyone could craft this JSON and present it.
+    const malformed = { ...basePayload(), aid: 123 } as unknown as TokenPayload;
+    const token = await mintToken(malformed, KEY);
+    await expect(verifyToken(token, KEY)).rejects.toBe("malformed");
+  });
 });
