@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { verifyContinuationToken, getSigningKey } from "../lib/continuationToken.js";
 import { getDb } from "../db.js";
+import { findByRelatedId, setOutcome } from "../repos/agentRequests.js";
 
 export const a2aRouter = Router();
 
@@ -48,6 +49,11 @@ a2aRouter.post("/a2a/confirm", (req: Request, res: Response) => {
     .run(payload.ticket, payload.business_slug);
 
   if (upd.changes === 1) {
+    // Backfill: stamp 'reservation_confirmed' on the originating audit row so
+    // the rollup attributes the conversion to the agent that called reserve_slot.
+    // Best-effort — a missing row (anonymous reserve_slot, or older data) is fine.
+    const ar = findByRelatedId(getDb(), payload.ticket);
+    if (ar) setOutcome(getDb(), { id: ar.id, outcomeSignal: "reservation_confirmed" });
     return res.status(200).json({ reservation_id: payload.ticket, status: "confirmed" });
   }
 
@@ -74,6 +80,12 @@ a2aRouter.post("/a2a/continue/:token", (req: Request, res: Response) => {
   if (payload.scope !== "continue") {
     return res.status(401).json({ error: "wrong_scope" });
   }
+  // Backfill: stamp 'handoff_completed' on the originating audit row so the
+  // rollup can credit the agent that initiated the handoff for actually
+  // following through on the continuation. Best-effort — same anonymity caveat
+  // as /a2a/confirm above.
+  const ar = findByRelatedId(getDb(), payload.ticket);
+  if (ar) setOutcome(getDb(), { id: ar.id, outcomeSignal: "handoff_completed" });
   return res.status(200).json({
     ticket: payload.ticket,
     business_slug: payload.business_slug,
