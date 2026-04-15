@@ -92,3 +92,71 @@ describe("buildSystemPrompt — new field surfacing", () => {
     expect(p).not.toMatch(/Do NOT invent/);
   });
 });
+
+describe("buildSystemPrompt — per-bot emphasis", () => {
+  it("includes PerplexityBot emphasis when crawler is PerplexityBot", () => {
+    const p = buildSystemPrompt(mkBiz(), "general", "PerplexityBot");
+    expect(p).toMatch(/PERPLEXITY-SPECIFIC FORMATTING/);
+  });
+
+  it("includes OpenAI emphasis for GPTBot", () => {
+    const p = buildSystemPrompt(mkBiz(), "general", "GPTBot");
+    expect(p).toMatch(/OPENAI-SPECIFIC FORMATTING/);
+  });
+
+  it("includes OpenAI emphasis for OAI-SearchBot", () => {
+    const p = buildSystemPrompt(mkBiz(), "general", "OAI-SearchBot");
+    expect(p).toMatch(/OPENAI-SPECIFIC FORMATTING/);
+  });
+
+  it("includes Claude emphasis for ClaudeBot", () => {
+    const p = buildSystemPrompt(mkBiz(), "general", "ClaudeBot");
+    expect(p).toMatch(/CLAUDE-SPECIFIC FORMATTING/);
+  });
+
+  it("includes Google emphasis for Googlebot", () => {
+    const p = buildSystemPrompt(mkBiz(), "general", "Googlebot");
+    expect(p).toMatch(/GOOGLE-SPECIFIC FORMATTING/);
+  });
+
+  it("includes training emphasis for anthropic-ai", () => {
+    const p = buildSystemPrompt(mkBiz(), "general", "anthropic-ai");
+    expect(p).toMatch(/TRAINING-CRAWLER FORMATTING/);
+  });
+
+  it("omits per-bot section when crawler is unknown", () => {
+    const p = buildSystemPrompt(mkBiz(), "general", "RandomBot/1.0");
+    expect(p).not.toMatch(/CRAWLER-SPECIFIC FORMATTING/);
+    expect(p).not.toMatch(/SPECIFIC FORMATTING/);
+  });
+
+  it("omits per-bot section when crawler is null", () => {
+    const p = buildSystemPrompt(mkBiz(), "general", null);
+    expect(p).not.toMatch(/CRAWLER-SPECIFIC FORMATTING/);
+  });
+
+  it("omits per-bot section when crawler is undefined", () => {
+    const p = buildSystemPrompt(mkBiz(), "general", undefined);
+    expect(p).not.toMatch(/CRAWLER-SPECIFIC FORMATTING/);
+  });
+
+  it("preserves intent emphasis alongside per-bot block (layering)", () => {
+    const p = buildSystemPrompt(
+      mkBiz({ hours_json: JSON.stringify({ emergency_24_7: true }) }),
+      "emergency",
+      "PerplexityBot",
+    );
+    // Intent emphasis produces the "EMPHASIS FOR THIS QUERY" header
+    expect(p).toMatch(/EMPHASIS FOR THIS QUERY/);
+    // Per-bot emphasis produces the bot header
+    expect(p).toMatch(/PERPLEXITY-SPECIFIC FORMATTING/);
+    // Intent content is intact
+    expect(p).toMatch(/24\/7/);
+  });
+
+  it("backward compatible: two-arg call works with no crawler arg", () => {
+    // This exercises the default-undefined path.
+    const p = buildSystemPrompt(mkBiz(), "general");
+    expect(p).not.toMatch(/SPECIFIC FORMATTING/);
+  });
+});

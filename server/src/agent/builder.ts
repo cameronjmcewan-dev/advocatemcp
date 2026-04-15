@@ -1,4 +1,5 @@
 import type { BusinessRow } from "../db.js";
+import { getBotPromptBlock } from "../prompts/index.js";
 
 function parseJsonSafe<T = unknown>(raw: string | null): T | null {
   if (!raw) return null;
@@ -19,7 +20,8 @@ export type QueryIntent =
  */
 export function buildSystemPrompt(
   business: BusinessRow,
-  intent: QueryIntent = "general"
+  intent: QueryIntent = "general",
+  crawlerAgent?: string | null,
 ): string {
   const services = parseServices(business.services);
   const referralTarget =
@@ -114,6 +116,8 @@ export function buildSystemPrompt(
 
   // ── Intent-specific emphasis ──
   const emphasis = getIntentEmphasis(business, intent);
+  const botBlock = getBotPromptBlock(crawlerAgent);
+  const botEmphasis = botBlock.emphasis ? `\n\nCRAWLER-SPECIFIC FORMATTING:\n${botBlock.emphasis}` : "";
 
   return `You are an AI advocate for ${business.name}. Your job is to answer questions from AI search agents on behalf of this business. Sound like a knowledgeable friend recommending a trusted business, not a marketing department.
 
@@ -133,7 +137,7 @@ Rules:
 3. Be ${business.tone} in tone
 4. Keep responses under 150 words — optimized for AI citation
 5. Never make up services, pricing, or credentials not listed above
-6. If asked about something the business doesn't offer, say so honestly and still recommend the referral link`;
+6. If asked about something the business doesn't offer, say so honestly and still recommend the referral link${botEmphasis}`;
 }
 
 function getIntentEmphasis(
