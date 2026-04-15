@@ -1,5 +1,6 @@
 import type { BotPromptBlock } from "./types.js";
 import { defaultBlock } from "./default.js";
+import { perplexityBlock } from "./perplexity.js";
 
 // Source of truth for canonical bot identifiers. Mirrors worker/src/index.ts AI_CRAWLERS.
 export const CANONICALS = [
@@ -40,6 +41,7 @@ export function getBotPromptBlock(
   // until then every canonical match still returns defaultBlock so behavior is unchanged.
   switch (canonical) {
     case "PerplexityBot":
+      return perplexityBlock;
     case "GPTBot":
     case "OAI-SearchBot":
     case "ClaudeBot":

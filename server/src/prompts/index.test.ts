@@ -21,24 +21,25 @@ describe("getBotPromptBlock dispatch", () => {
   it("is case-insensitive for canonical names", () => {
     const a = getBotPromptBlock("PerplexityBot");
     const b = getBotPromptBlock("perplexitybot");
-    expect(a.name).toBe(b.name);
+    expect(a.name).toBe("perplexity");
+    expect(b.name).toBe("perplexity");
   });
 
   it("tolerates a full UA string containing the canonical name", () => {
     const b = getBotPromptBlock("Mozilla/5.0 PerplexityBot/1.0");
-    expect(b.name).toBe("default"); // in Task 1, everything returns default
+    expect(b.name).toBe("perplexity");
   });
 
   it("matches canonical name at the end of a UA string", () => {
     const b = getBotPromptBlock("bot-version=/something PerplexityBot");
-    expect(b.name).toBe("default"); // Task 1: every match returns default
+    expect(b.name).toBe("perplexity");
   });
 
   it("picks the first canonical that appears when multiple match", () => {
     // CANONICALS order is: PerplexityBot, GPTBot, OAI-SearchBot, ...
     // A string with both PerplexityBot and GPTBot should resolve to PerplexityBot.
     const b = getBotPromptBlock("PerplexityBot GPTBot");
-    expect(b.name).toBe("default"); // Task 1: both canonicals return default; dispatch precedence asserted in Task 2+
+    expect(b.name).toBe("perplexity");
   });
 
   it("handles very long UA strings without catastrophic slowdown", () => {
@@ -46,7 +47,17 @@ describe("getBotPromptBlock dispatch", () => {
     const start = performance.now();
     const b = getBotPromptBlock(longUa);
     const elapsed = performance.now() - start;
-    expect(b.name).toBe("default");
+    expect(b.name).toBe("perplexity");
     expect(elapsed).toBeLessThan(50); // indexOf-based includes() is linear, not regex
+  });
+
+  it("dispatches PerplexityBot to perplexity module", () => {
+    const b = getBotPromptBlock("PerplexityBot");
+    expect(b.name).toBe("perplexity");
+  });
+
+  it("dispatches a PerplexityBot UA string to perplexity module", () => {
+    const b = getBotPromptBlock("Mozilla/5.0 PerplexityBot/1.0");
+    expect(b.name).toBe("perplexity");
   });
 });
