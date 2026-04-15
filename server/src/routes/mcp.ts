@@ -145,14 +145,24 @@ export function createMcpServer(requestId?: string): McpServer {
   // and agent frameworks that opted in) get the full tool/transport surface
   // in one round trip with no second HTTP call.
   const underlying = server.server;
-  const originalInit = (underlying as unknown as {
+  const handlers = (underlying as unknown as {
     _requestHandlers: Map<string, (req: unknown, extra: unknown) => Promise<unknown>>;
-  })._requestHandlers.get("initialize");
+  })._requestHandlers;
+  const originalInit = handlers.get("initialize");
 
-  (underlying as unknown as {
-    _requestHandlers: Map<string, (req: unknown, extra: unknown) => Promise<unknown>>;
-  })._requestHandlers.set("initialize", async (req: unknown, extra: unknown) => {
-    const result = (await originalInit!(req, extra)) as Record<string, unknown>;
+  // The MCP SDK currently registers `initialize` in McpServer's constructor,
+  // but an SDK upgrade could move it to connect(). Guard against that so we
+  // skip the wrapper cleanly instead of booting with a silent null-deref.
+  if (!originalInit) {
+    console.warn(
+      "[mcp] initialize handler not registered at createMcpServer() time; " +
+        "skipping _meta.advocatemcp wrapper. Check @modelcontextprotocol/sdk version."
+    );
+    return server;
+  }
+
+  handlers.set("initialize", async (req: unknown, extra: unknown) => {
+    const result = (await originalInit(req, extra)) as Record<string, unknown>;
     const apiBase = BASE();
     return {
       ...result,
