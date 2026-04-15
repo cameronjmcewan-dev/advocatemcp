@@ -12,6 +12,7 @@ import {
   type JsonSchemaNode,
   type Manifest,
 } from "./schema.js";
+import { getApiBaseUrl } from "../lib/baseUrl.js";
 import {
   PER_IP_LIMIT_PER_MINUTE,
   PER_API_KEY_LIMIT_PER_HOUR,
@@ -221,7 +222,7 @@ export function buildManifest(opts: BuildManifestOptions): Manifest {
   return m;
 }
 
-const API_BASE = process.env.API_BASE_URL ?? "https://api.advocatemcp.com";
+const API_BASE = getApiBaseUrl();
 const TRACK_BASE =
   process.env.WORKER_BASE_URL ?? "https://customers.advocatemcp.com";
 

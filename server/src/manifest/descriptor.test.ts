@@ -240,8 +240,11 @@ describe("transports — explicit wiring", () => {
     ]);
   });
 
-  it("MANIFEST.transports URLs use API_BASE_URL env var (or the default)", () => {
-    const expected = process.env.API_BASE_URL ?? "https://api.advocatemcp.com";
+  it("MANIFEST.transports URLs use API_BASE_URL env var (or the localhost dev fallback)", () => {
+    // Mirrors getApiBaseUrl(): env value if set, otherwise the dev/test fallback
+    // localhost:3000. The "https://api.advocatemcp.com" placeholder used in the
+    // pre-Apr-15 fallback is gone — see server/src/lib/baseUrl.ts.
+    const expected = process.env.API_BASE_URL ?? "http://localhost:3000";
     expect(MANIFEST.transports[0].url).toBe(`${expected}/mcp`);
     expect(MANIFEST.transports[1].url).toBe(`${expected}/mcp`);
   });

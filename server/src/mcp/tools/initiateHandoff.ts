@@ -7,9 +7,10 @@ import { initiateHandoffInput } from "../../manifest/tools.js";
 import { mintContinuationToken, getSigningKey } from "../../lib/continuationToken.js";
 import { sendSms, sendEmail } from "../../lib/notify.js";
 import { withAgentRequestLog } from "../../lib/agentRequestLogger.js";
+import { getApiBaseUrl } from "../../lib/baseUrl.js";
 
 function apiBase(): string {
-  return process.env.API_BASE_URL ?? "https://api.advocatemcp.com";
+  return getApiBaseUrl();
 }
 
 interface LeadRouting {

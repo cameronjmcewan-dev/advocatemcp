@@ -1,10 +1,11 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { getDb } from "../db.js";
+import { getApiBaseUrl } from "../lib/baseUrl.js";
 
 export const wellknownRouter = Router();
 
-const BASE = () => process.env.API_BASE_URL ?? "https://api.advocatemcp.com";
+const BASE = () => getApiBaseUrl();
 
 /**
  * GET /.well-known/ai-agent.json

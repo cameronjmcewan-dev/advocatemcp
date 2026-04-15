@@ -15,10 +15,11 @@ import { registerReserveSlot } from "../mcp/tools/reserveSlot.js";
 import { registerInitiateHandoff } from "../mcp/tools/initiateHandoff.js";
 import { resolveAgentId } from "../lib/agentIdentity.js";
 import { withAgentRequestLog } from "../lib/agentRequestLogger.js";
+import { getApiBaseUrl } from "../lib/baseUrl.js";
 
 export const mcpRouter = Router();
 
-const BASE = () => process.env.API_BASE_URL ?? "https://api.advocatemcp.com";
+const BASE = () => getApiBaseUrl();
 
 /**
  * Create a fully-configured McpServer instance.
