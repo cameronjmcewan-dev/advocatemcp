@@ -57,3 +57,16 @@ describe("requestIdMiddleware", () => {
     expect(resp.body.id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
   });
 });
+
+describe("requestIdMiddleware — integration with the real app stack", () => {
+  it("/health returns an x-advocate-request-id header", async () => {
+    // Ensure the in-memory test DB path is configured before app import
+    process.env.DATABASE_PATH ??= ":memory:";
+    process.env.ANTHROPIC_API_KEY ??= "test-key";
+    const { createTestApp } = await import("../testApp.js");
+    const app = createTestApp();
+    const resp = await request(app).get("/health");
+    expect(resp.status).toBe(200);
+    expect(resp.headers[REQUEST_ID_HEADER.toLowerCase()]).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+  });
+});
