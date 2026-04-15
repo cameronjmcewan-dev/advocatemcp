@@ -14,6 +14,7 @@ import { registerGetQuote } from "../mcp/tools/getQuote.js";
 import { registerReserveSlot } from "../mcp/tools/reserveSlot.js";
 import { registerInitiateHandoff } from "../mcp/tools/initiateHandoff.js";
 import { resolveAgentId } from "../lib/agentIdentity.js";
+import { withAgentRequestLog } from "../lib/agentRequestLogger.js";
 
 export const mcpRouter = Router();
 
@@ -39,57 +40,70 @@ export function createMcpServer(requestId?: string, req?: Request): McpServer {
       "Returns a concise, citation-ready answer from the business's dedicated AI agent.",
     queryBusinessAgentInput.shape,
     async ({ slug, query, agent_id, stage }) => {
-      const db = getDb();
-      const business = db
-        .prepare("SELECT * FROM businesses WHERE slug = ?")
-        .get(slug) as BusinessRow | undefined;
+      const run = async () => {
+        const db = getDb();
+        const business = db
+          .prepare("SELECT * FROM businesses WHERE slug = ?")
+          .get(slug) as BusinessRow | undefined;
 
-      if (!business) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({
-                error: `No business found with slug: ${slug}`,
-                hint: "Use the search_businesses tool to find the correct slug.",
-              }),
-            },
-          ],
-          isError: true,
-        };
-      }
+        if (!business) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  error: `No business found with slug: ${slug}`,
+                  hint: "Use the search_businesses tool to find the correct slug.",
+                }),
+              },
+            ],
+            isError: true,
+          };
+        }
 
-      // Session 10: header-asserted agent identity wins over tool-arg.
-      // resolveAgentId returns undefined when neither is set, which queryAgent
-      // forwards as null into the queries.agent_id column.
-      const resolvedAgentId = req ? resolveAgentId(req, agent_id) : agent_id;
+        // Session 10: header-asserted agent identity wins over tool-arg.
+        // resolveAgentId returns undefined when neither is set, which queryAgent
+        // forwards as null into the queries.agent_id column.
+        const resolvedAgentId = req ? resolveAgentId(req, agent_id) : agent_id;
 
-      try {
-        const result = await queryAgent(
-          business,
-          query,
-          "mcp-client",
+        try {
+          const result = await queryAgent(
+            business,
+            query,
+            "mcp-client",
+            requestId,
+            resolvedAgentId,
+            stage,
+          );
+          return {
+            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          };
+        } catch (err) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  error: "Agent query failed",
+                  message: err instanceof Error ? err.message : "Unknown error",
+                }),
+              },
+            ],
+            isError: true,
+          };
+        }
+      };
+      if (!req) return run();
+      return withAgentRequestLog(
+        {
+          toolName: "query_business_agent",
+          req,
           requestId,
-          resolvedAgentId,
-          stage,
-        );
-        return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-        };
-      } catch (err) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({
-                error: "Agent query failed",
-                message: err instanceof Error ? err.message : "Unknown error",
-              }),
-            },
-          ],
-          isError: true,
-        };
-      }
+          toolArgAgentId: agent_id ?? null,
+          businessSlug: slug,
+        },
+        run,
+      );
     }
   );
 
@@ -101,6 +115,7 @@ export function createMcpServer(requestId?: string, req?: Request): McpServer {
       "Use this to discover which businesses are available before querying one.",
     searchBusinessesInput.shape,
     async ({ search, location }) => {
+      const run = async () => {
       const db = getDb();
       const base = BASE();
       const term = `%${search}%`;
@@ -154,20 +169,32 @@ export function createMcpServer(requestId?: string, req?: Request): McpServer {
             "Try a broader search term or omit the location filter.";
 
       return { content: [{ type: "text", text }] };
+      };
+      if (!req) return run();
+      return withAgentRequestLog(
+        {
+          toolName: "search_businesses",
+          req,
+          requestId,
+          toolArgAgentId: null,
+          businessSlug: null,
+        },
+        run,
+      );
     }
   );
 
   // ── Tool 3: get_availability ──────────────────────────────────────────────
-  registerGetAvailability(server);
+  registerGetAvailability(server, req, requestId);
 
   // ── Tool 4: get_quote ─────────────────────────────────────────────────────
-  registerGetQuote(server);
+  registerGetQuote(server, req, requestId);
 
   // ── Tool 5: reserve_slot ──────────────────────────────────────────────────
-  registerReserveSlot(server);
+  registerReserveSlot(server, req, requestId);
 
   // ── Tool 6: initiate_handoff ──────────────────────────────────────────────
-  registerInitiateHandoff(server);
+  registerInitiateHandoff(server, req, requestId);
 
   // Decorate initialize responses with an A2A manifest summary under `_meta`.
   // MCP clients that don't understand `_meta` ignore it; clients that do (ours

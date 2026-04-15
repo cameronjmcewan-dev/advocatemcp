@@ -1,8 +1,10 @@
 import { z } from "zod";
+import type { Request } from "express";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getDb } from "../../db.js";
 import { getQuoteInput } from "../../manifest/tools.js";
 import { callClaude } from "../../lib/anthropic.js";
+import { withAgentRequestLog } from "../../lib/agentRequestLogger.js";
 
 export interface PricingRange {
   service: string;
@@ -133,11 +135,27 @@ export async function handleGetQuote(
   return { content: [{ type: "text", text: JSON.stringify({ quote: null, reason: "llm_unavailable" }) }] };
 }
 
-export function registerGetQuote(server: McpServer): void {
+export function registerGetQuote(
+  server: McpServer,
+  req?: Request,
+  requestId?: string,
+): void {
   server.tool(
     "get_quote",
     "Quote price for a service at a business. Deterministic lookup of pricing_json_v2.ranges[]; LLM fallback on miss, labelled 'estimate' with disclaimer.",
     getQuoteInput.shape,
-    async (args) => handleGetQuote(args)
+    async (args) => {
+      if (!req) return handleGetQuote(args);
+      return withAgentRequestLog(
+        {
+          toolName: "get_quote",
+          req,
+          requestId,
+          toolArgAgentId: null,
+          businessSlug: args.slug,
+        },
+        () => handleGetQuote(args),
+      );
+    }
   );
 }
