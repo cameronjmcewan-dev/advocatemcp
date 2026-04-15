@@ -8,6 +8,7 @@ import {
   queryBusinessAgentInput,
   searchBusinessesInput,
 } from "../manifest/tools.js";
+import { MANIFEST } from "../manifest/descriptor.js";
 
 export const mcpRouter = Router();
 
@@ -138,6 +139,39 @@ function createMcpServer(requestId?: string): McpServer {
       return { content: [{ type: "text", text }] };
     }
   );
+
+  // Decorate initialize responses with an A2A manifest summary under `_meta`.
+  // MCP clients that don't understand `_meta` ignore it; clients that do (ours
+  // and agent frameworks that opted in) get the full tool/transport surface
+  // in one round trip with no second HTTP call.
+  const underlying = server.server;
+  const originalInit = (underlying as unknown as {
+    _requestHandlers: Map<string, (req: unknown, extra: unknown) => Promise<unknown>>;
+  })._requestHandlers.get("initialize");
+
+  (underlying as unknown as {
+    _requestHandlers: Map<string, (req: unknown, extra: unknown) => Promise<unknown>>;
+  })._requestHandlers.set("initialize", async (req: unknown, extra: unknown) => {
+    const result = (await originalInit!(req, extra)) as Record<string, unknown>;
+    const apiBase = BASE();
+    return {
+      ...result,
+      _meta: {
+        ...((result._meta as Record<string, unknown>) ?? {}),
+        advocatemcp: {
+          agent_id: MANIFEST.agent_id,
+          spec_version: MANIFEST.spec_version,
+          manifest_url: `${apiBase}/.well-known/mcp.json`,
+          tools: MANIFEST.tools.map((t) => ({
+            name: t.name,
+            idempotent: t.idempotent,
+          })),
+          transports: MANIFEST.transports,
+          attribution_endpoint: MANIFEST.attribution_endpoint,
+        },
+      },
+    };
+  });
 
   return server;
 }
