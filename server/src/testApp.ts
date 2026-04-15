@@ -7,6 +7,7 @@ import { registerRouter } from "./routes/register.js";
 import { analyticsRouter } from "./routes/analytics.js";
 import { wellknownRouter } from "./routes/wellknown.js";
 import { wellknownMcpRouter } from "./routes/wellknownMcp.js";
+import { a2aRouter } from "./routes/a2a.js";
 import { rateLimitMiddleware } from "./middleware/rateLimit.js";
 import { requestIdMiddleware } from "./lib/requestId.js";
 
@@ -55,6 +56,7 @@ export function createTestApp(): express.Express {
   app.use(agentRouter);
   app.use(analyticsRouter);
   app.use(mcpRouter);
+  app.use(a2aRouter);
 
   app.get("/health", (_req, res) => {
     const db = getDb();
