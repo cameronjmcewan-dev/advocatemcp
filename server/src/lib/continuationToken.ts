@@ -14,6 +14,20 @@ export const CONTINUATION_HMAC_PREFIX = "a2a-continuation:v1:";
 
 const EXPIRY_SECONDS = 3600;
 
+/**
+ * Resolve the signing key from env. In production, missing TOKEN_SIGNING_KEY is
+ * a hard error. In dev/test, fall back to a well-known insecure key so the happy
+ * path works without env setup. All token-minting call sites should use this.
+ */
+export function getSigningKey(): string {
+  const k = process.env.TOKEN_SIGNING_KEY;
+  if (k) return k;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("TOKEN_SIGNING_KEY must be set in production");
+  }
+  return "dev-insecure-key";
+}
+
 export interface ContinuationPayload {
   ticket: string;
   business_slug: string;

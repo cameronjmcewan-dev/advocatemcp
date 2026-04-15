@@ -3,20 +3,11 @@ import { randomUUID } from "node:crypto";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getDb } from "../../db.js";
 import { reserveSlotInput } from "../../manifest/tools.js";
-import { mintContinuationToken } from "../../lib/continuationToken.js";
+import { mintContinuationToken, getSigningKey } from "../../lib/continuationToken.js";
 import { sweepExpiredReservations } from "../../jobs/expirySweeper.js";
 import type { ReservationRow } from "../../db.js";
 
 const HOLD_SECONDS = 900; // 15 min
-
-function signingKey(): string {
-  const k = process.env.TOKEN_SIGNING_KEY;
-  if (k) return k;
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("TOKEN_SIGNING_KEY must be set in production");
-  }
-  return "dev-insecure-key";
-}
 
 export async function handleReserveSlot(
   input: z.infer<typeof reserveSlotInput>
@@ -44,7 +35,7 @@ export async function handleReserveSlot(
         agent_id: existing.agent_id ?? undefined,
         scope: "confirm",
       },
-      signingKey()
+      getSigningKey()
     );
     return {
       content: [
@@ -72,25 +63,65 @@ export async function handleReserveSlot(
       agent_id: input.agent_id,
       scope: "confirm",
     },
-    signingKey()
+    getSigningKey()
   );
 
-  db.prepare(`
-    INSERT INTO reservations (id, business_slug, agent_id, requested_at, window_start, window_end,
-      status, confirmation_token, customer_contact_json, idempotency_key, expires_at)
-    VALUES (?, ?, ?, ?, ?, ?, 'held', ?, ?, ?, ?)
-  `).run(
-    reservation_id,
-    input.slug,
-    input.agent_id ?? null,
-    now,
-    input.window_start,
-    input.window_end,
-    confirmation_token,
-    JSON.stringify(input.customer_contact),
-    input.idempotency_key,
-    expires_at
-  );
+  // Race guard: two concurrent callers with the same idempotency_key can both
+  // pass the SELECT above and race to INSERT. The UNIQUE constraint will throw
+  // SQLITE_CONSTRAINT_UNIQUE on the loser. Catch it and re-SELECT — the winner's
+  // row is now visible, so we return the idempotent replay shape rather than
+  // surfacing a 500 to the caller.
+  try {
+    db.prepare(`
+      INSERT INTO reservations (id, business_slug, agent_id, requested_at, window_start, window_end,
+        status, confirmation_token, customer_contact_json, idempotency_key, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'held', ?, ?, ?, ?)
+    `).run(
+      reservation_id,
+      input.slug,
+      input.agent_id ?? null,
+      now,
+      input.window_start,
+      input.window_end,
+      confirmation_token,
+      JSON.stringify(input.customer_contact),
+      input.idempotency_key,
+      expires_at
+    );
+  } catch (err) {
+    const code = (err as { code?: string } | null)?.code;
+    if (code === "SQLITE_CONSTRAINT_UNIQUE") {
+      const won = db
+        .prepare(`SELECT * FROM reservations WHERE idempotency_key = ?`)
+        .get(input.idempotency_key) as ReservationRow | undefined;
+      if (won) {
+        const replayToken = mintContinuationToken(
+          {
+            ticket: won.id,
+            business_slug: won.business_slug,
+            agent_id: won.agent_id ?? undefined,
+            scope: "confirm",
+          },
+          getSigningKey()
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                reservation_id: won.id,
+                status: won.status,
+                confirmation_token: replayToken,
+                expires_at: won.expires_at,
+                idempotent_replay: true,
+              }),
+            },
+          ],
+        };
+      }
+    }
+    throw err;
+  }
 
   return {
     content: [

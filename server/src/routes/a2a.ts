@@ -1,18 +1,9 @@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
-import { verifyContinuationToken } from "../lib/continuationToken.js";
+import { verifyContinuationToken, getSigningKey } from "../lib/continuationToken.js";
 import { getDb } from "../db.js";
 
 export const a2aRouter = Router();
-
-function signingKey(): string {
-  const k = process.env.TOKEN_SIGNING_KEY;
-  if (k) return k;
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("TOKEN_SIGNING_KEY must be set in production");
-  }
-  return "dev-insecure-key";
-}
 
 /**
  * Map a thrown token-verification error to (HTTP code, reason string).
@@ -39,7 +30,7 @@ a2aRouter.post("/a2a/confirm", (req: Request, res: Response) => {
   }
   let payload;
   try {
-    payload = verifyContinuationToken(parsed.data.confirmation_token, signingKey());
+    payload = verifyContinuationToken(parsed.data.confirmation_token, getSigningKey());
   } catch (err) {
     const { code, reason } = mapTokenError(err);
     return res.status(code).json({ error: reason });
@@ -75,7 +66,7 @@ a2aRouter.post("/a2a/confirm", (req: Request, res: Response) => {
 a2aRouter.post("/a2a/continue/:token", (req: Request, res: Response) => {
   let payload;
   try {
-    payload = verifyContinuationToken(req.params.token ?? "", signingKey());
+    payload = verifyContinuationToken(req.params.token ?? "", getSigningKey());
   } catch (err) {
     const { code, reason } = mapTokenError(err);
     return res.status(code).json({ error: reason });

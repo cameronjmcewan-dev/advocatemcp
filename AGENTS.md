@@ -101,6 +101,13 @@ zero cross-use attack surface.
 - Email: deferred to v1.x — SES via AWS SigV4 is >200 lines hand-rolled and the
   project forbids new SDK dependencies without approval.
 
+Human-mode `initiate_handoff` adds one upstream reason: if the business's
+`lead_routing_json` does not configure a recipient for the preferred channel
+(e.g. `{"preferred":"sms"}` with no `sms_to`), the handoff short-circuits with
+`{delivered:false, reason:"no_recipient_configured", channel}` **without**
+calling the notify adapter. The audit row is still written to `handoffs` so
+the failed attempt is visible in analytics.
+
 ### Idempotency
 
 `reserve_slot` is the only tool with mutation-idempotency — repeated calls with

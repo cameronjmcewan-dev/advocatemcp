@@ -57,6 +57,30 @@ describe("POST /a2a/confirm", () => {
     expect(res.status).toBe(400);
   });
 
+  it("returns 409 not_confirmable with current_status:'expired' when the sweeper has flipped the row", async () => {
+    // Seed a 'held' row with a past expires_at, then a separate 'expired' row
+    // to simulate the sweeper having already run. Reuse the existing token
+    // (scope:'confirm'). Confirm route sees a row that exists but is not 'held',
+    // returns 409 with the observed status, and does NOT touch it.
+    const { getDb } = await import("../db.js");
+    getDb().prepare(`
+      INSERT INTO reservations (id, business_slug, requested_at, window_start, window_end,
+        status, confirmation_token, customer_contact_json, idempotency_key, expires_at)
+      VALUES ('r_expired', 'acme', 1, 1, 2, 'expired', 'x', '{}', 'ik-a2a-expired', 1)
+    `).run();
+    const tok = mintContinuationToken(
+      { ticket: "r_expired", business_slug: "acme", scope: "confirm" },
+      "test-key-a2a"
+    );
+    const res = await request(app).post("/a2a/confirm").send({ confirmation_token: tok });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe("not_confirmable");
+    expect(res.body.current_status).toBe("expired");
+    // Row must remain 'expired' — confirm must never resurrect an expired hold.
+    const row = getDb().prepare(`SELECT status FROM reservations WHERE id='r_expired'`).get() as { status: string };
+    expect(row.status).toBe("expired");
+  });
+
   it("returns 404 when token.business_slug does not match the reservation's owner", async () => {
     // Seed a second held reservation belonging to a different tenant.
     const { getDb } = await import("../db.js");

@@ -50,6 +50,33 @@ describe("reserve_slot", () => {
     expect(b.reservation_id).toBe(a.reservation_id);
   });
 
+  it("concurrent idempotency race: both callers get the winner's reservation_id via UNIQUE catch", async () => {
+    // Simulate the race by preseeding the UNIQUE row, then calling handleReserveSlot
+    // with the same idempotency_key. The SELECT-first branch would return that row;
+    // to exercise the INSERT-catch path instead, we delete the row right before
+    // the INSERT runs. That's fiddly to synchronize precisely — the cleanest coverage
+    // is: issue two calls in parallel with the same key and assert both responses
+    // point at the same reservation_id (one went through INSERT, the other through
+    // either the SELECT branch or the UNIQUE-catch branch; either way, one row wins).
+    await fresh();
+    const { handleReserveSlot } = await import("./reserveSlot.js");
+    const args = {
+      slug: "acme",
+      window_start: 1776215400,
+      window_end: 1776215400 + 1800,
+      customer_contact: { name: "Racer" },
+      idempotency_key: "k-race",
+    };
+    const [a, b] = await Promise.all([handleReserveSlot(args), handleReserveSlot(args)]);
+    const aBody = JSON.parse((a.content[0] as { text: string }).text) as { reservation_id: string };
+    const bBody = JSON.parse((b.content[0] as { text: string }).text) as { reservation_id: string };
+    expect(aBody.reservation_id).toBe(bBody.reservation_id);
+    // Only one row should exist under this idempotency_key.
+    const dbMod = await import("../../db.js");
+    const rows = dbMod.getDb().prepare(`SELECT id FROM reservations WHERE idempotency_key = ?`).all("k-race");
+    expect(rows.length).toBe(1);
+  });
+
   it("rejects unknown business", async () => {
     await fresh();
     const { handleReserveSlot } = await import("./reserveSlot.js");

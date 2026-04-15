@@ -3,18 +3,11 @@ import { randomUUID } from "node:crypto";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getDb } from "../../db.js";
 import { initiateHandoffInput } from "../../manifest/tools.js";
-import { mintContinuationToken } from "../../lib/continuationToken.js";
+import { mintContinuationToken, getSigningKey } from "../../lib/continuationToken.js";
 import { sendSms, sendEmail } from "../../lib/notify.js";
 
 function apiBase(): string {
   return process.env.API_BASE_URL ?? "https://api.advocatemcp.com";
-}
-
-function signingKey(): string {
-  const k = process.env.TOKEN_SIGNING_KEY;
-  if (k) return k;
-  if (process.env.NODE_ENV === "production") throw new Error("TOKEN_SIGNING_KEY must be set in production");
-  return "dev-insecure-key";
 }
 
 interface LeadRouting {
@@ -113,7 +106,7 @@ export async function handleInitiateHandoff(
   // agent mode
   const token = mintContinuationToken(
     { ticket: handoff_id, business_slug: input.slug, scope: "continue" },
-    signingKey()
+    getSigningKey()
   );
   const continuation_url = `${apiBase()}/a2a/continue/${token}`;
   const expires_at = Math.floor(Date.now() / 1000) + 3600;
