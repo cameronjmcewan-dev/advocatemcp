@@ -43,6 +43,8 @@ export interface TokenPayload {
   slug: string;      // business slug
   query_id: number;  // queries.id row that generated this token
   ts: number;        // Unix timestamp in seconds
+  aid?: string;      // optional agent id (e.g. "claude-desktop") — legacy tokens
+                     // have no aid field; verifyToken returns it as undefined.
 }
 
 /** Token rejection reasons — callers log these as structured metrics. */
@@ -130,6 +132,10 @@ export async function verifyToken(
     typeof payload.query_id !== "number" ||
     typeof payload.ts !== "number"
   ) {
+    throw "malformed" satisfies TokenError;
+  }
+  // `aid` is optional — absent on legacy tokens. If present it must be a string.
+  if (payload.aid !== undefined && typeof payload.aid !== "string") {
     throw "malformed" satisfies TokenError;
   }
 
