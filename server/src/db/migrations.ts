@@ -20,6 +20,10 @@ export function applyMigrations(db: Database.Database): void {
   `);
 
   const applied = new Set(listAppliedMigrations(db));
+  // Directory may be absent in edge cases (fresh clone before build step
+  // copies .sql files, or dev environments that skipped the copy). Treat
+  // as an empty migration set rather than throwing ENOENT.
+  if (!fs.existsSync(MIGRATIONS_DIR)) return;
   const files = fs
     .readdirSync(MIGRATIONS_DIR)
     .filter((f) => f.endsWith(".sql"))
