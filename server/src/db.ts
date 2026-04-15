@@ -141,4 +141,6 @@ export interface QueryRow {
   timestamp: string;
   intent: string | null;
   request_id: string | null;
+  agent_id: string | null;
+  stage: string | null;
 }
