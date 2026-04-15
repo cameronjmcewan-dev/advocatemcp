@@ -8,7 +8,12 @@ Last updated: 2026-04-13 (Sunday night sprint)
 ## Blockers — ship before the next real paying customer
 
 ### ~~DNS custom hostname routing~~ RESOLVED
-**Resolved in feature/dns-self-healing-activation** — self-healing reconcile on `POST /admin/domains/activate`. See `docs/dns-routing.md` for the full design, or `docs/superpowers/specs/2026-04-14-dns-self-healing-activation-design.md` for the original spec.
+**Resolved Apr 14 2026.** Root cause was not the `custom_origin_server` field alone — CF SaaS needs BOTH the per-hostname record AND a Worker Route pattern `{tenant-hostname}/*` on our zone. Without the route, CF's edge has no Worker to dispatch to and returns a fast 522 pre-origin.
+
+The self-healing reconcile on `POST /admin/domains/activate` handles piece 1. Piece 2 (the Worker Route) is currently manual via the CF dashboard until the `CF_API_TOKEN` scope gets `Workers Routes: Edit`; `POST /admin/domains/ensure-worker-route` is already wired and ready for that day. See `docs/dns-routing.md` for the full design or `docs/superpowers/specs/2026-04-14-dns-self-healing-activation-design.md` for the original spec.
+
+### CF_API_TOKEN needs Workers Routes: Edit scope
+Blocking full automation of tenant onboarding. Today the token can create/update CF SaaS custom hostnames but not Workers Routes, which forces the manual dashboard step above. To fix: edit the existing API token at dash.cloudflare.com/profile/api-tokens, add permission `Account > Workers Routes > Edit` to the same zone scope (`advocatemcp.com`). No secret rotation needed if the existing token is edited in place. Then fold a call to `POST /admin/domains/ensure-worker-route` into `activateDomain` so new tenants get the route automatically.
 
 Workman Copy Co's domain (www.workmancopyco.com) currently returns 522 for AI crawler traffic.
 The worker code is fully prepared to handle custom hostname requests (BUSINESS_MAP KV lookup,
