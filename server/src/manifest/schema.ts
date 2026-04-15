@@ -27,6 +27,9 @@ export type JsonSchemaNode =
     };
 
 export function zodToJsonSchema(node: ZodTypeAny): JsonSchemaNode {
+  // `_def` is a zod internal — stable across the 3.23 line we depend on. If
+  // zod v4 renames `typeName`, this converter fails loudly at test time via
+  // the unsupported-type throw below rather than silently emitting wrong JSON.
   const def = node._def as {
     typeName: string;
     description?: string;
