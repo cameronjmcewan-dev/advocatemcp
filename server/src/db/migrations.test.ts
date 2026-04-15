@@ -114,3 +114,15 @@ describe("migrations runner", () => {
     expect(() => applyMigrations(db)).not.toThrow();
   });
 });
+
+describe("migrations — 005_queries_request_id", () => {
+  it("adds a request_id TEXT column to the queries table", () => {
+    const db = new Database(":memory:");
+    applyMigrations(db);
+    const cols = db.prepare("PRAGMA table_info(queries)").all() as { name: string; type: string }[];
+    const col = cols.find((c) => c.name === "request_id");
+    expect(col).toBeDefined();
+    expect(col?.type).toBe("TEXT");
+    db.close();
+  });
+});
