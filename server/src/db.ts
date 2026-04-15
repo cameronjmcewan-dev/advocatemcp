@@ -106,4 +106,5 @@ export interface QueryRow {
   referral_clicked: number;
   timestamp: string;
   intent: string | null;
+  request_id: string | null;
 }
