@@ -1,0 +1,138 @@
+/* ═══════════════════════════════════════════════════════════════
+   AdvocateMCP Design Tokens — generated from tokens.json
+   Single source of truth for Webflow (marketing) + dashboard.
+   Brand: maroon #7d2550 — replaces all legacy teal.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Font faces (self-hosted WOFF2) ──────────────────────────── */
+@font-face {
+  font-family: 'Instrument Serif';
+  src: url('fonts/InstrumentSerif-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Instrument Serif';
+  src: url('fonts/InstrumentSerif-Italic.woff2') format('woff2');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'General Sans';
+  src: url('fonts/GeneralSans-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'General Sans';
+  src: url('fonts/GeneralSans-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'General Sans';
+  src: url('fonts/GeneralSans-Semibold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('fonts/JetBrainsMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('fonts/JetBrainsMono-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ── Color tokens ────────────────────────────────────────────── */
+:root {
+  --bg:              #13100f;
+  --surface:         #1a1715;
+  --surface-raised:  #221e1c;
+  --border:          #2a2622;
+  --border-strong:   #3a3430;
+  --text-primary:    #ece7e2;
+  --text-secondary:  #a49c94;
+  --text-muted:      #6c655f;
+  --accent:          #7d2550;
+  --accent-hover:    #8f2d5d;
+  --accent-dim:      rgba(125,37,80,0.10);
+  --accent-ring:     rgba(125,37,80,0.24);
+  --success:         #3ea572;
+  --warning:         #d9a23e;
+  --danger:          #c9465a;
+  --info:            #5a93c0;
+
+  /* ── Radius ──────────────────────────────────────────────── */
+  --r-xs:   4px;
+  --r-sm:   8px;
+  --r-md:   12px;
+  --r-lg:   16px;
+  --r-pill: 999px;
+
+  /* ── Spacing ─────────────────────────────────────────────── */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+  --s-8: 64px;
+  --s-9: 96px;
+
+  /* ── Typography ──────────────────────────────────────────── */
+  --font-display: 'Instrument Serif', Georgia, serif;
+  --font-body:    'General Sans', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, monospace;
+
+  --tx-xs:   clamp(12px, 0.75rem + 0.1vw, 13px);
+  --tx-sm:   clamp(13px, 0.8rem + 0.15vw, 14px);
+  --tx-base: clamp(15px, 0.9rem + 0.2vw, 16px);
+  --tx-lg:   clamp(17px, 1rem + 0.3vw, 18px);
+  --tx-xl:   clamp(20px, 1.15rem + 0.5vw, 22px);
+  --tx-2xl:  clamp(28px, 1.6rem + 1.2vw, 36px);
+  --tx-3xl:  clamp(40px, 2.2rem + 2.5vw, 64px);
+
+  --h1: clamp(3.5rem, 4.5vw, 5rem);
+  --h2: clamp(2.25rem, 3vw, 3rem);
+  --h3: clamp(1.5rem, 1.8vw, 1.75rem);
+
+  /* ── Shadows ─────────────────────────────────────────────── */
+  --shadow-1: 0 1px 2px rgba(0,0,0,0.4);
+  --shadow-2: 0 4px 12px rgba(0,0,0,0.45);
+  --shadow-3: 0 12px 40px rgba(0,0,0,0.55);
+
+  /* ── Motion ──────────────────────────────────────────────── */
+  --motion-fast:     150ms;
+  --motion-standard: 250ms;
+  --motion-slow:     400ms;
+  --motion-ease:     cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* ── Layout ──────────────────────────────────────────────── */
+  --sidebar-w: 240px;
+  --max-w:     1200px;
+  --max-w-lg:  1400px;
+}
+
+/* ── Compat aliases (used by existing index.html/dashboard.html) */
+:root {
+  --text:       var(--text-primary);
+  --muted:      var(--text-muted);
+  --surface-2:  var(--surface-raised);
+  --green:      var(--success);
+  --yellow:     var(--warning);
+  --red:        var(--danger);
+  --font-serif: var(--font-display);
+}
