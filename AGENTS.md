@@ -115,6 +115,42 @@ the same `idempotency_key` return the existing reservation. `initiate_handoff`
 is NOT idempotent (each call writes a new `handoffs` row + notify side effect);
 agents should not retry on timeout without user consent.
 
+### PII retention on `reservations.customer_contact_json`
+
+Customer contact details on reservations are passively redacted by
+`redactStalePii()` in `server/src/jobs/expirySweeper.ts`, called alongside the
+expiry sweeper on every `reserve_slot` invocation (no cron in v1). Policy:
+
+| Reservation status | Trigger | Action |
+|---|---|---|
+| `held` | `expires_at` more than 24h in the past | Replace contact JSON with redaction sentinel |
+| `expired` | `expires_at` more than 7 days in the past | Replace contact JSON with redaction sentinel |
+| `confirmed` | `window_end` more than 90 days in the past | Replace contact JSON with redaction sentinel |
+| `rejected` | (n/a — v1 doesn't store contact on reject) | No-op |
+
+The redaction sentinel is `{"redacted":true,"redacted_at":<unix-timestamp>}` —
+parseable JSON, preserves the `NOT NULL` constraint on the column, and the
+`redacted_at` timestamp is auditable evidence of when retention fired. The
+operation is idempotent: the WHERE clause filters out rows already containing
+`"redacted":true`, so re-runs are no-ops.
+
+Tune the 90-day confirmed-row window per industry if needed (regulated
+verticals may require shorter retention; service businesses with annual
+follow-ups may want longer).
+
+### Transport advertisement (Apr 15 2026)
+
+`MANIFEST.transports[]` advertises **only** `{kind:"http", url:".../mcp"}` —
+SSE was dropped because Cloudflare/Railway closes idle SSE channels around 30s
+and we never push server-initiated events. The `/mcp` GET handler still serves
+SSE on request for backward-compat with Inspector-class clients that default
+to SSE on connect — we just don't advertise it so spec-compliant agents pick
+the transport that actually works through the proxy chain.
+
+If we ever add a streaming tool, revisit: either re-advertise SSE with a
+heartbeat interceptor on the response, or use the MCP spec's notification
+mechanism over the existing HTTP transport.
+
 ## Hard design decisions locked in for Session 8
 
 | Question | Decision | Rationale |

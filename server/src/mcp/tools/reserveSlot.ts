@@ -5,7 +5,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getDb } from "../../db.js";
 import { reserveSlotInput } from "../../manifest/tools.js";
 import { mintContinuationToken, getSigningKey } from "../../lib/continuationToken.js";
-import { sweepExpiredReservations } from "../../jobs/expirySweeper.js";
+import { sweepExpiredReservations, redactStalePii } from "../../jobs/expirySweeper.js";
 import type { ReservationRow } from "../../db.js";
 import { withAgentRequestLog } from "../../lib/agentRequestLogger.js";
 import { setOutcomeAndRelated } from "../../repos/agentRequests.js";
@@ -17,6 +17,9 @@ export async function handleReserveSlot(
 ): Promise<{ content: Array<{ type: "text"; text: string }>; isError?: boolean }> {
   const db = getDb();
   sweepExpiredReservations(db);
+  // Passive PII decay — runs alongside the expirer on every reserve_slot call
+  // so retention policy fires without a cron. See expirySweeper.ts for policy.
+  redactStalePii(db);
 
   const biz = db.prepare(`SELECT slug FROM businesses WHERE slug = ?`).get(input.slug);
   if (!biz) {
