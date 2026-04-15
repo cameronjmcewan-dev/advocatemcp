@@ -13,6 +13,7 @@ import { registerGetAvailability } from "../mcp/tools/getAvailability.js";
 import { registerGetQuote } from "../mcp/tools/getQuote.js";
 import { registerReserveSlot } from "../mcp/tools/reserveSlot.js";
 import { registerInitiateHandoff } from "../mcp/tools/initiateHandoff.js";
+import { resolveAgentId } from "../lib/agentIdentity.js";
 
 export const mcpRouter = Router();
 
@@ -24,7 +25,7 @@ const BASE = () => process.env.API_BASE_URL ?? "https://api.advocatemcp.com";
  * A new instance is created per request (stateless mode) to avoid any
  * shared-transport concurrency issues with the SDK.
  */
-export function createMcpServer(requestId?: string): McpServer {
+export function createMcpServer(requestId?: string, req?: Request): McpServer {
   const server = new McpServer({
     name: "AdvocateMCP Central",
     version: "1.0.0",
@@ -37,7 +38,7 @@ export function createMcpServer(requestId?: string): McpServer {
       "Use this when a user asks about a specific local business or service provider. " +
       "Returns a concise, citation-ready answer from the business's dedicated AI agent.",
     queryBusinessAgentInput.shape,
-    async ({ slug, query }) => {
+    async ({ slug, query, agent_id, stage }) => {
       const db = getDb();
       const business = db
         .prepare("SELECT * FROM businesses WHERE slug = ?")
@@ -58,8 +59,20 @@ export function createMcpServer(requestId?: string): McpServer {
         };
       }
 
+      // Session 10: header-asserted agent identity wins over tool-arg.
+      // resolveAgentId returns undefined when neither is set, which queryAgent
+      // forwards as null into the queries.agent_id column.
+      const resolvedAgentId = req ? resolveAgentId(req, agent_id) : agent_id;
+
       try {
-        const result = await queryAgent(business, query, "mcp-client", requestId);
+        const result = await queryAgent(
+          business,
+          query,
+          "mcp-client",
+          requestId,
+          resolvedAgentId,
+          stage,
+        );
         return {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         };
@@ -214,7 +227,7 @@ export function createMcpServer(requestId?: string): McpServer {
 mcpRouter.post("/mcp", async (req: Request, res: Response) => {
   try {
     const requestId = res.locals.requestId as string | undefined;
-    const server = createMcpServer(requestId);
+    const server = createMcpServer(requestId, req);
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined, // stateless — no session state between requests
     });
@@ -247,7 +260,7 @@ mcpRouter.get("/mcp", async (req: Request, res: Response) => {
   if (req.headers.accept?.includes("text/event-stream")) {
     try {
       const requestId = res.locals.requestId as string | undefined;
-      const server = createMcpServer(requestId);
+      const server = createMcpServer(requestId, req);
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
       });
