@@ -2,9 +2,17 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { z } from "zod";
 import { getDb, type BusinessRow } from "../db.js";
 import { queryAgent } from "../agent/query.js";
+import {
+  queryBusinessAgentInput,
+  searchBusinessesInput,
+} from "../manifest/tools.js";
+import { MANIFEST } from "../manifest/descriptor.js";
+import { registerGetAvailability } from "../mcp/tools/getAvailability.js";
+import { registerGetQuote } from "../mcp/tools/getQuote.js";
+import { registerReserveSlot } from "../mcp/tools/reserveSlot.js";
+import { registerInitiateHandoff } from "../mcp/tools/initiateHandoff.js";
 
 export const mcpRouter = Router();
 
@@ -16,7 +24,7 @@ const BASE = () => process.env.API_BASE_URL ?? "https://api.advocatemcp.com";
  * A new instance is created per request (stateless mode) to avoid any
  * shared-transport concurrency issues with the SDK.
  */
-function createMcpServer(requestId?: string): McpServer {
+export function createMcpServer(requestId?: string): McpServer {
   const server = new McpServer({
     name: "AdvocateMCP Central",
     version: "1.0.0",
@@ -28,19 +36,7 @@ function createMcpServer(requestId?: string): McpServer {
     "Query a registered business's AI advocate agent. " +
       "Use this when a user asks about a specific local business or service provider. " +
       "Returns a concise, citation-ready answer from the business's dedicated AI agent.",
-    {
-      slug: z
-        .string()
-        .min(1)
-        .describe(
-          "The business slug identifier (e.g. 'joes-pizza-austin'). " +
-            "Use search_businesses first if you don't know the slug."
-        ),
-      query: z
-        .string()
-        .min(1)
-        .describe("The user's question about this business"),
-    },
+    queryBusinessAgentInput.shape,
     async ({ slug, query }) => {
       const db = getDb();
       const business = db
@@ -90,20 +86,7 @@ function createMcpServer(requestId?: string): McpServer {
     "Search for registered businesses by category, name, or location. " +
       "Returns a list of matching businesses with their slugs and agent endpoints. " +
       "Use this to discover which businesses are available before querying one.",
-    {
-      search: z
-        .string()
-        .min(1)
-        .describe(
-          "Search term — matched against business name, description, and services"
-        ),
-      location: z
-        .string()
-        .optional()
-        .describe(
-          "Optional location filter (city, state, or region). Narrows results geographically."
-        ),
-    },
+    searchBusinessesInput.shape,
     async ({ search, location }) => {
       const db = getDb();
       const base = BASE();
@@ -160,6 +143,61 @@ function createMcpServer(requestId?: string): McpServer {
       return { content: [{ type: "text", text }] };
     }
   );
+
+  // ── Tool 3: get_availability ──────────────────────────────────────────────
+  registerGetAvailability(server);
+
+  // ── Tool 4: get_quote ─────────────────────────────────────────────────────
+  registerGetQuote(server);
+
+  // ── Tool 5: reserve_slot ──────────────────────────────────────────────────
+  registerReserveSlot(server);
+
+  // ── Tool 6: initiate_handoff ──────────────────────────────────────────────
+  registerInitiateHandoff(server);
+
+  // Decorate initialize responses with an A2A manifest summary under `_meta`.
+  // MCP clients that don't understand `_meta` ignore it; clients that do (ours
+  // and agent frameworks that opted in) get the full tool/transport surface
+  // in one round trip with no second HTTP call.
+  const underlying = server.server;
+  const handlers = (underlying as unknown as {
+    _requestHandlers: Map<string, (req: unknown, extra: unknown) => Promise<unknown>>;
+  })._requestHandlers;
+  const originalInit = handlers.get("initialize");
+
+  // The MCP SDK currently registers `initialize` in McpServer's constructor,
+  // but an SDK upgrade could move it to connect(). Guard against that so we
+  // skip the wrapper cleanly instead of booting with a silent null-deref.
+  if (!originalInit) {
+    console.warn(
+      "[mcp] initialize handler not registered at createMcpServer() time; " +
+        "skipping _meta.advocatemcp wrapper. Check @modelcontextprotocol/sdk version."
+    );
+    return server;
+  }
+
+  handlers.set("initialize", async (req: unknown, extra: unknown) => {
+    const result = (await originalInit(req, extra)) as Record<string, unknown>;
+    const apiBase = BASE();
+    return {
+      ...result,
+      _meta: {
+        ...((result._meta as Record<string, unknown>) ?? {}),
+        advocatemcp: {
+          agent_id: MANIFEST.agent_id,
+          spec_version: MANIFEST.spec_version,
+          manifest_url: `${apiBase}/.well-known/mcp.json`,
+          tools: MANIFEST.tools.map((t) => ({
+            name: t.name,
+            idempotent: t.idempotent,
+          })),
+          transports: MANIFEST.transports,
+          attribution_endpoint: MANIFEST.attribution_endpoint,
+        },
+      },
+    };
+  });
 
   return server;
 }

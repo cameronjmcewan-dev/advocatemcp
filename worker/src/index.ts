@@ -130,7 +130,7 @@ function jsonError(status: number, message: string, detail?: unknown): Response 
   );
 }
 
-function buildWellKnownResponse(
+export function buildWellKnownResponse(
   slug: string | null,
   env: Env,
   profile: Record<string, unknown> | null = null
@@ -139,9 +139,11 @@ function buildWellKnownResponse(
   const body: Record<string, unknown> = {
     spec_version: "1.0",
     spec_name: "ai-agent-discovery",
+    agent_id: slug,
     agent_endpoint: slug ? `${base}/agents/${slug}/query` : `${base}/agents/{slug}/query`,
     profile_endpoint: slug ? `${base}/agents/${slug}/profile` : null,
     mcp_endpoint: `${base}/mcp`,
+    manifest_url: `${base}/.well-known/mcp.json`,
     protocol: "advocatemcp-v1",
     capabilities: ["answer_queries", "referral", "availability"],
     crawler_instructions: slug

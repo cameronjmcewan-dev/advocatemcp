@@ -33,6 +33,12 @@ export function _resetDbForTests(): void {
   }
 }
 
+// Test-only: expose the raw better-sqlite3 handle so tests can run migrations
+// inline without importing the private module state. Not for production callers.
+export function __getRawForTest(): unknown {
+  return getDb();
+}
+
 // Retained as dead code pending full migration rollout. Once every
 // environment's DB has been stamped with the schema_migrations bootstrap
 // row (Task 7), this helper and its callers can be removed entirely. Until
@@ -95,6 +101,34 @@ export interface BusinessRow {
   guarantee_text: string | null;
   case_stories_json: string | null;
   lead_routing_json: string | null;
+}
+
+export interface ReservationRow {
+  id: string;
+  business_slug: string;
+  agent_id: string | null;
+  requested_at: number;
+  window_start: number;
+  window_end: number;
+  status: 'held' | 'confirmed' | 'rejected' | 'expired';
+  confirmation_token: string;
+  customer_contact_json: string;
+  idempotency_key: string;
+  expires_at: number;
+  created_at: number;
+}
+
+export interface HandoffRow {
+  id: string;
+  business_slug: string;
+  reservation_id: string | null;
+  mode: 'human' | 'agent';
+  delivered_via: 'sms' | 'email' | null;
+  continuation_url: string | null;
+  handshake_token: string | null;
+  ticket_id: string | null;
+  agent_id: string | null;
+  created_at: number;
 }
 
 export interface QueryRow {
