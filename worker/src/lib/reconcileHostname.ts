@@ -1,7 +1,8 @@
 /**
  * Reconcile an existing Cloudflare custom hostname record against the declared
- * spec. Compares three fields (custom_origin_server, ssl.method,
- * ssl.settings.min_tls_version); PATCHes only the drifting fields.
+ * spec. Compares two fields (custom_origin_server, ssl.settings.min_tls_version);
+ * PATCHes only the drifting fields. ssl.method and ssl.type are effectively
+ * constants across our fleet so they are excluded from the drift check.
  *
  * Fields excluded from reconciliation (CF-owned state, not desired-state):
  *   - verification / ownership_verification status
