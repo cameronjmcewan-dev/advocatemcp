@@ -112,6 +112,19 @@ export interface ReservationRow {
   created_at: number;
 }
 
+export interface HandoffRow {
+  id: string;
+  business_slug: string;
+  reservation_id: string | null;
+  mode: 'human' | 'agent';
+  delivered_via: 'sms' | 'email' | null;
+  continuation_url: string | null;
+  handshake_token: string | null;
+  ticket_id: string | null;
+  agent_id: string | null;
+  created_at: number;
+}
+
 export interface QueryRow {
   id: number;
   business_slug: string;
