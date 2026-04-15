@@ -2,6 +2,7 @@ import type { BotPromptBlock } from "./types.js";
 import { defaultBlock } from "./default.js";
 import { perplexityBlock } from "./perplexity.js";
 import { openaiBlock } from "./openai.js";
+import { claudeBlock } from "./claude.js";
 
 // Source of truth for canonical bot identifiers. Mirrors worker/src/index.ts AI_CRAWLERS.
 export const CANONICALS = [
@@ -47,6 +48,7 @@ export function getBotPromptBlock(
     case "OAI-SearchBot":
       return openaiBlock;
     case "ClaudeBot":
+      return claudeBlock;
     case "Google-Extended":
     case "Googlebot":
     case "anthropic-ai":

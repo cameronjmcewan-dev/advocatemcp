@@ -67,4 +67,8 @@ describe("getBotPromptBlock dispatch", () => {
   it("dispatches OAI-SearchBot to openai module", () => {
     expect(getBotPromptBlock("OAI-SearchBot").name).toBe("openai");
   });
+
+  it("dispatches ClaudeBot to claude module", () => {
+    expect(getBotPromptBlock("ClaudeBot").name).toBe("claude");
+  });
 });
