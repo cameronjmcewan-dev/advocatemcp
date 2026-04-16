@@ -23,6 +23,7 @@ import {
   jsonErr,
   requireAdmin,
 } from "./onboard";
+import { ensureWorkerRouteForHostname } from "./domains";
 import { signActivationToken } from "../lib/activation-token";
 import { validateOnboardingPayload } from "../lib/validateOnboarding";
 import { sendActivationEmail } from "../lib/resend";
@@ -937,20 +938,90 @@ export async function handleStripeWebhook(
   }
 
   // Transition status based on whether this tenant needs a DNS step.
-  // Wizard flow (skipDns) → straight to active, no Cloudflare custom hostname.
-  // Admin/Pro flow (default) → paid_pending_dns, then the /onboard DNS wizard.
+  //
+  // Wizard flow (skipDns) → we own the `{slug}.hosted.advocatemcp.com`
+  //   namespace, so we create a CF SaaS custom hostname ourselves + a
+  //   Workers Route so bot traffic to that subdomain hits our Worker.
+  //   Status goes straight to "active" since there's no customer DNS step.
+  //
+  // Admin/Pro flow (default) → tenant owns a custom domain; we still
+  //   create the CF SaaS hostname on our zone + a Workers Route here,
+  //   but status stays "paid_pending_dns" until the customer points their
+  //   DNS at us in the /onboard wizard (the Worker Route is harmless
+  //   until that happens — pattern matches but no requests arrive).
+  //
+  // Both CF calls are NON-FATAL by design. If CF is flaky or the token is
+  // under-scoped, the tenant still activates in D1/KV and the customer can
+  // reach their dashboard. Routing will self-heal on the next call via the
+  // admin `/admin/domains/*` endpoints or a subsequent webhook retry. The
+  // failure is logged so the operator can see what happened.
+  let cfHostnameCreated = false;
+  let cfFailureReason: string | null = null;
+
   if (tenant.skipDns === true) {
-    transitionStatus(tenant, "active", "Payment received — wizard flow, no DNS needed");
+    // Wizard flow: we provision the CF hostname for the *.hosted.advocatemcp.com
+    // subdomain and flip the tenant active. CF failures don't block activation
+    // — log + continue; the customer is paid and deserves a working dashboard.
+    try {
+      const hostnameRes = await createCfHostnameForTenant(env, tenant);
+      cfHostnameCreated = hostnameRes.created;
+    } catch (err) {
+      cfFailureReason = `createCfHostnameForTenant threw: ${String(err)}`;
+    }
+    transitionStatus(tenant, "active", "Payment received — wizard flow");
     console.log(JSON.stringify({
       onboarding: true,
       event: "public_onboard_paid_active",
       domain,
       slug: tenant.slug,
+      cf_hostname_created: cfHostnameCreated,
+      cf_failure_reason: cfFailureReason,
     }));
   } else {
     transitionStatus(tenant, "paid_pending_dns", "Payment received via Stripe Checkout");
-    // Create CF custom hostname now that payment is confirmed
-    await createCfHostnameForTenant(env, tenant);
+    try {
+      const hostnameRes = await createCfHostnameForTenant(env, tenant);
+      cfHostnameCreated = hostnameRes.created;
+    } catch (err) {
+      cfFailureReason = `createCfHostnameForTenant threw: ${String(err)}`;
+    }
+  }
+
+  // Workers Route creation is the final routing primitive — without this,
+  // CF SaaS has a hostname configured but no Worker to dispatch to (the
+  // 522 we saw in the WCC smoke test). Create it here for every paying
+  // tenant, idempotent on the CF side. Same non-fatal semantics as the
+  // hostname step above.
+  try {
+    const routeRes = await ensureWorkerRouteForHostname(env, domain);
+    if (!routeRes.ok) {
+      console.log(JSON.stringify({
+        onboarding: true,
+        event: "stripe_webhook_worker_route_failed",
+        domain,
+        slug: tenant.slug,
+        error: routeRes.error,
+        details: routeRes.details,
+      }));
+    } else {
+      console.log(JSON.stringify({
+        onboarding: true,
+        event: "stripe_webhook_worker_route_ok",
+        domain,
+        slug: tenant.slug,
+        created: routeRes.created,
+        route_id: routeRes.route_id,
+        note: routeRes.note,
+      }));
+    }
+  } catch (err) {
+    console.log(JSON.stringify({
+      onboarding: true,
+      event: "stripe_webhook_worker_route_threw",
+      domain,
+      slug: tenant.slug,
+      error: String(err),
+    }));
   }
 
   // Write KV — routing slug for BUSINESS_MAP
