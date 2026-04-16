@@ -201,7 +201,7 @@ All modules are **IIFEs** that register on `window.AMCP_SECTIONS` or expose help
 | `--border` | `#393836` | Borders |
 | `--text` | `#e8e6e3` | Body text |
 | `--muted` | `#7a7875` | Secondary text, labels |
-| `--accent` | `#7d2550` | Brand mauve (primary accent) |
+| `--accent` | `#7d2550` | Brand mauve (primary accent — migrated from teal `#4f98a3` in commit `38697a4`) |
 | `--accent-dk` | `#5c1a3c` | Darker accent (hover states) |
 | `--accent-dim` | `rgba(125,37,80,.12)` | Light accent backgrounds |
 | `--accent-ring` | `rgba(125,37,80,.25)` | Accent outlines/rings |
