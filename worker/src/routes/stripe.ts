@@ -523,6 +523,9 @@ export async function handlePublicOnboard(
   }
 
   // Fixed success/cancel URLs — always land back on the marketing brand.
+  // success_url ⇒ site/onboarding/complete.html (static page that polls
+  // GET /api/onboard/session/:session_id and renders confirmation/CTA).
+  // cancel_url ⇒ site/onboarding.html (re-entry into the wizard with a banner).
   const successUrl = "https://advocatemcp.com/onboarding/complete.html?session_id={CHECKOUT_SESSION_ID}";
   const cancelUrl  = "https://advocatemcp.com/onboarding.html?cancelled=true";
 

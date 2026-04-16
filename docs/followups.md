@@ -44,10 +44,17 @@ and verify the next webhook still fires correctly.
 
 ## Real bugs that shipped
 
-### Post-checkout redirect
-After Stripe checkout succeeds in the wizard flow, customers redirect to the marketing site
-home page instead of a proper confirmation/activation page. Need to investigate where the
-Stripe success_url is configured and what it should point at. Bug A from earlier today.
+### ~~Post-checkout redirect~~ RESOLVED
+**Resolved Apr 15 2026.** Root cause: `worker/src/routes/stripe.ts:526` set the public-wizard
+`success_url` to `https://advocatemcp.com/onboarding/complete.html?session_id=...`, but
+`site/onboarding/complete.html` did not exist on the marketing Pages site. The 404 fell through
+to the marketing index, so customers saw the home page. Fix: created the missing page as a
+single-file static asset that polls `GET /api/onboard/session/:session_id` (already exposed
+publicly for skipDns wizard tenants), shows a spinner while the Stripe webhook is in flight,
+then renders confirmation with the customer's plan + slug + a "Sign in to your dashboard"
+CTA pointing at `customers.advocatemcp.com/login`. Falls through to a graceful "payment
+received — finishing setup" state if the webhook hasn't fired within 60s, and to an explicit
+error state if the API is unreachable.
 
 ### ~~Eight hosted test tenants stuck in pending state~~ RESOLVED
 Apr 12 — cleaned 12 pending test tenants from D1, removed orphaned test user cameronjmcewan@gmail.com.

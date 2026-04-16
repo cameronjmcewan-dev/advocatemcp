@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" style="background:#171614">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="dark light" />
+<meta name="robots" content="noindex,nofollow" />
+<title>Setting up your account — Advocate</title>
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root {
+  --bg:          #171614;
+  --surface:     #1c1b19;
+  --surface-2:   #222120;
+  --border:      #393836;
+  --text:        #e8e6e3;
+  --muted:       #7a7875;
+  --accent:      #4f98a3;
+  --accent-dk:   #3d8090;
+  --accent-dim:  rgba(79,152,163,.1);
+  --accent-ring: rgba(79,152,163,.2);
+  --green:       #3fb950;
+  --yellow:      #d29922;
+  --red:         #f85149;
+
+  --font-serif: 'Instrument Serif', Georgia, serif;
+  --font-body:  'General Sans','Inter',system-ui,-apple-system,sans-serif;
+  --font-mono:  'SF Mono','Fira Code','Cascadia Code',Consolas,monospace;
+
+  --tx-xs:   .6875rem;
+  --tx-sm:   .875rem;
+  --tx-base: 1rem;
+  --tx-md:   1.0625rem;
+  --tx-lg:   1.25rem;
+
+  --r-sm:4px; --r-md:8px; --r-lg:12px; --r-xl:16px;
+}
+
+[data-theme="light"] {
+  --bg:         #f5f4f2;
+  --surface:    #ffffff;
+  --surface-2:  #efeeed;
+  --border:     #dddbd8;
+  --text:       #1a1917;
+  --muted:      #6b6967;
+  --accent:     #01696f;
+  --accent-dk:  #015861;
+  --accent-dim: rgba(1,105,111,.08);
+  --accent-ring:rgba(1,105,111,.2);
+}
+
+html{font-size:16px;-webkit-font-smoothing:antialiased;color-scheme:dark light;background:#171614}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:var(--font-body);font-size:var(--tx-base);line-height:1.6;
+  min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:24px;
+}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit;cursor:pointer;border:none;background:none}
+
+.card{
+  width:100%;max-width:520px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-xl);padding:36px 32px;
+}
+
+.logo{
+  display:flex;align-items:center;gap:8px;
+  font-size:var(--tx-sm);font-weight:600;letter-spacing:-.01em;
+  margin-bottom:28px;
+}
+
+.h{font-family:var(--font-serif);font-size:1.75rem;line-height:1.1;letter-spacing:-.02em;margin-bottom:8px}
+.sub{font-size:var(--tx-sm);color:var(--muted);margin-bottom:24px;line-height:1.6}
+
+.state-panel{display:none}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{
+  width:32px;height:32px;
+  border:2px solid var(--border);
+  border-top-color:var(--accent);
+  border-radius:50%;
+  animation:spin .7s linear infinite;
+  margin:0 auto 16px;
+}
+
+.success-badge{
+  display:flex;align-items:center;gap:8px;
+  font-size:var(--tx-sm);font-weight:600;color:var(--green);
+  margin-bottom:16px;
+}
+.success-badge svg{width:18px;height:18px}
+
+.facts{
+  background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md);
+  padding:14px 16px;margin:18px 0;
+  font-size:var(--tx-sm);
+}
+.fact-row{display:flex;justify-content:space-between;align-items:baseline;padding:4px 0}
+.fact-k{color:var(--muted)}
+.fact-v{color:var(--text);font-weight:500;font-family:var(--font-mono);font-size:.8125rem}
+
+.btn-primary{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:11px 20px;
+  font-size:var(--tx-sm);font-weight:500;
+  background:var(--accent);color:#fff;
+  border:1px solid var(--accent);border-radius:var(--r-md);
+  transition:background .15s,border-color .15s;line-height:1;
+}
+.btn-primary:hover{background:var(--accent-dk);border-color:var(--accent-dk)}
+
+.warn-icon,.err-icon{
+  width:48px;height:48px;border-radius:var(--r-lg);
+  display:flex;align-items:center;justify-content:center;margin-bottom:16px;
+}
+.warn-icon{background:rgba(210,153,34,.1);border:1px solid rgba(210,153,34,.2);color:var(--yellow)}
+.err-icon{background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.2);color:var(--red)}
+.warn-icon svg,.err-icon svg{width:24px;height:24px}
+
+.foot{text-align:center;font-size:var(--tx-sm);color:var(--muted);margin-top:20px}
+.foot a{color:var(--accent)}
+.foot a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+
+<div class="card">
+
+  <div class="logo">
+    <svg width="22" height="22" viewBox="0 0 26 26" fill="none">
+      <rect width="26" height="26" rx="6" fill="#4f98a3"/>
+      <path d="M13 6.5L20.5 20H5.5L13 6.5Z" stroke="white" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
+      <line x1="9.2" y1="15.5" x2="16.8" y2="15.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/>
+    </svg>
+    Advocate
+  </div>
+
+  <!-- ── State: no session_id in URL ── -->
+  <div id="state-no-session" class="state-panel">
+    <div class="warn-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+    </div>
+    <h1 class="h">Confirmation link missing</h1>
+    <p class="sub">
+      This page is only used after completing checkout. If you've already paid,
+      you should have received a confirmation email — check your inbox for an
+      email from Advocate.
+    </p>
+    <p style="font-size:var(--tx-sm);color:var(--muted)">
+      Need help? <a href="mailto:support@advocatemcp.com" style="color:var(--accent)">Contact support</a>.
+    </p>
+  </div>
+
+  <!-- ── State: polling for webhook ── -->
+  <div id="state-loading" class="state-panel" style="text-align:center;padding:24px 0">
+    <div class="spinner"></div>
+    <p style="font-size:var(--tx-sm);color:var(--muted)" id="loading-msg">
+      Confirming your payment with Stripe…
+    </p>
+  </div>
+
+  <!-- ── State: success ── -->
+  <div id="state-success" class="state-panel">
+    <div class="success-badge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M22 11.08V12a10 10 0 11-5.93-9.14"/>
+        <polyline points="22 4 12 14.01 9 11.01"/>
+      </svg>
+      Payment confirmed
+    </div>
+
+    <h1 class="h">You're all set.</h1>
+    <p class="sub">
+      Your AdvocateMCP account is active and ready. Sign in to your dashboard to
+      finish your business profile and watch AI crawler traffic land.
+    </p>
+
+    <div class="facts">
+      <div class="fact-row"><span class="fact-k">Plan</span><span class="fact-v" id="fact-plan">—</span></div>
+      <div class="fact-row"><span class="fact-k">Slug</span><span class="fact-v" id="fact-slug">—</span></div>
+    </div>
+
+    <a href="https://customers.advocatemcp.com/login" class="btn-primary">
+      Sign in to your dashboard →
+    </a>
+  </div>
+
+  <!-- ── State: timeout (webhook hasn't fired yet) ── -->
+  <div id="state-pending" class="state-panel">
+    <div class="warn-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <polyline points="12 6 12 12 16 14"/>
+      </svg>
+    </div>
+    <h1 class="h">Payment received — finishing setup</h1>
+    <p class="sub">
+      Stripe has confirmed your payment, but our background sync is still running.
+      This usually completes within a minute. You can sign in now — your account
+      will be ready by the time the dashboard loads.
+    </p>
+    <a href="https://customers.advocatemcp.com/login" class="btn-primary">
+      Sign in to your dashboard →
+    </a>
+  </div>
+
+  <!-- ── State: error ── -->
+  <div id="state-error" class="state-panel">
+    <div class="err-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+    </div>
+    <h1 class="h" style="margin-bottom:12px">We hit a snag</h1>
+    <p id="error-message" style="font-size:var(--tx-sm);color:var(--muted);line-height:1.7;margin-bottom:20px">
+      We couldn't confirm your payment status. Your card may still have been charged.
+      Please contact support and we'll sort it out.
+    </p>
+    <a href="mailto:support@advocatemcp.com" class="btn-primary">
+      Contact support
+    </a>
+  </div>
+
+  <p class="foot" id="foot-link" style="display:none">
+    Already signed in? <a href="https://customers.advocatemcp.com/login">Open dashboard →</a>
+  </p>
+
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  // Worker base — the API that owns Stripe sessions and tenant state.
+  // Same origin as the dashboard, different from this marketing page.
+  var API_BASE = 'https://customers.advocatemcp.com';
+
+  // Poll cadence + ceiling. Webhooks usually fire in 1–3s.
+  // 20 attempts × 3s = 60s ceiling, then we degrade gracefully to "pending".
+  var POLL_INTERVAL_MS = 3000;
+  var MAX_ATTEMPTS = 20;
+
+  function show(panelId){
+    var ids = ['state-no-session','state-loading','state-success','state-pending','state-error'];
+    for (var i=0; i<ids.length; i++){
+      var el = document.getElementById(ids[i]);
+      if (el) el.style.display = (ids[i] === panelId) ? 'block' : 'none';
+    }
+    var foot = document.getElementById('foot-link');
+    if (foot) foot.style.display = (panelId === 'state-success' || panelId === 'state-pending') ? 'block' : 'none';
+  }
+
+  function setText(id, value){
+    var el = document.getElementById(id);
+    if (el) el.textContent = value;
+  }
+
+  function isTerminalSuccess(data){
+    // Webhook has fired AND tenant has progressed past pending_payment.
+    // For skipDns wizard tenants this means status === 'active'.
+    return data && data.paymentStatus === 'paid' && data.status === 'active';
+  }
+
+  function isTerminalFailure(data){
+    // Stripe has reported a non-recoverable payment status.
+    return data && (data.paymentStatus === 'unpaid' && data.status !== 'pending_payment');
+  }
+
+  function renderSuccess(data){
+    setText('fact-plan', data.plan || 'base');
+    setText('fact-slug', data.slug || '—');
+    show('state-success');
+  }
+
+  function poll(sessionId, attempt){
+    fetch(API_BASE + '/api/onboard/session/' + encodeURIComponent(sessionId), {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+    })
+      .then(function(r){
+        if (!r.ok) {
+          // 404 right after Stripe redirect can happen if the session lookup
+          // races the webhook. Treat as transient until we exhaust attempts.
+          if (r.status === 404 && attempt < MAX_ATTEMPTS) {
+            return null;
+          }
+          throw new Error('http_' + r.status);
+        }
+        return r.json();
+      })
+      .then(function(data){
+        if (!data) {
+          // Transient miss — keep polling.
+          if (attempt < MAX_ATTEMPTS) {
+            setTimeout(function(){ poll(sessionId, attempt + 1); }, POLL_INTERVAL_MS);
+          } else {
+            show('state-pending');
+          }
+          return;
+        }
+        if (isTerminalSuccess(data)) {
+          renderSuccess(data);
+          return;
+        }
+        if (isTerminalFailure(data)) {
+          show('state-error');
+          return;
+        }
+        if (attempt < MAX_ATTEMPTS) {
+          setTimeout(function(){ poll(sessionId, attempt + 1); }, POLL_INTERVAL_MS);
+        } else {
+          // Webhook hasn't fired in the budgeted window. Don't lie to the user
+          // about confirmation, but also don't suggest the payment failed —
+          // route them to login where they'll see the real account state.
+          show('state-pending');
+        }
+      })
+      .catch(function(err){
+        // Network or unexpected status — single retry, then degrade.
+        if (attempt < 2) {
+          setTimeout(function(){ poll(sessionId, attempt + 1); }, POLL_INTERVAL_MS);
+          return;
+        }
+        var msg = document.getElementById('error-message');
+        if (msg && err && err.message) {
+          msg.textContent =
+            "We couldn't reach our payment service (" + err.message + "). " +
+            "Your card may still have been charged. Please contact support and we'll sort it out.";
+        }
+        show('state-error');
+      });
+  }
+
+  // Boot
+  var params = new URLSearchParams(window.location.search);
+  var sessionId = params.get('session_id');
+
+  if (!sessionId) {
+    show('state-no-session');
+    return;
+  }
+
+  show('state-loading');
+  poll(sessionId, 1);
+})();
+</script>
+
+</body>
+</html>
