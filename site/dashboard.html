@@ -249,6 +249,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 }
 .badge-dot{width:5px;height:5px;border-radius:50%;background:currentColor}
 .badge-green{background:rgba(63,185,80,.1);color:var(--green);border:1px solid rgba(63,185,80,.2)}
+.badge-red{background:rgba(248,81,73,.1);color:var(--red);border:1px solid rgba(248,81,73,.2)}
 .badge-yellow{background:rgba(210,153,34,.1);color:var(--yellow);border:1px solid rgba(210,153,34,.2)}
 .badge-accent{background:var(--accent-dim);color:var(--accent);border:1px solid var(--accent-ring)}
 
@@ -414,6 +415,87 @@ tr:hover td{background:rgba(255,255,255,.02)}
 @media(max-width:480px){
   .kpi-grid{grid-template-columns:1fr 1fr}
 }
+
+/* ── AMCP_UI primitives — drawer / toast / progress ring / feed ── */
+.amcp-drawer-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;
+  opacity:0;pointer-events:none;transition:opacity .28s ease;
+}
+.amcp-drawer-overlay.open{opacity:1;pointer-events:auto}
+
+.amcp-drawer-panel{
+  position:fixed;top:0;right:0;bottom:0;width:420px;max-width:100vw;
+  background:var(--surface);border-left:1px solid var(--border);
+  box-shadow:-8px 0 24px rgba(0,0,0,.3);
+  transform:translateX(100%);transition:transform .28s ease;
+  z-index:101;display:flex;flex-direction:column;
+}
+.amcp-drawer-panel.open{transform:translateX(0)}
+
+.amcp-drawer-header{
+  position:sticky;top:0;background:var(--surface);
+  padding:16px 20px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  font-weight:600;font-size:var(--tx-md);
+}
+.amcp-drawer-close{
+  width:28px;height:28px;border-radius:6px;
+  display:inline-flex;align-items:center;justify-content:center;
+  color:var(--muted);background:transparent;border:none;cursor:pointer;
+}
+.amcp-drawer-close:hover{background:var(--surface-2);color:var(--text)}
+
+.amcp-drawer-body{
+  flex:1;overflow:auto;padding:16px 20px;font-size:var(--tx-sm);line-height:1.6;
+}
+
+.amcp-toast-stack{
+  position:fixed;bottom:20px;right:20px;z-index:200;
+  display:flex;flex-direction:column;gap:8px;pointer-events:none;
+}
+.amcp-toast{
+  min-width:240px;max-width:360px;
+  padding:12px 16px;border-radius:var(--r-md);
+  background:var(--surface);border:1px solid var(--border);color:var(--text);
+  font-size:var(--tx-sm);box-shadow:0 8px 24px rgba(0,0,0,.25);
+  transform:translateX(120%);transition:transform .25s ease;
+  pointer-events:auto;
+}
+.amcp-toast.visible{transform:translateX(0)}
+.amcp-toast.success{background:var(--accent-dim);border-color:var(--accent-ring);color:var(--accent)}
+.amcp-toast.error{background:rgba(248,81,73,.1);border-color:rgba(248,81,73,.3);color:var(--red)}
+.amcp-toast.info{background:var(--surface-2);border-color:var(--border);color:var(--muted)}
+
+/* Progress ring — conic-gradient filled arc with hollow center via mask. */
+.progress-ring{
+  --pct:0%; --size:48px; --sw:4px;
+  width:var(--size);height:var(--size);border-radius:50%;
+  background:conic-gradient(var(--accent) var(--pct), var(--surface-2) 0);
+  mask:radial-gradient(circle at center, transparent calc(var(--size)/2 - var(--sw)), black calc(var(--size)/2 - var(--sw) + 1px));
+  -webkit-mask:radial-gradient(circle at center, transparent calc(var(--size)/2 - var(--sw)), black calc(var(--size)/2 - var(--sw) + 1px));
+}
+
+/* Unified activity row — used by mixed-type aggregate feed. */
+.amcp-activity-row{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 12px;border-bottom:1px solid var(--border);
+  font-size:var(--tx-sm);cursor:pointer;transition:background .15s;
+}
+.amcp-activity-row:hover{background:var(--surface-2)}
+.amcp-activity-row:last-child{border-bottom:none}
+.amcp-activity-type{
+  font-size:var(--tx-xs);font-weight:600;text-transform:uppercase;letter-spacing:.02em;
+  padding:2px 7px;border-radius:100px;
+  background:var(--accent-dim);color:var(--accent);border:1px solid var(--accent-ring);
+  flex-shrink:0;
+}
+.amcp-activity-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.amcp-activity-biz{
+  font-size:var(--tx-xs);color:var(--muted);
+  padding:2px 7px;border:1px solid var(--border);border-radius:100px;
+  flex-shrink:0;
+}
+.amcp-activity-ts{font-size:var(--tx-xs);color:var(--muted);flex-shrink:0}
 </style>
 </head>
 <body>
@@ -771,8 +853,22 @@ tr:hover td{background:rgba(255,255,255,.02)}
   </div><!-- #content -->
 </div><!-- #main -->
 
+<!-- ── AMCP_UI: slide-over drawer + toast stack (populated by dashboard-ui.js) ── -->
+<div class="amcp-drawer-overlay" id="amcp-drawer-overlay" aria-hidden="true"></div>
+<aside class="amcp-drawer-panel" id="amcp-drawer-panel" role="dialog" aria-hidden="true" aria-labelledby="amcp-drawer-title">
+  <div class="amcp-drawer-header">
+    <span id="amcp-drawer-title">Details</span>
+    <button type="button" class="amcp-drawer-close" id="amcp-drawer-close" aria-label="Close">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+    </button>
+  </div>
+  <div class="amcp-drawer-body" id="amcp-drawer-body"></div>
+</aside>
+<div class="amcp-toast-stack" id="amcp-toast-stack" aria-live="polite" aria-atomic="true"></div>
+
 <script src="/js/dashboard-auth.js"></script>
 <script src="/js/dashboard-theme.js"></script>
+<script src="/js/dashboard-ui.js"></script>
 <script src="/js/dashboard-overview.js"></script>
 <script src="/js/dashboard-requests.js"></script>
 <script src="/js/dashboard-clicks.js"></script>
