@@ -673,6 +673,22 @@ tr:hover td{background:rgba(255,255,255,.02)}
       </div>
 
       <div class="db-card" style="margin-top:12px">
+        <div class="db-card-title">
+          Click-through Trend <span class="db-card-sub">Clicks vs queries, last 30 days</span>
+        </div>
+        <div class="chart-wrap"><canvas id="chart-clicks-trend"></canvas></div>
+      </div>
+
+      <div class="db-card" style="margin-top:12px">
+        <div class="db-card-title">
+          Recent Clicks <span class="db-card-sub">Last 50 tracked redirects</span>
+        </div>
+        <div id="recent-clicks-wrap">
+          <div class="skeleton" style="height:180px;border-radius:8px"></div>
+        </div>
+      </div>
+
+      <div class="db-card" style="margin-top:12px">
         <div class="db-card-title">About Referral Tracking</div>
         <p style="font-size:var(--tx-sm);color:var(--muted);line-height:1.7">
           Every time an AI like Perplexity or ChatGPT includes your business in an answer,
