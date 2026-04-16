@@ -54,6 +54,9 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/me"       && method === "GET")  return apiMe(request, env);
   if (pathname === "/api/client/metrics"  && method === "GET")  return apiMetrics(request, env);
   if (pathname === "/api/client/activity"   && method === "GET")  return apiActivity(request, env);
+  if (pathname === "/api/client/clicks"          && method === "GET")  return apiClicks(request, env);
+  if (pathname === "/api/client/recommendations" && method === "GET")  return apiRecommendations(request, env);
+  if (pathname === "/api/client/profile"         && method === "POST") return apiUpdateProfile(request, env);
   if (pathname === "/api/client/rotate-key" && method === "POST") return apiRotateKey(request, env);
   if (pathname === "/admin/create-client"      && method === "POST") return adminCreateClient(request, env);
   const resyncMatch = pathname.match(/^\/admin\/businesses\/([^/]+)\/resync-api-key$/);
@@ -101,6 +104,9 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/activity-detail" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/activity-detail" && method === "GET")     return apiActivityDetail(request, env);
   if (pathname === "/api/client/activity"    && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/clicks"          && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/recommendations" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/profile"         && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/rotate-key"  && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
 
   // ── Stripe / new onboarding API ──────────────────────────────────────────
@@ -615,6 +621,252 @@ async function apiActivity(request: Request, env: Env): Promise<Response> {
 
   const data = await fetchAnalytics(biz, env);
   return withCors(jsonOk(data?.recent_queries ?? []), request, { credentials: true });
+}
+
+// ── GET /api/client/clicks ─────────────────────────────────────────────────
+// Proxy to Railway's GET /analytics/:slug/clicks — returns the 50 most
+// recent referral click events for the selected tenant.
+
+interface ClickRow {
+  id: number;
+  ref: string | null;
+  user_agent: string | null;
+  timestamp: string;
+}
+
+async function apiClicks(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  try {
+    const res = await fetch(`${base}/analytics/${biz.slug}/clicks`, {
+      headers: { Authorization: `Bearer ${biz.api_key}` },
+    });
+    if (!res.ok) {
+      return withCors(jsonErr(res.status, "Clicks fetch failed"), request, { credentials: true });
+    }
+    const data = await res.json() as { slug: string; clicks: ClickRow[] };
+    return withCors(jsonOk(data), request, { credentials: true });
+  } catch (err) {
+    return withCors(jsonErr(502, `Backend unreachable: ${String(err)}`), request, { credentials: true });
+  }
+}
+
+// ── GET /api/client/recommendations ────────────────────────────────────────
+// Derives dynamic recs + checklist from the tenant's analytics data. Pure
+// server-side rules — no external fetch beyond the existing analytics proxy.
+
+interface RecOut {
+  id: string;
+  title: string;
+  body: string;
+  priority: "high" | "med" | "low";
+  impact: string;
+  action_label?: string;
+  action_url?: string;
+}
+interface ChecklistItem {
+  id: string;
+  label: string;
+  done: boolean;
+}
+
+interface ProfileOut {
+  name?: string;
+  description?: string;
+  category?: string;
+  services?: string[];
+  website?: string;
+  pricing_json_v2?: unknown;
+}
+
+async function fetchProfile(biz: Business, env: Env): Promise<ProfileOut | null> {
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  try {
+    const res = await fetch(`${base}/agents/${biz.slug}/profile`, {
+      headers: { Authorization: `Bearer ${biz.api_key}` },
+    });
+    if (!res.ok) return null;
+    return await res.json() as ProfileOut;
+  } catch {
+    return null;
+  }
+}
+
+function buildRecommendations(
+  analytics: AnalyticsData | null,
+  profile: ProfileOut | null,
+): { recommendations: RecOut[]; checklist: ChecklistItem[] } {
+  const total   = analytics?.total_queries ?? 0;
+  const clicks  = analytics?.referral_clicks ?? 0;
+  const intents = analytics?.queries_by_intent ?? {};
+  const ctr     = total > 0 ? clicks / total : 0;
+
+  const recs: RecOut[] = [];
+
+  if (total < 10) {
+    recs.push({
+      id: "no-traffic",
+      title: "Verify your site is receiving AI crawler traffic",
+      body: "Your profile has fewer than 10 recorded queries. Confirm that your domain is routed through Advocate and that /.well-known/ai-agent.json is reachable.",
+      priority: "high",
+      impact: "High — no traffic means no citations, no referrals, no attribution.",
+      action_label: "Open activation guide",
+      action_url: "/activate.html",
+    });
+  } else if (ctr < 0.05) {
+    recs.push({
+      id: "low-ctr",
+      title: "Improve referral click-through rate",
+      body: `Only ${(ctr * 100).toFixed(1)}% of AI queries lead to a click. Tighten your response copy — include a clear CTA, service-area details, and a booking or contact link above the fold.`,
+      priority: "high",
+      impact: "High — CTR is the main lever once traffic arrives.",
+    });
+  }
+
+  if (!intents["brand_direct"] || intents["brand_direct"] === 0) {
+    recs.push({
+      id: "no-brand-queries",
+      title: "Invest in brand awareness",
+      body: "No direct-brand queries yet — customers aren't searching for you by name. Consider Reddit/Wikidata seeding, review outreach, and local PR to build the brand signal AI systems reward.",
+      priority: "med",
+      impact: "Med — direct-brand queries convert 3–5× better than generic.",
+    });
+  }
+
+  const profileIncomplete =
+    !profile ||
+    !profile.name ||
+    !profile.description ||
+    !profile.category ||
+    !Array.isArray(profile.services) || profile.services.length === 0 ||
+    !profile.pricing_json_v2;
+  if (profileIncomplete) {
+    recs.push({
+      id: "incomplete-profile",
+      title: "Complete your business profile",
+      body: "Missing profile fields reduce how richly AI citations describe your business. Fill in services, structured pricing, and a category to unlock better-matched queries.",
+      priority: "med",
+      impact: "Med — richer profile = more specific AI citations.",
+      action_label: "Edit profile",
+      action_url: "#settings",
+    });
+  }
+
+  if (recs.length === 0) {
+    recs.push({
+      id: "all-good",
+      title: "You're in great shape",
+      body: "Traffic is healthy, CTR is solid, and your profile is complete. Explore Pro features — Competitor Radar and the off-site authority kit will compound your lead.",
+      priority: "low",
+      impact: "Low — keep momentum, no action required.",
+    });
+  }
+
+  const servicesOk = Array.isArray(profile?.services) && (profile?.services?.length ?? 0) > 0;
+  const profileComplete = Boolean(
+    profile?.name && profile?.description && profile?.category && servicesOk,
+  );
+
+  const checklist: ChecklistItem[] = [
+    { id: "profile-complete",   label: "Business profile complete (name, description, category, services)", done: profileComplete },
+    { id: "domain-active",      label: "Domain routed through Advocate",                                    done: total > 0 },
+    { id: "first-query",        label: "First AI query received",                                           done: total >= 1 },
+    { id: "first-click",        label: "First referral click tracked",                                      done: clicks >= 1 },
+    { id: "api-key-fresh",      label: "API key rotated within the last 90 days",                           done: false },
+  ];
+
+  return { recommendations: recs, checklist };
+}
+
+async function apiRecommendations(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  const [analytics, profile] = await Promise.all([
+    fetchAnalytics(biz, env),
+    fetchProfile(biz, env),
+  ]);
+
+  const out = buildRecommendations(analytics, profile);
+  return withCors(jsonOk(out), request, { credentials: true });
+}
+
+// ── POST /api/client/profile ───────────────────────────────────────────────
+// Proxy to Railway's PATCH /agents/:slug/profile. Only forwards fields the
+// Railway endpoint declares mutable; anything else is silently dropped.
+
+async function apiUpdateProfile(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json() as Record<string, unknown>;
+  } catch {
+    return withCors(jsonErr(400, "Invalid JSON body"), request, { credentials: true });
+  }
+
+  // Whitelist — mirrors Railway's PATCH /agents/:slug/profile allow-list.
+  // `name` is intentionally NOT included because Railway's PATCH does not
+  // accept it; business_name is immutable once created.
+  const allowed = [
+    "description", "category", "services", "pricing", "location", "phone",
+    "website", "referral_url", "tone", "star_rating", "review_count",
+    "years_in_business", "top_services", "availability", "differentiator",
+    "service_radius_miles", "certifications", "pricing_tier",
+    "service_area_keywords",
+  ] as const;
+
+  const payload: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (key in body) payload[key] = body[key];
+  }
+
+  if (Object.keys(payload).length === 0) {
+    return withCors(jsonErr(400, "No updatable fields provided"), request, { credentials: true });
+  }
+
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  try {
+    const res = await fetch(`${base}/agents/${biz.slug}/profile`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${biz.api_key}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return withCors(jsonErr(res.status, "Profile update failed"), request, { credentials: true });
+    }
+    return withCors(jsonOk(data), request, { credentials: true });
+  } catch (err) {
+    return withCors(jsonErr(502, `Backend unreachable: ${String(err)}`), request, { credentials: true });
+  }
 }
 
 // ── POST /api/client/rotate-key ───────────────────────────────────────────
