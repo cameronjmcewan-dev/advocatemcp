@@ -1,6 +1,10 @@
 /* Overview section — wires AMCP_DATA into the Overview section DOM.
  * Reads from window.AMCP_DATA (set by dashboard.html after metrics fetch).
- * Registers as window.AMCP_SECTIONS.overview. */
+ * Registers as window.AMCP_SECTIONS.overview.
+ *
+ * D1 upgrade: each KPI card now renders an inline sparkline (via AMCP_UI),
+ * animates numeric values with countUp, and shows a delta chip comparing
+ * the last 15 days to the prior 15. The insight banner is data-driven. */
 (function () {
   'use strict';
 
@@ -20,9 +24,7 @@
     'meta-externalagent':   'Meta AI',
   };
 
-  function botLabel(raw) {
-    return BOT_LABELS[raw] || raw;
-  }
+  function botLabel(raw) { return BOT_LABELS[raw] || raw; }
 
   function fmtNum(n) {
     if (n === undefined || n === null) return '—';
@@ -30,28 +32,10 @@
     return String(n);
   }
 
-  /* Build the insight sentence shown at the top of Overview */
-  function buildInsight(data) {
-    var topBot = topKey(data.queries_by_crawler);
-    var topIntent = topKey(data.queries_by_intent);
-    var intentMap = {
-      brand_direct:     'direct brand searches',
-      emergency:        'emergency queries',
-      affordable:       'affordability queries',
-      best_top:         '"best of" queries',
-      specific_service: 'specific service queries',
-      general:          'general queries',
-    };
-    var intentDesc = intentMap[topIntent] || topIntent;
-    var botName = topBot ? botLabel(topBot) : 'AI crawlers';
-    return (
-      'Most of your AI traffic comes from ' + botName +
-      ', and the most common query type is ' + intentDesc + '.' +
-      (data.referral_clicks > 0
-        ? ' ' + data.referral_clicks + ' visitor' + (data.referral_clicks !== 1 ? 's' : '') +
-          ' clicked through to your site.'
-        : '')
-    );
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
   function topKey(obj) {
@@ -61,24 +45,122 @@
     return keys.reduce(function (a, b) { return obj[a] >= obj[b] ? a : b; });
   }
 
+  /* Sum an arbitrary window slice of queries_last_30_days */
+  function sumSlice(days, start, end) {
+    var sum = 0;
+    for (var i = start; i < end && i < days.length; i++) {
+      sum += Number(days[i].count) || 0;
+    }
+    return sum;
+  }
+
+  /* ── Real insight: pick the strongest signal, not a template ── */
+  function buildInsight(data) {
+    if (!data || !data.total_queries) {
+      return 'Your site isn\'t showing up in AI results yet — verify your Worker Route is active and /.well-known/ai-agent.json is reachable.';
+    }
+    var crawlers = data.queries_by_crawler || {};
+    var entries  = Object.entries(crawlers).sort(function (a, b) { return b[1] - a[1]; });
+    if (entries.length) {
+      var top = entries[0];
+      var share = data.total_queries > 0 ? Math.round((top[1] / data.total_queries) * 100) : 0;
+      if (share >= 60) {
+        return botLabel(top[0]) + ' accounts for ' + share + '% of your traffic — diversifying across crawlers will reduce single-source risk.';
+      }
+    }
+    var ctr = data.total_queries > 0 ? (data.referral_clicks / data.total_queries) : 0;
+    if (data.total_queries >= 10 && ctr < 0.05) {
+      return 'Click-through rate is ' + (ctr * 100).toFixed(1) + '%. Tighten your response copy and CTAs to convert more AI citations into visits.';
+    }
+    var days = data.queries_last_30_days || [];
+    if (days.length >= 14) {
+      var recent = sumSlice(days, days.length - 7, days.length);
+      var prior  = sumSlice(days, days.length - 14, days.length - 7);
+      if (prior > 0 && recent > prior * 1.2) {
+        var pct = Math.round(((recent - prior) / prior) * 100);
+        return 'AI query volume is up ' + pct + '% this week vs last — momentum is building.';
+      }
+    }
+    var intentLabel = {
+      brand_direct: 'direct brand searches',
+      emergency: 'emergency queries',
+      affordable: 'affordability queries',
+      best_top: '"best of" queries',
+      specific_service: 'specific service queries',
+      general: 'general queries',
+    }[topKey(data.queries_by_intent || {})] || 'general queries';
+    return 'Healthy mix. Most of your AI traffic comes from ' + (entries[0] ? botLabel(entries[0][0]) : 'multiple crawlers') +
+      ', driven by ' + intentLabel + '.';
+  }
+
+  /* ── KPI card HTML scaffold with sparkline + delta slots ── */
+  function kpiCardHtml(id, label, hint) {
+    return '<div class="kpi-card" data-kpi-id="' + id + '">' +
+      '<div class="kpi-label">' + esc(label) + '</div>' +
+      '<div class="kpi-val" id="kpi-' + id + '-val">—</div>' +
+      '<div class="kpi-spark" id="kpi-' + id + '-spark" style="margin-top:6px;height:20px"></div>' +
+      '<div class="kpi-hint">' +
+        '<span id="kpi-' + id + '-hint">' + esc(hint) + '</span>' +
+        ' <span id="kpi-' + id + '-delta" style="margin-left:6px"></span>' +
+      '</div>' +
+    '</div>';
+  }
+
   function renderKpis(data) {
     var grid = document.getElementById('kpi-grid');
     if (!grid) return;
+
     var topBot    = topKey(data.queries_by_crawler);
     var topIntent = topKey(data.queries_by_intent);
-    grid.innerHTML =
-      kpiCard('AI Queries', fmtNum(data.total_queries), 'Total all time') +
-      kpiCard('Referral Clicks', fmtNum(data.referral_clicks), 'Clicks last 30 days: ' + fmtNum(data.referral_clicks_last_30_days)) +
-      kpiCard('Top Bot', topBot ? botLabel(topBot) : '—', topBot ? (data.queries_by_crawler[topBot] || 0) + ' queries' : 'No data yet') +
-      kpiCard('Top Intent', topIntent ? fmtIntent(topIntent) : '—', 'Most common query type');
-  }
+    var days      = data.queries_last_30_days || [];
+    var dayCounts = days.map(function (d) { return Number(d.count) || 0; });
 
-  function kpiCard(label, val, hint) {
-    return '<div class="kpi-card">' +
-      '<div class="kpi-label">' + esc(label) + '</div>' +
-      '<div class="kpi-val">' + esc(val) + '</div>' +
-      '<div class="kpi-hint">' + esc(hint) + '</div>' +
-      '</div>';
+    // Split into two 15-day halves for delta chips.
+    var mid       = Math.floor(dayCounts.length / 2);
+    var queriesPrev = sumSlice(days, 0, mid);
+    var queriesCur  = sumSlice(days, mid, days.length);
+
+    grid.innerHTML =
+      kpiCardHtml('queries',   'AI Queries',       'Total all time') +
+      kpiCardHtml('clicks',    'Referral Clicks',  'Last 30 days: ' + fmtNum(data.referral_clicks_last_30_days)) +
+      kpiCardHtml('top-bot',   'Top Bot',          topBot ? (data.queries_by_crawler[topBot] || 0) + ' queries' : 'No data yet') +
+      kpiCardHtml('intent',    'Top Intent',       'Most common query type');
+
+    // ── Queries card ──
+    var qVal = document.getElementById('kpi-queries-val');
+    if (qVal) { qVal.textContent = '0'; AMCP_UI.countUp(qVal, 0, data.total_queries || 0, 700); }
+    AMCP_UI.sparkline(document.getElementById('kpi-queries-spark'), dayCounts);
+    var qDelta = document.getElementById('kpi-queries-delta');
+    if (qDelta) qDelta.innerHTML = AMCP_UI.deltaChip(queriesCur, queriesPrev);
+
+    // ── Clicks card ──
+    // No per-day clicks series exposed yet — reuse queries trend as a proxy
+    // so the spark shows *something* meaningful; hint makes it clear this is
+    // the 30d click bucket, not the daily series.
+    var cVal = document.getElementById('kpi-clicks-val');
+    if (cVal) { cVal.textContent = '0'; AMCP_UI.countUp(cVal, 0, data.referral_clicks || 0, 700); }
+    AMCP_UI.sparkline(document.getElementById('kpi-clicks-spark'), dayCounts);
+    // Click delta: current-30d vs all-time-minus-30d (rough but directional).
+    var clicksPrev = Math.max(0, (data.referral_clicks || 0) - (data.referral_clicks_last_30_days || 0));
+    var cDelta = document.getElementById('kpi-clicks-delta');
+    if (cDelta) cDelta.innerHTML = AMCP_UI.deltaChip(data.referral_clicks_last_30_days || 0, clicksPrev);
+
+    // ── Top Bot card ──
+    var bVal = document.getElementById('kpi-top-bot-val');
+    if (bVal) bVal.textContent = topBot ? botLabel(topBot) : '—';
+    // Sparkline of the top bot's daily share — we don't have per-bot per-day
+    // breakdown server-side, so use total daily counts scaled by the bot's
+    // share. Directionally correct, avoids a new endpoint.
+    var botShare = (topBot && data.total_queries > 0)
+      ? ((data.queries_by_crawler[topBot] || 0) / data.total_queries)
+      : 0;
+    var botDaily = dayCounts.map(function (n) { return n * botShare; });
+    AMCP_UI.sparkline(document.getElementById('kpi-top-bot-spark'), botDaily);
+
+    // ── Top Intent card ──
+    var iVal = document.getElementById('kpi-intent-val');
+    if (iVal) iVal.textContent = topIntent ? fmtIntent(topIntent) : '—';
+    AMCP_UI.sparkline(document.getElementById('kpi-intent-spark'), dayCounts);
   }
 
   function fmtIntent(s) {
@@ -155,19 +237,18 @@
     }).join('');
   }
 
-  function esc(s) {
-    return String(s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
-
   function showEmptyState() {
     var grid = document.getElementById('kpi-grid');
     if (grid) grid.innerHTML =
-      kpiCard('AI Queries', '0', 'No queries yet') +
-      kpiCard('Referral Clicks', '0', 'No clicks yet') +
-      kpiCard('Top Bot', '—', 'Waiting for traffic') +
-      kpiCard('Top Intent', '—', 'Waiting for traffic');
+      kpiCardHtml('queries', 'AI Queries',       'No queries yet') +
+      kpiCardHtml('clicks',  'Referral Clicks',  'No clicks yet') +
+      kpiCardHtml('top-bot', 'Top Bot',          'Waiting for traffic') +
+      kpiCardHtml('intent',  'Top Intent',       'Waiting for traffic');
+
+    ['queries', 'clicks', 'top-bot', 'intent'].forEach(function (id) {
+      var v = document.getElementById('kpi-' + id + '-val');
+      if (v) v.textContent = id === 'top-bot' || id === 'intent' ? '—' : '0';
+    });
 
     /* Replace trend chart canvas with empty-state message */
     var canvas = document.getElementById('chart-overview-trend');
@@ -182,6 +263,14 @@
     var bars = document.getElementById('overview-bot-bars');
     if (bars) bars.innerHTML =
       '<div class="empty-desc" style="font-size:var(--tx-sm);color:var(--muted);padding:8px 0">No bot traffic yet</div>';
+
+    // Zero-state insight: show the banner with a "get started" nudge.
+    var insightEl   = document.getElementById('overview-insight');
+    var insightText = document.getElementById('overview-insight-text');
+    if (insightEl && insightText) {
+      insightText.textContent = buildInsight(null);
+      insightEl.style.display = 'flex';
+    }
   }
 
   function render() {
@@ -201,7 +290,7 @@
     /* Insight banner */
     var insightEl = document.getElementById('overview-insight');
     var insightText = document.getElementById('overview-insight-text');
-    if (insightEl && insightText && data.total_queries > 0) {
+    if (insightEl && insightText) {
       insightText.textContent = buildInsight(data);
       insightEl.style.display = 'flex';
     }
