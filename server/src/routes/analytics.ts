@@ -336,10 +336,16 @@ analyticsRouter.get(
     const { slug } = req.params;
     const db = getDb();
 
-    // Reservations — last 20
+    // Reservations — last 20. Timestamps are INTEGER unix seconds in the
+    // schema (migration 006); convert to ISO strings so the dashboard can
+    // pass them through `new Date(iso)` without special-casing.
     const reservations = db
       .prepare(
-        `SELECT id, agent_id, status, window_start, window_end, requested_at, expires_at
+        `SELECT id, agent_id, status,
+                datetime(window_start, 'unixepoch') AS window_start,
+                datetime(window_end,   'unixepoch') AS window_end,
+                datetime(requested_at, 'unixepoch') AS requested_at,
+                datetime(expires_at,   'unixepoch') AS expires_at
          FROM reservations
          WHERE business_slug = ?
          ORDER BY requested_at DESC
@@ -355,10 +361,11 @@ analyticsRouter.get(
         expires_at: string;
       }>;
 
-    // Handoffs — last 20
+    // Handoffs — last 20. Same timestamp treatment as reservations.
     const handoffs = db
       .prepare(
-        `SELECT id, mode, delivered_via, reservation_id, agent_id, created_at
+        `SELECT id, mode, delivered_via, reservation_id, agent_id,
+                datetime(created_at, 'unixepoch') AS created_at
          FROM handoffs
          WHERE business_slug = ?
          ORDER BY created_at DESC
@@ -415,12 +422,21 @@ analyticsRouter.get(
         updated_at: string;
       }>;
 
-    // Competitor radar — last 10 polls (Pro tenants)
+    // Competitor radar — last 10 polls (Pro tenants). Schema from
+    // migration 013: the table keys on `slug` (not business_slug), and
+    // the cited flag is `our_domain_cited`. `citation_count` is the total
+    // citations in that poll; `our_domain_cited` is the boolean "were we
+    // one of them?". Normalize field names to the shape the dashboard
+    // already renders (query_phrasing, tenant_cited, citation_count).
     const competitor_polls = db
       .prepare(
-        `SELECT id, query_phrasing, polled_at, citation_found, tenant_cited
+        `SELECT id,
+                phrasing AS query_phrasing,
+                polled_at,
+                our_domain_cited AS tenant_cited,
+                citation_count
          FROM competitor_polls
-         WHERE business_slug = ?
+         WHERE slug = ?
          ORDER BY polled_at DESC
          LIMIT 10`,
       )
@@ -428,8 +444,8 @@ analyticsRouter.get(
         id: number;
         query_phrasing: string;
         polled_at: string;
-        citation_found: number;
         tenant_cited: number;
+        citation_count: number;
       }>;
 
     // Summary totals

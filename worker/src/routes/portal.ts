@@ -1078,11 +1078,48 @@ async function apiDomainInfo(request: Request, env: Env): Promise<Response> {
   }
 
   // Worker Route introspection needs Workers Routes:Read scope on the API
-  // token, which our current token doesn't carry. Surface `present: null`
-  // so the dashboard can paint an honest "unknown" state rather than a false
-  // "missing". The pattern is what we *would* register via /admin/domains/
-  // ensure-worker-route.
+  // token, which our current token doesn't carry. Instead, probe the domain
+  // empirically: fire a bot-UA request at the root, and if the response is
+  // our Worker's structured JSON (ai_generated + powered_by:"AdvocateMCP"),
+  // we know the route is wired correctly. This doesn't introspect the CF
+  // edge config, but it tells us what matters — "is bot traffic landing on
+  // our Worker right now?" — which is the question the dashboard actually
+  // needs answered.
   const workerRoutePattern = biz.domain ? `${biz.domain}/*` : null;
+  let workerRoutePresent: boolean | null = null;
+  let workerRouteNote: string | undefined;
+
+  if (biz.domain) {
+    try {
+      const probeRes = await fetch(`https://${biz.domain}/`, {
+        method: "GET",
+        headers: { "User-Agent": "PerplexityBot/1.0 (+https://perplexity.ai/bot)" },
+        signal: AbortSignal.timeout(5000),
+        redirect: "follow",
+      });
+      if (probeRes.ok) {
+        const ct = probeRes.headers.get("content-type") ?? "";
+        if (ct.includes("application/json")) {
+          const body = await probeRes.json() as Record<string, unknown>;
+          if (body.ai_generated === true && body.powered_by === "AdvocateMCP") {
+            workerRoutePresent = true;
+          } else {
+            workerRoutePresent = false;
+            workerRouteNote = "domain responded but not with Worker's bot response";
+          }
+        } else {
+          workerRoutePresent = false;
+          workerRouteNote = "domain returned non-JSON to bot UA — Worker not intercepting";
+        }
+      } else {
+        workerRoutePresent = false;
+        workerRouteNote = `probe returned HTTP ${probeRes.status}`;
+      }
+    } catch (err) {
+      workerRouteNote = `probe failed: ${err instanceof Error ? err.message : "unknown"}`;
+      // leave workerRoutePresent at null — "we don't know"
+    }
+  }
 
   // last_bot_hit — piggyback on the analytics fetch we already do. Only read
   // max(timestamp) from recent_queries.
@@ -1108,7 +1145,7 @@ async function apiDomainInfo(request: Request, env: Env): Promise<Response> {
       business_name: biz.business_name,
       domain:        biz.domain ?? null,
       cf_hostname:   cfHostname,
-      worker_route:  { present: null, pattern: workerRoutePattern },
+      worker_route:  { present: workerRoutePresent, pattern: workerRoutePattern, note: workerRouteNote },
       last_bot_hit:  lastBotHit,
     }),
     request,

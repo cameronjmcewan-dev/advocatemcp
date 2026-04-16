@@ -496,7 +496,7 @@
     if (data.competitor_polls && data.competitor_polls.length > 0) {
       anyData = true;
       var pollRows = data.competitor_polls.map(function (p) {
-        var cited = p.tenant_cited ? '✓' : (p.citation_found ? '—' : 'no result');
+        var cited = p.tenant_cited ? '✓' : (p.citation_count > 0 ? '—' : 'no result');
         var cls = p.tenant_cited ? 'color:var(--green);font-weight:600' : 'color:var(--muted)';
         return '<tr>' +
           '<td style="font-size:var(--tx-sm)">' + esc(p.query_phrasing) + '</td>' +
