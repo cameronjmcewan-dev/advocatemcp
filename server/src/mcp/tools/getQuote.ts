@@ -7,11 +7,23 @@ import { DESCRIPTORS } from "../../manifest/descriptor.js";
 import { callClaude } from "../../lib/anthropic.js";
 import { withAgentRequestLog } from "../../lib/agentRequestLogger.js";
 
+/**
+ * PricingRange — matches the wire format stored in businesses.pricing_json_v2.
+ *
+ * The zod schema at server/src/schemas/business.ts PricingRangeSchema uses
+ * `min` and `max`, which is what the wizard / /register actually persists.
+ * This interface mirrors that. The field `currency` is optional — the
+ * schema doesn't include it, so we default to "USD" at read time.
+ * (Internationalization: when we add non-USD pricing we'll widen the
+ * zod schema + migrate existing rows; no call site today depends on
+ * currency being anything other than USD.)
+ */
 export interface PricingRange {
   service: string;
-  low: number;
-  high: number;
-  currency: string;
+  min: number;
+  max: number;
+  unit?: "job" | "hour" | "visit" | "sqft";
+  currency?: string;
   params?: Record<string, string>;
 }
 export interface PricingJson { ranges: PricingRange[] }
@@ -37,7 +49,7 @@ function paramsMatch(required: Record<string, string> | undefined, given: Record
 
 /**
  * Deterministic quote. Returns null on miss; Task 6 wraps this with the LLM fallback.
- * Confidence: "exact" when low === high, "range" otherwise. Never returns "estimate".
+ * Confidence: "exact" when min === max, "range" otherwise. Never returns "estimate".
  */
 export function deterministicQuote(
   args: { service: string; params: Record<string, string> },
@@ -48,10 +60,10 @@ export function deterministicQuote(
     if (norm(r.service) !== target) continue;
     if (!paramsMatch(r.params, args.params)) continue;
     return {
-      low: r.low,
-      high: r.high,
-      currency: r.currency,
-      confidence: r.low === r.high ? "exact" : "range",
+      low: r.min,
+      high: r.max,
+      currency: r.currency ?? "USD",
+      confidence: r.min === r.max ? "exact" : "range",
       basis: "pricing_json_v2",
     };
   }
