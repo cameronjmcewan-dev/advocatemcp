@@ -96,6 +96,8 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/metrics"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/all-metrics" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/all-metrics" && method === "GET")     return apiAllMetrics(request, env);
+  if (pathname === "/api/client/activity-detail" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/activity-detail" && method === "GET")     return apiActivityDetail(request, env);
   if (pathname === "/api/client/activity"    && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/rotate-key"  && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
 
@@ -386,6 +388,37 @@ async function apiAllMetrics(request: Request, env: Env): Promise<Response> {
     request,
     { credentials: true },
   );
+}
+
+// ── GET /api/client/activity-detail ────────────────────────────────────────
+// Proxy to Railway's /analytics/:slug/activity — surfaces the new-feature
+// data (reservations, handoffs, agent_requests, competitor radar) for the
+// selected business. Admin users can query any slug via ?slug=<slug>.
+
+async function apiActivityDetail(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getAllBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  try {
+    const res = await fetch(`${base}/analytics/${biz.slug}/activity`, {
+      headers: { Authorization: `Bearer ${biz.api_key}` },
+    });
+    if (!res.ok) {
+      return withCors(jsonErr(res.status, "Activity fetch failed"), request, { credentials: true });
+    }
+    const data = await res.json();
+    return withCors(jsonOk(data), request, { credentials: true });
+  } catch (err) {
+    return withCors(jsonErr(502, `Backend unreachable: ${String(err)}`), request, { credentials: true });
+  }
 }
 
 // ── GET /api/client/activity ───────────────────────────────────────────────

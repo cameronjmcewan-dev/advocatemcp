@@ -51,25 +51,17 @@
     nav.parentNode.insertBefore(wrap, nav);
   }
 
-  /* ── Load single business metrics and re-render default overview ── */
+  /* ── Switch business via page reload ──
+   *
+   * Section modules cache `rendered = true` after first paint, so partial
+   * in-place swaps leave stale data in AI Requests / Referral Clicks / Bot
+   * Activity. A full page reload with `?slug=X` is the reliable path — the
+   * shell's initial metrics fetch picks up the param and every section
+   * renders fresh. */
   function loadSingleBusiness(slug) {
-    window.AMCP.authedFetch('/api/client/metrics?slug=' + encodeURIComponent(slug))
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        window.AMCP_DATA = data;
-        // Re-trigger overview section render
-        if (window.AMCP_SECTIONS && window.AMCP_SECTIONS['overview']) {
-          window.AMCP_SECTIONS['overview']();
-        }
-        // Hide admin table, show normal sections
-        var adminSec = document.getElementById('admin-overview-table');
-        if (adminSec) adminSec.style.display = 'none';
-        var normalKpis = document.getElementById('kpi-grid');
-        if (normalKpis) normalKpis.style.display = '';
-        var normalRow = document.querySelector('#sec-overview .db-row');
-        if (normalRow) normalRow.style.display = '';
-      })
-      .catch(function (err) { console.error('metrics switch failed', err); });
+    var url = new URL(window.location.href);
+    url.searchParams.set('slug', slug);
+    window.location.href = url.toString();
   }
 
   /* ── Render admin aggregate overview ── */
@@ -171,14 +163,25 @@
     init: function (user) {
       if (user.role !== 'admin') return;
 
-      // Fetch all-metrics
+      // If the URL has ?slug=X, we're in single-business mode — inject the
+      // switcher pre-selected to that slug but skip the aggregate render.
+      var urlSlug = new URLSearchParams(window.location.search).get('slug');
+
       window.AMCP.authedFetch('/api/client/all-metrics')
         .then(function (r) { return r.json(); })
         .then(function (data) {
           adminData = data;
           injectSwitcher(data.businesses);
-          // Start with aggregate view
-          renderAdminOverview();
+
+          if (urlSlug) {
+            // Single-business mode — pre-select dropdown, leave sections rendering from AMCP_DATA
+            var sel = document.getElementById('biz-select');
+            if (sel) sel.value = urlSlug;
+            currentSlug = urlSlug;
+          } else {
+            // Aggregate mode — render the all-businesses overview
+            renderAdminOverview();
+          }
         })
         .catch(function (err) { console.error('all-metrics failed', err); });
     },
