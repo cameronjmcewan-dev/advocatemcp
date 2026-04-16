@@ -1,4 +1,8 @@
-/* Recommendations section — data-driven rec cards + optimization checklist.
+/* Recommendations section — lives-data rec cards + optimization checklist,
+ * fetched from GET /api/client/recommendations (Worker-side rules over
+ * analytics + /agents/:slug/profile). Replaces the previous static
+ * template-based cards.
+ *
  * Registers as window.AMCP_SECTIONS['recommendations']. */
 (function () {
   'use strict';
@@ -6,116 +10,116 @@
   var rendered = false;
 
   function esc(s) {
-    return String(s)
+    return String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
-  /* Static rec cards — each has a condition function and content */
-  var REC_CARDS = [
-    {
-      title: 'Respond to Emergency Queries',
-      body:  'You\'re getting emergency-intent queries. Make sure your phone number and hours are prominent in your Advocate profile so AI answers include immediate contact info.',
-      show:  function (d) { return (d.queries_by_intent && d.queries_by_intent['emergency'] > 0); },
-    },
-    {
-      title: 'Lean into "Best Of" Positioning',
-      body:  'Best/top queries are common for your category. Add awards, certifications, or a star rating to your profile to boost citation in ranking-style AI answers.',
-      show:  function (d) { return (d.queries_by_intent && (d.queries_by_intent['best_top'] || 0) > 0); },
-    },
-    {
-      title: 'Optimize for Affordable Seekers',
-      body:  'A portion of your queries are price-sensitive. Consider adding a pricing tier or a "free estimate" CTA to your referral URL to convert affordable-intent clicks.',
-      show:  function (d) { return (d.queries_by_intent && (d.queries_by_intent['affordable'] || 0) > 0); },
-    },
-    {
-      title: 'Expand Your Service Description',
-      body:  'Specific-service queries are landing on your profile. Add more detail about individual services so AI answers can match narrow queries more precisely.',
-      show:  function (d) { return (d.queries_by_intent && (d.queries_by_intent['specific_service'] || 0) > 0); },
-    },
-    {
-      title: 'Improve Referral Click Rate',
-      body:  'Your click-through rate has room to grow. Try updating your referral URL to a high-intent landing page (e.g. a contact form or booking page) rather than your homepage.',
-      show:  function (d) {
-        if (typeof d.total_queries !== 'number' || d.total_queries === 0) return false;
-        return (d.referral_clicks / d.total_queries) < 0.05;
-      },
-    },
-    {
-      title: 'Activate More AI Crawlers',
-      body:  'You\'re visible to some AI bots but not all. Perplexity, ChatGPT, and Google AI are the highest-traffic sources. Ensure your domain is reachable and your sitemap is current.',
-      show:  function (d) { return Object.keys(d.queries_by_crawler || {}).length < 3; },
-    },
-  ];
-
-  /* Always-visible checklist items */
-  var CHECKLIST = [
-    { text: 'Business profile complete (name, description, services)', done: true },
-    { text: 'Referral URL set to a conversion page (not homepage)', done: false },
-    { text: 'Receiving traffic from at least 2 AI bots',
-      doneCheck: function (d) { return Object.keys(d.queries_by_crawler || {}).length >= 2; } },
-    { text: 'At least 1 referral click recorded',
-      doneCheck: function (d) { return (d.referral_clicks || 0) >= 1; } },
-    { text: 'Response tone set to match your brand voice', done: true },
-  ];
-
-  function checkItem(item, data) {
-    if (typeof item.doneCheck === 'function') return item.doneCheck(data);
-    return !!item.done;
+  function priorityBadge(p) {
+    if (p === 'high') return '<span class="badge badge-red" style="margin-left:auto"><span class="badge-dot"></span>high</span>';
+    if (p === 'med')  return '<span class="badge badge-yellow" style="margin-left:auto"><span class="badge-dot"></span>med</span>';
+    return '<span class="badge badge-accent" style="margin-left:auto"><span class="badge-dot"></span>low</span>';
   }
 
-  function renderRecs(data) {
+  function renderRecs(recs) {
     var grid = document.getElementById('rec-grid');
     if (!grid) return;
-    var active = REC_CARDS.filter(function (c) { return c.show(data); }).slice(0, 4);
-    if (!active.length) {
+    if (!Array.isArray(recs) || !recs.length) {
       grid.innerHTML = '<div class="db-card" style="grid-column:1/-1">' +
         '<div class="empty">' +
-        '<div class="empty-icon"><i data-lucide="check-circle"></i></div>' +
-        '<div class="empty-title">All good!</div>' +
-        '<div class="empty-desc">Keep monitoring your dashboard as traffic grows.</div>' +
+          '<div class="empty-icon"><i data-lucide="check-circle"></i></div>' +
+          '<div class="empty-title">Everything looks good — no active recommendations.</div>' +
+          '<div class="empty-desc">Keep monitoring your dashboard as traffic grows.</div>' +
         '</div></div>';
+      if (window.lucide) lucide.createIcons();
       return;
     }
-    grid.innerHTML = active.map(function (c) {
+    grid.innerHTML = recs.map(function (r) {
+      var action = (r.action_label && r.action_url)
+        ? '<div style="margin-top:10px"><a href="' + esc(r.action_url) + '" class="btn-sm btn-ghost" ' +
+             'style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:var(--tx-xs)">' +
+             esc(r.action_label) +
+          '</a></div>'
+        : '';
+      var impact = r.impact
+        ? '<div style="margin-top:8px;font-size:var(--tx-xs);color:var(--muted);font-style:italic">' + esc(r.impact) + '</div>'
+        : '';
       return '<div class="rec-card">' +
         '<div class="rec-card-title">' +
           '<div class="rec-icon"><i data-lucide="lightbulb"></i></div>' +
-          esc(c.title) +
+          '<span>' + esc(r.title || 'Recommendation') + '</span>' +
+          priorityBadge(r.priority) +
         '</div>' +
-        '<div class="rec-card-body">' + esc(c.body) + '</div>' +
-        '</div>';
+        '<div class="rec-card-body">' + esc(r.body || '') + '</div>' +
+        impact +
+        action +
+      '</div>';
     }).join('');
   }
 
-  function renderChecklist(data) {
+  function renderChecklist(items) {
     var wrap = document.getElementById('checklist');
     if (!wrap) return;
-    wrap.innerHTML = CHECKLIST.map(function (item) {
-      var done = checkItem(item, data);
+    if (!Array.isArray(items) || !items.length) {
+      wrap.innerHTML = '<div class="empty-desc" style="font-size:var(--tx-sm);color:var(--muted)">No checklist items.</div>';
+      return;
+    }
+    wrap.innerHTML = items.map(function (item) {
+      var done = !!item.done;
       return '<div class="check-item">' +
         '<div class="check-dot ' + (done ? 'check-dot-done' : 'check-dot-pend') + '">' +
           (done ? '<i data-lucide="check"></i>' : '') +
         '</div>' +
-        '<span style="' + (done ? '' : 'color:var(--muted)') + '">' + esc(item.text) + '</span>' +
-        '</div>';
+        '<span style="' + (done ? '' : 'color:var(--muted)') + '">' + esc(item.label || '') + '</span>' +
+      '</div>';
     }).join('');
+  }
+
+  function showSkeleton() {
+    var grid = document.getElementById('rec-grid');
+    if (grid) grid.innerHTML =
+      '<div class="skeleton" style="height:120px;border-radius:12px"></div>' +
+      '<div class="skeleton" style="height:120px;border-radius:12px"></div>';
+    var wrap = document.getElementById('checklist');
+    if (wrap) wrap.innerHTML =
+      '<div class="skeleton" style="height:20px;border-radius:4px"></div>' +
+      '<div class="skeleton" style="height:20px;border-radius:4px;margin-top:8px"></div>' +
+      '<div class="skeleton" style="height:20px;border-radius:4px;margin-top:8px"></div>';
+  }
+
+  function showError(msg) {
+    var grid = document.getElementById('rec-grid');
+    if (grid) grid.innerHTML = '<div class="db-card" style="grid-column:1/-1">' +
+      '<div class="empty">' +
+        '<div class="empty-title">Couldn\'t load recommendations</div>' +
+        '<div class="empty-desc">' + esc(msg || 'Try refreshing in a moment.') + '</div>' +
+      '</div></div>';
+    var wrap = document.getElementById('checklist');
+    if (wrap) wrap.innerHTML =
+      '<div class="empty-desc" style="font-size:var(--tx-sm);color:var(--muted)">—</div>';
   }
 
   function render() {
     if (rendered) return;
-    var data = window.AMCP_DATA;
-    if (!data) return;
-
-    var safeData = typeof data.total_queries === 'number' ? data : {
-      total_queries: 0, referral_clicks: 0,
-      queries_by_crawler: {}, queries_by_intent: {},
-    };
-
     rendered = true;
-    renderRecs(safeData);
-    renderChecklist(safeData);
-    if (window.lucide) lucide.createIcons();
+
+    showSkeleton();
+    var slug = (window.AMCP_DATA && window.AMCP_DATA.slug) || '';
+    var path = '/api/client/recommendations' + (slug ? '?slug=' + encodeURIComponent(slug) : '');
+
+    window.AMCP.authedFetch(path)
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (data) {
+        renderRecs(data && data.recommendations);
+        renderChecklist(data && data.checklist);
+        if (window.lucide) lucide.createIcons();
+      })
+      .catch(function (err) {
+        showError(String(err && err.message || err));
+      });
   }
 
   window.AMCP_SECTIONS = window.AMCP_SECTIONS || {};
