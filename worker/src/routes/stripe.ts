@@ -710,7 +710,13 @@ export async function registerBusinessOnRailway(
     over_2000: "premium",
   };
   const rawPricingTier = typeof profile.pricing_tier === "string" ? profile.pricing_tier : "";
-  const pricingTier = pricingMap[rawPricingTier] ?? null;
+  // `pricingMap[...]` returns undefined when there's no mapping. We must NOT
+  // coalesce to null — Railway's zod schema (server/src/schemas/business.ts:
+  // OnboardingPayloadSchema) uses `pricing_tier: z.enum([...]).optional()`,
+  // which accepts undefined but REJECTS null with a validation_error. Setting
+  // the key to `undefined` below means JSON.stringify omits it entirely,
+  // which is what zod's .optional() actually wants.
+  const pricingTier: string | undefined = pricingMap[rawPricingTier];
 
   const differentiators = Array.isArray(profile.differentiators) ? profile.differentiators : [];
 
