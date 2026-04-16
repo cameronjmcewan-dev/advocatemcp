@@ -464,6 +464,10 @@ async function apiActivityDetail(request: Request, env: Env): Promise<Response> 
         try {
           const res = await fetch(`${base}/analytics/${biz.slug}/activity`, {
             headers: { Authorization: `Bearer ${biz.api_key}` },
+            // Cap each per-business fetch so one stalled tenant can't hold the
+            // whole admin aggregate hostage (Worker subrequests have a 30s
+            // ceiling; 5s × N in parallel keeps us well under it).
+            signal: AbortSignal.timeout(5000),
           });
           if (!res.ok) return { biz, data: null as ActivityPayload | null };
           const data = await res.json() as ActivityPayload;

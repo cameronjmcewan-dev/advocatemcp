@@ -59,14 +59,21 @@
   }
 
   // ── countUp: rAF tween of a numeric value ────────────────────────────────
+  // A monotonically increasing token is stamped on the element on each call
+  // so that if a second countUp lands on the same element mid-tween, the
+  // earlier rAF loop bails on its next frame instead of fighting the new one.
+  var countUpSeq = 0;
   function countUp(el, from, to, durationMs) {
     if (!el) return;
     var start  = Number(from) || 0;
     var end    = Number(to)   || 0;
     var dur    = Math.max(50, Number(durationMs) || 600);
     var t0     = null;
+    var token  = ++countUpSeq;
+    el.dataset.countUpToken = String(token);
 
     function step(ts) {
+      if (el.dataset.countUpToken !== String(token)) return; // superseded
       if (t0 === null) t0 = ts;
       var elapsed = ts - t0;
       var pct = Math.min(1, elapsed / dur);
@@ -161,6 +168,39 @@
   }
 
   var drawerListenersBound = false;
+  var drawerOpen = false;
+  var previouslyFocused = null;
+  var FOCUSABLE_SEL = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+  function getFocusableInPanel(panel) {
+    if (!panel) return [];
+    var nodes = panel.querySelectorAll(FOCUSABLE_SEL);
+    var out = [];
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      if (!n.hasAttribute('disabled') && n.getAttribute('aria-hidden') !== 'true') out.push(n);
+    }
+    return out;
+  }
+
+  function trapTab(ev) {
+    if (!drawerOpen || ev.key !== 'Tab') return;
+    var refs = getDrawerRefs();
+    if (!refs.panel) return;
+    var focusable = getFocusableInPanel(refs.panel);
+    if (focusable.length === 0) { ev.preventDefault(); return; }
+    var first = focusable[0];
+    var last  = focusable[focusable.length - 1];
+    var active = document.activeElement;
+    if (ev.shiftKey && active === first) {
+      ev.preventDefault();
+      last.focus();
+    } else if (!ev.shiftKey && active === last) {
+      ev.preventDefault();
+      first.focus();
+    }
+  }
+
   function bindDrawerListenersOnce() {
     if (drawerListenersBound) return;
     var refs = getDrawerRefs();
@@ -170,19 +210,34 @@
     document.addEventListener('keydown', function (ev) {
       if (ev.key === 'Escape') closeDrawer();
     });
+    refs.panel.addEventListener('keydown', trapTab);
     drawerListenersBound = true;
   }
 
+  /**
+   * Open the right-side drawer with the given title and body HTML.
+   *
+   * SECURITY: bodyHTML is inserted verbatim via innerHTML. Callers MUST
+   * pre-escape any untrusted content (agent IDs, query text, user input)
+   * before passing it in. Trusted static template fragments are fine.
+   */
   function openDrawer(title, bodyHTML) {
     bindDrawerListenersOnce();
     var refs = getDrawerRefs();
     if (!refs.overlay || !refs.panel) return;
+    previouslyFocused = document.activeElement;
     if (refs.title) refs.title.textContent = title == null ? 'Details' : String(title);
     if (refs.body)  refs.body.innerHTML  = bodyHTML == null ? '' : bodyHTML;
     refs.overlay.classList.add('open');
     refs.panel.classList.add('open');
     refs.overlay.setAttribute('aria-hidden', 'false');
     refs.panel.setAttribute('aria-hidden', 'false');
+    drawerOpen = true;
+    // Prefer the close button; fall back to the first focusable descendant.
+    var target = refs.close || getFocusableInPanel(refs.panel)[0] || null;
+    if (target && typeof target.focus === 'function') {
+      try { target.focus(); } catch (_) { /* ignore */ }
+    }
   }
   function closeDrawer() {
     var refs = getDrawerRefs();
@@ -191,6 +246,11 @@
     refs.panel.classList.remove('open');
     refs.overlay.setAttribute('aria-hidden', 'true');
     refs.panel.setAttribute('aria-hidden', 'true');
+    drawerOpen = false;
+    if (previouslyFocused && document.contains(previouslyFocused) && typeof previouslyFocused.focus === 'function') {
+      try { previouslyFocused.focus(); } catch (_) { /* ignore */ }
+    }
+    previouslyFocused = null;
   }
 
   // ── Toast stack (auto-dismiss 4s) ────────────────────────────────────────
