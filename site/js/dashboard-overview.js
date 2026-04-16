@@ -97,8 +97,10 @@
 
     if (overviewChart) { overviewChart.destroy(); overviewChart = null; }
 
-    var isDark = document.documentElement.getAttribute('data-theme') !== 'light';
-    var accent = isDark ? '#4f98a3' : '#01696f';
+    var isDark = (window.AMCP_THEME && window.AMCP_THEME.isDark)
+      ? window.AMCP_THEME.isDark()
+      : document.documentElement.getAttribute('data-theme') !== 'light';
+    var accent = window.AMCP_THEME ? window.AMCP_THEME.accent() : '#7d2550';
     var gridColor = isDark ? 'rgba(57,56,54,.5)' : 'rgba(221,219,216,.7)';
     var textColor = isDark ? '#7a7875' : '#6b6967';
 
@@ -108,7 +110,7 @@
         labels: labels,
         datasets: [{
           data: values,
-          backgroundColor: accent + '55',
+          backgroundColor: window.AMCP_THEME ? window.AMCP_THEME.accentWithAlpha('55') : accent + '55',
           borderColor: accent,
           borderWidth: 1,
           borderRadius: 3,
