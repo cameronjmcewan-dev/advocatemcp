@@ -783,6 +783,45 @@ tr:hover td{background:rgba(255,255,255,.02)}
       </div>
 
       <div class="settings-card">
+        <div class="settings-card-title">Business Profile</div>
+        <div class="settings-card-sub">
+          These fields feed the structured business data AI crawlers and MCP clients see.
+          Business name (slug) is immutable — contact support to rename.
+        </div>
+        <form id="profile-form" style="display:flex;flex-direction:column;gap:10px">
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+            Business name
+            <input type="text" class="fi" id="profile-name" disabled
+                   title="Business name is tied to your slug and cannot be edited here.">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+            Description
+            <input type="text" class="fi" id="profile-description"
+                   placeholder="One-line pitch AI will quote when citing your business.">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+            Category
+            <input type="text" class="fi" id="profile-category"
+                   placeholder='e.g. "Bamboo fly-rod maker"'>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+            Services (comma separated)
+            <input type="text" class="fi" id="profile-services"
+                   placeholder="e.g. Custom rods, Repairs, Lessons">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+            Website
+            <input type="url" class="fi" id="profile-website"
+                   placeholder="https://example.com">
+          </label>
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <button class="btn-sm btn-ghost" id="btn-save-profile" type="submit">Save profile</button>
+            <span style="align-self:center;font-size:var(--tx-xs);color:var(--muted)" id="profile-status"></span>
+          </div>
+        </form>
+      </div>
+
+      <div class="settings-card">
         <div class="settings-card-title">API Key</div>
         <div class="settings-card-sub">
           Your API key is configured. Use Rotate to generate a new one —
@@ -796,6 +835,21 @@ tr:hover td{background:rgba(255,255,255,.02)}
           <button class="btn-sm btn-ghost" id="btn-rotate-key">Rotate</button>
         </div>
         <div style="margin-top:8px;font-size:var(--tx-xs);color:var(--muted)" id="rotate-status"></div>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-title">Account activity</div>
+        <div class="settings-card-sub">Recent account-level events</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;justify-content:space-between;font-size:var(--tx-sm)">
+            <span style="color:var(--muted)">Last sign-in</span>
+            <span id="account-last-login">—</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:var(--tx-sm)">
+            <span style="color:var(--muted)">Last API key rotation</span>
+            <span id="account-last-rotate">—</span>
+          </div>
+        </div>
       </div>
     </section>
 
