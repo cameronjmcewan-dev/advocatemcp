@@ -8,7 +8,7 @@ import {
 } from "../auth";
 import {
   getUserByEmail, createUser, updateUserPassword, createSession, getSessionByToken,
-  deleteSession, getUserBusinesses, getAllBusinesses, getBusinessBySlug, createBusiness,
+  deleteSession, getUserBusinesses, getAllBusinesses, getActiveBusinesses, getBusinessBySlug, createBusiness,
   grantAccess, checkRateLimit, recordLoginAttempt, updateBusinessApiKey,
 } from "../portalDb";
 import type { Business, User, SessionWithUser } from "../portalDb";
@@ -266,7 +266,7 @@ async function dashboard(request: Request, env: Env): Promise<Response> {
   if (!ctx) return redirect("/login?error=expired");
 
   const businesses = ctx.role === "admin"
-    ? await getAllBusinesses(env.DB)
+    ? await getActiveBusinesses(env.DB)
     : await getUserBusinesses(env.DB, ctx.user_id);
 
   // Dashboard gating: redirect non-admin users whose tenant isn't active yet
@@ -325,7 +325,7 @@ async function apiMetrics(request: Request, env: Env): Promise<Response> {
   if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
 
   const businesses = ctx.role === "admin"
-    ? await getAllBusinesses(env.DB)
+    ? await getActiveBusinesses(env.DB)
     : await getUserBusinesses(env.DB, ctx.user_id);
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
@@ -344,7 +344,7 @@ async function apiAllMetrics(request: Request, env: Env): Promise<Response> {
   if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
   if (ctx.role !== "admin") return withCors(jsonErr(403, "Admin only"), request, { credentials: true });
 
-  const businesses = await getAllBusinesses(env.DB);
+  const businesses = await getActiveBusinesses(env.DB);
   const results = await Promise.all(
     businesses.map(async (biz) => {
       const analytics = await fetchAnalytics(biz, env);
@@ -400,7 +400,7 @@ async function apiActivityDetail(request: Request, env: Env): Promise<Response> 
   if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
 
   const businesses = ctx.role === "admin"
-    ? await getAllBusinesses(env.DB)
+    ? await getActiveBusinesses(env.DB)
     : await getUserBusinesses(env.DB, ctx.user_id);
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
@@ -428,7 +428,7 @@ async function apiActivity(request: Request, env: Env): Promise<Response> {
   if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
 
   const businesses = ctx.role === "admin"
-    ? await getAllBusinesses(env.DB)
+    ? await getActiveBusinesses(env.DB)
     : await getUserBusinesses(env.DB, ctx.user_id);
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;

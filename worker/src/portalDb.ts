@@ -180,6 +180,25 @@ export async function getAllBusinesses(db: D1Database): Promise<Business[]> {
   return result.results;
 }
 
+/**
+ * Active businesses only — filters out pending onboarding rows.
+ *
+ * A row is "pending" when api_key = 'pending' (set by registerBusinessInD1
+ * before the Stripe webhook fires). These rows are onboarding-in-progress
+ * and must never appear in customer-facing lists (business switcher,
+ * aggregate counts) — they skew totals and surface half-setup tenants.
+ *
+ * getAllBusinesses() is kept for admin debug views where seeing everything
+ * matters; use this helper for the dashboard and every /api/client/*
+ * proxy that serves user-facing data.
+ */
+export async function getActiveBusinesses(db: D1Database): Promise<Business[]> {
+  const result = await db
+    .prepare("SELECT * FROM businesses WHERE api_key != 'pending' ORDER BY business_name")
+    .all<Business>();
+  return result.results;
+}
+
 export async function getUserBusinesses(db: D1Database, userId: string): Promise<Business[]> {
   const result = await db
     .prepare(
