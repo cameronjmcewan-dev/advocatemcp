@@ -56,6 +56,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/activity"   && method === "GET")  return apiActivity(request, env);
   if (pathname === "/api/client/clicks"          && method === "GET")  return apiClicks(request, env);
   if (pathname === "/api/client/recommendations" && method === "GET")  return apiRecommendations(request, env);
+  if (pathname === "/api/client/profile"         && method === "GET")  return apiGetProfile(request, env);
   if (pathname === "/api/client/profile"         && method === "POST") return apiUpdateProfile(request, env);
   if (pathname === "/api/client/rotate-key" && method === "POST") return apiRotateKey(request, env);
   if (pathname === "/api/client/radar"         && method === "GET")    return apiRadar(request, env);
@@ -816,6 +817,27 @@ async function apiRecommendations(request: Request, env: Env): Promise<Response>
 
   const out = buildRecommendations(analytics, profile);
   return withCors(jsonOk(out), request, { credentials: true });
+}
+
+// ── GET /api/client/profile ────────────────────────────────────────────────
+// Proxy to Railway's GET /agents/:slug/profile so the Settings edit form can
+// pre-fill with the tenant's current values instead of empty defaults.
+// Session auth + slug scope-check via getUserBusinesses.
+
+async function apiGetProfile(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  const profile = await fetchProfile(biz, env);
+  if (!profile) return withCors(jsonErr(502, "Profile unavailable"), request, { credentials: true });
+  return withCors(jsonOk(profile), request, { credentials: true });
 }
 
 // ── POST /api/client/profile ───────────────────────────────────────────────

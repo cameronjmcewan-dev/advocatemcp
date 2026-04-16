@@ -52,9 +52,10 @@
       if (slugEl) slugEl.textContent = window.AMCP_DATA.slug;
     }
 
-    // Account activity — last login is the current session (we only have
-    // "now" client-side until /api/client/me grows a last_login_at field).
-    setText('account-last-login', 'This session');
+    // Account activity — we don't yet have a last_login_at field from
+    // /api/client/me, so show an em-dash instead of a cosmetic "This session"
+    // placeholder. Flip to a real value once the endpoint exposes it.
+    setText('account-last-login', '—');
 
     var lastRotate = null;
     try { lastRotate = localStorage.getItem(LAST_ROTATE_KEY); } catch (_) { /* ignore */ }
@@ -87,32 +88,51 @@
     if (w) w.value = profile.website || '';
   }
 
-  function loadProfile() {
-    // The profile fetch has its own endpoint on Railway; the Worker's
-    // /api/client/recommendations uses the same source. Rather than add
-    // another proxy route, read it from /api/client/profile — OR, if the
-    // server only has POST, reuse /api/client/recommendations which fetches
-    // the profile internally. The simplest path: POST an empty profile
-    // update to trigger validation error… not ideal. Instead hit the
-    // Worker's /api/client/me → user object and derive name from the slug
-    // for now, and let the user overwrite other fields via the form.
-    //
-    // Implementation choice: add a lightweight GET via the
-    // recommendations endpoint, which already returns checklist flags
-    // based on profile completeness. For richer fields we fall back to
-    // whatever AMCP_DATA exposes.
+  var profileAbortCtrl = null;
 
-    // Prefer AMCP_DATA.profile if the metrics endpoint starts returning it
-    // in a future pass; right now use sensible empty defaults.
-    var derived = {
+  function loadProfile() {
+    // Pre-fill the form with empty defaults so the UI has something to show
+    // while the fetch is in flight, then overlay real values once Railway
+    // responds. This also keeps the form usable if the proxy fails.
+    var fallback = {
       name:        (window.AMCP_DATA && window.AMCP_DATA.business_name) || '',
       description: '',
       category:    '',
       services:    [],
       website:     '',
     };
-    fillProfileForm(derived);
-    profileCache = derived;
+    fillProfileForm(fallback);
+    profileCache = fallback;
+
+    var slug = window.AMCP_DATA && window.AMCP_DATA.slug;
+    if (!slug) return;
+
+    // Abort any in-flight profile fetch before starting a new one.
+    if (profileAbortCtrl) profileAbortCtrl.abort();
+    profileAbortCtrl = new AbortController();
+
+    window.AMCP.authedFetch('/api/client/profile?slug=' + encodeURIComponent(slug), {
+      signal: profileAbortCtrl.signal,
+    })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (profile) {
+        if (!profile) return;
+        fillProfileForm({
+          name:        profile.name        || fallback.name,
+          description: profile.description || '',
+          category:    profile.category    || '',
+          services:    Array.isArray(profile.services)
+                         ? profile.services
+                         : (profile.services || ''),
+          website:     profile.website     || '',
+        });
+        profileCache = profile;
+      })
+      .catch(function (err) {
+        // AbortError is benign; other failures are non-fatal — the form
+        // stays with the fallback defaults.
+        if (err && err.name === 'AbortError') return;
+      });
   }
 
   function render() {

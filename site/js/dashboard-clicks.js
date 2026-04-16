@@ -8,6 +8,7 @@
 
   var rendered = false;
   var clicksTrendChart = null;
+  var abortCtrl = null;
 
   var BOT_LABELS = {
     'PerplexityBot':      'Perplexity',
@@ -253,7 +254,12 @@
     var slug = (data && data.slug) || '';
     var path = '/api/client/clicks' + (slug ? '?slug=' + encodeURIComponent(slug) : '');
 
-    window.AMCP.authedFetch(path)
+    // Abort any in-flight fetch before starting a new one so late-resolving
+    // promises don't write to stale DOM if the user switches sections.
+    if (abortCtrl) abortCtrl.abort();
+    abortCtrl = new AbortController();
+
+    window.AMCP.authedFetch(path, { signal: abortCtrl.signal })
       .then(function (r) { return r.json(); })
       .then(function (resp) {
         var clicks = (resp && resp.clicks) || [];
@@ -263,6 +269,8 @@
         renderRecentClicks(clicks);
       })
       .catch(function (err) {
+        // AbortError is benign — skip reporting.
+        if (err && err.name === 'AbortError') return;
         // Preserve the KPIs but surface a soft failure in the slots that
         // depend on the clicks payload.
         var barWrap = document.getElementById('clicks-bot-bars');

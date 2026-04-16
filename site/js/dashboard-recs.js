@@ -8,6 +8,7 @@
   'use strict';
 
   var rendered = false;
+  var abortCtrl = null;
 
   function esc(s) {
     return String(s == null ? '' : s)
@@ -107,7 +108,12 @@
     var slug = (window.AMCP_DATA && window.AMCP_DATA.slug) || '';
     var path = '/api/client/recommendations' + (slug ? '?slug=' + encodeURIComponent(slug) : '');
 
-    window.AMCP.authedFetch(path)
+    // Abort any in-flight fetch before starting a new one so late-resolving
+    // promises don't write to stale DOM if the user switches sections.
+    if (abortCtrl) abortCtrl.abort();
+    abortCtrl = new AbortController();
+
+    window.AMCP.authedFetch(path, { signal: abortCtrl.signal })
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
@@ -118,6 +124,8 @@
         if (window.lucide) lucide.createIcons();
       })
       .catch(function (err) {
+        // AbortError is benign — skip reporting.
+        if (err && err.name === 'AbortError') return;
         showError(String(err && err.message || err));
       });
   }
