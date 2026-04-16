@@ -13,7 +13,7 @@ describe("synthSlots — pure function", () => {
   });
 
   it("returns 2 half-hour slots for a 09:00–10:00 Monday", () => {
-    const hours: HoursJson = { monday: { open: "09:00", close: "10:00" } };
+    const hours: HoursJson = { mon: { open: "09:00", close: "10:00" } };
     const out = synthSlots({ hours, window_start: MON_0000, window_end: TUE_0000 });
     expect(out).toHaveLength(2);
     expect(out[0]).toEqual({ start: MON_0000 + 9 * 3600, end: MON_0000 + 9 * 3600 + 1800, capacity: 1 });
@@ -22,15 +22,15 @@ describe("synthSlots — pure function", () => {
 
   it("caps output at 48 slots even if the window is wider", () => {
     const hours: HoursJson = {
-      monday: { open: "00:00", close: "23:59" },
-      tuesday: { open: "00:00", close: "23:59" },
+      mon: { open: "00:00", close: "23:59" },
+      tue: { open: "00:00", close: "23:59" },
     };
     const out = synthSlots({ hours, window_start: MON_0000, window_end: MON_0000 + 3 * 86400 });
     expect(out.length).toBe(48);
   });
 
   it("drops a partial first slot when window_start lands mid-slot", () => {
-    const hours: HoursJson = { monday: { open: "09:00", close: "10:00" } };
+    const hours: HoursJson = { mon: { open: "09:00", close: "10:00" } };
     const out = synthSlots({ hours, window_start: MON_0000 + 9 * 3600 + 600, window_end: TUE_0000 });
     // 09:10 UTC is inside the 09:00 slot, so the slotter must drop that slot and start at 09:30
     expect(out).toHaveLength(1);

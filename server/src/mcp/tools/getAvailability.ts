@@ -7,14 +7,18 @@ import { DESCRIPTORS } from "../../manifest/descriptor.js";
 import { withAgentRequestLog } from "../../lib/agentRequestLogger.js";
 
 export interface DaySpec { open: string; close: string }
-export type HoursJson = Partial<Record<
-  "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday",
-  DaySpec
->>;
+export interface HoursJson {
+  mon?: DaySpec | null;
+  tue?: DaySpec | null;
+  wed?: DaySpec | null;
+  thu?: DaySpec | null;
+  fri?: DaySpec | null;
+  sat?: DaySpec | null;
+  sun?: DaySpec | null;
+  emergency_24_7?: boolean;
+}
 
-const DAY_NAMES = [
-  "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
-] as const;
+const DAY_NAMES = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 const SLOT_SECONDS = 1800;
 const MAX_SLOTS = 48;
 
