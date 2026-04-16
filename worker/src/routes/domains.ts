@@ -633,6 +633,113 @@ export async function handleSetFallbackOrigin(
 // Body: { "hostname": "www.workmancopyco.com" }. Idempotent: checks for an
 // existing matching route before creating.
 
+/**
+ * Core "ensure a Workers Route exists for hostname" logic, usable from both
+ * the admin HTTP handler below and the Stripe webhook activation path.
+ *
+ * Idempotent — returns the existing route if one matches `${hostname}/*`.
+ * Returns a typed result instead of a Response so callers can handle errors
+ * contextually (the webhook logs + continues; the admin handler 502s).
+ *
+ * All CF calls are wrapped so that transient CF 5xx / credential problems
+ * don't cascade. Callers decide whether to block on failure.
+ */
+export interface EnsureWorkerRouteResult {
+  ok: boolean;
+  hostname: string;
+  pattern: string;
+  script: string;
+  created: boolean;
+  route_id?: string;
+  note?: string;
+  error?: string;
+  details?: unknown;
+}
+
+const WORKER_SCRIPT_NAME = "advocatemcp-worker";
+
+export async function ensureWorkerRouteForHostname(
+  env: Env,
+  hostname: string,
+): Promise<EnsureWorkerRouteResult> {
+  const normalized = hostname.trim().toLowerCase();
+  const pattern = `${normalized}/*`;
+  const base = {
+    hostname: normalized,
+    pattern,
+    script: WORKER_SCRIPT_NAME,
+    created: false,
+  };
+
+  if (!env.CF_API_TOKEN || !env.CF_ZONE_ID) {
+    return {
+      ...base,
+      ok: false,
+      error: "CF_API_TOKEN / CF_ZONE_ID not configured",
+    };
+  }
+
+  const routesUrl = `https://api.cloudflare.com/client/v4/zones/${env.CF_ZONE_ID}/workers/routes`;
+  const headers = { Authorization: `Bearer ${env.CF_API_TOKEN}` };
+
+  // 1. Idempotency check — if a matching route already exists, reuse it.
+  let listResp: Response;
+  try {
+    listResp = await fetch(routesUrl, { headers });
+  } catch (err) {
+    return { ...base, ok: false, error: `CF routes list fetch failed: ${String(err)}` };
+  }
+
+  const listData = (await listResp.json().catch(() => ({}))) as {
+    success?: boolean;
+    result?: Array<{ id: string; pattern: string; script: string }>;
+  };
+
+  if (!listResp.ok || !listData.success) {
+    return { ...base, ok: false, error: "CF routes list non-success", details: listData };
+  }
+
+  const existing = listData.result?.find((r) => r.pattern === pattern);
+  if (existing) {
+    return {
+      ...base,
+      ok: true,
+      created: false,
+      route_id: existing.id,
+      note: "route already existed",
+    };
+  }
+
+  // 2. Create the route.
+  let createResp: Response;
+  try {
+    createResp = await fetch(routesUrl, {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ pattern, script: WORKER_SCRIPT_NAME }),
+    });
+  } catch (err) {
+    return { ...base, ok: false, error: `CF routes create fetch failed: ${String(err)}` };
+  }
+
+  const createData = (await createResp.json().catch(() => ({}))) as {
+    success?: boolean;
+    result?: { id: string };
+    errors?: unknown;
+  };
+
+  if (!createResp.ok || !createData.success) {
+    return { ...base, ok: false, error: "CF routes create non-success", details: createData };
+  }
+
+  return {
+    ...base,
+    ok: true,
+    created: true,
+    route_id: createData.result?.id,
+  };
+}
+
 export async function handleEnsureWorkerRoute(
   request: Request,
   env: Env
@@ -641,66 +748,30 @@ export async function handleEnsureWorkerRoute(
     return jsonErr(401, "Unauthorized — X-Admin-Secret header required");
   }
 
-  if (!env.CF_API_TOKEN || !env.CF_ZONE_ID) {
-    return jsonErr(500, "CF_API_TOKEN and CF_ZONE_ID secrets are not configured");
-  }
-
   let hostname: string;
   try {
     const body = await request.json<{ hostname?: string }>();
     if (typeof body.hostname !== "string" || !body.hostname.trim()) {
       return jsonErr(400, "Missing required field: hostname");
     }
-    hostname = body.hostname.trim().toLowerCase();
+    hostname = body.hostname;
   } catch {
     return jsonErr(400, "Invalid JSON body");
   }
 
-  const pattern = `${hostname}/*`;
-  const script  = "advocatemcp-worker";
-  const routesUrl = `https://api.cloudflare.com/client/v4/zones/${env.CF_ZONE_ID}/workers/routes`;
-
-  // 1. List existing routes and check for duplicate
-  const listResp = await fetch(routesUrl, {
-    headers: { Authorization: `Bearer ${env.CF_API_TOKEN}` },
-  });
-  const listData = await listResp.json() as { success?: boolean; result?: Array<{ id: string; pattern: string; script: string }> };
-  if (!listResp.ok || !listData.success) {
-    return jsonErr(502, "CF workers/routes list failed", listData);
-  }
-
-  const existing = listData.result?.find((r) => r.pattern === pattern);
-  if (existing) {
-    return jsonOk({
-      hostname,
-      pattern,
-      script,
-      created: false,
-      route_id: existing.id,
-      note: "route already existed",
-    });
-  }
-
-  // 2. Create the route
-  const createResp = await fetch(routesUrl, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.CF_API_TOKEN}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ pattern, script }),
-  });
-  const createData = await createResp.json() as { success?: boolean; result?: { id: string }; errors?: unknown };
-  if (!createResp.ok || !createData.success) {
-    return jsonErr(502, "CF workers/routes create failed", createData);
+  const result = await ensureWorkerRouteForHostname(env, hostname);
+  if (!result.ok) {
+    const status = result.error?.includes("not configured") ? 500 : 502;
+    return jsonErr(status, result.error ?? "ensureWorkerRoute failed", result.details);
   }
 
   return jsonOk({
-    hostname,
-    pattern,
-    script,
-    created: true,
-    route_id: createData.result?.id,
+    hostname: result.hostname,
+    pattern: result.pattern,
+    script: result.script,
+    created: result.created,
+    route_id: result.route_id,
+    note: result.note,
   });
 }
 

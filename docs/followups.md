@@ -12,8 +12,19 @@ Last updated: 2026-04-13 (Sunday night sprint)
 
 The self-healing reconcile on `POST /admin/domains/activate` handles piece 1. Piece 2 (the Worker Route) is currently manual via the CF dashboard until the `CF_API_TOKEN` scope gets `Workers Routes: Edit`; `POST /admin/domains/ensure-worker-route` is already wired and ready for that day. See `docs/dns-routing.md` for the full design or `docs/superpowers/specs/2026-04-14-dns-self-healing-activation-design.md` for the original spec.
 
-### CF_API_TOKEN needs Workers Routes: Edit scope
-Blocking full automation of tenant onboarding. Today the token can create/update CF SaaS custom hostnames but not Workers Routes, which forces the manual dashboard step above. To fix: edit the existing API token at dash.cloudflare.com/profile/api-tokens, add permission `Account > Workers Routes > Edit` to the same zone scope (`advocatemcp.com`). No secret rotation needed if the existing token is edited in place. Then fold a call to `POST /admin/domains/ensure-worker-route` into `activateDomain` so new tenants get the route automatically.
+### ~~CF_API_TOKEN needs Workers Routes: Edit scope~~ RESOLVED (pending token upgrade)
+**Code resolved Apr 16 2026.** The Stripe webhook now calls `ensureWorkerRouteForHostname` automatically for every paying tenant (both `skipDns=true` public-wizard flow and custom-domain flow). `createCfHostnameForTenant` is also now called in the skipDns branch so wizard-signup subdomains (`{slug}.hosted.advocatemcp.com`) get their CF SaaS custom hostname provisioned. Both CF calls are non-fatal — if the token is under-scoped or CF is transiently unavailable, the tenant still activates and the failure is logged for manual recovery.
+
+**Remaining operator step:** upgrade `CF_API_TOKEN` at dash.cloudflare.com/profile/api-tokens to include `Account > Workers Routes > Edit` on the `advocatemcp.com` zone. Once that scope lands, every new paying signup (custom-domain or wizard) auto-gets both pieces (CF hostname + Workers Route).
+
+**One-shot backfill for WCC:** after the token upgrade, run:
+```
+curl -X POST https://customers.advocatemcp.com/admin/domains/ensure-worker-route \
+  -H "X-Admin-Secret: <ADMIN_SECRET>" \
+  -H "Content-Type: application/json" \
+  -d '{"hostname":"www.workmancopyco.com"}'
+```
+This creates the missing `www.workmancopyco.com/*` route and fixes the 522s.
 
 Workman Copy Co's domain (www.workmancopyco.com) currently returns 522 for AI crawler traffic.
 The worker code is fully prepared to handle custom hostname requests (BUSINESS_MAP KV lookup,
