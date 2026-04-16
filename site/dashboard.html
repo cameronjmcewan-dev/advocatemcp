@@ -496,6 +496,11 @@ tr:hover td{background:rgba(255,255,255,.02)}
   flex-shrink:0;
 }
 .amcp-activity-ts{font-size:var(--tx-xs);color:var(--muted);flex-shrink:0}
+
+/* ── Pro-only gating — sidebar nav items tagged with data-pro-only are
+ *   hidden unless body carries .pro-tier (set by the shell after metrics). */
+.db-nav-item[data-pro-only]{display:none}
+body.pro-tier .db-nav-item[data-pro-only]{display:flex}
 </style>
 </head>
 <body>
@@ -531,6 +536,9 @@ tr:hover td{background:rgba(255,255,255,.02)}
     </div>
     <div class="db-nav-item" data-section="activity">
       <i data-lucide="zap"></i><span>Activity</span>
+    </div>
+    <div class="db-nav-item" data-section="radar" data-pro-only>
+      <i data-lucide="radar"></i><span>Radar</span>
     </div>
     <div class="db-nav-item" data-section="domains">
       <i data-lucide="globe"></i><span>Domains</span>
@@ -901,6 +909,60 @@ tr:hover td{background:rgba(255,255,255,.02)}
       </div>
     </section>
 
+    <!-- ── Competitor Radar (Pro-only) ── -->
+    <section id="sec-radar" class="db-sec">
+      <p class="db-sec-title">Competitor Radar</p>
+      <p class="db-sec-sub">Weekly Perplexity polls for your key queries — win/loss tracking vs competitors</p>
+
+      <div class="error-banner" id="radar-error"></div>
+
+      <!-- Locked state (non-Pro tenant — admin always sees data) -->
+      <div id="radar-locked" class="db-card" style="display:none;max-width:520px">
+        <div class="db-card-title" style="color:var(--accent)">Available on Pro</div>
+        <p style="font-size:var(--tx-sm);color:var(--muted);line-height:1.7;margin-bottom:16px">
+          Competitor Radar runs weekly Perplexity polls for your core queries, tracks whether
+          your business shows up in citations, and flags the competitors who beat you. Upgrade
+          to Pro to unlock.
+        </p>
+        <a href="mailto:support@advocatemcp.com?subject=Upgrade%20to%20Pro"
+           style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;
+                  background:var(--accent);color:#fff;
+                  border:1px solid var(--accent);border-radius:var(--r-md);
+                  font-size:var(--tx-sm);font-weight:500;">
+          Talk to us about Pro &rarr;
+        </a>
+      </div>
+
+      <!-- Data state -->
+      <div id="radar-content" style="display:none">
+        <div class="kpi-grid" id="radar-kpis" style="grid-template-columns:repeat(3,1fr)">
+          <div class="kpi-card"><div class="kpi-label">Basket size</div><div class="kpi-val skeleton" style="height:30px;width:50px"></div><div class="kpi-hint skeleton" style="height:11px;width:100px;margin-top:8px"></div></div>
+          <div class="kpi-card"><div class="kpi-label">Citation rate (7d)</div><div class="kpi-val skeleton" style="height:30px;width:50px"></div><div class="kpi-hint skeleton" style="height:11px;width:100px;margin-top:8px"></div></div>
+          <div class="kpi-card"><div class="kpi-label">Wins (7d)</div><div class="kpi-val skeleton" style="height:30px;width:50px"></div><div class="kpi-hint skeleton" style="height:11px;width:100px;margin-top:8px"></div></div>
+        </div>
+
+        <div class="db-card" style="margin-bottom:20px">
+          <div class="db-card-title">Weekly trend <span class="db-card-sub">Citation rate over the last 4&ndash;8 weeks</span></div>
+          <div id="radar-trend"><div class="skeleton" style="height:60px;border-radius:6px"></div></div>
+        </div>
+
+        <div class="tbl-wrap" style="margin-bottom:20px">
+          <div class="tbl-head"><div class="tbl-head-title">Recent polls</div></div>
+          <div id="radar-polls"><div class="skeleton" style="height:180px;border-radius:8px"></div></div>
+        </div>
+
+        <div class="db-card">
+          <div class="db-card-title">Basket manager <span class="db-card-sub">Queries Perplexity polls each week</span></div>
+          <form id="radar-basket-form" style="display:flex;gap:8px;margin-bottom:14px">
+            <input type="text" class="fi" id="radar-basket-input"
+                   placeholder="e.g. best bamboo fly rod maker" maxlength="200" required>
+            <button type="submit" class="btn-sm btn-primary-sm">Add</button>
+          </form>
+          <div id="radar-basket-list"><div class="skeleton" style="height:120px;border-radius:6px"></div></div>
+        </div>
+      </div>
+    </section>
+
     <!-- ── Domains (stub — Q3 pending) ── -->
     <section id="sec-domains" class="db-sec">
       <p class="db-sec-title">Domains</p>
@@ -957,6 +1019,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 <script src="/js/dashboard-recs.js"></script>
 <script src="/js/dashboard-settings.js"></script>
 <script src="/js/dashboard-activity.js"></script>
+<script src="/js/dashboard-radar.js"></script>
 <script src="/js/dashboard-admin.js"></script>
 <script>
 /* ── Dashboard shell: auth gate, nav, theme, section routing ── */
@@ -971,6 +1034,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
     'recommendations':   'Recommendations',
     'settings':          'Settings',
     'activity':          'Activity',
+    'radar':             'Competitor Radar',
     'domains':           'Domains',
   };
 
@@ -1062,6 +1126,14 @@ tr:hover td{background:rgba(255,255,255,.02)}
       .then(function (data) {
         /* Expose to all section modules */
         window.AMCP_DATA = data;
+
+        /* Pro-tier gate for the Radar sidebar item.
+         *
+         * A tenant is shown Radar if their own plan is 'pro'. Admin users
+         * viewing the aggregate (no ?slug) see it too so they can drop into
+         * any tenant's radar without re-planning themselves. */
+        var isPro = (data && data.plan === 'pro') || window.AMCP_ADMIN_MODE === 'all';
+        document.body.classList.toggle('pro-tier', Boolean(isPro));
 
         /* Trigger initial section */
         if (window.AMCP_SECTIONS[currentSection]) {

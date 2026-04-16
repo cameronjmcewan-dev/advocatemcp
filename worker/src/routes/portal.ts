@@ -58,6 +58,10 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/recommendations" && method === "GET")  return apiRecommendations(request, env);
   if (pathname === "/api/client/profile"         && method === "POST") return apiUpdateProfile(request, env);
   if (pathname === "/api/client/rotate-key" && method === "POST") return apiRotateKey(request, env);
+  if (pathname === "/api/client/radar"         && method === "GET")    return apiRadar(request, env);
+  const radarBasketDel = pathname.match(/^\/api\/client\/radar\/basket\/([^/]+)$/);
+  if (pathname === "/api/client/radar/basket"  && method === "POST")   return apiRadarBasketAdd(request, env);
+  if (radarBasketDel && method === "DELETE")                            return apiRadarBasketDelete(request, env, radarBasketDel[1]);
   if (pathname === "/admin/create-client"      && method === "POST") return adminCreateClient(request, env);
   const resyncMatch = pathname.match(/^\/admin\/businesses\/([^/]+)\/resync-api-key$/);
   if (resyncMatch && method === "POST") return adminResyncApiKey(request, env, resyncMatch[1]);
@@ -108,6 +112,9 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/recommendations" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/profile"         && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/rotate-key"  && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/radar"         && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/radar/basket"  && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (radarBasketDel && method === "OPTIONS")                            return handleCorsPreflight(request, { credentials: true });
 
   // ── Stripe / new onboarding API ──────────────────────────────────────────
   if (pathname === "/api/onboard/basic"     && method === "POST") return handleBasicOnboard(request, env);
@@ -862,6 +869,116 @@ async function apiUpdateProfile(request: Request, env: Env): Promise<Response> {
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       return withCors(jsonErr(res.status, "Profile update failed"), request, { credentials: true });
+    }
+    return withCors(jsonOk(data), request, { credentials: true });
+  } catch (err) {
+    return withCors(jsonErr(502, `Backend unreachable: ${String(err)}`), request, { credentials: true });
+  }
+}
+
+// ── GET /api/client/radar ─────────────────────────────────────────────────
+// Proxy to Railway Competitor Radar — combines summary, basket, and losses
+// into a single response so the dashboard only makes one round-trip.
+// Non-admin users must be bound to the slug via getUserBusinesses.
+
+async function apiRadar(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  try {
+    const [summaryRes, basketRes, lossesRes] = await Promise.all([
+      fetch(`${base}/api/competitor-radar/${biz.slug}/summary`, {
+        headers: { Authorization: `Bearer ${biz.api_key}` },
+      }),
+      fetch(`${base}/api/competitor-radar/${biz.slug}/basket`, {
+        headers: { Authorization: `Bearer ${biz.api_key}` },
+      }),
+      fetch(`${base}/api/competitor-radar/${biz.slug}/losses`, {
+        headers: { Authorization: `Bearer ${biz.api_key}` },
+      }),
+    ]);
+
+    const summary = summaryRes.ok ? await summaryRes.json() : null;
+    const basket  = basketRes.ok  ? await basketRes.json()  : null;
+    const losses  = lossesRes.ok  ? await lossesRes.json()  : null;
+
+    return withCors(jsonOk({ summary, basket, losses }), request, { credentials: true });
+  } catch (err) {
+    return withCors(jsonErr(502, `Backend unreachable: ${String(err)}`), request, { credentials: true });
+  }
+}
+
+// ── POST /api/client/radar/basket ─────────────────────────────────────────
+// Add a query phrasing to the tenant's radar basket. Body: { query_phrasing }.
+
+async function apiRadarBasketAdd(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  let body: Record<string, unknown>;
+  try { body = await request.json() as Record<string, unknown>; }
+  catch { return withCors(jsonErr(400, "Invalid JSON body"), request, { credentials: true }); }
+
+  const qp = typeof body.query_phrasing === "string" ? body.query_phrasing.trim() : "";
+  if (!qp) return withCors(jsonErr(400, "Missing query_phrasing"), request, { credentials: true });
+
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  try {
+    const res = await fetch(`${base}/api/competitor-radar/${biz.slug}/basket`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${biz.api_key}`,
+      },
+      body: JSON.stringify({ query_phrasing: qp }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return withCors(jsonErr(res.status, "Radar basket add failed"), request, { credentials: true });
+    }
+    return withCors(jsonOk(data), request, { credentials: true });
+  } catch (err) {
+    return withCors(jsonErr(502, `Backend unreachable: ${String(err)}`), request, { credentials: true });
+  }
+}
+
+// ── DELETE /api/client/radar/basket/:basket_id ────────────────────────────
+
+async function apiRadarBasketDelete(request: Request, env: Env, basketId: string): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  try {
+    const res = await fetch(`${base}/api/competitor-radar/${biz.slug}/basket/${encodeURIComponent(basketId)}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${biz.api_key}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return withCors(jsonErr(res.status, "Radar basket delete failed"), request, { credentials: true });
     }
     return withCors(jsonOk(data), request, { credentials: true });
   } catch (err) {

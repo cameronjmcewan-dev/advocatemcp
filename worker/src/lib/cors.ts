@@ -86,7 +86,7 @@ export function corsHeadersFor(
 
   const headers: Record<string, string> = {
     "Access-Control-Allow-Origin":  allowedOrigin,
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Activation-Token",
     "Access-Control-Max-Age":       "86400",
     "Vary":                         "Origin",

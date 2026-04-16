@@ -180,8 +180,10 @@
             currentSlug = urlSlug;
           } else {
             // Aggregate mode — flag for section modules (Activity) that support
-            // scope=all fetches, then render the all-businesses overview.
+            // scope=all fetches, unlock the Radar sidebar item for admin
+            // inspection of any tenant's radar, then render the aggregate view.
             window.AMCP_ADMIN_MODE = 'all';
+            document.body.classList.add('pro-tier');
             renderAdminOverview();
           }
         })
