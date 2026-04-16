@@ -56,6 +56,8 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/activity"   && method === "GET")  return apiActivity(request, env);
   if (pathname === "/api/client/rotate-key" && method === "POST") return apiRotateKey(request, env);
   if (pathname === "/admin/create-client"      && method === "POST") return adminCreateClient(request, env);
+  const resyncMatch = pathname.match(/^\/admin\/businesses\/([^/]+)\/resync-api-key$/);
+  if (resyncMatch && method === "POST") return adminResyncApiKey(request, env, resyncMatch[1]);
   if (pathname === "/admin/domains/activate"              && method === "POST") return handleActivateDomain(request, env);
   if (pathname === "/admin/domains/saas-fallback-origin"  && method === "POST") return handleSetFallbackOrigin(request, env);
   if (pathname === "/admin/domains/ensure-worker-route"   && method === "POST") return handleEnsureWorkerRoute(request, env);
@@ -466,6 +468,56 @@ async function apiRotateKey(request: Request, env: Env): Promise<Response> {
 
   await updateBusinessApiKey(env.DB, biz.slug, data.new_api_key);
   return withCors(jsonOk({ ok: true, new_api_key: data.new_api_key }), request, { credentials: true });
+}
+
+// ── POST /admin/businesses/:slug/resync-api-key ────────────────────────────
+// Recovers from D1/Railway api_key divergence by rotating Railway's key
+// and writing the new value back to D1. Idempotent.
+//
+// The underlying cause of divergence is a Railway-side write that bypasses
+// the Stripe webhook dual-write path — e.g. a direct curl to rotate-key
+// without updating D1, or a Railway sqlite re-seed. This endpoint is the
+// canonical recovery mechanism; do not paper over divergences with manual
+// SQL except during the migration that introduced this endpoint.
+//
+// Auth: Bearer ADMIN_SECRET (same as /admin/create-client).
+async function adminResyncApiKey(request: Request, env: Env, slug: string): Promise<Response> {
+  const given  = request.headers.get("Authorization") ?? "";
+  const secret = env.ADMIN_SECRET ?? "";
+  const credentialValid = secret.length > 0 && given === `Bearer ${secret}`;
+  if (!credentialValid) return jsonErr(401, "Unauthorized");
+
+  const biz = await getBusinessBySlug(env.DB, slug);
+  if (!biz) return jsonErr(404, "Business not found in D1");
+
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  let rotateRes: Response;
+  try {
+    rotateRes = await fetch(`${base}/agents/${slug}/rotate-key`, {
+      method: "POST",
+      headers: { ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}) },
+    });
+  } catch (err) {
+    return jsonErr(502, `Backend unreachable: ${String(err)}`);
+  }
+
+  if (!rotateRes.ok) {
+    return jsonErr(502, `Backend rotate failed with ${rotateRes.status}`);
+  }
+  const data = await rotateRes.json() as { ok?: boolean; new_api_key?: string };
+  if (!data.ok || !data.new_api_key) {
+    return jsonErr(502, "Invalid response from backend");
+  }
+
+  await updateBusinessApiKey(env.DB, slug, data.new_api_key);
+  return jsonOk({
+    ok: true,
+    slug,
+    message: "API key resynced. D1 and Railway are now aligned.",
+    // Deliberately does NOT return the new key — operator sees it via
+    // the rotate-key endpoint if they need it; this endpoint is for ops
+    // recovery, not key discovery.
+  });
 }
 
 // ── POST /admin/create-client ──────────────────────────────────────────────
