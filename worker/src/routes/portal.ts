@@ -8,12 +8,12 @@ import {
 } from "../auth";
 import {
   getUserByEmail, createUser, updateUserPassword, createSession, getSessionByToken,
-  deleteSession, getUserBusinesses, getAllBusinesses, getBusinessBySlug, createBusiness,
+  deleteSession, getUserBusinesses, getAllBusinesses, getActiveBusinesses, getBusinessBySlug, createBusiness,
   grantAccess, checkRateLimit, recordLoginAttempt, updateBusinessApiKey,
 } from "../portalDb";
 import type { Business, User, SessionWithUser } from "../portalDb";
 import { buildDashboard, type AnalyticsData } from "./dashboard";
-import { handleActivateDomain, handleDomainStatus, handleDomainRaw, handleSetFallbackOrigin, handleEnsureWorkerRoute } from "./domains";
+import { handleActivateDomain, handleDomainStatus, handleDomainRaw, handleSetFallbackOrigin, handleEnsureWorkerRoute, cfRequest } from "./domains";
 import {
   handleOnboard, handleOnboardStatus, handleOnboardList,
   handleVerifyDomain, handleVerifyAll, handleDisableTenant,
@@ -54,8 +54,20 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/me"       && method === "GET")  return apiMe(request, env);
   if (pathname === "/api/client/metrics"  && method === "GET")  return apiMetrics(request, env);
   if (pathname === "/api/client/activity"   && method === "GET")  return apiActivity(request, env);
+  if (pathname === "/api/client/clicks"          && method === "GET")  return apiClicks(request, env);
+  if (pathname === "/api/client/recommendations" && method === "GET")  return apiRecommendations(request, env);
+  if (pathname === "/api/client/profile"         && method === "GET")  return apiGetProfile(request, env);
+  if (pathname === "/api/client/profile"         && method === "POST") return apiUpdateProfile(request, env);
   if (pathname === "/api/client/rotate-key" && method === "POST") return apiRotateKey(request, env);
+  if (pathname === "/api/client/radar"         && method === "GET")    return apiRadar(request, env);
+  const radarBasketDel = pathname.match(/^\/api\/client\/radar\/basket\/([^/]+)$/);
+  if (pathname === "/api/client/radar/basket"  && method === "POST")   return apiRadarBasketAdd(request, env);
+  if (radarBasketDel && method === "DELETE")                            return apiRadarBasketDelete(request, env, radarBasketDel[1]);
+  if (pathname === "/api/client/domain-info"   && method === "GET")    return apiDomainInfo(request, env);
+  if (pathname === "/api/client/domain-test"   && method === "GET")    return apiDomainTest(request, env);
   if (pathname === "/admin/create-client"      && method === "POST") return adminCreateClient(request, env);
+  const resyncMatch = pathname.match(/^\/admin\/businesses\/([^/]+)\/resync-api-key$/);
+  if (resyncMatch && method === "POST") return adminResyncApiKey(request, env, resyncMatch[1]);
   if (pathname === "/admin/domains/activate"              && method === "POST") return handleActivateDomain(request, env);
   if (pathname === "/admin/domains/saas-fallback-origin"  && method === "POST") return handleSetFallbackOrigin(request, env);
   if (pathname === "/admin/domains/ensure-worker-route"   && method === "POST") return handleEnsureWorkerRoute(request, env);
@@ -99,7 +111,15 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/activity-detail" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/activity-detail" && method === "GET")     return apiActivityDetail(request, env);
   if (pathname === "/api/client/activity"    && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/clicks"          && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/recommendations" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/profile"         && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/rotate-key"  && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/radar"         && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/radar/basket"  && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (radarBasketDel && method === "OPTIONS")                            return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/domain-info"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/domain-test"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
 
   // ── Stripe / new onboarding API ──────────────────────────────────────────
   if (pathname === "/api/onboard/basic"     && method === "POST") return handleBasicOnboard(request, env);
@@ -266,7 +286,7 @@ async function dashboard(request: Request, env: Env): Promise<Response> {
   if (!ctx) return redirect("/login?error=expired");
 
   const businesses = ctx.role === "admin"
-    ? await getAllBusinesses(env.DB)
+    ? await getActiveBusinesses(env.DB)
     : await getUserBusinesses(env.DB, ctx.user_id);
 
   // Dashboard gating: redirect non-admin users whose tenant isn't active yet
@@ -325,7 +345,7 @@ async function apiMetrics(request: Request, env: Env): Promise<Response> {
   if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
 
   const businesses = ctx.role === "admin"
-    ? await getAllBusinesses(env.DB)
+    ? await getActiveBusinesses(env.DB)
     : await getUserBusinesses(env.DB, ctx.user_id);
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
@@ -344,7 +364,7 @@ async function apiAllMetrics(request: Request, env: Env): Promise<Response> {
   if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
   if (ctx.role !== "admin") return withCors(jsonErr(403, "Admin only"), request, { credentials: true });
 
-  const businesses = await getAllBusinesses(env.DB);
+  const businesses = await getActiveBusinesses(env.DB);
   const results = await Promise.all(
     businesses.map(async (biz) => {
       const analytics = await fetchAnalytics(biz, env);
@@ -394,16 +414,193 @@ async function apiAllMetrics(request: Request, env: Env): Promise<Response> {
 // Proxy to Railway's /analytics/:slug/activity — surfaces the new-feature
 // data (reservations, handoffs, agent_requests, competitor radar) for the
 // selected business. Admin users can query any slug via ?slug=<slug>.
+//
+// Aggregate mode: ?scope=all (admin only) parallel-fetches every active
+// business and merges reservations / handoffs / agent_requests into a unified
+// recent-events feed sorted by timestamp desc. Non-admin callers receive 403.
+
+type ActivityPayload = {
+  slug: string;
+  reservations?: Array<{
+    id: string;
+    agent_id: string | null;
+    status: string;
+    window_start: string;
+    window_end: string;
+    requested_at: string;
+    expires_at: string;
+  }>;
+  handoffs?: Array<{
+    id: string;
+    mode: string;
+    delivered_via: string | null;
+    reservation_id: string | null;
+    agent_id: string | null;
+    created_at: string;
+  }>;
+  agent_requests?: Array<{
+    id: number;
+    tool_called: string;
+    agent_id: string;
+    agent_id_source: string;
+    outcome_signal: string;
+    latency_ms: number | null;
+    cost_cents: number | null;
+    timestamp: string;
+  }>;
+  totals?: {
+    reservations?: { held?: number; confirmed?: number; expired?: number; total?: number };
+    handoffs?: { human?: number; agent?: number; total?: number };
+    agent_requests?: { unique_agents?: number; total_calls?: number };
+  };
+  [key: string]: unknown;
+};
+
+type AggregateFeedItem =
+  | { type: "reservation"; business_slug: string; business_name: string; id: string; status: string; agent_id: string | null; timestamp: string }
+  | { type: "handoff"; business_slug: string; business_name: string; id: string; mode: string; delivered_via: string | null; timestamp: string }
+  | { type: "agent_call"; business_slug: string; business_name: string; tool_called: string; agent_id: string; outcome_signal: string; latency_ms: number | null; timestamp: string };
 
 async function apiActivityDetail(request: Request, env: Env): Promise<Response> {
   const ctx = await getSessionFromRequest(request, env);
   if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
 
+  const url = new URL(request.url);
+  const scope = url.searchParams.get("scope");
+  const slug  = url.searchParams.get("slug");
+
+  // ── Aggregate mode (admin only) ──────────────────────────────────────────
+  if (scope === "all") {
+    if (ctx.role !== "admin") {
+      return withCors(jsonErr(403, "Admin only"), request, { credentials: true });
+    }
+    const businesses = await getActiveBusinesses(env.DB);
+    const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+
+    const perBusiness = await Promise.all(
+      businesses.map(async (biz) => {
+        try {
+          const res = await fetch(`${base}/analytics/${biz.slug}/activity`, {
+            headers: { Authorization: `Bearer ${biz.api_key}` },
+            // Cap each per-business fetch so one stalled tenant can't hold the
+            // whole admin aggregate hostage (Worker subrequests have a 30s
+            // ceiling; 5s × N in parallel keeps us well under it).
+            signal: AbortSignal.timeout(5000),
+          });
+          if (!res.ok) return { biz, data: null as ActivityPayload | null };
+          const data = await res.json() as ActivityPayload;
+          return { biz, data };
+        } catch {
+          return { biz, data: null as ActivityPayload | null };
+        }
+      }),
+    );
+
+    // Per-business summary (totals + most recent items)
+    const perBizSummary = perBusiness.map(({ biz, data }) => ({
+      slug: biz.slug,
+      name: biz.business_name,
+      totals: data?.totals ?? null,
+      recent_items: [
+        ...(data?.reservations ?? []).slice(0, 5).map((r) => ({ type: "reservation", ...r })),
+        ...(data?.handoffs ?? []).slice(0, 5).map((h) => ({ type: "handoff", ...h })),
+        ...(data?.agent_requests ?? []).slice(0, 5).map((a) => ({ type: "agent_call", ...a })),
+      ],
+    }));
+
+    // Aggregate totals across all businesses
+    const aggregate_totals = {
+      reservations: { held: 0, confirmed: 0, expired: 0, total: 0 },
+      handoffs: { human: 0, agent: 0, total: 0 },
+      agent_requests: { unique_agents: 0, total_calls: 0 },
+    };
+    const uniqueAgents = new Set<string>();
+    for (const { data } of perBusiness) {
+      if (!data) continue;
+      const r = data.totals?.reservations;
+      if (r) {
+        aggregate_totals.reservations.held      += r.held ?? 0;
+        aggregate_totals.reservations.confirmed += r.confirmed ?? 0;
+        aggregate_totals.reservations.expired   += r.expired ?? 0;
+        aggregate_totals.reservations.total     += r.total ?? 0;
+      }
+      const h = data.totals?.handoffs;
+      if (h) {
+        aggregate_totals.handoffs.human += h.human ?? 0;
+        aggregate_totals.handoffs.agent += h.agent ?? 0;
+        aggregate_totals.handoffs.total += h.total ?? 0;
+      }
+      const a = data.totals?.agent_requests;
+      if (a) {
+        aggregate_totals.agent_requests.total_calls += a.total_calls ?? 0;
+      }
+      for (const ar of data.agent_requests ?? []) {
+        if (ar.agent_id) uniqueAgents.add(ar.agent_id);
+      }
+    }
+    aggregate_totals.agent_requests.unique_agents = uniqueAgents.size;
+
+    // Build unified feed: merge reservations + handoffs + agent_requests,
+    // stamp each with business_slug + business_name, sort by timestamp desc,
+    // limit to 50.
+    const feed: AggregateFeedItem[] = [];
+    for (const { biz, data } of perBusiness) {
+      if (!data) continue;
+      for (const r of data.reservations ?? []) {
+        feed.push({
+          type: "reservation",
+          business_slug: biz.slug,
+          business_name: biz.business_name,
+          id: r.id,
+          status: r.status,
+          agent_id: r.agent_id,
+          timestamp: r.requested_at,
+        });
+      }
+      for (const h of data.handoffs ?? []) {
+        feed.push({
+          type: "handoff",
+          business_slug: biz.slug,
+          business_name: biz.business_name,
+          id: h.id,
+          mode: h.mode,
+          delivered_via: h.delivered_via,
+          timestamp: h.created_at,
+        });
+      }
+      for (const a of data.agent_requests ?? []) {
+        feed.push({
+          type: "agent_call",
+          business_slug: biz.slug,
+          business_name: biz.business_name,
+          tool_called: a.tool_called,
+          agent_id: a.agent_id,
+          outcome_signal: a.outcome_signal,
+          latency_ms: a.latency_ms,
+          timestamp: a.timestamp,
+        });
+      }
+    }
+    feed.sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0));
+    const trimmedFeed = feed.slice(0, 50);
+
+    return withCors(
+      jsonOk({
+        scope: "all",
+        businesses: perBizSummary,
+        aggregate_totals,
+        feed: trimmedFeed,
+      }),
+      request,
+      { credentials: true },
+    );
+  }
+
+  // ── Single-business mode (default) ───────────────────────────────────────
   const businesses = ctx.role === "admin"
-    ? await getAllBusinesses(env.DB)
+    ? await getActiveBusinesses(env.DB)
     : await getUserBusinesses(env.DB, ctx.user_id);
-  const slug = new URL(request.url).searchParams.get("slug");
-  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  const biz = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
 
   const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
@@ -428,7 +625,7 @@ async function apiActivity(request: Request, env: Env): Promise<Response> {
   if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
 
   const businesses = ctx.role === "admin"
-    ? await getAllBusinesses(env.DB)
+    ? await getActiveBusinesses(env.DB)
     : await getUserBusinesses(env.DB, ctx.user_id);
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
@@ -436,6 +633,537 @@ async function apiActivity(request: Request, env: Env): Promise<Response> {
 
   const data = await fetchAnalytics(biz, env);
   return withCors(jsonOk(data?.recent_queries ?? []), request, { credentials: true });
+}
+
+// ── GET /api/client/clicks ─────────────────────────────────────────────────
+// Proxy to Railway's GET /analytics/:slug/clicks — returns the 50 most
+// recent referral click events for the selected tenant.
+
+interface ClickRow {
+  id: number;
+  ref: string | null;
+  user_agent: string | null;
+  timestamp: string;
+}
+
+async function apiClicks(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  try {
+    const res = await fetch(`${base}/analytics/${biz.slug}/clicks`, {
+      headers: { Authorization: `Bearer ${biz.api_key}` },
+    });
+    if (!res.ok) {
+      return withCors(jsonErr(res.status, "Clicks fetch failed"), request, { credentials: true });
+    }
+    const data = await res.json() as { slug: string; clicks: ClickRow[] };
+    return withCors(jsonOk(data), request, { credentials: true });
+  } catch (err) {
+    return withCors(jsonErr(502, `Backend unreachable: ${String(err)}`), request, { credentials: true });
+  }
+}
+
+// ── GET /api/client/recommendations ────────────────────────────────────────
+// Derives dynamic recs + checklist from the tenant's analytics data. Pure
+// server-side rules — no external fetch beyond the existing analytics proxy.
+
+interface RecOut {
+  id: string;
+  title: string;
+  body: string;
+  priority: "high" | "med" | "low";
+  impact: string;
+  action_label?: string;
+  action_url?: string;
+}
+interface ChecklistItem {
+  id: string;
+  label: string;
+  done: boolean;
+}
+
+interface ProfileOut {
+  name?: string;
+  description?: string;
+  category?: string;
+  services?: string[];
+  website?: string;
+  pricing_json_v2?: unknown;
+}
+
+async function fetchProfile(biz: Business, env: Env): Promise<ProfileOut | null> {
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  try {
+    const res = await fetch(`${base}/agents/${biz.slug}/profile`, {
+      headers: { Authorization: `Bearer ${biz.api_key}` },
+    });
+    if (!res.ok) return null;
+    return await res.json() as ProfileOut;
+  } catch {
+    return null;
+  }
+}
+
+function buildRecommendations(
+  analytics: AnalyticsData | null,
+  profile: ProfileOut | null,
+): { recommendations: RecOut[]; checklist: ChecklistItem[] } {
+  const total   = analytics?.total_queries ?? 0;
+  const clicks  = analytics?.referral_clicks ?? 0;
+  const intents = analytics?.queries_by_intent ?? {};
+  const ctr     = total > 0 ? clicks / total : 0;
+
+  const recs: RecOut[] = [];
+
+  if (total < 10) {
+    recs.push({
+      id: "no-traffic",
+      title: "Verify your site is receiving AI crawler traffic",
+      body: "Your profile has fewer than 10 recorded queries. Confirm that your domain is routed through Advocate and that /.well-known/ai-agent.json is reachable.",
+      priority: "high",
+      impact: "High — no traffic means no citations, no referrals, no attribution.",
+      action_label: "Open activation guide",
+      action_url: "/activate.html",
+    });
+  } else if (ctr < 0.05) {
+    recs.push({
+      id: "low-ctr",
+      title: "Improve referral click-through rate",
+      body: `Only ${(ctr * 100).toFixed(1)}% of AI queries lead to a click. Tighten your response copy — include a clear CTA, service-area details, and a booking or contact link above the fold.`,
+      priority: "high",
+      impact: "High — CTR is the main lever once traffic arrives.",
+    });
+  }
+
+  if (!intents["brand_direct"] || intents["brand_direct"] === 0) {
+    recs.push({
+      id: "no-brand-queries",
+      title: "Invest in brand awareness",
+      body: "No direct-brand queries yet — customers aren't searching for you by name. Consider Reddit/Wikidata seeding, review outreach, and local PR to build the brand signal AI systems reward.",
+      priority: "med",
+      impact: "Med — direct-brand queries convert 3–5× better than generic.",
+    });
+  }
+
+  const profileIncomplete =
+    !profile ||
+    !profile.name ||
+    !profile.description ||
+    !profile.category ||
+    !Array.isArray(profile.services) || profile.services.length === 0 ||
+    !profile.pricing_json_v2;
+  if (profileIncomplete) {
+    recs.push({
+      id: "incomplete-profile",
+      title: "Complete your business profile",
+      body: "Missing profile fields reduce how richly AI citations describe your business. Fill in services, structured pricing, and a category to unlock better-matched queries.",
+      priority: "med",
+      impact: "Med — richer profile = more specific AI citations.",
+      action_label: "Edit profile",
+      action_url: "#settings",
+    });
+  }
+
+  if (recs.length === 0) {
+    recs.push({
+      id: "all-good",
+      title: "You're in great shape",
+      body: "Traffic is healthy, CTR is solid, and your profile is complete. Explore Pro features — Competitor Radar and the off-site authority kit will compound your lead.",
+      priority: "low",
+      impact: "Low — keep momentum, no action required.",
+    });
+  }
+
+  const servicesOk = Array.isArray(profile?.services) && (profile?.services?.length ?? 0) > 0;
+  const profileComplete = Boolean(
+    profile?.name && profile?.description && profile?.category && servicesOk,
+  );
+
+  const checklist: ChecklistItem[] = [
+    { id: "profile-complete",   label: "Business profile complete (name, description, category, services)", done: profileComplete },
+    { id: "domain-active",      label: "Domain routed through Advocate",                                    done: total > 0 },
+    { id: "first-query",        label: "First AI query received",                                           done: total >= 1 },
+    { id: "first-click",        label: "First referral click tracked",                                      done: clicks >= 1 },
+    { id: "api-key-fresh",      label: "API key rotated within the last 90 days",                           done: false },
+  ];
+
+  return { recommendations: recs, checklist };
+}
+
+async function apiRecommendations(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  const [analytics, profile] = await Promise.all([
+    fetchAnalytics(biz, env),
+    fetchProfile(biz, env),
+  ]);
+
+  const out = buildRecommendations(analytics, profile);
+  return withCors(jsonOk(out), request, { credentials: true });
+}
+
+// ── GET /api/client/profile ────────────────────────────────────────────────
+// Proxy to Railway's GET /agents/:slug/profile so the Settings edit form can
+// pre-fill with the tenant's current values instead of empty defaults.
+// Session auth + slug scope-check via getUserBusinesses.
+
+async function apiGetProfile(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  const profile = await fetchProfile(biz, env);
+  if (!profile) return withCors(jsonErr(502, "Profile unavailable"), request, { credentials: true });
+  return withCors(jsonOk(profile), request, { credentials: true });
+}
+
+// ── POST /api/client/profile ───────────────────────────────────────────────
+// Proxy to Railway's PATCH /agents/:slug/profile. Only forwards fields the
+// Railway endpoint declares mutable; anything else is silently dropped.
+
+async function apiUpdateProfile(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json() as Record<string, unknown>;
+  } catch {
+    return withCors(jsonErr(400, "Invalid JSON body"), request, { credentials: true });
+  }
+
+  // Whitelist — mirrors Railway's PATCH /agents/:slug/profile allow-list.
+  // `name` is intentionally NOT included because Railway's PATCH does not
+  // accept it; business_name is immutable once created.
+  const allowed = [
+    "description", "category", "services", "pricing", "location", "phone",
+    "website", "referral_url", "tone", "star_rating", "review_count",
+    "years_in_business", "top_services", "availability", "differentiator",
+    "service_radius_miles", "certifications", "pricing_tier",
+    "service_area_keywords",
+  ] as const;
+
+  const payload: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (key in body) payload[key] = body[key];
+  }
+
+  if (Object.keys(payload).length === 0) {
+    return withCors(jsonErr(400, "No updatable fields provided"), request, { credentials: true });
+  }
+
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  try {
+    const res = await fetch(`${base}/agents/${biz.slug}/profile`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${biz.api_key}`,
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return withCors(jsonErr(res.status, "Profile update failed"), request, { credentials: true });
+    }
+    return withCors(jsonOk(data), request, { credentials: true });
+  } catch (err) {
+    return withCors(jsonErr(502, `Backend unreachable: ${String(err)}`), request, { credentials: true });
+  }
+}
+
+// ── GET /api/client/radar ─────────────────────────────────────────────────
+// Proxy to Railway Competitor Radar — combines summary, basket, and losses
+// into a single response so the dashboard only makes one round-trip.
+// Non-admin users must be bound to the slug via getUserBusinesses.
+
+async function apiRadar(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  try {
+    const [summaryRes, basketRes, lossesRes] = await Promise.all([
+      fetch(`${base}/api/competitor-radar/${biz.slug}/summary`, {
+        headers: { Authorization: `Bearer ${biz.api_key}` },
+      }),
+      fetch(`${base}/api/competitor-radar/${biz.slug}/basket`, {
+        headers: { Authorization: `Bearer ${biz.api_key}` },
+      }),
+      fetch(`${base}/api/competitor-radar/${biz.slug}/losses`, {
+        headers: { Authorization: `Bearer ${biz.api_key}` },
+      }),
+    ]);
+
+    const summary = summaryRes.ok ? await summaryRes.json() : null;
+    const basket  = basketRes.ok  ? await basketRes.json()  : null;
+    const losses  = lossesRes.ok  ? await lossesRes.json()  : null;
+
+    return withCors(jsonOk({ summary, basket, losses }), request, { credentials: true });
+  } catch (err) {
+    return withCors(jsonErr(502, `Backend unreachable: ${String(err)}`), request, { credentials: true });
+  }
+}
+
+// ── POST /api/client/radar/basket ─────────────────────────────────────────
+// Add a query phrasing to the tenant's radar basket. Body: { query_phrasing }.
+
+async function apiRadarBasketAdd(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  let body: Record<string, unknown>;
+  try { body = await request.json() as Record<string, unknown>; }
+  catch { return withCors(jsonErr(400, "Invalid JSON body"), request, { credentials: true }); }
+
+  const qp = typeof body.query_phrasing === "string" ? body.query_phrasing.trim() : "";
+  if (!qp) return withCors(jsonErr(400, "Missing query_phrasing"), request, { credentials: true });
+
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  try {
+    const res = await fetch(`${base}/api/competitor-radar/${biz.slug}/basket`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${biz.api_key}`,
+      },
+      body: JSON.stringify({ query_phrasing: qp }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return withCors(jsonErr(res.status, "Radar basket add failed"), request, { credentials: true });
+    }
+    return withCors(jsonOk(data), request, { credentials: true });
+  } catch (err) {
+    return withCors(jsonErr(502, `Backend unreachable: ${String(err)}`), request, { credentials: true });
+  }
+}
+
+// ── DELETE /api/client/radar/basket/:basket_id ────────────────────────────
+
+async function apiRadarBasketDelete(request: Request, env: Env, basketId: string): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  try {
+    const res = await fetch(`${base}/api/competitor-radar/${biz.slug}/basket/${encodeURIComponent(basketId)}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${biz.api_key}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return withCors(jsonErr(res.status, "Radar basket delete failed"), request, { credentials: true });
+    }
+    return withCors(jsonOk(data), request, { credentials: true });
+  } catch (err) {
+    return withCors(jsonErr(502, `Backend unreachable: ${String(err)}`), request, { credentials: true });
+  }
+}
+
+// ── GET /api/client/domain-info ───────────────────────────────────────────
+// Session-authed status surface for the Domains dashboard section.
+//
+// Combines three sources:
+//   1. cf_hostname   — pulled live from the Cloudflare API when
+//                      CF_API_TOKEN/CF_ZONE_ID are set on the Worker;
+//                      otherwise surfaced as "permission check required".
+//   2. worker_route  — full introspection requires Workers Routes:Read scope
+//                      which this token lacks. Return present: null with a
+//                      computed pattern so the UI can signal "unknown".
+//   3. last_bot_hit  — derived from the tenant's /analytics/:slug payload
+//                      (max timestamp across recent_queries).
+
+async function apiDomainInfo(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  // Pull cf_hostname_id from D1 — the raw admin endpoint does this too but
+  // we keep the query here so the session-authed helper does not leak the
+  // admin secret to anyone.
+  const row = await env.DB
+    .prepare("SELECT cf_hostname_id FROM businesses WHERE slug = ? LIMIT 1")
+    .bind(biz.slug)
+    .first<{ cf_hostname_id: string | null }>();
+
+  let cfHostname: {
+    status: string;
+    ssl_status: string;
+    ownership_verified: boolean | null;
+    note?: string;
+  } = {
+    status:             "unknown",
+    ssl_status:         "unknown",
+    ownership_verified: null,
+    note:               "no cf_hostname_id on record",
+  };
+
+  if (row?.cf_hostname_id) {
+    if (env.CF_API_TOKEN && env.CF_ZONE_ID) {
+      const { ok, data } = await cfRequest(env, "GET", `/${row.cf_hostname_id}`);
+      if (ok) {
+        const result = data.result as Record<string, unknown> | undefined;
+        const ssl    = result?.ssl as Record<string, unknown> | undefined;
+        const ownershipStatus = result?.ownership_verification_status as string | undefined;
+        cfHostname = {
+          status:             (result?.status as string) ?? "unknown",
+          ssl_status:         (ssl?.status as string) ?? "unknown",
+          ownership_verified: ownershipStatus === "success",
+        };
+      } else {
+        cfHostname.note = "cloudflare API error";
+      }
+    } else {
+      cfHostname.note = "permission check required — CF_API_TOKEN / CF_ZONE_ID not configured on Worker";
+    }
+  }
+
+  // Worker Route introspection needs Workers Routes:Read scope on the API
+  // token, which our current token doesn't carry. Surface `present: null`
+  // so the dashboard can paint an honest "unknown" state rather than a false
+  // "missing". The pattern is what we *would* register via /admin/domains/
+  // ensure-worker-route.
+  const workerRoutePattern = biz.domain ? `${biz.domain}/*` : null;
+
+  // last_bot_hit — piggyback on the analytics fetch we already do. Only read
+  // max(timestamp) from recent_queries.
+  let lastBotHit: string | null = null;
+  try {
+    const analytics = await fetchAnalytics(biz, env);
+    const recents = analytics?.recent_queries ?? [];
+    if (recents.length > 0) {
+      const maxTs = recents
+        .map((q) => q.timestamp)
+        .filter((t): t is string => typeof t === "string")
+        .sort()
+        .pop();
+      lastBotHit = maxTs ?? null;
+    }
+  } catch {
+    /* non-fatal */
+  }
+
+  return withCors(
+    jsonOk({
+      slug:          biz.slug,
+      business_name: biz.business_name,
+      domain:        biz.domain ?? null,
+      cf_hostname:   cfHostname,
+      worker_route:  { present: null, pattern: workerRoutePattern },
+      last_bot_hit:  lastBotHit,
+    }),
+    request,
+    { credentials: true },
+  );
+}
+
+// ── GET /api/client/domain-test ───────────────────────────────────────────
+// Server-side fetch of the tenant's domain with a crawler User-Agent so the
+// dashboard can visually verify that bot traffic is flowing through the
+// Worker. Browsers cannot override User-Agent on fetch() for security
+// reasons, so the Worker does it on their behalf.
+//
+// Capped at ~10s total and returns the HTTP status + first 200 chars of
+// the body. Only called from the authenticated portal; session-bound slug.
+
+async function apiDomainTest(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  if (!biz.domain) {
+    return withCors(jsonErr(400, "No domain registered for this business"), request, { credentials: true });
+  }
+
+  const target = `https://${biz.domain}/`;
+  try {
+    const res = await fetch(target, {
+      headers: { "User-Agent": "PerplexityBot/1.0 (advocate dashboard test)" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    const body = await res.text();
+    const snippet = body.length > 200 ? body.slice(0, 200) + "…" : body;
+    return withCors(
+      jsonOk({
+        url:         target,
+        status:      res.status,
+        status_text: res.statusText,
+        content_type: res.headers.get("Content-Type") ?? null,
+        snippet,
+      }),
+      request,
+      { credentials: true },
+    );
+  } catch (err) {
+    return withCors(
+      jsonErr(502, `Fetch failed: ${String(err)}`),
+      request,
+      { credentials: true },
+    );
+  }
 }
 
 // ── POST /api/client/rotate-key ───────────────────────────────────────────
@@ -466,6 +1194,56 @@ async function apiRotateKey(request: Request, env: Env): Promise<Response> {
 
   await updateBusinessApiKey(env.DB, biz.slug, data.new_api_key);
   return withCors(jsonOk({ ok: true, new_api_key: data.new_api_key }), request, { credentials: true });
+}
+
+// ── POST /admin/businesses/:slug/resync-api-key ────────────────────────────
+// Recovers from D1/Railway api_key divergence by rotating Railway's key
+// and writing the new value back to D1. Idempotent.
+//
+// The underlying cause of divergence is a Railway-side write that bypasses
+// the Stripe webhook dual-write path — e.g. a direct curl to rotate-key
+// without updating D1, or a Railway sqlite re-seed. This endpoint is the
+// canonical recovery mechanism; do not paper over divergences with manual
+// SQL except during the migration that introduced this endpoint.
+//
+// Auth: Bearer ADMIN_SECRET (same as /admin/create-client).
+async function adminResyncApiKey(request: Request, env: Env, slug: string): Promise<Response> {
+  const given  = request.headers.get("Authorization") ?? "";
+  const secret = env.ADMIN_SECRET ?? "";
+  const credentialValid = secret.length > 0 && given === `Bearer ${secret}`;
+  if (!credentialValid) return jsonErr(401, "Unauthorized");
+
+  const biz = await getBusinessBySlug(env.DB, slug);
+  if (!biz) return jsonErr(404, "Business not found in D1");
+
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  let rotateRes: Response;
+  try {
+    rotateRes = await fetch(`${base}/agents/${slug}/rotate-key`, {
+      method: "POST",
+      headers: { ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}) },
+    });
+  } catch (err) {
+    return jsonErr(502, `Backend unreachable: ${String(err)}`);
+  }
+
+  if (!rotateRes.ok) {
+    return jsonErr(502, `Backend rotate failed with ${rotateRes.status}`);
+  }
+  const data = await rotateRes.json() as { ok?: boolean; new_api_key?: string };
+  if (!data.ok || !data.new_api_key) {
+    return jsonErr(502, "Invalid response from backend");
+  }
+
+  await updateBusinessApiKey(env.DB, slug, data.new_api_key);
+  return jsonOk({
+    ok: true,
+    slug,
+    message: "API key resynced. D1 and Railway are now aligned.",
+    // Deliberately does NOT return the new key — operator sees it via
+    // the rotate-key endpoint if they need it; this endpoint is for ops
+    // recovery, not key discovery.
+  });
 }
 
 // ── POST /admin/create-client ──────────────────────────────────────────────

@@ -23,10 +23,10 @@
   --border:      #393836;
   --text:        #e8e6e3;
   --muted:       #7a7875;
-  --accent:      #4f98a3;
-  --accent-dk:   #3d8090;
-  --accent-dim:  rgba(79,152,163,.1);
-  --accent-ring: rgba(79,152,163,.2);
+  --accent:      #7d2550;
+  --accent-dk:   #5c1a3c;
+  --accent-dim:  rgba(125,37,80,.12);
+  --accent-ring: rgba(125,37,80,.25);
   --green:       #3fb950;
   --yellow:      #d29922;
   --red:         #f85149;
@@ -53,10 +53,10 @@
   --border:     #dddbd8;
   --text:       #1a1917;
   --muted:      #6b6967;
-  --accent:     #01696f;
-  --accent-dk:  #015861;
-  --accent-dim: rgba(1,105,111,.08);
-  --accent-ring:rgba(1,105,111,.2);
+  --accent:     #7d2550;
+  --accent-dk:  #5c1a3c;
+  --accent-dim: rgba(125,37,80,.08);
+  --accent-ring:rgba(125,37,80,.22);
 }
 
 html{font-size:16px;-webkit-font-smoothing:antialiased;color-scheme:dark light;background:#171614}
@@ -249,6 +249,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 }
 .badge-dot{width:5px;height:5px;border-radius:50%;background:currentColor}
 .badge-green{background:rgba(63,185,80,.1);color:var(--green);border:1px solid rgba(63,185,80,.2)}
+.badge-red{background:rgba(248,81,73,.1);color:var(--red);border:1px solid rgba(248,81,73,.2)}
 .badge-yellow{background:rgba(210,153,34,.1);color:var(--yellow);border:1px solid rgba(210,153,34,.2)}
 .badge-accent{background:var(--accent-dim);color:var(--accent);border:1px solid var(--accent-ring)}
 
@@ -371,11 +372,11 @@ tr:hover td{background:rgba(255,255,255,.02)}
 
 /* ── Heatmap color scale ── */
 .hm-0{background:var(--surface-2)}
-.hm-1{background:rgba(79,152,163,.2)}
-.hm-2{background:rgba(79,152,163,.4)}
-.hm-3{background:rgba(79,152,163,.6)}
-.hm-4{background:rgba(79,152,163,.8)}
-.hm-5{background:rgba(79,152,163,1)}
+.hm-1{background:rgba(125,37,80,.2)}
+.hm-2{background:rgba(125,37,80,.4)}
+.hm-3{background:rgba(125,37,80,.6)}
+.hm-4{background:rgba(125,37,80,.8)}
+.hm-5{background:rgba(125,37,80,1)}
 
 /* ── Error state ── */
 .error-banner{
@@ -414,6 +415,92 @@ tr:hover td{background:rgba(255,255,255,.02)}
 @media(max-width:480px){
   .kpi-grid{grid-template-columns:1fr 1fr}
 }
+
+/* ── AMCP_UI primitives — drawer / toast / progress ring / feed ── */
+.amcp-drawer-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;
+  opacity:0;pointer-events:none;transition:opacity .28s ease;
+}
+.amcp-drawer-overlay.open{opacity:1;pointer-events:auto}
+
+.amcp-drawer-panel{
+  position:fixed;top:0;right:0;bottom:0;width:420px;max-width:100vw;
+  background:var(--surface);border-left:1px solid var(--border);
+  box-shadow:-8px 0 24px rgba(0,0,0,.3);
+  transform:translateX(100%);transition:transform .28s ease;
+  z-index:101;display:flex;flex-direction:column;
+}
+.amcp-drawer-panel.open{transform:translateX(0)}
+
+.amcp-drawer-header{
+  position:sticky;top:0;background:var(--surface);
+  padding:16px 20px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  font-weight:600;font-size:var(--tx-md);
+}
+.amcp-drawer-close{
+  width:28px;height:28px;border-radius:6px;
+  display:inline-flex;align-items:center;justify-content:center;
+  color:var(--muted);background:transparent;border:none;cursor:pointer;
+}
+.amcp-drawer-close:hover{background:var(--surface-2);color:var(--text)}
+
+.amcp-drawer-body{
+  flex:1;overflow:auto;padding:16px 20px;font-size:var(--tx-sm);line-height:1.6;
+}
+
+.amcp-toast-stack{
+  position:fixed;bottom:20px;right:20px;z-index:200;
+  display:flex;flex-direction:column;gap:8px;pointer-events:none;
+}
+.amcp-toast{
+  min-width:240px;max-width:360px;
+  padding:12px 16px;border-radius:var(--r-md);
+  background:var(--surface);border:1px solid var(--border);color:var(--text);
+  font-size:var(--tx-sm);box-shadow:0 8px 24px rgba(0,0,0,.25);
+  transform:translateX(120%);transition:transform .25s ease;
+  pointer-events:auto;
+}
+.amcp-toast.visible{transform:translateX(0)}
+.amcp-toast.success{background:var(--accent-dim);border-color:var(--accent-ring);color:var(--accent)}
+.amcp-toast.error{background:rgba(248,81,73,.1);border-color:rgba(248,81,73,.3);color:var(--red)}
+.amcp-toast.info{background:var(--surface-2);border-color:var(--border);color:var(--muted)}
+
+/* Progress ring — conic-gradient filled arc with hollow center via mask. */
+.progress-ring{
+  --pct:0%; --size:48px; --sw:4px;
+  width:var(--size);height:var(--size);border-radius:50%;
+  background:conic-gradient(var(--accent) var(--pct), var(--surface-2) 0);
+  mask:radial-gradient(circle at center, transparent calc(var(--size)/2 - var(--sw)), black calc(var(--size)/2 - var(--sw) + 1px));
+  -webkit-mask:radial-gradient(circle at center, transparent calc(var(--size)/2 - var(--sw)), black calc(var(--size)/2 - var(--sw) + 1px));
+}
+
+/* Unified activity row — used by mixed-type aggregate feed. */
+.amcp-activity-row{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 12px;border-bottom:1px solid var(--border);
+  font-size:var(--tx-sm);cursor:pointer;transition:background .15s;
+}
+.amcp-activity-row:hover{background:var(--surface-2)}
+.amcp-activity-row:last-child{border-bottom:none}
+.amcp-activity-type{
+  font-size:var(--tx-xs);font-weight:600;text-transform:uppercase;letter-spacing:.02em;
+  padding:2px 7px;border-radius:100px;
+  background:var(--accent-dim);color:var(--accent);border:1px solid var(--accent-ring);
+  flex-shrink:0;
+}
+.amcp-activity-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.amcp-activity-biz{
+  font-size:var(--tx-xs);color:var(--muted);
+  padding:2px 7px;border:1px solid var(--border);border-radius:100px;
+  flex-shrink:0;
+}
+.amcp-activity-ts{font-size:var(--tx-xs);color:var(--muted);flex-shrink:0}
+
+/* ── Pro-only gating — sidebar nav items tagged with data-pro-only are
+ *   hidden unless body carries .pro-tier (set by the shell after metrics). */
+.db-nav-item[data-pro-only]{display:none}
+body.pro-tier .db-nav-item[data-pro-only]{display:flex}
 </style>
 </head>
 <body>
@@ -422,7 +509,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 <aside id="sidebar">
   <div class="db-logo">
     <svg width="22" height="22" viewBox="0 0 26 26" fill="none">
-      <rect width="26" height="26" rx="6" fill="#4f98a3"/>
+      <rect width="26" height="26" rx="6" fill="#7d2550"/>
       <path d="M13 6.5L20.5 20H5.5L13 6.5Z" stroke="white" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
       <line x1="9.2" y1="15.5" x2="16.8" y2="15.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/>
     </svg>
@@ -449,6 +536,9 @@ tr:hover td{background:rgba(255,255,255,.02)}
     </div>
     <div class="db-nav-item" data-section="activity">
       <i data-lucide="zap"></i><span>Activity</span>
+    </div>
+    <div class="db-nav-item" data-section="radar" data-pro-only>
+      <i data-lucide="radar"></i><span>Radar</span>
     </div>
     <div class="db-nav-item" data-section="domains">
       <i data-lucide="globe"></i><span>Domains</span>
@@ -546,6 +636,15 @@ tr:hover td{background:rgba(255,255,255,.02)}
           </div>
         </div>
       </div>
+
+      <div class="db-card" style="margin-top:20px">
+        <div class="db-card-title">
+          Recent Queries <span class="db-card-sub">Click a row to see the Claude response</span>
+        </div>
+        <div id="recent-queries-wrap">
+          <div class="skeleton" style="height:180px;border-radius:8px"></div>
+        </div>
+      </div>
     </section>
 
     <!-- ── Referral Clicks ── -->
@@ -578,6 +677,22 @@ tr:hover td{background:rgba(255,255,255,.02)}
         <div class="bar-rows" id="clicks-bot-bars">
           <div class="skeleton" style="height:36px;border-radius:6px"></div>
           <div class="skeleton" style="height:36px;border-radius:6px"></div>
+        </div>
+      </div>
+
+      <div class="db-card" style="margin-top:12px">
+        <div class="db-card-title">
+          Click-through Trend <span class="db-card-sub">Clicks vs queries, last 30 days</span>
+        </div>
+        <div class="chart-wrap"><canvas id="chart-clicks-trend"></canvas></div>
+      </div>
+
+      <div class="db-card" style="margin-top:12px">
+        <div class="db-card-title">
+          Recent Clicks <span class="db-card-sub">Last 50 tracked redirects</span>
+        </div>
+        <div id="recent-clicks-wrap">
+          <div class="skeleton" style="height:180px;border-radius:8px"></div>
         </div>
       </div>
 
@@ -676,6 +791,45 @@ tr:hover td{background:rgba(255,255,255,.02)}
       </div>
 
       <div class="settings-card">
+        <div class="settings-card-title">Business Profile</div>
+        <div class="settings-card-sub">
+          These fields feed the structured business data AI crawlers and MCP clients see.
+          Business name (slug) is immutable — contact support to rename.
+        </div>
+        <form id="profile-form" style="display:flex;flex-direction:column;gap:10px">
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+            Business name
+            <input type="text" class="fi" id="profile-name" disabled
+                   title="Business name is tied to your slug and cannot be edited here.">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+            Description
+            <input type="text" class="fi" id="profile-description"
+                   placeholder="One-line pitch AI will quote when citing your business.">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+            Category
+            <input type="text" class="fi" id="profile-category"
+                   placeholder='e.g. "Bamboo fly-rod maker"'>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+            Services (comma separated)
+            <input type="text" class="fi" id="profile-services"
+                   placeholder="e.g. Custom rods, Repairs, Lessons">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+            Website
+            <input type="url" class="fi" id="profile-website"
+                   placeholder="https://example.com">
+          </label>
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <button class="btn-sm btn-ghost" id="btn-save-profile" type="submit">Save profile</button>
+            <span style="align-self:center;font-size:var(--tx-xs);color:var(--muted)" id="profile-status"></span>
+          </div>
+        </form>
+      </div>
+
+      <div class="settings-card">
         <div class="settings-card-title">API Key</div>
         <div class="settings-card-sub">
           Your API key is configured. Use Rotate to generate a new one —
@@ -689,6 +843,21 @@ tr:hover td{background:rgba(255,255,255,.02)}
           <button class="btn-sm btn-ghost" id="btn-rotate-key">Rotate</button>
         </div>
         <div style="margin-top:8px;font-size:var(--tx-xs);color:var(--muted)" id="rotate-status"></div>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-title">Account activity</div>
+        <div class="settings-card-sub">Recent account-level events</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;justify-content:space-between;font-size:var(--tx-sm)">
+            <span style="color:var(--muted)">Last sign-in</span>
+            <span id="account-last-login">—</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:var(--tx-sm)">
+            <span style="color:var(--muted)">Last API key rotation</span>
+            <span id="account-last-rotate">—</span>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -705,6 +874,8 @@ tr:hover td{background:rgba(255,255,255,.02)}
         <div class="kpi-card"><div class="kpi-label">Agent Calls</div><div class="kpi-val skeleton" style="height:30px;width:50px"></div><div class="kpi-hint skeleton" style="height:11px;width:100px;margin-top:8px"></div></div>
         <div class="kpi-card"><div class="kpi-label">Unique Agents</div><div class="kpi-val skeleton" style="height:30px;width:50px"></div><div class="kpi-hint skeleton" style="height:11px;width:100px;margin-top:8px"></div></div>
       </div>
+
+      <div id="activity-funnel-wrap" style="display:none;margin-bottom:20px"></div>
 
       <div class="tbl-wrap" id="activity-reservations-wrap" style="display:none">
         <div class="tbl-head"><div class="tbl-head-title">Recent Reservations</div></div>
@@ -738,40 +909,121 @@ tr:hover td{background:rgba(255,255,255,.02)}
       </div>
     </section>
 
-    <!-- ── Domains (stub — Q3 pending) ── -->
+    <!-- ── Competitor Radar (Pro-only) ── -->
+    <section id="sec-radar" class="db-sec">
+      <p class="db-sec-title">Competitor Radar</p>
+      <p class="db-sec-sub">Weekly Perplexity polls for your key queries — win/loss tracking vs competitors</p>
+
+      <div class="error-banner" id="radar-error"></div>
+
+      <!-- Locked state (non-Pro tenant — admin always sees data) -->
+      <div id="radar-locked" class="db-card" style="display:none;max-width:520px">
+        <div class="db-card-title" style="color:var(--accent)">Available on Pro</div>
+        <p style="font-size:var(--tx-sm);color:var(--muted);line-height:1.7;margin-bottom:16px">
+          Competitor Radar runs weekly Perplexity polls for your core queries, tracks whether
+          your business shows up in citations, and flags the competitors who beat you. Upgrade
+          to Pro to unlock.
+        </p>
+        <a href="mailto:support@advocatemcp.com?subject=Upgrade%20to%20Pro"
+           style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;
+                  background:var(--accent);color:#fff;
+                  border:1px solid var(--accent);border-radius:var(--r-md);
+                  font-size:var(--tx-sm);font-weight:500;">
+          Talk to us about Pro &rarr;
+        </a>
+      </div>
+
+      <!-- Data state -->
+      <div id="radar-content" style="display:none">
+        <div class="kpi-grid" id="radar-kpis" style="grid-template-columns:repeat(3,1fr)">
+          <div class="kpi-card"><div class="kpi-label">Basket size</div><div class="kpi-val skeleton" style="height:30px;width:50px"></div><div class="kpi-hint skeleton" style="height:11px;width:100px;margin-top:8px"></div></div>
+          <div class="kpi-card"><div class="kpi-label">Citation rate (7d)</div><div class="kpi-val skeleton" style="height:30px;width:50px"></div><div class="kpi-hint skeleton" style="height:11px;width:100px;margin-top:8px"></div></div>
+          <div class="kpi-card"><div class="kpi-label">Wins (7d)</div><div class="kpi-val skeleton" style="height:30px;width:50px"></div><div class="kpi-hint skeleton" style="height:11px;width:100px;margin-top:8px"></div></div>
+        </div>
+
+        <div class="db-card" style="margin-bottom:20px">
+          <div class="db-card-title">Weekly trend <span class="db-card-sub">Citation rate over the last 4&ndash;8 weeks</span></div>
+          <div id="radar-trend"><div class="skeleton" style="height:60px;border-radius:6px"></div></div>
+        </div>
+
+        <div class="tbl-wrap" style="margin-bottom:20px">
+          <div class="tbl-head"><div class="tbl-head-title">Recent polls</div></div>
+          <div id="radar-polls"><div class="skeleton" style="height:180px;border-radius:8px"></div></div>
+        </div>
+
+        <div class="db-card">
+          <div class="db-card-title">Basket manager <span class="db-card-sub">Queries Perplexity polls each week</span></div>
+          <form id="radar-basket-form" style="display:flex;gap:8px;margin-bottom:14px">
+            <input type="text" class="fi" id="radar-basket-input"
+                   placeholder="e.g. best bamboo fly rod maker" maxlength="200" required>
+            <button type="submit" class="btn-sm btn-primary-sm">Add</button>
+          </form>
+          <div id="radar-basket-list"><div class="skeleton" style="height:120px;border-radius:6px"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Domains (real CF hostname + Worker Route status) ── -->
     <section id="sec-domains" class="db-sec">
       <p class="db-sec-title">Domains</p>
       <p class="db-sec-sub">Custom domain routing through Advocate</p>
 
-      <div class="db-card" style="max-width:520px">
-        <div class="db-card-title">Domain routing</div>
-        <p style="font-size:var(--tx-sm);color:var(--muted);line-height:1.7;margin-bottom:16px">
-          Your domain is configured and routing AI crawler traffic through Advocate.
-          To update your domain or add a new one, use your activation link from the
-          onboarding email, or contact support.
-        </p>
-        <a href="/activate.html"
-           style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;
-                  background:var(--accent-dim);color:var(--accent);
-                  border:1px solid var(--accent-ring);border-radius:var(--r-md);
-                  font-size:var(--tx-sm);font-weight:500;">
-          Activate a domain →
-        </a>
+      <div class="error-banner" id="domains-error"></div>
+
+      <div id="domain-header" class="db-card" style="margin-bottom:12px">
+        <div class="skeleton" style="height:18px;width:200px;border-radius:4px;margin-bottom:8px"></div>
+        <div class="skeleton" style="height:14px;width:280px;border-radius:4px"></div>
       </div>
 
-      <div class="db-card" style="max-width:520px;margin-top:12px;background:rgba(210,153,34,.04);border-color:rgba(210,153,34,.2)">
-        <div class="db-card-title" style="color:var(--yellow)">Coming soon</div>
-        <p style="font-size:var(--tx-sm);color:var(--muted);line-height:1.7">
-          A full domain management view (activation status, CNAME target, TXT verification record,
-          and live DNS check) is planned for a future release.
+      <div id="status-pills-wrap" class="db-card" style="margin-bottom:12px">
+        <div class="db-card-title">Routing status</div>
+        <div id="status-pills" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px">
+          <div class="skeleton" style="height:24px;width:140px;border-radius:100px"></div>
+          <div class="skeleton" style="height:24px;width:110px;border-radius:100px"></div>
+          <div class="skeleton" style="height:24px;width:150px;border-radius:100px"></div>
+        </div>
+        <div id="status-meta" style="margin-top:10px;font-size:var(--tx-xs);color:var(--muted)"></div>
+      </div>
+
+      <div id="dns-records-wrap" class="db-card" style="margin-bottom:12px">
+        <div class="db-card-title">DNS records</div>
+        <div id="dns-records"><div class="skeleton" style="height:80px;border-radius:6px"></div></div>
+      </div>
+
+      <div id="test-bot-wrap" class="db-card" style="margin-bottom:12px">
+        <div class="db-card-title">Test bot traffic <span class="db-card-sub">Fetches your domain with a PerplexityBot User-Agent</span></div>
+        <button type="button" class="btn-sm btn-primary-sm" id="btn-test-bot">Run test</button>
+        <div id="test-bot-result" style="margin-top:12px"></div>
+      </div>
+
+      <div id="admin-domain-actions" class="db-card" style="margin-bottom:12px;display:none;border-color:var(--accent-ring);background:var(--accent-dim)">
+        <div class="db-card-title" style="color:var(--accent)">Admin actions</div>
+        <p style="font-size:var(--tx-xs);color:var(--muted);margin-bottom:10px">
+          These actions hit Worker admin endpoints and require an ADMIN_SECRET bearer token.
         </p>
+        <button type="button" class="btn-sm btn-ghost" id="btn-rotate-key-admin">Rotate api_key</button>
       </div>
     </section>
 
   </div><!-- #content -->
 </div><!-- #main -->
 
+<!-- ── AMCP_UI: slide-over drawer + toast stack (populated by dashboard-ui.js) ── -->
+<div class="amcp-drawer-overlay" id="amcp-drawer-overlay" aria-hidden="true"></div>
+<aside class="amcp-drawer-panel" id="amcp-drawer-panel" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="amcp-drawer-title">
+  <div class="amcp-drawer-header">
+    <span id="amcp-drawer-title">Details</span>
+    <button type="button" class="amcp-drawer-close" id="amcp-drawer-close" aria-label="Close">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+    </button>
+  </div>
+  <div class="amcp-drawer-body" id="amcp-drawer-body"></div>
+</aside>
+<div class="amcp-toast-stack" id="amcp-toast-stack" aria-live="polite" aria-atomic="true"></div>
+
 <script src="/js/dashboard-auth.js"></script>
+<script src="/js/dashboard-theme.js"></script>
+<script src="/js/dashboard-ui.js"></script>
 <script src="/js/dashboard-overview.js"></script>
 <script src="/js/dashboard-requests.js"></script>
 <script src="/js/dashboard-clicks.js"></script>
@@ -779,6 +1031,8 @@ tr:hover td{background:rgba(255,255,255,.02)}
 <script src="/js/dashboard-recs.js"></script>
 <script src="/js/dashboard-settings.js"></script>
 <script src="/js/dashboard-activity.js"></script>
+<script src="/js/dashboard-radar.js"></script>
+<script src="/js/dashboard-domains.js"></script>
 <script src="/js/dashboard-admin.js"></script>
 <script>
 /* ── Dashboard shell: auth gate, nav, theme, section routing ── */
@@ -793,6 +1047,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
     'recommendations':   'Recommendations',
     'settings':          'Settings',
     'activity':          'Activity',
+    'radar':             'Competitor Radar',
     'domains':           'Domains',
   };
 
@@ -884,6 +1139,14 @@ tr:hover td{background:rgba(255,255,255,.02)}
       .then(function (data) {
         /* Expose to all section modules */
         window.AMCP_DATA = data;
+
+        /* Pro-tier gate for the Radar sidebar item.
+         *
+         * A tenant is shown Radar if their own plan is 'pro'. Admin users
+         * viewing the aggregate (no ?slug) see it too so they can drop into
+         * any tenant's radar without re-planning themselves. */
+        var isPro = (data && data.plan === 'pro') || window.AMCP_ADMIN_MODE === 'all';
+        document.body.classList.toggle('pro-tier', Boolean(isPro));
 
         /* Trigger initial section */
         if (window.AMCP_SECTIONS[currentSection]) {
