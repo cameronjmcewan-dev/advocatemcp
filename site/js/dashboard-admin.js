@@ -179,7 +179,9 @@
             if (sel) sel.value = urlSlug;
             currentSlug = urlSlug;
           } else {
-            // Aggregate mode — render the all-businesses overview
+            // Aggregate mode — flag for section modules (Activity) that support
+            // scope=all fetches, then render the all-businesses overview.
+            window.AMCP_ADMIN_MODE = 'all';
             renderAdminOverview();
           }
         })
