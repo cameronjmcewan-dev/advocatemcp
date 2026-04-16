@@ -13,7 +13,7 @@ import {
 } from "../portalDb";
 import type { Business, User, SessionWithUser } from "../portalDb";
 import { buildDashboard, type AnalyticsData } from "./dashboard";
-import { handleActivateDomain, handleDomainStatus, handleDomainRaw, handleSetFallbackOrigin, handleEnsureWorkerRoute } from "./domains";
+import { handleActivateDomain, handleDomainStatus, handleDomainRaw, handleSetFallbackOrigin, handleEnsureWorkerRoute, cfRequest } from "./domains";
 import {
   handleOnboard, handleOnboardStatus, handleOnboardList,
   handleVerifyDomain, handleVerifyAll, handleDisableTenant,
@@ -62,6 +62,8 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   const radarBasketDel = pathname.match(/^\/api\/client\/radar\/basket\/([^/]+)$/);
   if (pathname === "/api/client/radar/basket"  && method === "POST")   return apiRadarBasketAdd(request, env);
   if (radarBasketDel && method === "DELETE")                            return apiRadarBasketDelete(request, env, radarBasketDel[1]);
+  if (pathname === "/api/client/domain-info"   && method === "GET")    return apiDomainInfo(request, env);
+  if (pathname === "/api/client/domain-test"   && method === "GET")    return apiDomainTest(request, env);
   if (pathname === "/admin/create-client"      && method === "POST") return adminCreateClient(request, env);
   const resyncMatch = pathname.match(/^\/admin\/businesses\/([^/]+)\/resync-api-key$/);
   if (resyncMatch && method === "POST") return adminResyncApiKey(request, env, resyncMatch[1]);
@@ -115,6 +117,8 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/radar"         && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/radar/basket"  && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (radarBasketDel && method === "OPTIONS")                            return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/domain-info"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/domain-test"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
 
   // ── Stripe / new onboarding API ──────────────────────────────────────────
   if (pathname === "/api/onboard/basic"     && method === "POST") return handleBasicOnboard(request, env);
@@ -983,6 +987,160 @@ async function apiRadarBasketDelete(request: Request, env: Env, basketId: string
     return withCors(jsonOk(data), request, { credentials: true });
   } catch (err) {
     return withCors(jsonErr(502, `Backend unreachable: ${String(err)}`), request, { credentials: true });
+  }
+}
+
+// ── GET /api/client/domain-info ───────────────────────────────────────────
+// Session-authed status surface for the Domains dashboard section.
+//
+// Combines three sources:
+//   1. cf_hostname   — pulled live from the Cloudflare API when
+//                      CF_API_TOKEN/CF_ZONE_ID are set on the Worker;
+//                      otherwise surfaced as "permission check required".
+//   2. worker_route  — full introspection requires Workers Routes:Read scope
+//                      which this token lacks. Return present: null with a
+//                      computed pattern so the UI can signal "unknown".
+//   3. last_bot_hit  — derived from the tenant's /analytics/:slug payload
+//                      (max timestamp across recent_queries).
+
+async function apiDomainInfo(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  // Pull cf_hostname_id from D1 — the raw admin endpoint does this too but
+  // we keep the query here so the session-authed helper does not leak the
+  // admin secret to anyone.
+  const row = await env.DB
+    .prepare("SELECT cf_hostname_id FROM businesses WHERE slug = ? LIMIT 1")
+    .bind(biz.slug)
+    .first<{ cf_hostname_id: string | null }>();
+
+  let cfHostname: {
+    status: string;
+    ssl_status: string;
+    ownership_verified: boolean | null;
+    note?: string;
+  } = {
+    status:             "unknown",
+    ssl_status:         "unknown",
+    ownership_verified: null,
+    note:               "no cf_hostname_id on record",
+  };
+
+  if (row?.cf_hostname_id) {
+    if (env.CF_API_TOKEN && env.CF_ZONE_ID) {
+      const { ok, data } = await cfRequest(env, "GET", `/${row.cf_hostname_id}`);
+      if (ok) {
+        const result = data.result as Record<string, unknown> | undefined;
+        const ssl    = result?.ssl as Record<string, unknown> | undefined;
+        const ownershipStatus = result?.ownership_verification_status as string | undefined;
+        cfHostname = {
+          status:             (result?.status as string) ?? "unknown",
+          ssl_status:         (ssl?.status as string) ?? "unknown",
+          ownership_verified: ownershipStatus === "success",
+        };
+      } else {
+        cfHostname.note = "cloudflare API error";
+      }
+    } else {
+      cfHostname.note = "permission check required — CF_API_TOKEN / CF_ZONE_ID not configured on Worker";
+    }
+  }
+
+  // Worker Route introspection needs Workers Routes:Read scope on the API
+  // token, which our current token doesn't carry. Surface `present: null`
+  // so the dashboard can paint an honest "unknown" state rather than a false
+  // "missing". The pattern is what we *would* register via /admin/domains/
+  // ensure-worker-route.
+  const workerRoutePattern = biz.domain ? `${biz.domain}/*` : null;
+
+  // last_bot_hit — piggyback on the analytics fetch we already do. Only read
+  // max(timestamp) from recent_queries.
+  let lastBotHit: string | null = null;
+  try {
+    const analytics = await fetchAnalytics(biz, env);
+    const recents = analytics?.recent_queries ?? [];
+    if (recents.length > 0) {
+      const maxTs = recents
+        .map((q) => q.timestamp)
+        .filter((t): t is string => typeof t === "string")
+        .sort()
+        .pop();
+      lastBotHit = maxTs ?? null;
+    }
+  } catch {
+    /* non-fatal */
+  }
+
+  return withCors(
+    jsonOk({
+      slug:          biz.slug,
+      business_name: biz.business_name,
+      domain:        biz.domain ?? null,
+      cf_hostname:   cfHostname,
+      worker_route:  { present: null, pattern: workerRoutePattern },
+      last_bot_hit:  lastBotHit,
+    }),
+    request,
+    { credentials: true },
+  );
+}
+
+// ── GET /api/client/domain-test ───────────────────────────────────────────
+// Server-side fetch of the tenant's domain with a crawler User-Agent so the
+// dashboard can visually verify that bot traffic is flowing through the
+// Worker. Browsers cannot override User-Agent on fetch() for security
+// reasons, so the Worker does it on their behalf.
+//
+// Capped at ~10s total and returns the HTTP status + first 200 chars of
+// the body. Only called from the authenticated portal; session-bound slug.
+
+async function apiDomainTest(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  if (!biz.domain) {
+    return withCors(jsonErr(400, "No domain registered for this business"), request, { credentials: true });
+  }
+
+  const target = `https://${biz.domain}/`;
+  try {
+    const res = await fetch(target, {
+      headers: { "User-Agent": "PerplexityBot/1.0 (advocate dashboard test)" },
+      signal: AbortSignal.timeout(10_000),
+    });
+    const body = await res.text();
+    const snippet = body.length > 200 ? body.slice(0, 200) + "…" : body;
+    return withCors(
+      jsonOk({
+        url:         target,
+        status:      res.status,
+        status_text: res.statusText,
+        content_type: res.headers.get("Content-Type") ?? null,
+        snippet,
+      }),
+      request,
+      { credentials: true },
+    );
+  } catch (err) {
+    return withCors(
+      jsonErr(502, `Fetch failed: ${String(err)}`),
+      request,
+      { credentials: true },
+    );
   }
 }
 

@@ -963,33 +963,45 @@ body.pro-tier .db-nav-item[data-pro-only]{display:flex}
       </div>
     </section>
 
-    <!-- ── Domains (stub — Q3 pending) ── -->
+    <!-- ── Domains (real CF hostname + Worker Route status) ── -->
     <section id="sec-domains" class="db-sec">
       <p class="db-sec-title">Domains</p>
       <p class="db-sec-sub">Custom domain routing through Advocate</p>
 
-      <div class="db-card" style="max-width:520px">
-        <div class="db-card-title">Domain routing</div>
-        <p style="font-size:var(--tx-sm);color:var(--muted);line-height:1.7;margin-bottom:16px">
-          Your domain is configured and routing AI crawler traffic through Advocate.
-          To update your domain or add a new one, use your activation link from the
-          onboarding email, or contact support.
-        </p>
-        <a href="/activate.html"
-           style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;
-                  background:var(--accent-dim);color:var(--accent);
-                  border:1px solid var(--accent-ring);border-radius:var(--r-md);
-                  font-size:var(--tx-sm);font-weight:500;">
-          Activate a domain →
-        </a>
+      <div class="error-banner" id="domains-error"></div>
+
+      <div id="domain-header" class="db-card" style="margin-bottom:12px">
+        <div class="skeleton" style="height:18px;width:200px;border-radius:4px;margin-bottom:8px"></div>
+        <div class="skeleton" style="height:14px;width:280px;border-radius:4px"></div>
       </div>
 
-      <div class="db-card" style="max-width:520px;margin-top:12px;background:rgba(210,153,34,.04);border-color:rgba(210,153,34,.2)">
-        <div class="db-card-title" style="color:var(--yellow)">Coming soon</div>
-        <p style="font-size:var(--tx-sm);color:var(--muted);line-height:1.7">
-          A full domain management view (activation status, CNAME target, TXT verification record,
-          and live DNS check) is planned for a future release.
+      <div id="status-pills-wrap" class="db-card" style="margin-bottom:12px">
+        <div class="db-card-title">Routing status</div>
+        <div id="status-pills" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px">
+          <div class="skeleton" style="height:24px;width:140px;border-radius:100px"></div>
+          <div class="skeleton" style="height:24px;width:110px;border-radius:100px"></div>
+          <div class="skeleton" style="height:24px;width:150px;border-radius:100px"></div>
+        </div>
+        <div id="status-meta" style="margin-top:10px;font-size:var(--tx-xs);color:var(--muted)"></div>
+      </div>
+
+      <div id="dns-records-wrap" class="db-card" style="margin-bottom:12px">
+        <div class="db-card-title">DNS records</div>
+        <div id="dns-records"><div class="skeleton" style="height:80px;border-radius:6px"></div></div>
+      </div>
+
+      <div id="test-bot-wrap" class="db-card" style="margin-bottom:12px">
+        <div class="db-card-title">Test bot traffic <span class="db-card-sub">Fetches your domain with a PerplexityBot User-Agent</span></div>
+        <button type="button" class="btn-sm btn-primary-sm" id="btn-test-bot">Run test</button>
+        <div id="test-bot-result" style="margin-top:12px"></div>
+      </div>
+
+      <div id="admin-domain-actions" class="db-card" style="margin-bottom:12px;display:none;border-color:var(--accent-ring);background:var(--accent-dim)">
+        <div class="db-card-title" style="color:var(--accent)">Admin actions</div>
+        <p style="font-size:var(--tx-xs);color:var(--muted);margin-bottom:10px">
+          These actions hit Worker admin endpoints and require an ADMIN_SECRET bearer token.
         </p>
+        <button type="button" class="btn-sm btn-ghost" id="btn-rotate-key-admin">Rotate api_key</button>
       </div>
     </section>
 
@@ -1020,6 +1032,7 @@ body.pro-tier .db-nav-item[data-pro-only]{display:flex}
 <script src="/js/dashboard-settings.js"></script>
 <script src="/js/dashboard-activity.js"></script>
 <script src="/js/dashboard-radar.js"></script>
+<script src="/js/dashboard-domains.js"></script>
 <script src="/js/dashboard-admin.js"></script>
 <script>
 /* ── Dashboard shell: auth gate, nav, theme, section routing ── */
