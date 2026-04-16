@@ -51,7 +51,7 @@ export function createMcpServer(requestId?: string, req?: Request): McpServer {
           return {
             content: [
               {
-                type: "text",
+                type: "text" as const,
                 text: JSON.stringify({
                   error: `No business found with slug: ${slug}`,
                   hint: "Use the search_businesses tool to find the correct slug.",
@@ -77,13 +77,13 @@ export function createMcpServer(requestId?: string, req?: Request): McpServer {
             stage,
           );
           return {
-            content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+            content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
           };
         } catch (err) {
           return {
             content: [
               {
-                type: "text",
+                type: "text" as const,
                 text: JSON.stringify({
                   error: "Agent query failed",
                   message: err instanceof Error ? err.message : "Unknown error",
@@ -169,7 +169,7 @@ export function createMcpServer(requestId?: string, req?: Request): McpServer {
           : `No businesses found matching "${search}"${location ? ` in ${location}` : ""}. ` +
             "Try a broader search term or omit the location filter.";
 
-      return { content: [{ type: "text", text }] };
+      return { content: [{ type: "text" as const, text }] };
       };
       if (!req) return run();
       return withAgentRequestLog(
