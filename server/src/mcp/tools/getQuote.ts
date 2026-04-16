@@ -3,6 +3,7 @@ import type { Request } from "express";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getDb } from "../../db.js";
 import { getQuoteInput } from "../../manifest/tools.js";
+import { DESCRIPTORS } from "../../manifest/descriptor.js";
 import { callClaude } from "../../lib/anthropic.js";
 import { withAgentRequestLog } from "../../lib/agentRequestLogger.js";
 
@@ -144,6 +145,7 @@ export function registerGetQuote(
     "get_quote",
     "Quote price for a service at a business. Deterministic lookup of pricing_json_v2.ranges[]; LLM fallback on miss, labelled 'estimate' with disclaimer.",
     getQuoteInput.shape,
+    DESCRIPTORS.find((d) => d.name === "get_quote")!.annotations,
     async (args) => {
       if (!req) return handleGetQuote(args);
       return withAgentRequestLog(

@@ -138,6 +138,13 @@ export const ManifestSchema = z.object({
       idempotent: z.boolean(),
       estimated_latency_ms: z.number().int().positive(),
       estimated_cost_cents: z.number().nonnegative(),
+      // MCP spec behavioral hints — surfaced so A2A manifest consumers see
+      // the same readOnly/destructive/openWorld signal as `tools/list`.
+      annotations: z.object({
+        readOnlyHint: z.boolean(),
+        destructiveHint: z.boolean(),
+        openWorldHint: z.boolean(),
+      }),
     })
   ),
   rate_limits: z.object({
@@ -159,6 +166,11 @@ export const ManifestSchema = z.object({
     ),
   }),
   attribution_endpoint: z.string().url(),
+  // Compliance/contact surfaces required by the ChatGPT Apps SDK review
+  // process. Agent frameworks also surface these to end users.
+  support_contact: z.string().min(1),
+  privacy_url: z.string().url(),
+  terms_url: z.string().url(),
 });
 
 export type Manifest = z.infer<typeof ManifestSchema>;

@@ -29,6 +29,48 @@ describe("descriptor registry", () => {
       expect(typeof d.idempotent).toBe("boolean");
     }
   });
+
+  it("each descriptor carries MCP tool annotations (readOnly/destructive/openWorld)", () => {
+    for (const d of DESCRIPTORS) {
+      expect(typeof d.annotations.readOnlyHint).toBe("boolean");
+      expect(typeof d.annotations.destructiveHint).toBe("boolean");
+      expect(typeof d.annotations.openWorldHint).toBe("boolean");
+    }
+  });
+
+  it("annotations match the Apps-SDK submission table", () => {
+    const byName = Object.fromEntries(DESCRIPTORS.map((d) => [d.name, d.annotations]));
+    expect(byName.query_business_agent).toEqual({
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    });
+    expect(byName.search_businesses).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false,
+    });
+    expect(byName.get_availability).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false,
+    });
+    expect(byName.get_quote).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
+    });
+    expect(byName.reserve_slot).toEqual({
+      readOnlyHint: false,
+      destructiveHint: true,
+      openWorldHint: true,
+    });
+    expect(byName.initiate_handoff).toEqual({
+      readOnlyHint: false,
+      destructiveHint: true,
+      openWorldHint: true,
+    });
+  });
 });
 
 describe("buildManifest", () => {
@@ -74,6 +116,30 @@ describe("buildManifest", () => {
 
   it("attribution_endpoint points at the worker /track path", () => {
     expect(m.attribution_endpoint).toBe("https://track.example.com/track");
+  });
+
+  it("surfaces annotations on every tool in the manifest output", () => {
+    for (const t of m.tools) {
+      const anno = (t as { annotations?: Record<string, unknown> }).annotations;
+      expect(anno).toBeDefined();
+      expect(typeof anno!.readOnlyHint).toBe("boolean");
+      expect(typeof anno!.destructiveHint).toBe("boolean");
+      expect(typeof anno!.openWorldHint).toBe("boolean");
+    }
+  });
+
+  it("exposes support_contact, privacy_url, and terms_url at the top level", () => {
+    expect(m.support_contact).toBe("mailto:support@advocatemcp.com");
+    expect(m.privacy_url).toBe("https://advocatemcp.com/privacy");
+    expect(m.terms_url).toBe("https://advocatemcp.com/terms");
+  });
+});
+
+describe("MANIFEST — compliance top-level fields", () => {
+  it("is published on the cached module-scoped MANIFEST (what /.well-known/mcp.json returns)", () => {
+    expect(MANIFEST.support_contact).toBe("mailto:support@advocatemcp.com");
+    expect(MANIFEST.privacy_url).toBe("https://advocatemcp.com/privacy");
+    expect(MANIFEST.terms_url).toBe("https://advocatemcp.com/terms");
   });
 });
 
@@ -174,6 +240,28 @@ describe("drift: MCP registry ↔ DESCRIPTORS", () => {
       (s as unknown as { _registeredTools: Record<string, unknown> })._registeredTools
     ).sort();
     expect(regKeys).toEqual(DESCRIPTORS.map((d) => d.name).sort());
+  });
+
+  it("every registered tool carries annotations matching DESCRIPTORS (tools/list surface)", async () => {
+    const mcpModule = await import("../routes/mcp.js");
+    const factory = (mcpModule as unknown as {
+      createMcpServer?: (rid?: string) => import("@modelcontextprotocol/sdk/server/mcp.js").McpServer;
+    }).createMcpServer;
+    const s = factory!();
+    const registered = (s as unknown as {
+      _registeredTools: Record<string, { annotations?: Record<string, unknown> }>;
+    })._registeredTools;
+    for (const d of DESCRIPTORS) {
+      const reg = registered[d.name];
+      expect(reg, `tool ${d.name} is registered`).toBeDefined();
+      expect(
+        reg.annotations,
+        `tool ${d.name} carries annotations on the MCP server`,
+      ).toBeDefined();
+      expect(reg.annotations!.readOnlyHint).toBe(d.annotations.readOnlyHint);
+      expect(reg.annotations!.destructiveHint).toBe(d.annotations.destructiveHint);
+      expect(reg.annotations!.openWorldHint).toBe(d.annotations.openWorldHint);
+    }
   });
 });
 

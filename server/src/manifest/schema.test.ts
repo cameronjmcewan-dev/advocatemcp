@@ -110,6 +110,9 @@ describe("ManifestSchema", () => {
       rate_limits: { per_agent_per_minute: 100, per_ip_per_minute: 100 },
       auth_model: { modes: ["open"] },
       attribution_endpoint: "https://customers.advocatemcp.com/track",
+      support_contact: "mailto:support@advocatemcp.com",
+      privacy_url: "https://advocatemcp.com/privacy",
+      terms_url: "https://advocatemcp.com/terms",
     });
     expect(out.agent_id).toBe("advocatemcp-central");
   });
@@ -124,7 +127,25 @@ describe("ManifestSchema", () => {
         rate_limits: { per_agent_per_minute: 1, per_ip_per_minute: 1 },
         auth_model: { modes: ["open"] },
         attribution_endpoint: "https://x",
+        support_contact: "mailto:x@example.com",
+        privacy_url: "https://example.com/privacy",
+        terms_url: "https://example.com/terms",
       })
+    ).toThrow();
+  });
+
+  it("rejects a manifest missing support/privacy/terms top-level fields", () => {
+    expect(() =>
+      ManifestSchema.parse({
+        spec_version: "2026-04-14",
+        agent_id: "advocatemcp-central",
+        protocol_versions: ["2025-03-26"],
+        transports: [{ kind: "http", url: "https://api.advocatemcp.com/mcp" }],
+        tools: [],
+        rate_limits: { per_agent_per_minute: 100, per_ip_per_minute: 100 },
+        auth_model: { modes: ["open"] },
+        attribution_endpoint: "https://customers.advocatemcp.com/track",
+      }),
     ).toThrow();
   });
 });

@@ -32,6 +32,20 @@ describe("GET /.well-known/mcp.json", () => {
     expect(res.body).toHaveProperty("rate_limits");
     expect(res.body).toHaveProperty("auth_model");
     expect(res.body).toHaveProperty("attribution_endpoint");
+    // Apps SDK compliance fields — surfaced so reviewers + agent frameworks
+    // can discover privacy/terms/support without a second HTTP hop.
+    expect(res.body).toHaveProperty(
+      "support_contact",
+      "mailto:support@advocatemcp.com",
+    );
+    expect(res.body).toHaveProperty(
+      "privacy_url",
+      "https://advocatemcp.com/privacy",
+    );
+    expect(res.body).toHaveProperty(
+      "terms_url",
+      "https://advocatemcp.com/terms",
+    );
   });
 
   it("tools[].name includes all current MCP tools", async () => {

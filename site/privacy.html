@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" style="background:#171614">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="dark light" />
+<meta name="theme-color" content="#3D1B2C" />
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+<link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+<title>Privacy Policy — Advocate</title>
+<meta name="description" content="AdvocateMCP privacy policy — what we collect, why, how long we keep it, and how to exercise your rights." />
+<meta name="robots" content="index,follow" />
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root {
+  --bg:          #171614;
+  --surface:     #1c1b19;
+  --surface-2:   #222120;
+  --border:      #393836;
+  --text:        #e8e6e3;
+  --muted:       #7a7875;
+  --accent:      #7d2550;
+  --accent-dk:   #5c1a3c;
+  --accent-dim:  rgba(125,37,80,.12);
+  --accent-ring: rgba(125,37,80,.25);
+
+  --font-serif:  'Instrument Serif', Georgia, serif;
+  --font-body:   'General Sans','Inter',system-ui,-apple-system,sans-serif;
+  --font-mono:   'SF Mono','Fira Code','Cascadia Code',Consolas,monospace;
+
+  --tx-xs:   clamp(.6875rem,.66rem + .14vw,.75rem);
+  --tx-sm:   clamp(.8125rem,.78rem + .16vw,.875rem);
+  --tx-base: clamp(1rem,.97rem + .15vw,1.0625rem);
+  --tx-md:   clamp(1.0625rem,1.02rem + .21vw,1.125rem);
+  --tx-lg:   clamp(1.125rem,1.07rem + .28vw,1.25rem);
+  --tx-xl:   clamp(1.5rem,1.35rem + .75vw,2rem);
+  --h1: clamp(2.5rem, 3.5vw, 3.25rem);
+  --h2: clamp(1.375rem, 1.8vw, 1.625rem);
+
+  --r-sm:4px; --r-md:8px; --r-lg:12px; --r-xl:16px;
+}
+
+[data-theme="light"] {
+  --bg:        #f5f4f2;
+  --surface:   #ffffff;
+  --surface-2: #efeeed;
+  --border:    #dddbd8;
+  --text:      #1a1917;
+  --muted:     #6b6967;
+  --accent:    #7d2550;
+  --accent-dk: #5c1a3c;
+  --accent-dim:rgba(125,37,80,.08);
+  --accent-ring:rgba(125,37,80,.22);
+}
+
+html{font-size:16px;-webkit-font-smoothing:antialiased;color-scheme:dark light;background:var(--bg)}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:var(--font-body);font-size:var(--tx-base);line-height:1.7;
+  min-height:100vh;
+}
+a{color:var(--accent);text-decoration:underline;text-decoration-color:var(--accent-ring);text-underline-offset:2px;transition:color .15s}
+a:hover{color:var(--accent-dk)}
+button{font-family:inherit;cursor:pointer;border:none;background:none}
+
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* ── Nav ── */
+.ln-nav{
+  position:sticky;top:0;z-index:200;
+  display:flex;align-items:center;gap:0;
+  padding:0 40px;height:60px;
+  background:rgba(23,22,20,.82);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border-bottom:1px solid rgba(255,255,255,.06);
+}
+[data-theme="light"] .ln-nav{background:rgba(245,244,242,.88)}
+.logo{display:flex;align-items:center;gap:8px;font-size:var(--tx-sm);font-weight:600;letter-spacing:-.01em;flex-shrink:0;color:var(--text);text-decoration:none}
+.logo:hover{color:var(--text)}
+.ln-nav-spacer{flex:1}
+.ln-nav-actions{display:flex;align-items:center;gap:10px}
+.icon-btn{
+  display:flex;align-items:center;justify-content:center;
+  width:34px;height:34px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-sm);color:var(--muted);transition:color .15s;
+}
+.icon-btn:hover{color:var(--text)}
+.icon-btn svg{width:15px;height:15px}
+.back-link{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:var(--tx-sm);color:var(--muted);
+  padding:6px 12px;border-radius:var(--r-sm);
+  text-decoration:none;
+  transition:color .15s,background .15s;
+}
+.back-link:hover{color:var(--text);background:var(--surface-2)}
+.back-link svg{width:14px;height:14px}
+
+/* ── Document layout ── */
+.doc-wrap{
+  max-width:760px;margin:0 auto;
+  padding:80px 40px 120px;
+}
+.doc-eyebrow{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:5px 12px;margin-bottom:20px;
+  font-size:var(--tx-xs);font-weight:600;color:var(--accent);
+  background:var(--accent-dim);border:1px solid var(--accent-ring);
+  border-radius:100px;text-transform:uppercase;letter-spacing:.07em;
+}
+.doc-h1{
+  font-family:var(--font-serif);
+  font-size:var(--h1);
+  line-height:1.08;letter-spacing:-.025em;
+  margin-bottom:12px;
+}
+.doc-meta{
+  display:flex;flex-wrap:wrap;gap:16px;
+  font-size:var(--tx-sm);color:var(--muted);
+  padding-bottom:24px;margin-bottom:40px;
+  border-bottom:1px solid var(--border);
+}
+.doc-meta strong{color:var(--text);font-weight:500}
+
+.doc-h2{
+  font-family:var(--font-serif);
+  font-size:var(--h2);
+  line-height:1.2;letter-spacing:-.02em;
+  margin-top:44px;margin-bottom:14px;
+  color:var(--text);
+}
+.doc-h3{
+  font-size:var(--tx-md);font-weight:600;
+  margin-top:24px;margin-bottom:8px;
+  color:var(--text);
+}
+.doc-lead{
+  font-size:var(--tx-md);color:var(--text);line-height:1.75;
+  margin-bottom:24px;
+}
+.doc-p{color:var(--text);margin-bottom:14px}
+.doc-p.muted{color:var(--muted)}
+.doc-ul{margin:0 0 18px 0;padding-left:22px}
+.doc-ul li{margin-bottom:8px;color:var(--text)}
+.doc-ul li::marker{color:var(--accent)}
+
+.doc-note{
+  padding:16px 18px;margin:20px 0;
+  background:var(--accent-dim);
+  border-left:3px solid var(--accent);
+  border-radius:var(--r-sm);
+  font-size:var(--tx-sm);color:var(--text);line-height:1.65;
+}
+.doc-note strong{color:var(--accent);font-weight:600}
+
+code, .mono{font-family:var(--font-mono);font-size:.92em;color:var(--accent);background:var(--accent-dim);padding:1px 6px;border-radius:3px}
+
+.doc-table-wrap{overflow-x:auto;margin:16px 0 22px}
+.doc-table{
+  width:100%;border-collapse:collapse;
+  font-size:var(--tx-sm);
+  border:1px solid var(--border);border-radius:var(--r-md);
+  overflow:hidden;
+}
+.doc-table th,.doc-table td{
+  padding:10px 14px;text-align:left;
+  border-bottom:1px solid var(--border);
+}
+.doc-table th{
+  background:var(--surface);color:var(--muted);
+  font-weight:500;font-size:var(--tx-xs);
+  text-transform:uppercase;letter-spacing:.05em;
+}
+.doc-table tr:last-child td{border-bottom:none}
+.doc-table td{color:var(--text);vertical-align:top}
+.doc-table td.label{color:var(--muted);white-space:nowrap;font-weight:500}
+
+.doc-footer-cta{
+  margin-top:60px;padding:24px 28px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-lg);
+}
+.doc-footer-cta strong{color:var(--text);font-weight:500}
+.doc-footer-cta p{color:var(--muted);font-size:var(--tx-sm);margin-top:4px}
+
+@media (max-width: 640px) {
+  .ln-nav{padding:0 20px}
+  .doc-wrap{padding:48px 20px 80px}
+}
+</style>
+</head>
+<body>
+
+<nav class="ln-nav">
+  <a href="/" class="logo">
+    <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true"><rect width="26" height="26" rx="6" fill="#7d2550"/><path d="M13 6.5L20.5 20H5.5L13 6.5Z" stroke="white" stroke-width="1.6" stroke-linejoin="round" fill="none"/><line x1="9.2" y1="15.5" x2="16.8" y2="15.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/></svg>
+    Advocate
+  </a>
+  <div class="ln-nav-spacer"></div>
+  <div class="ln-nav-actions">
+    <a href="/" class="back-link" aria-label="Back to AdvocateMCP">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+      Back to AdvocateMCP
+    </a>
+    <button class="icon-btn" onclick="toggleTheme()" aria-label="Toggle theme">
+      <svg id="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      <svg id="moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+  </div>
+</nav>
+
+<main class="doc-wrap">
+  <div class="doc-eyebrow">Legal</div>
+  <h1 class="doc-h1">Privacy Policy</h1>
+  <div class="doc-meta">
+    <span><strong>Effective:</strong> April 16, 2026</span>
+    <span><strong>Last updated:</strong> April 16, 2026</span>
+  </div>
+
+  <p class="doc-lead">
+    AdvocateMCP operates a platform that intercepts AI search crawler traffic
+    and exposes registered businesses through the Model Context Protocol. This
+    policy describes exactly what we collect, why we collect it, who we share
+    it with, and how long we keep it. We wrote it to match what the platform
+    actually does — not boilerplate.
+  </p>
+
+  <h2 class="doc-h2">1. Who we are</h2>
+  <p class="doc-p">
+    AdvocateMCP (the &ldquo;Service&rdquo;) is operated as a sole-proprietor
+    SaaS by its founder. Contact us any time at
+    <a href="mailto:support@advocatemcp.com">support@advocatemcp.com</a>.
+  </p>
+
+  <h2 class="doc-h2">2. What we collect</h2>
+
+  <h3 class="doc-h3">From registered businesses (&ldquo;tenants&rdquo;)</h3>
+  <ul class="doc-ul">
+    <li>Business name, description, category, location, and the services offered</li>
+    <li>Business phone number, website, and public ratings/review counts</li>
+    <li>Operating hours (<code>hours_json</code>) and pricing ranges (<code>pricing_json_v2</code>)</li>
+    <li>Credentials, certifications, or licenses the business chooses to display</li>
+    <li>Lead-routing preferences: email address, SMS number, or webhook endpoint used to receive handoffs</li>
+    <li>A tracked <code>referral_url</code> the platform uses to route citation clicks</li>
+    <li>Billing contact and Stripe customer/subscription identifiers</li>
+  </ul>
+
+  <h3 class="doc-h3">From end users interacting with AI bots</h3>
+  <ul class="doc-ul">
+    <li>The query text that was routed through AdvocateMCP</li>
+    <li>Timestamp of the request and the user-agent of the originating bot</li>
+    <li>The bot&rsquo;s self-asserted agent identity (when sent via <code>x-agent-identity</code>)</li>
+    <li>A request correlation ID (ULID) so a single interaction can be traced end-to-end</li>
+  </ul>
+
+  <h3 class="doc-h3">From users who click tracked citations</h3>
+  <ul class="doc-ul">
+    <li>The originating bot and the query that produced the citation</li>
+    <li>Destination URL</li>
+    <li>A salted hash of the source IP address &mdash; we never store the raw IP, and the hash itself is discarded within 30 days</li>
+    <li>User-Agent string as sent by the browser</li>
+  </ul>
+
+  <h3 class="doc-h3">From the reservation flow (<code>reserve_slot</code>)</h3>
+  <ul class="doc-ul">
+    <li>Customer contact payload (<code>customer_contact_json</code>) containing a name, email, and/or phone number submitted by the requesting agent</li>
+    <li>The requested time window and the tenant slug</li>
+    <li>Whether the reservation was held, confirmed, rejected, or expired</li>
+  </ul>
+
+  <div class="doc-note">
+    <strong>PII handling.</strong> We never ask end users for sensitive
+    categories (financial account numbers, government IDs, health data,
+    children&rsquo;s data). If you spot any appearing in a query, let us know at
+    <a href="mailto:support@advocatemcp.com">support@advocatemcp.com</a> and
+    we will purge it from logs.
+  </div>
+
+  <h2 class="doc-h2">3. Why we collect it</h2>
+  <ul class="doc-ul">
+    <li>Generate citation-ready AI responses tailored to the querying bot</li>
+    <li>Track attribution end-to-end: which bot cited which business for which query, and whether the click converted</li>
+    <li>Hold and confirm reservations, and deliver handoffs to the tenant&rsquo;s configured recipient</li>
+    <li>Enforce rate limits and detect abusive agents</li>
+    <li>Produce aggregate analytics for tenants (citation counts, top queries, click-through, competitor radar)</li>
+    <li>Process subscription payments</li>
+  </ul>
+
+  <h2 class="doc-h2">4. Who we share it with</h2>
+  <p class="doc-p">
+    We use the following processors. Each receives the minimum data it needs
+    to perform the listed purpose, under its own published terms.
+  </p>
+  <div class="doc-table-wrap">
+    <table class="doc-table">
+      <thead>
+        <tr><th>Processor</th><th>Purpose</th><th>Data shared</th></tr>
+      </thead>
+      <tbody>
+        <tr><td class="label">Anthropic</td><td>Claude API for response generation</td><td>Query text, business profile, system prompt</td></tr>
+        <tr><td class="label">Railway</td><td>Application hosting</td><td>All application data</td></tr>
+        <tr><td class="label">Cloudflare</td><td>Edge, Pages hosting, DNS, custom hostnames</td><td>Request metadata, DNS records</td></tr>
+        <tr><td class="label">Stripe</td><td>Subscription billing</td><td>Billing contact, subscription state</td></tr>
+        <tr><td class="label">Resend</td><td>Transactional email (activation, notifications)</td><td>Recipient email, message body</td></tr>
+        <tr><td class="label">Twilio</td><td>SMS reservation notifications (only when enabled)</td><td>Recipient phone, message body</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="doc-p">
+    We do not sell personal data, and we do not share it with advertising
+    networks or data brokers.
+  </p>
+
+  <h2 class="doc-h2">5. How long we keep it</h2>
+  <ul class="doc-ul">
+    <li><strong>Queries and click events</strong>: 365 days, so we can resolve attribution disputes.</li>
+    <li><strong>Reservation customer contact</strong>: auto-redacted after 90 days for held reservations, 24 hours for expired ones, and 7 days for rejected ones.</li>
+    <li><strong>IP-hash for click tracking</strong>: 30 days, then deleted.</li>
+    <li><strong>Tenant account data</strong>: kept while the subscription is active plus 30 days after cancellation, then deleted.</li>
+    <li><strong>Billing records</strong>: retained for the period required by tax and financial regulations (typically seven years).</li>
+  </ul>
+
+  <h2 class="doc-h2">6. Your rights</h2>
+  <p class="doc-p">
+    You have the right to access, correct, export, or delete personal data we
+    hold about you &mdash; whether you&rsquo;re a tenant, an end user whose
+    query we processed, or a person on the receiving end of a reservation
+    handoff. Send a request to
+    <a href="mailto:support@advocatemcp.com">support@advocatemcp.com</a> and
+    we will respond within 30 days. We acknowledge GDPR and CCPA obligations
+    and honour them globally; we do not sell personal data under any reading
+    of either statute.
+  </p>
+
+  <h2 class="doc-h2">7. Security</h2>
+  <ul class="doc-ul">
+    <li>All transport is TLS; mixed-content HTTP is blocked at the edge.</li>
+    <li>Portal session tokens are stored as SHA-256 hashes; raw tokens only live in HttpOnly cookies.</li>
+    <li>Passwords are stretched with PBKDF2-SHA256 at 100 000 iterations.</li>
+    <li>Attribution and continuation tokens are HMAC-SHA256 signed with a domain-separated key.</li>
+    <li>API keys can be rotated at any time via the tenant dashboard.</li>
+  </ul>
+
+  <h2 class="doc-h2">8. Children</h2>
+  <p class="doc-p">
+    The Service is not directed at people under the age of 18 and we do not
+    knowingly collect personal data from them. If you believe we have, email
+    <a href="mailto:support@advocatemcp.com">support@advocatemcp.com</a> and
+    we will delete it.
+  </p>
+
+  <h2 class="doc-h2">9. International transfers</h2>
+  <p class="doc-p">
+    Our processors are primarily US-based. If you access the Service from
+    outside the United States, you understand that your data is transferred
+    to and processed in the United States, where data-protection law may
+    differ from your local jurisdiction.
+  </p>
+
+  <h2 class="doc-h2">10. Changes to this policy</h2>
+  <p class="doc-p">
+    Material changes will be announced by email to registered tenants at
+    least 30 days before they take effect. Non-material clarifications are
+    published here with an updated revision date.
+  </p>
+
+  <h2 class="doc-h2">11. Contact</h2>
+  <p class="doc-p">
+    Questions about this policy or about data we hold:
+    <a href="mailto:support@advocatemcp.com">support@advocatemcp.com</a>.
+  </p>
+
+  <div class="doc-footer-cta">
+    <strong>Have a privacy question that isn&rsquo;t covered here?</strong>
+    <p>Email <a href="mailto:support@advocatemcp.com">support@advocatemcp.com</a> and a human will get back to you.</p>
+  </div>
+</main>
+
+<script>
+function toggleTheme() {
+  var cur = document.documentElement.dataset.theme || 'dark';
+  var next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  document.getElementById('sun-icon').style.display  = next === 'dark' ? '' : 'none';
+  document.getElementById('moon-icon').style.display = next === 'dark' ? 'none' : '';
+  try { localStorage.setItem('theme', next); } catch (e) {}
+}
+(function initTheme(){
+  try {
+    var saved = localStorage.getItem('theme');
+    if (saved === 'light' || saved === 'dark') {
+      document.documentElement.dataset.theme = saved;
+      document.getElementById('sun-icon').style.display  = saved === 'dark' ? '' : 'none';
+      document.getElementById('moon-icon').style.display = saved === 'dark' ? 'none' : '';
+    }
+  } catch (e) {}
+})();
+</script>
+
+</body>
+</html>
