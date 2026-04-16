@@ -447,6 +447,9 @@ tr:hover td{background:rgba(255,255,255,.02)}
     <div class="db-nav-item" data-section="settings">
       <i data-lucide="settings"></i><span>Settings</span>
     </div>
+    <div class="db-nav-item" data-section="activity">
+      <i data-lucide="zap"></i><span>Activity</span>
+    </div>
     <div class="db-nav-item" data-section="domains">
       <i data-lucide="globe"></i><span>Domains</span>
     </div>
@@ -689,6 +692,52 @@ tr:hover td{background:rgba(255,255,255,.02)}
       </div>
     </section>
 
+    <!-- ── Activity (reservations, handoffs, agent requests, competitor radar) ── -->
+    <section id="sec-activity" class="db-sec">
+      <p class="db-sec-title">Activity</p>
+      <p class="db-sec-sub">Reservations, handoffs, identified agents, competitor radar</p>
+
+      <div class="error-banner" id="activity-error"></div>
+
+      <div class="kpi-grid" id="activity-kpis">
+        <div class="kpi-card"><div class="kpi-label">Reservations</div><div class="kpi-val skeleton" style="height:30px;width:50px"></div><div class="kpi-hint skeleton" style="height:11px;width:100px;margin-top:8px"></div></div>
+        <div class="kpi-card"><div class="kpi-label">Handoffs</div><div class="kpi-val skeleton" style="height:30px;width:50px"></div><div class="kpi-hint skeleton" style="height:11px;width:100px;margin-top:8px"></div></div>
+        <div class="kpi-card"><div class="kpi-label">Agent Calls</div><div class="kpi-val skeleton" style="height:30px;width:50px"></div><div class="kpi-hint skeleton" style="height:11px;width:100px;margin-top:8px"></div></div>
+        <div class="kpi-card"><div class="kpi-label">Unique Agents</div><div class="kpi-val skeleton" style="height:30px;width:50px"></div><div class="kpi-hint skeleton" style="height:11px;width:100px;margin-top:8px"></div></div>
+      </div>
+
+      <div class="tbl-wrap" id="activity-reservations-wrap" style="display:none">
+        <div class="tbl-head"><div class="tbl-head-title">Recent Reservations</div></div>
+        <div id="activity-reservations"></div>
+      </div>
+
+      <div class="tbl-wrap" id="activity-handoffs-wrap" style="display:none">
+        <div class="tbl-head"><div class="tbl-head-title">Recent Handoffs</div></div>
+        <div id="activity-handoffs"></div>
+      </div>
+
+      <div class="tbl-wrap" id="activity-agents-wrap" style="display:none">
+        <div class="tbl-head"><div class="tbl-head-title">Recent Agent Calls</div></div>
+        <div id="activity-agents"></div>
+      </div>
+
+      <div class="tbl-wrap" id="activity-reputation-wrap" style="display:none">
+        <div class="tbl-head"><div class="tbl-head-title">Agent Reputation</div></div>
+        <div id="activity-reputation"></div>
+      </div>
+
+      <div class="tbl-wrap" id="activity-radar-wrap" style="display:none">
+        <div class="tbl-head"><div class="tbl-head-title">Competitor Radar — Recent Polls</div></div>
+        <div id="activity-radar"></div>
+      </div>
+
+      <div class="empty" id="activity-empty" style="display:none">
+        <div class="empty-icon"><i data-lucide="zap-off"></i></div>
+        <div class="empty-title">No activity yet</div>
+        <div class="empty-desc">Once agents start making reservations or handoffs — or Competitor Radar polls run — the data shows up here.</div>
+      </div>
+    </section>
+
     <!-- ── Domains (stub — Q3 pending) ── -->
     <section id="sec-domains" class="db-sec">
       <p class="db-sec-title">Domains</p>
@@ -729,6 +778,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 <script src="/js/dashboard-bots.js"></script>
 <script src="/js/dashboard-recs.js"></script>
 <script src="/js/dashboard-settings.js"></script>
+<script src="/js/dashboard-activity.js"></script>
 <script src="/js/dashboard-admin.js"></script>
 <script>
 /* ── Dashboard shell: auth gate, nav, theme, section routing ── */
@@ -742,6 +792,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
     'bot-activity':      'Bot Activity',
     'recommendations':   'Recommendations',
     'settings':          'Settings',
+    'activity':          'Activity',
     'domains':           'Domains',
   };
 
@@ -822,8 +873,13 @@ tr:hover td{background:rgba(255,255,255,.02)}
       })
       .catch(function () { /* non-fatal */ });
 
-    /* Load metrics then trigger the initial section render */
-    window.AMCP.authedFetch('/api/client/metrics')
+    /* Load metrics then trigger the initial section render.
+     * Honor ?slug=X from URL so the admin business switcher (which reloads
+     * the page to pick up slug changes) lands on the correct tenant. */
+    var urlParams = new URLSearchParams(window.location.search);
+    var slugParam = urlParams.get('slug');
+    var metricsPath = '/api/client/metrics' + (slugParam ? '?slug=' + encodeURIComponent(slugParam) : '');
+    window.AMCP.authedFetch(metricsPath)
       .then(function (r) { return r.json(); })
       .then(function (data) {
         /* Expose to all section modules */

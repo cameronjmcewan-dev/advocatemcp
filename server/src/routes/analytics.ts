@@ -317,3 +317,164 @@ analyticsRouter.get(
     res.json({ slug, clicks });
   }
 );
+
+/**
+ * GET /analytics/:slug/activity
+ *
+ * Returns the new-feature data for a business:
+ *   - reservations (Session 9)
+ *   - handoffs (Session 9)
+ *   - agent_requests (Session 11, identified-agent MCP tool calls)
+ *   - competitor_radar (Session 4, Pro tenants only)
+ *
+ * Requires Authorization: Bearer <api_key> for the slug.
+ */
+analyticsRouter.get(
+  "/analytics/:slug/activity",
+  requireSlugApiKey,
+  (req: Request, res: Response) => {
+    const { slug } = req.params;
+    const db = getDb();
+
+    // Reservations — last 20
+    const reservations = db
+      .prepare(
+        `SELECT id, agent_id, status, window_start, window_end, requested_at, expires_at
+         FROM reservations
+         WHERE business_slug = ?
+         ORDER BY requested_at DESC
+         LIMIT 20`,
+      )
+      .all(slug) as Array<{
+        id: string;
+        agent_id: string | null;
+        status: string;
+        window_start: string;
+        window_end: string;
+        requested_at: string;
+        expires_at: string;
+      }>;
+
+    // Handoffs — last 20
+    const handoffs = db
+      .prepare(
+        `SELECT id, mode, delivered_via, reservation_id, agent_id, created_at
+         FROM handoffs
+         WHERE business_slug = ?
+         ORDER BY created_at DESC
+         LIMIT 20`,
+      )
+      .all(slug) as Array<{
+        id: string;
+        mode: string;
+        delivered_via: string | null;
+        reservation_id: string | null;
+        agent_id: string | null;
+        created_at: string;
+      }>;
+
+    // Agent requests — last 30 identified-agent MCP tool calls
+    const agent_requests = db
+      .prepare(
+        `SELECT id, tool_called, agent_id, agent_id_source, outcome_signal,
+                latency_ms, cost_cents, timestamp
+         FROM agent_requests
+         WHERE business_slug = ?
+         ORDER BY timestamp DESC
+         LIMIT 30`,
+      )
+      .all(slug) as Array<{
+        id: number;
+        tool_called: string;
+        agent_id: string;
+        agent_id_source: string;
+        outcome_signal: string;
+        latency_ms: number | null;
+        cost_cents: number | null;
+        timestamp: string;
+      }>;
+
+    // Agent reputation for agents who hit this business
+    const agent_reputation = db
+      .prepare(
+        `SELECT ar.agent_id, ar.window, ar.requests, ar.reservations_confirmed,
+                ar.conversion_rate, ar.quality_score, ar.updated_at
+         FROM agent_reputation ar
+         WHERE ar.agent_id IN (
+           SELECT DISTINCT agent_id FROM agent_requests WHERE business_slug = ?
+         )
+         ORDER BY ar.window, ar.quality_score DESC`,
+      )
+      .all(slug) as Array<{
+        agent_id: string;
+        window: string;
+        requests: number;
+        reservations_confirmed: number;
+        conversion_rate: number;
+        quality_score: number;
+        updated_at: string;
+      }>;
+
+    // Competitor radar — last 10 polls (Pro tenants)
+    const competitor_polls = db
+      .prepare(
+        `SELECT id, query_phrasing, polled_at, citation_found, tenant_cited
+         FROM competitor_polls
+         WHERE business_slug = ?
+         ORDER BY polled_at DESC
+         LIMIT 10`,
+      )
+      .all(slug) as Array<{
+        id: number;
+        query_phrasing: string;
+        polled_at: string;
+        citation_found: number;
+        tenant_cited: number;
+      }>;
+
+    // Summary totals
+    const reservation_totals = db
+      .prepare(
+        `SELECT
+           SUM(CASE WHEN status = 'held' THEN 1 ELSE 0 END) AS held,
+           SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) AS confirmed,
+           SUM(CASE WHEN status = 'expired' THEN 1 ELSE 0 END) AS expired,
+           COUNT(*) AS total
+         FROM reservations WHERE business_slug = ?`,
+      )
+      .get(slug) as { held: number; confirmed: number; expired: number; total: number };
+
+    const handoff_totals = db
+      .prepare(
+        `SELECT
+           SUM(CASE WHEN mode = 'human' THEN 1 ELSE 0 END) AS human,
+           SUM(CASE WHEN mode = 'agent' THEN 1 ELSE 0 END) AS agent,
+           COUNT(*) AS total
+         FROM handoffs WHERE business_slug = ?`,
+      )
+      .get(slug) as { human: number; agent: number; total: number };
+
+    const agent_request_totals = db
+      .prepare(
+        `SELECT
+           COUNT(DISTINCT agent_id) AS unique_agents,
+           COUNT(*) AS total_calls
+         FROM agent_requests WHERE business_slug = ?`,
+      )
+      .get(slug) as { unique_agents: number; total_calls: number };
+
+    res.json({
+      slug,
+      reservations,
+      handoffs,
+      agent_requests,
+      agent_reputation,
+      competitor_polls,
+      totals: {
+        reservations: reservation_totals,
+        handoffs: handoff_totals,
+        agent_requests: agent_request_totals,
+      },
+    });
+  },
+);
