@@ -396,16 +396,189 @@ async function apiAllMetrics(request: Request, env: Env): Promise<Response> {
 // Proxy to Railway's /analytics/:slug/activity — surfaces the new-feature
 // data (reservations, handoffs, agent_requests, competitor radar) for the
 // selected business. Admin users can query any slug via ?slug=<slug>.
+//
+// Aggregate mode: ?scope=all (admin only) parallel-fetches every active
+// business and merges reservations / handoffs / agent_requests into a unified
+// recent-events feed sorted by timestamp desc. Non-admin callers receive 403.
+
+type ActivityPayload = {
+  slug: string;
+  reservations?: Array<{
+    id: string;
+    agent_id: string | null;
+    status: string;
+    window_start: string;
+    window_end: string;
+    requested_at: string;
+    expires_at: string;
+  }>;
+  handoffs?: Array<{
+    id: string;
+    mode: string;
+    delivered_via: string | null;
+    reservation_id: string | null;
+    agent_id: string | null;
+    created_at: string;
+  }>;
+  agent_requests?: Array<{
+    id: number;
+    tool_called: string;
+    agent_id: string;
+    agent_id_source: string;
+    outcome_signal: string;
+    latency_ms: number | null;
+    cost_cents: number | null;
+    timestamp: string;
+  }>;
+  totals?: {
+    reservations?: { held?: number; confirmed?: number; expired?: number; total?: number };
+    handoffs?: { human?: number; agent?: number; total?: number };
+    agent_requests?: { unique_agents?: number; total_calls?: number };
+  };
+  [key: string]: unknown;
+};
+
+type AggregateFeedItem =
+  | { type: "reservation"; business_slug: string; business_name: string; id: string; status: string; agent_id: string | null; timestamp: string }
+  | { type: "handoff"; business_slug: string; business_name: string; id: string; mode: string; delivered_via: string | null; timestamp: string }
+  | { type: "agent_call"; business_slug: string; business_name: string; tool_called: string; agent_id: string; outcome_signal: string; latency_ms: number | null; timestamp: string };
 
 async function apiActivityDetail(request: Request, env: Env): Promise<Response> {
   const ctx = await getSessionFromRequest(request, env);
   if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
 
+  const url = new URL(request.url);
+  const scope = url.searchParams.get("scope");
+  const slug  = url.searchParams.get("slug");
+
+  // ── Aggregate mode (admin only) ──────────────────────────────────────────
+  if (scope === "all") {
+    if (ctx.role !== "admin") {
+      return withCors(jsonErr(403, "Admin only"), request, { credentials: true });
+    }
+    const businesses = await getActiveBusinesses(env.DB);
+    const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+
+    const perBusiness = await Promise.all(
+      businesses.map(async (biz) => {
+        try {
+          const res = await fetch(`${base}/analytics/${biz.slug}/activity`, {
+            headers: { Authorization: `Bearer ${biz.api_key}` },
+          });
+          if (!res.ok) return { biz, data: null as ActivityPayload | null };
+          const data = await res.json() as ActivityPayload;
+          return { biz, data };
+        } catch {
+          return { biz, data: null as ActivityPayload | null };
+        }
+      }),
+    );
+
+    // Per-business summary (totals + most recent items)
+    const perBizSummary = perBusiness.map(({ biz, data }) => ({
+      slug: biz.slug,
+      name: biz.business_name,
+      totals: data?.totals ?? null,
+      recent_items: [
+        ...(data?.reservations ?? []).slice(0, 5).map((r) => ({ type: "reservation", ...r })),
+        ...(data?.handoffs ?? []).slice(0, 5).map((h) => ({ type: "handoff", ...h })),
+        ...(data?.agent_requests ?? []).slice(0, 5).map((a) => ({ type: "agent_call", ...a })),
+      ],
+    }));
+
+    // Aggregate totals across all businesses
+    const aggregate_totals = {
+      reservations: { held: 0, confirmed: 0, expired: 0, total: 0 },
+      handoffs: { human: 0, agent: 0, total: 0 },
+      agent_requests: { unique_agents: 0, total_calls: 0 },
+    };
+    const uniqueAgents = new Set<string>();
+    for (const { data } of perBusiness) {
+      if (!data) continue;
+      const r = data.totals?.reservations;
+      if (r) {
+        aggregate_totals.reservations.held      += r.held ?? 0;
+        aggregate_totals.reservations.confirmed += r.confirmed ?? 0;
+        aggregate_totals.reservations.expired   += r.expired ?? 0;
+        aggregate_totals.reservations.total     += r.total ?? 0;
+      }
+      const h = data.totals?.handoffs;
+      if (h) {
+        aggregate_totals.handoffs.human += h.human ?? 0;
+        aggregate_totals.handoffs.agent += h.agent ?? 0;
+        aggregate_totals.handoffs.total += h.total ?? 0;
+      }
+      const a = data.totals?.agent_requests;
+      if (a) {
+        aggregate_totals.agent_requests.total_calls += a.total_calls ?? 0;
+      }
+      for (const ar of data.agent_requests ?? []) {
+        if (ar.agent_id) uniqueAgents.add(ar.agent_id);
+      }
+    }
+    aggregate_totals.agent_requests.unique_agents = uniqueAgents.size;
+
+    // Build unified feed: merge reservations + handoffs + agent_requests,
+    // stamp each with business_slug + business_name, sort by timestamp desc,
+    // limit to 50.
+    const feed: AggregateFeedItem[] = [];
+    for (const { biz, data } of perBusiness) {
+      if (!data) continue;
+      for (const r of data.reservations ?? []) {
+        feed.push({
+          type: "reservation",
+          business_slug: biz.slug,
+          business_name: biz.business_name,
+          id: r.id,
+          status: r.status,
+          agent_id: r.agent_id,
+          timestamp: r.requested_at,
+        });
+      }
+      for (const h of data.handoffs ?? []) {
+        feed.push({
+          type: "handoff",
+          business_slug: biz.slug,
+          business_name: biz.business_name,
+          id: h.id,
+          mode: h.mode,
+          delivered_via: h.delivered_via,
+          timestamp: h.created_at,
+        });
+      }
+      for (const a of data.agent_requests ?? []) {
+        feed.push({
+          type: "agent_call",
+          business_slug: biz.slug,
+          business_name: biz.business_name,
+          tool_called: a.tool_called,
+          agent_id: a.agent_id,
+          outcome_signal: a.outcome_signal,
+          latency_ms: a.latency_ms,
+          timestamp: a.timestamp,
+        });
+      }
+    }
+    feed.sort((a, b) => (a.timestamp < b.timestamp ? 1 : a.timestamp > b.timestamp ? -1 : 0));
+    const trimmedFeed = feed.slice(0, 50);
+
+    return withCors(
+      jsonOk({
+        scope: "all",
+        businesses: perBizSummary,
+        aggregate_totals,
+        feed: trimmedFeed,
+      }),
+      request,
+      { credentials: true },
+    );
+  }
+
+  // ── Single-business mode (default) ───────────────────────────────────────
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
     : await getUserBusinesses(env.DB, ctx.user_id);
-  const slug = new URL(request.url).searchParams.get("slug");
-  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  const biz = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
 
   const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
