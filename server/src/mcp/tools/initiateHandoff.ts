@@ -4,6 +4,7 @@ import type { Request } from "express";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getDb } from "../../db.js";
 import { initiateHandoffInput } from "../../manifest/tools.js";
+import { DESCRIPTORS } from "../../manifest/descriptor.js";
 import { mintContinuationToken, getSigningKey } from "../../lib/continuationToken.js";
 import { sendSms, sendEmail } from "../../lib/notify.js";
 import { withAgentRequestLog } from "../../lib/agentRequestLogger.js";
@@ -153,6 +154,7 @@ export function registerInitiateHandoff(
     "initiate_handoff",
     "Begin a handoff from the agent to either a human operator (SMS/email via lead_routing_json) or another agent (signed continuation URL).",
     wrapper.shape,
+    DESCRIPTORS.find((d) => d.name === "initiate_handoff")!.annotations,
     async (args) => {
       const run = async () => {
         // Validate and narrow using the strict discriminated union

@@ -138,6 +138,13 @@ export const ManifestSchema = z.object({
       idempotent: z.boolean(),
       estimated_latency_ms: z.number().int().positive(),
       estimated_cost_cents: z.number().nonnegative(),
+      // MCP spec behavioral hints — surfaced so A2A manifest consumers see
+      // the same readOnly/destructive/openWorld signal as `tools/list`.
+      annotations: z.object({
+        readOnlyHint: z.boolean(),
+        destructiveHint: z.boolean(),
+        openWorldHint: z.boolean(),
+      }),
     })
   ),
   rate_limits: z.object({

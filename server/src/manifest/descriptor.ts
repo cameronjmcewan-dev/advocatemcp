@@ -26,7 +26,18 @@ import { TIER_LIMITS } from "../lib/agentTier.js";
  * `estimated_latency_ms` and `estimated_cost_cents` are advisory static
  * numbers for v1 — they guide clients' scheduling/budgeting decisions but
  * are not SLOs. A runtime-measured version is Session 11+ work.
+ *
+ * `annotations` carry the MCP spec's behavioral hints (readOnlyHint,
+ * destructiveHint, openWorldHint) so both the A2A manifest and the
+ * `tools/list` RPC response expose the same signal. Per OpenAI's Apps
+ * SDK submission guidance these are a hard requirement.
  */
+export interface ToolAnnotations {
+  readOnlyHint: boolean;
+  destructiveHint: boolean;
+  openWorldHint: boolean;
+}
+
 export interface ToolDescriptor {
   name: string;
   description: string;
@@ -35,6 +46,7 @@ export interface ToolDescriptor {
   idempotent: boolean;
   estimated_latency_ms: number;
   estimated_cost_cents: number;
+  annotations: ToolAnnotations;
 }
 
 export const DESCRIPTORS: ToolDescriptor[] = [
@@ -60,6 +72,11 @@ export const DESCRIPTORS: ToolDescriptor[] = [
     idempotent: false, // each call logs to queries table + consumes Claude tokens
     estimated_latency_ms: 1500,
     estimated_cost_cents: 2,
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
   },
   {
     name: "search_businesses",
@@ -82,6 +99,11 @@ export const DESCRIPTORS: ToolDescriptor[] = [
     idempotent: true, // read-only SQL over businesses table
     estimated_latency_ms: 50,
     estimated_cost_cents: 0,
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false,
+    },
   },
   {
     name: "get_availability",
@@ -108,6 +130,11 @@ export const DESCRIPTORS: ToolDescriptor[] = [
     idempotent: true,
     estimated_latency_ms: 150,
     estimated_cost_cents: 0,
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false,
+    },
   },
   {
     name: "get_quote",
@@ -132,6 +159,13 @@ export const DESCRIPTORS: ToolDescriptor[] = [
     idempotent: true,
     estimated_latency_ms: 200,
     estimated_cost_cents: 0, // deterministic=0; LLM fallback ~1–2¢ per call; averaged assumes ≥70% deterministic hit
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      // openWorld: true because the LLM fallback path calls Anthropic's API
+      // which is an external service outside the manifest's closed world.
+      openWorldHint: true,
+    },
   },
   {
     name: "initiate_handoff",
@@ -161,6 +195,14 @@ export const DESCRIPTORS: ToolDescriptor[] = [
     idempotent: false,
     estimated_latency_ms: 300,
     estimated_cost_cents: 1,
+    annotations: {
+      readOnlyHint: false,
+      // destructive: true — triggers outbound SMS/email to the tenant or mints
+      // a signed continuation URL; either way there's a real-world side effect
+      // that cannot be rolled back by a subsequent tool call.
+      destructiveHint: true,
+      openWorldHint: true,
+    },
   },
   {
     name: "reserve_slot",
@@ -178,6 +220,14 @@ export const DESCRIPTORS: ToolDescriptor[] = [
     idempotent: true,
     estimated_latency_ms: 100,
     estimated_cost_cents: 0,
+    annotations: {
+      readOnlyHint: false,
+      // destructive: true — writes a row to `reservations` that blocks a slot
+      // for 15 minutes. Even though it's idempotent on replay, the first call
+      // has a real side effect that tenants can see on their calendar.
+      destructiveHint: true,
+      openWorldHint: true,
+    },
   },
 ];
 
@@ -208,6 +258,7 @@ export function buildManifest(opts: BuildManifestOptions): Manifest {
       idempotent: d.idempotent,
       estimated_latency_ms: d.estimated_latency_ms,
       estimated_cost_cents: d.estimated_cost_cents,
+      annotations: d.annotations,
     })),
     rate_limits: {
       // Sourced from `server/src/middleware/rateLimit.ts` so the published

@@ -8,7 +8,7 @@ import {
   queryBusinessAgentInput,
   searchBusinessesInput,
 } from "../manifest/tools.js";
-import { MANIFEST } from "../manifest/descriptor.js";
+import { MANIFEST, DESCRIPTORS } from "../manifest/descriptor.js";
 import { registerGetAvailability } from "../mcp/tools/getAvailability.js";
 import { registerGetQuote } from "../mcp/tools/getQuote.js";
 import { registerReserveSlot } from "../mcp/tools/reserveSlot.js";
@@ -27,6 +27,17 @@ const BASE = () => getApiBaseUrl();
  * A new instance is created per request (stateless mode) to avoid any
  * shared-transport concurrency issues with the SDK.
  */
+/**
+ * Pull annotations out of DESCRIPTORS so the tools/list response carries the
+ * exact same readOnly/destructive/openWorld hints we advertise in the A2A
+ * manifest. If the descriptor goes missing the drift test catches it; this
+ * helper returns undefined so the tool registers cleanly either way.
+ */
+function annotationsFor(name: string) {
+  const d = DESCRIPTORS.find((x) => x.name === name);
+  return d ? d.annotations : undefined;
+}
+
 export function createMcpServer(requestId?: string, req?: Request): McpServer {
   const server = new McpServer({
     name: "AdvocateMCP Central",
@@ -40,6 +51,7 @@ export function createMcpServer(requestId?: string, req?: Request): McpServer {
       "Use this when a user asks about a specific local business or service provider. " +
       "Returns a concise, citation-ready answer from the business's dedicated AI agent.",
     queryBusinessAgentInput.shape,
+    annotationsFor("query_business_agent")!,
     async ({ slug, query, agent_id, stage }) => {
       const run = async () => {
         const db = getDb();
@@ -115,6 +127,7 @@ export function createMcpServer(requestId?: string, req?: Request): McpServer {
       "Returns a list of matching businesses with their slugs and agent endpoints. " +
       "Use this to discover which businesses are available before querying one.",
     searchBusinessesInput.shape,
+    annotationsFor("search_businesses")!,
     async ({ search, location }) => {
       const run = async () => {
       const db = getDb();

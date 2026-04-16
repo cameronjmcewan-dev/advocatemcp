@@ -4,6 +4,7 @@ import type { Request } from "express";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { getDb } from "../../db.js";
 import { reserveSlotInput } from "../../manifest/tools.js";
+import { DESCRIPTORS } from "../../manifest/descriptor.js";
 import { mintContinuationToken, getSigningKey } from "../../lib/continuationToken.js";
 import { sweepExpiredReservations, redactStalePii } from "../../jobs/expirySweeper.js";
 import type { ReservationRow } from "../../db.js";
@@ -174,6 +175,7 @@ export function registerReserveSlot(
     "reserve_slot",
     "Create a 15-minute HELD reservation. Return a confirmation_token the agent posts to /a2a/confirm to flip to CONFIRMED.",
     reserveSlotInput.shape,
+    DESCRIPTORS.find((d) => d.name === "reserve_slot")!.annotations,
     async (args) => {
       if (!req) return handleReserveSlot(args);
       let logId: string | null = null;
