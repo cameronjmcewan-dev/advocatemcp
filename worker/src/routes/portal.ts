@@ -67,6 +67,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/domain-test"   && method === "GET")    return apiDomainTest(request, env);
   if (pathname === "/admin/create-client"      && method === "POST") return adminCreateClient(request, env);
   const resyncMatch = pathname.match(/^\/admin\/businesses\/([^/]+)\/resync-api-key$/);
+  if (resyncMatch && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (resyncMatch && method === "POST") return adminResyncApiKey(request, env, resyncMatch[1]);
   if (pathname === "/admin/domains/activate"              && method === "POST") return handleActivateDomain(request, env);
   if (pathname === "/admin/domains/saas-fallback-origin"  && method === "POST") return handleSetFallbackOrigin(request, env);
@@ -1207,14 +1208,19 @@ async function apiRotateKey(request: Request, env: Env): Promise<Response> {
 // SQL except during the migration that introduced this endpoint.
 //
 // Auth: Bearer ADMIN_SECRET (same as /admin/create-client).
+//
+// CORS: exposed to the dashboard UI on advocatemcp.com. Every response
+// goes through withCors(..., {credentials: true}) so the browser doesn't
+// block the cross-origin response. Non-browser callers (curl, CI) ignore
+// the extra headers. OPTIONS preflight handled in the route dispatcher.
 async function adminResyncApiKey(request: Request, env: Env, slug: string): Promise<Response> {
   const given  = request.headers.get("Authorization") ?? "";
   const secret = env.ADMIN_SECRET ?? "";
   const credentialValid = secret.length > 0 && given === `Bearer ${secret}`;
-  if (!credentialValid) return jsonErr(401, "Unauthorized");
+  if (!credentialValid) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
 
   const biz = await getBusinessBySlug(env.DB, slug);
-  if (!biz) return jsonErr(404, "Business not found in D1");
+  if (!biz) return withCors(jsonErr(404, "Business not found in D1"), request, { credentials: true });
 
   const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
   let rotateRes: Response;
@@ -1224,26 +1230,30 @@ async function adminResyncApiKey(request: Request, env: Env, slug: string): Prom
       headers: { ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}) },
     });
   } catch (err) {
-    return jsonErr(502, `Backend unreachable: ${String(err)}`);
+    return withCors(jsonErr(502, `Backend unreachable: ${String(err)}`), request, { credentials: true });
   }
 
   if (!rotateRes.ok) {
-    return jsonErr(502, `Backend rotate failed with ${rotateRes.status}`);
+    return withCors(jsonErr(502, `Backend rotate failed with ${rotateRes.status}`), request, { credentials: true });
   }
   const data = await rotateRes.json() as { ok?: boolean; new_api_key?: string };
   if (!data.ok || !data.new_api_key) {
-    return jsonErr(502, "Invalid response from backend");
+    return withCors(jsonErr(502, "Invalid response from backend"), request, { credentials: true });
   }
 
   await updateBusinessApiKey(env.DB, slug, data.new_api_key);
-  return jsonOk({
-    ok: true,
-    slug,
-    message: "API key resynced. D1 and Railway are now aligned.",
-    // Deliberately does NOT return the new key — operator sees it via
-    // the rotate-key endpoint if they need it; this endpoint is for ops
-    // recovery, not key discovery.
-  });
+  return withCors(
+    jsonOk({
+      ok: true,
+      slug,
+      message: "API key resynced. D1 and Railway are now aligned.",
+      // Deliberately does NOT return the new key — operator sees it via
+      // the rotate-key endpoint if they need it; this endpoint is for ops
+      // recovery, not key discovery.
+    }),
+    request,
+    { credentials: true },
+  );
 }
 
 // ── POST /admin/create-client ──────────────────────────────────────────────
