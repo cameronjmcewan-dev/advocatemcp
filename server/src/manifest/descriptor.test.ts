@@ -127,6 +127,20 @@ describe("buildManifest", () => {
       expect(typeof anno!.openWorldHint).toBe("boolean");
     }
   });
+
+  it("exposes support_contact, privacy_url, and terms_url at the top level", () => {
+    expect(m.support_contact).toBe("mailto:support@advocatemcp.com");
+    expect(m.privacy_url).toBe("https://advocatemcp.com/privacy");
+    expect(m.terms_url).toBe("https://advocatemcp.com/terms");
+  });
+});
+
+describe("MANIFEST — compliance top-level fields", () => {
+  it("is published on the cached module-scoped MANIFEST (what /.well-known/mcp.json returns)", () => {
+    expect(MANIFEST.support_contact).toBe("mailto:support@advocatemcp.com");
+    expect(MANIFEST.privacy_url).toBe("https://advocatemcp.com/privacy");
+    expect(MANIFEST.terms_url).toBe("https://advocatemcp.com/terms");
+  });
 });
 
 describe("MANIFEST cached const", () => {

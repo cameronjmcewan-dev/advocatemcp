@@ -166,6 +166,11 @@ export const ManifestSchema = z.object({
     ),
   }),
   attribution_endpoint: z.string().url(),
+  // Compliance/contact surfaces required by the ChatGPT Apps SDK review
+  // process. Agent frameworks also surface these to end users.
+  support_contact: z.string().min(1),
+  privacy_url: z.string().url(),
+  terms_url: z.string().url(),
 });
 
 export type Manifest = z.infer<typeof ManifestSchema>;
