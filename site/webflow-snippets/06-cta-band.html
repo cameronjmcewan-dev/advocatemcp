@@ -1,0 +1,38 @@
+<!-- AdvocateMCP — Webflow CTA Band Snippet
+     Full-bleed call-to-action section.
+     ──────────────────────────────────────────────────────────── -->
+
+<style>
+.cta-band {
+  padding: 120px 40px; text-align: center;
+  background: radial-gradient(ellipse 70% 80% at 50% 50%, rgba(125,37,80,.12) 0%, transparent 65%);
+  border-top: 1px solid var(--border);
+}
+.cta-band h2 {
+  font-family: var(--font-display);
+  font-size: var(--h2); line-height: 1.1; letter-spacing: -.03em;
+  margin-bottom: 18px;
+}
+.cta-band h2 em { font-style: italic; color: var(--accent); }
+.cta-band-sub {
+  font-size: var(--tx-base); color: var(--text-muted);
+  max-width: 460px; margin: 0 auto 36px; line-height: 1.7;
+}
+.cta-band-actions {
+  display: flex; align-items: center; justify-content: center;
+  gap: 14px; flex-wrap: wrap;
+}
+@media (max-width: 768px) {
+  .cta-band { padding: 72px 20px; }
+  .cta-band h2 { font-size: clamp(2rem, 7vw, 2.5rem); }
+}
+</style>
+
+<section class="cta-band">
+  <h2>Your competitors will be on AI.<br><em>Will you?</em></h2>
+  <p class="cta-band-sub">AI-powered recommendations are the new word of mouth. The businesses that show up first will capture leads that others never see.</p>
+  <div class="cta-band-actions">
+    <a href="/onboarding" class="btn btn-primary btn-lg">Start for $100/month →</a>
+    <a href="#how-it-works" class="btn btn-ghost btn-lg">See how it works</a>
+  </div>
+</section>

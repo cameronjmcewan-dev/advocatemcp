@@ -1,0 +1,120 @@
+<!-- AdvocateMCP — Webflow Hero Section Snippet
+     Paste into Webflow as a custom code embed or recreate with visual tools.
+     ──────────────────────────────────────────────────────────── -->
+
+<style>
+.hero {
+  position: relative; overflow: hidden;
+  padding: 120px 48px 100px; text-align: center;
+}
+.hero-bg {
+  position: absolute; inset: 0; z-index: 0;
+  background: radial-gradient(ellipse 60% 50% at 50% 0%, rgba(125,37,80,.18) 0%, transparent 70%);
+  pointer-events: none;
+}
+.hero-inner { position: relative; z-index: 1; max-width: 760px; margin: 0 auto; }
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 14px; margin-bottom: 24px;
+  font-size: var(--tx-xs); font-weight: 600; color: var(--accent-hover);
+  background: var(--accent-dim); border: 1px solid var(--accent-ring);
+  border-radius: var(--r-pill); text-transform: uppercase; letter-spacing: .07em;
+}
+.hero h1 {
+  font-family: var(--font-display);
+  font-size: var(--h1); line-height: 1.04; letter-spacing: -.03em;
+  margin-bottom: 24px; color: var(--text-primary);
+}
+.hero h1 em { font-style: italic; color: var(--accent); }
+.hero-sub {
+  font-size: clamp(1.0625rem, 1.4vw, 1.2rem);
+  color: var(--text-muted); line-height: 1.7;
+  max-width: 560px; margin: 0 auto 36px;
+}
+.hero-cta {
+  display: flex; align-items: center; justify-content: center;
+  gap: 14px; flex-wrap: wrap; margin-bottom: 16px;
+}
+.hero-proof {
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px; font-size: var(--tx-sm); color: var(--text-muted);
+  margin-bottom: 56px;
+}
+.pulse-dot {
+  width: 6px; height: 6px; background: var(--success);
+  border-radius: 50%; animation: pulse 2s ease-in-out infinite; flex-shrink: 0;
+}
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+/* Browser chrome mockup */
+.hero-browser {
+  max-width: 720px; margin: 0 auto;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-lg); overflow: hidden;
+  box-shadow: 0 32px 80px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.04);
+}
+.hero-browser-bar {
+  display: flex; align-items: center; gap: 6px; padding: 12px 16px;
+  background: var(--surface-raised); border-bottom: 1px solid var(--border);
+}
+.hero-browser-dot { width: 10px; height: 10px; border-radius: 50%; }
+.hero-browser-url {
+  flex: 1; margin: 0 12px; padding: 4px 12px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-xs);
+  font-size: var(--tx-xs); color: var(--text-muted); text-align: left;
+}
+.hero-browser-body { padding: 20px; text-align: left; }
+
+@media (max-width: 768px) {
+  .hero { padding: 80px 20px 60px; }
+  .hero h1 { font-size: clamp(2.5rem, 8vw, 3.5rem); }
+  .hero-browser { display: none; }
+  .hero-proof { margin-bottom: 0; }
+}
+</style>
+
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-inner">
+    <div class="hero-eyebrow">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      AI-native business presence
+    </div>
+    <h1>Get found by AI,<br><em>not buried by it</em></h1>
+    <p class="hero-sub">When someone asks ChatGPT, Perplexity, or Claude for a business like yours, Advocate makes sure your name comes up — with a direct link to reach you.</p>
+    <div class="hero-cta">
+      <a href="/onboarding" class="btn btn-primary btn-lg">Start Getting Recommended →</a>
+      <a href="#how-it-works" class="btn btn-ghost btn-lg">See how it works</a>
+    </div>
+    <div class="hero-proof">
+      <span class="pulse-dot"></span>
+      Live on Claude, ChatGPT, Perplexity &amp; Gemini
+    </div>
+
+    <!-- Browser mockup showing a real AI recommendation -->
+    <div class="hero-browser">
+      <div class="hero-browser-bar">
+        <span class="hero-browser-dot" style="background:var(--danger)"></span>
+        <span class="hero-browser-dot" style="background:var(--warning)"></span>
+        <span class="hero-browser-dot" style="background:var(--success)"></span>
+        <div class="hero-browser-url">perplexity.ai</div>
+      </div>
+      <div class="hero-browser-body">
+        <p style="font-size:var(--tx-xs);color:var(--text-muted);margin-bottom:8px;font-style:italic;display:flex;align-items:center;gap:6px">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          "Best property management company near South Congress Austin"
+        </p>
+        <p style="font-size:var(--tx-xs);color:var(--text-muted);margin-bottom:10px;display:flex;align-items:center;gap:5px;text-transform:uppercase;font-weight:600;letter-spacing:.07em">
+          <span style="width:5px;height:5px;border-radius:50%;background:var(--success)"></span>
+          Perplexity AI Answer
+        </p>
+        <p style="font-size:var(--tx-sm);line-height:1.7;margin-bottom:14px">For South Congress and Bouldin Creek, <strong>Barton Hills Property Group</strong> stands out. They specialize in 4–50 unit multifamily properties and provide full-service management.</p>
+        <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;margin-bottom:12px">
+          <div style="font-size:var(--tx-sm);font-weight:600;margin-bottom:2px">Barton Hills Property Group</div>
+          <div style="font-size:var(--tx-xs);color:var(--text-muted);margin-bottom:5px">Austin, TX · Multifamily &amp; CRE · Est. 2018</div>
+          <a href="#" style="font-size:var(--tx-xs);color:var(--accent)">bartonhillspropertygroup.com — View availability →</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

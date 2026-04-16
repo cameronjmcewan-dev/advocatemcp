@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark" style="background:#171614">
+<html lang="en" data-theme="dark" style="background:#13100f">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -31,10 +31,10 @@
   --border:      #393836;
   --text:        #e8e6e3;
   --muted:       #7a7875;
-  --accent:      #4f98a3;
-  --accent-dk:   #3d8090;
-  --accent-dim:  rgba(79,152,163,.1);
-  --accent-ring: rgba(79,152,163,.2);
+  --accent:      #7d2550;
+  --accent-dk:   #8f2d5d;
+  --accent-dim:  rgba(125,37,80,.1);
+  --accent-ring: rgba(125,37,80,.24);
   --green:       #3fb950;
   --yellow:      #d29922;
   --red:         #f85149;
@@ -67,10 +67,10 @@
   --border:    #dddbd8;
   --text:      #1a1917;
   --muted:     #6b6967;
-  --accent:    #01696f;
-  --accent-dk: #015861;
-  --accent-dim:rgba(1,105,111,.08);
-  --accent-ring:rgba(1,105,111,.2);
+  --accent:    #7d2550;
+  --accent-dk: #6e1f46;
+  --accent-dim:rgba(125,37,80,.08);
+  --accent-ring:rgba(125,37,80,.2);
 }
 
 html{font-size:16px;-webkit-font-smoothing:antialiased;color-scheme:dark light;background:#171614}
@@ -164,7 +164,7 @@ img,svg{display:block}
 }
 .ln-hero-bg{
   position:absolute;inset:0;z-index:0;
-  background:radial-gradient(ellipse 60% 50% at 50% 0%, rgba(79,152,163,.22) 0%, transparent 70%);
+  background:radial-gradient(ellipse 60% 50% at 50% 0%, rgba(125,37,80,.18) 0%, transparent 70%);
   pointer-events:none;
 }
 .ln-hero-inner{position:relative;z-index:1;max-width:760px;margin:0 auto}
@@ -436,8 +436,8 @@ img,svg{display:block}
   box-shadow:0 16px 40px rgba(0,0,0,.3);
   border-color:var(--accent-ring);
 }
-.ln-price-card.pop{border-color:rgba(79,152,163,.4)}
-[data-theme="light"] .ln-price-card.pop{border-color:rgba(1,105,111,.35)}
+.ln-price-card.pop{border-color:rgba(125,37,80,.4)}
+[data-theme="light"] .ln-price-card.pop{border-color:rgba(125,37,80,.35)}
 .ln-pop-badge{
   position:absolute;top:-1px;right:24px;
   background:var(--accent);color:#fff;
@@ -455,7 +455,7 @@ img,svg{display:block}
 /* ── Final CTA ── */
 .ln-final-cta{
   padding:120px 40px;text-align:center;
-  background:radial-gradient(ellipse 70% 80% at 50% 50%, rgba(79,152,163,.15) 0%, transparent 65%);
+  background:radial-gradient(ellipse 70% 80% at 50% 50%, rgba(125,37,80,.12) 0%, transparent 65%);
   border-top:1px solid var(--border);
 }
 .ln-cta-h{font-family:var(--font-serif);font-size:var(--h2);line-height:1.1;letter-spacing:-.03em;margin-bottom:18px}
@@ -531,7 +531,7 @@ img,svg{display:block}
   border:1px solid var(--accent-ring);border-radius:var(--r-md);
   font-size:var(--tx-sm);font-weight:500;transition:background .15s;
 }
-.db-add-btn:hover{background:rgba(79,152,163,.18)}
+.db-add-btn:hover{background:rgba(125,37,80,.18)}
 .db-add-btn svg{width:14px;height:14px}
 
 /* Main */
@@ -794,7 +794,7 @@ tr:hover td{background:var(--surface-2)}
 <!-- Nav -->
 <nav class="ln-nav">
   <a href="#home" class="logo">
-    <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><rect width="26" height="26" rx="6" fill="#4f98a3"/><path d="M13 6.5L20.5 20H5.5L13 6.5Z" stroke="white" stroke-width="1.6" stroke-linejoin="round" fill="none"/><line x1="9.2" y1="15.5" x2="16.8" y2="15.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/></svg>
+    <svg width="26" height="26" viewBox="0 0 200 200" fill="none" stroke="#fff" stroke-width="14" stroke-linejoin="round" stroke-linecap="round"><rect width="200" height="200" rx="40" fill="#7d2550" stroke="none"/><path d="M 30 100 L 70 70 L 100 100 L 70 130 Z M 170 100 L 130 70 L 100 100 L 130 130 Z"/><path d="M 100 30 L 70 70 L 100 100 L 130 70 Z M 100 170 L 70 130 L 100 100 L 130 130 Z"/></svg>
     Advocate
   </a>
   <div class="ln-nav-links">
@@ -1318,14 +1318,15 @@ tr:hover td{background:var(--surface-2)}
     </div>
     <div class="ln-price-grid fade-up">
       <div class="ln-price-card">
-        <div class="ln-price-name">Starter</div>
-        <div class="ln-price-amt">$49</div>
+        <div class="ln-price-name">Base</div>
+        <div class="ln-price-amt">$100</div>
         <div class="ln-price-per">per month</div>
         <ul class="ln-price-list">
           <li>1 business profile</li>
           <li>AI recommendation presence</li>
           <li>Custom domain endpoint</li>
           <li>Referral tracking dashboard</li>
+          <li>Full analytics &amp; activity log</li>
           <li>Email support</li>
         </ul>
         <a href="/onboarding.html" class="btn btn-ghost" style="width:100%;justify-content:center">Get started</a>
@@ -1333,13 +1334,14 @@ tr:hover td{background:var(--surface-2)}
       <div class="ln-price-card pop">
         <div class="ln-pop-badge">Most Popular</div>
         <div class="ln-price-name">Pro</div>
-        <div class="ln-price-amt">$149</div>
+        <div class="ln-price-amt">$250</div>
         <div class="ln-price-per">per month</div>
         <ul class="ln-price-list">
-          <li>Up to 5 business profiles</li>
-          <li>Priority AI indexing</li>
+          <li>Everything in Base</li>
+          <li>Competitor radar — see who beats you</li>
           <li>Advanced analytics &amp; exports</li>
-          <li>Custom business categories</li>
+          <li>Priority AI indexing</li>
+          <li>Custom query basket (15 queries)</li>
           <li>Priority support</li>
         </ul>
         <a href="/onboarding.html" class="btn btn-primary" style="width:100%;justify-content:center">Get started</a>
@@ -1354,7 +1356,7 @@ tr:hover td{background:var(--surface-2)}
     <h2 class="ln-cta-h">Your competitors will be on AI.<br><em>Will you?</em></h2>
     <p class="ln-cta-sub">AI-powered recommendations are the new word of mouth. The businesses that show up first will capture leads that others never see.</p>
     <div class="ln-cta-actions">
-      <a href="/onboarding.html" class="btn btn-primary" style="padding:14px 32px;font-size:var(--tx-base)">Start for $49/month →</a>
+      <a href="/onboarding.html" class="btn btn-primary" style="padding:14px 32px;font-size:var(--tx-base)">Start for $100/month →</a>
       <a href="#home" class="btn btn-ghost" onclick="navScrollTo('ln-features')" style="padding:14px 32px;font-size:var(--tx-base)">See how it works</a>
     </div>
   </div>
@@ -1366,7 +1368,7 @@ tr:hover td{background:var(--surface-2)}
     <div class="ln-footer-top">
       <div class="ln-footer-brand">
         <a href="#home" class="logo">
-          <svg width="24" height="24" viewBox="0 0 26 26" fill="none"><rect width="26" height="26" rx="6" fill="#4f98a3"/><path d="M13 6.5L20.5 20H5.5L13 6.5Z" stroke="white" stroke-width="1.6" stroke-linejoin="round" fill="none"/><line x1="9.2" y1="15.5" x2="16.8" y2="15.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <svg width="24" height="24" viewBox="0 0 200 200" fill="none" stroke="#fff" stroke-width="14" stroke-linejoin="round" stroke-linecap="round"><rect width="200" height="200" rx="40" fill="#7d2550" stroke="none"/><path d="M 30 100 L 70 70 L 100 100 L 70 130 Z M 170 100 L 130 70 L 100 100 L 130 130 Z"/><path d="M 100 30 L 70 70 L 100 100 L 130 70 Z M 100 170 L 70 130 L 100 100 L 130 130 Z"/></svg>
           Advocate
         </a>
         <p class="ln-footer-tagline">Get your business recommended by every major AI assistant. Flat monthly. No code.</p>
@@ -1428,7 +1430,7 @@ tr:hover td{background:var(--surface-2)}
   <!-- Sidebar -->
   <aside class="db-side">
     <div class="db-logo">
-      <svg width="22" height="22" viewBox="0 0 26 26" fill="none"><rect width="26" height="26" rx="6" fill="#4f98a3"/><path d="M13 6.5L20.5 20H5.5L13 6.5Z" stroke="white" stroke-width="1.6" stroke-linejoin="round" fill="none"/><line x1="9.2" y1="15.5" x2="16.8" y2="15.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <svg width="22" height="22" viewBox="0 0 200 200" fill="none" stroke="#fff" stroke-width="14" stroke-linejoin="round" stroke-linecap="round"><rect width="200" height="200" rx="40" fill="#7d2550" stroke="none"/><path d="M 30 100 L 70 70 L 100 100 L 70 130 Z M 170 100 L 130 70 L 100 100 L 130 130 Z"/><path d="M 100 30 L 70 70 L 100 100 L 130 70 Z M 100 170 L 70 130 L 100 100 L 130 130 Z"/></svg>
       Advocate
     </div>
     <nav class="db-nav">
@@ -1786,7 +1788,7 @@ function chartConfig(canvasId, height) {
     type: 'bar',
     data: {
       labels: CHART_LABELS,
-      datasets: [{ data: CHART_DATA, backgroundColor:'rgba(79,152,163,.65)', borderColor:'rgba(79,152,163,1)', borderWidth:1, borderRadius:3, borderSkipped:false }]
+      datasets: [{ data: CHART_DATA, backgroundColor:'rgba(125,37,80,.65)', borderColor:'rgba(125,37,80,1)', borderWidth:1, borderRadius:3, borderSkipped:false }]
     },
     options: {
       responsive:true, maintainAspectRatio:false,

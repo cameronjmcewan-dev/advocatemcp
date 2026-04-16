@@ -1,0 +1,98 @@
+<!-- AdvocateMCP — Webflow FAQ Section Snippet
+     Accordion-style FAQ section.
+     ──────────────────────────────────────────────────────────── -->
+
+<style>
+.faq-section { max-width: 680px; margin: 0 auto; padding: 96px 20px; }
+.faq-section .s-label {
+  font-size: var(--tx-xs); font-weight: 600; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--text-muted); margin-bottom: 10px;
+}
+.faq-section h2 {
+  font-family: var(--font-display); font-size: var(--h2);
+  line-height: 1.12; letter-spacing: -.025em; margin-bottom: 40px;
+}
+.faq-item { border-bottom: 1px solid var(--border); }
+.faq-trigger {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 0; cursor: pointer;
+  font-size: var(--tx-base); font-weight: 500; color: var(--text-primary);
+  text-align: left; background: none; border: none; font-family: var(--font-body);
+}
+.faq-trigger svg {
+  width: 16px; height: 16px; color: var(--text-muted);
+  transition: transform 150ms; flex-shrink: 0;
+}
+.faq-item.open .faq-trigger svg { transform: rotate(180deg); }
+.faq-content { overflow: hidden; max-height: 0; transition: max-height 250ms cubic-bezier(0.2,0.8,0.2,1); }
+.faq-item.open .faq-content { max-height: 500px; }
+.faq-content p {
+  padding: 0 0 20px;
+  font-size: var(--tx-sm); color: var(--text-secondary); line-height: 1.7;
+}
+</style>
+
+<section class="faq-section" id="faq">
+  <p class="s-label">FAQ</p>
+  <h2>Common questions</h2>
+
+  <div class="faq-item">
+    <button class="faq-trigger" onclick="this.parentElement.classList.toggle('open')">
+      How does Advocate get my business into AI responses?
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+    <div class="faq-content">
+      <p>Advocate intercepts AI bot traffic at the edge via a Cloudflare Worker. When an AI crawler (GPTBot, PerplexityBot, ClaudeBot) visits your domain, we serve a Claude-powered conversational response with structured business data and tracked referral links.</p>
+    </div>
+  </div>
+
+  <div class="faq-item">
+    <button class="faq-trigger" onclick="this.parentElement.classList.toggle('open')">
+      What AI platforms does Advocate work with?
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+    <div class="faq-content">
+      <p>Advocate is live on ChatGPT (GPTBot, OAI-SearchBot), Claude (ClaudeBot), Perplexity (PerplexityBot), and Google Gemini (Google-Extended). We also expose your business via the MCP protocol, so any MCP-compatible client can query you directly.</p>
+    </div>
+  </div>
+
+  <div class="faq-item">
+    <button class="faq-trigger" onclick="this.parentElement.classList.toggle('open')">
+      Do I need a developer to set this up?
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+    <div class="faq-content">
+      <p>No. Setup takes about 15 minutes: fill in the onboarding wizard, pick your plan, and point a CNAME record at your registrar. We handle everything else — SSL, AI crawler routing, and response generation.</p>
+    </div>
+  </div>
+
+  <div class="faq-item">
+    <button class="faq-trigger" onclick="this.parentElement.classList.toggle('open')">
+      What's the difference between Base and Pro?
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+    <div class="faq-content">
+      <p>Base ($100/mo) gives you the full AI recommendation engine, referral tracking, and analytics dashboard. Pro ($250/mo) adds Competitor Radar — see exactly which queries your competitors are cited in and you're not — plus priority indexing and advanced exports.</p>
+    </div>
+  </div>
+
+  <div class="faq-item">
+    <button class="faq-trigger" onclick="this.parentElement.classList.toggle('open')">
+      Can I cancel any time?
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+    <div class="faq-content">
+      <p>Yes. Billing is month-to-month via Stripe. Cancel from your dashboard at any time — your domain stays yours and the profile stays live until the end of the billing period.</p>
+    </div>
+  </div>
+
+  <div class="faq-item">
+    <button class="faq-trigger" onclick="this.parentElement.classList.toggle('open')">
+      How do referral links work?
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+    <div class="faq-content">
+      <p>Every AI response includes a signed referral link to your website or booking page. When a human clicks it, we log the click with the originating AI bot, query, and timestamp. Links are auto-tagged with UTM parameters so your existing analytics see the traffic.</p>
+    </div>
+  </div>
+</section>

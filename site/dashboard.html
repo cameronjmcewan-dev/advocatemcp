@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark" style="background:#171614">
+<html lang="en" data-theme="dark" style="background:#13100f">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -23,10 +23,10 @@
   --border:      #393836;
   --text:        #e8e6e3;
   --muted:       #7a7875;
-  --accent:      #4f98a3;
-  --accent-dk:   #3d8090;
-  --accent-dim:  rgba(79,152,163,.1);
-  --accent-ring: rgba(79,152,163,.2);
+  --accent:      #7d2550;
+  --accent-dk:   #8f2d5d;
+  --accent-dim:  rgba(125,37,80,.1);
+  --accent-ring: rgba(125,37,80,.24);
   --green:       #3fb950;
   --yellow:      #d29922;
   --red:         #f85149;
@@ -53,13 +53,13 @@
   --border:     #dddbd8;
   --text:       #1a1917;
   --muted:      #6b6967;
-  --accent:     #01696f;
-  --accent-dk:  #015861;
-  --accent-dim: rgba(1,105,111,.08);
-  --accent-ring:rgba(1,105,111,.2);
+  --accent:     #7d2550;
+  --accent-dk:  #6e1f46;
+  --accent-dim: rgba(125,37,80,.08);
+  --accent-ring:rgba(125,37,80,.2);
 }
 
-html{font-size:16px;-webkit-font-smoothing:antialiased;color-scheme:dark light;background:#171614}
+html{font-size:16px;-webkit-font-smoothing:antialiased;color-scheme:dark light;background:#13100f}
 body{
   background:var(--bg);color:var(--text);
   font-family:var(--font-body);font-size:var(--tx-base);line-height:1.6;
@@ -371,11 +371,11 @@ tr:hover td{background:rgba(255,255,255,.02)}
 
 /* ── Heatmap color scale ── */
 .hm-0{background:var(--surface-2)}
-.hm-1{background:rgba(79,152,163,.2)}
-.hm-2{background:rgba(79,152,163,.4)}
-.hm-3{background:rgba(79,152,163,.6)}
-.hm-4{background:rgba(79,152,163,.8)}
-.hm-5{background:rgba(79,152,163,1)}
+.hm-1{background:rgba(125,37,80,.24)}
+.hm-2{background:rgba(125,37,80,.4)}
+.hm-3{background:rgba(125,37,80,.6)}
+.hm-4{background:rgba(125,37,80,.8)}
+.hm-5{background:rgba(125,37,80,1)}
 
 /* ── Error state ── */
 .error-banner{
@@ -422,7 +422,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 <aside id="sidebar">
   <div class="db-logo">
     <svg width="22" height="22" viewBox="0 0 26 26" fill="none">
-      <rect width="26" height="26" rx="6" fill="#4f98a3"/>
+      <rect width="26" height="26" rx="6" fill="#7d2550"/>
       <path d="M13 6.5L20.5 20H5.5L13 6.5Z" stroke="white" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
       <line x1="9.2" y1="15.5" x2="16.8" y2="15.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/>
     </svg>
@@ -449,6 +449,18 @@ tr:hover td{background:rgba(255,255,255,.02)}
     </div>
     <div class="db-nav-item" data-section="domains">
       <i data-lucide="globe"></i><span>Domains</span>
+    </div>
+    <div class="db-nav-item" data-section="agent-config">
+      <i data-lucide="cpu"></i><span>Agent Config</span>
+    </div>
+    <div class="db-nav-item" data-section="competitor-radar">
+      <i data-lucide="radar"></i><span>Competitor Radar</span>
+    </div>
+    <div class="db-nav-item" data-section="billing">
+      <i data-lucide="credit-card"></i><span>Billing</span>
+    </div>
+    <div class="db-nav-item" data-section="embed">
+      <i data-lucide="code-2"></i><span>Embed Snippet</span>
     </div>
   </nav>
   <div class="db-side-foot">
@@ -719,6 +731,288 @@ tr:hover td{background:rgba(255,255,255,.02)}
       </div>
     </section>
 
+    <!-- ── Agent Config ── -->
+    <section id="sec-agent-config" class="db-sec">
+      <p class="db-sec-title">Agent Configuration</p>
+      <p class="db-sec-sub">Configure how AI assistants describe and recommend your business</p>
+
+      <div class="db-card" style="max-width:640px;margin-bottom:16px">
+        <div class="db-card-title">Business Profile</div>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div>
+            <label style="display:block;font-size:var(--tx-sm);font-weight:500;margin-bottom:6px">Business Name</label>
+            <input class="fi" type="text" id="cfg-biz-name" placeholder="Your Business Name">
+          </div>
+          <div>
+            <label style="display:block;font-size:var(--tx-sm);font-weight:500;margin-bottom:6px">One-line Description</label>
+            <input class="fi" type="text" id="cfg-tagline" placeholder="A short description AI uses to introduce your business">
+          </div>
+          <div>
+            <label style="display:block;font-size:var(--tx-sm);font-weight:500;margin-bottom:6px">Detailed Description</label>
+            <textarea class="fi" id="cfg-description" rows="4" style="resize:vertical;min-height:80px;max-height:240px" placeholder="Tell AI assistants about your services, specialties, and what makes you different"></textarea>
+          </div>
+          <div>
+            <label style="display:block;font-size:var(--tx-sm);font-weight:500;margin-bottom:6px">Location</label>
+            <input class="fi" type="text" id="cfg-location" placeholder="City, State">
+          </div>
+          <div>
+            <label style="display:block;font-size:var(--tx-sm);font-weight:500;margin-bottom:6px">Referral URL</label>
+            <input class="fi" type="url" id="cfg-referral-url" placeholder="https://yourbusiness.com/contact">
+            <p style="font-size:var(--tx-xs);color:var(--muted);margin-top:4px">Where AI-referred visitors land. Can be a booking page, contact form, or phone link.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="db-card" style="max-width:640px;margin-bottom:16px">
+        <div class="db-card-title">Services</div>
+        <p style="font-size:var(--tx-xs);color:var(--muted);margin-bottom:12px">List the services AI should mention when recommending your business.</p>
+        <div id="cfg-services-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <input class="fi" type="text" placeholder="e.g. Property Management" style="flex:1">
+            <button class="btn-sm btn-ghost" style="color:var(--red);flex-shrink:0" title="Remove">×</button>
+          </div>
+        </div>
+        <button class="btn-sm btn-ghost" style="color:var(--accent)" onclick="addServiceRow()">
+          + Add service
+        </button>
+      </div>
+
+      <div class="db-card" style="max-width:640px;margin-bottom:16px">
+        <div class="db-card-title">Response Tone</div>
+        <p style="font-size:var(--tx-xs);color:var(--muted);margin-bottom:12px">Choose how AI assistants present your business.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:6px;padding:8px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);cursor:pointer;font-size:var(--tx-sm)">
+            <input type="radio" name="cfg-tone" value="professional" checked style="accent-color:var(--accent)"> Professional
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;padding:8px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);cursor:pointer;font-size:var(--tx-sm)">
+            <input type="radio" name="cfg-tone" value="friendly" style="accent-color:var(--accent)"> Friendly
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;padding:8px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);cursor:pointer;font-size:var(--tx-sm)">
+            <input type="radio" name="cfg-tone" value="authoritative" style="accent-color:var(--accent)"> Authoritative
+          </label>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;margin-top:20px">
+        <button class="btn-sm btn-primary-sm">Save Configuration</button>
+        <button class="btn-sm btn-ghost">Preview AI Response</button>
+      </div>
+    </section>
+
+    <!-- ── Competitor Radar ── -->
+    <section id="sec-competitor-radar" class="db-sec">
+      <p class="db-sec-title">Competitor Radar</p>
+      <p class="db-sec-sub">See which queries your competitors win — and where you're missing out</p>
+
+      <div class="insight-card" style="margin-bottom:20px">
+        <div class="insight-icon"><i data-lucide="sparkles"></i></div>
+        <span>Pro plan feature. Upgrade to see competitor insights for your queries.</span>
+      </div>
+
+      <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px">
+        <div class="kpi-card">
+          <div class="kpi-label">Your Mentions</div>
+          <div class="kpi-val">24</div>
+          <div class="kpi-hint">Across 15 tracked queries</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Competitor Mentions</div>
+          <div class="kpi-val" style="color:var(--yellow)">38</div>
+          <div class="kpi-hint">Top competitor: Acme Services</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Queries You're Missing</div>
+          <div class="kpi-val" style="color:var(--red)">7</div>
+          <div class="kpi-hint">Competitors cited, you're not</div>
+        </div>
+      </div>
+
+      <div class="tbl-wrap">
+        <div class="tbl-head">
+          <span class="tbl-head-title">Query Comparison</span>
+          <button class="btn-sm btn-ghost">Export CSV</button>
+        </div>
+        <table>
+          <thead><tr>
+            <th>Query</th><th>Your Position</th><th>Top Competitor</th><th>Platform</th><th>Last Checked</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td style="max-width:240px">"Best property management Austin"</td>
+              <td><span class="badge badge-ok"><span class="badge-dot"></span>Cited #1</span></td>
+              <td style="font-size:var(--tx-xs);color:var(--muted)">Acme Properties</td>
+              <td style="font-size:var(--tx-xs)">GPTBot</td>
+              <td style="font-size:var(--tx-xs);color:var(--muted)">2h ago</td>
+            </tr>
+            <tr>
+              <td style="max-width:240px">"Multifamily management near me"</td>
+              <td><span class="badge badge-ok"><span class="badge-dot"></span>Cited #2</span></td>
+              <td style="font-size:var(--tx-xs);color:var(--muted)">Urban Manage Co</td>
+              <td style="font-size:var(--tx-xs)">ClaudeBot</td>
+              <td style="font-size:var(--tx-xs);color:var(--muted)">4h ago</td>
+            </tr>
+            <tr>
+              <td style="max-width:240px">"Property management companies Texas"</td>
+              <td><span class="badge badge-pend"><span class="badge-dot"></span>Not cited</span></td>
+              <td style="font-size:var(--tx-xs);color:var(--muted)">Texas PM Group</td>
+              <td style="font-size:var(--tx-xs)">PerplexityBot</td>
+              <td style="font-size:var(--tx-xs);color:var(--muted)">6h ago</td>
+            </tr>
+            <tr>
+              <td style="max-width:240px">"Affordable property management Austin"</td>
+              <td><span class="badge badge-pend"><span class="badge-dot"></span>Not cited</span></td>
+              <td style="font-size:var(--tx-xs);color:var(--muted)">Acme Properties</td>
+              <td style="font-size:var(--tx-xs)">GPTBot</td>
+              <td style="font-size:var(--tx-xs);color:var(--muted)">8h ago</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="db-card" style="max-width:640px">
+        <div class="db-card-title">Query Basket</div>
+        <p style="font-size:var(--tx-xs);color:var(--muted);margin-bottom:12px">Add queries you want to monitor. Pro plan includes 15 custom queries.</p>
+        <div style="display:flex;gap:8px">
+          <input class="fi" type="text" placeholder="Enter a query to track…" style="flex:1">
+          <button class="btn-sm btn-primary-sm">Add</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Billing ── -->
+    <section id="sec-billing" class="db-sec">
+      <p class="db-sec-title">Billing</p>
+      <p class="db-sec-sub">Manage your subscription and payment method</p>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:640px;margin-bottom:20px">
+        <div class="kpi-card">
+          <div class="kpi-label">Current Plan</div>
+          <div class="kpi-val" style="font-size:var(--tx-lg)" id="billing-plan">Base</div>
+          <div class="kpi-hint">$100/month</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">Next Invoice</div>
+          <div class="kpi-val" style="font-size:var(--tx-lg)">$100</div>
+          <div class="kpi-hint" id="billing-next-date">May 12, 2026</div>
+        </div>
+      </div>
+
+      <div class="db-card" style="max-width:640px;margin-bottom:16px">
+        <div class="db-card-title">Payment Method</div>
+        <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md);margin-bottom:12px">
+          <div style="width:40px;height:26px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-sm);display:flex;align-items:center;justify-content:center;font-size:var(--tx-xs);font-weight:600;color:var(--muted)">VISA</div>
+          <div>
+            <div style="font-size:var(--tx-sm);font-weight:500">•••• •••• •••• 4242</div>
+            <div style="font-size:var(--tx-xs);color:var(--muted)">Expires 12/28</div>
+          </div>
+          <button class="btn-sm btn-ghost" style="margin-left:auto">Update</button>
+        </div>
+      </div>
+
+      <div class="db-card" style="max-width:640px;margin-bottom:16px">
+        <div class="db-card-title">Upgrade to Pro</div>
+        <p style="font-size:var(--tx-sm);color:var(--muted);line-height:1.7;margin-bottom:16px">
+          Get Competitor Radar, priority AI indexing, advanced exports, and 15 custom query baskets for $250/month.
+        </p>
+        <button class="btn-sm btn-primary-sm">Upgrade to Pro — $250/mo</button>
+      </div>
+
+      <div class="tbl-wrap" style="max-width:640px">
+        <div class="tbl-head">
+          <span class="tbl-head-title">Invoice History</span>
+          <button class="btn-sm btn-ghost">Download All</button>
+        </div>
+        <table>
+          <thead><tr>
+            <th>Date</th><th>Amount</th><th>Status</th><th></th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td style="font-size:var(--tx-sm)">Apr 12, 2026</td>
+              <td>$100.00</td>
+              <td><span class="badge badge-ok"><span class="badge-dot"></span>Paid</span></td>
+              <td><button class="btn-sm btn-ghost">PDF</button></td>
+            </tr>
+            <tr>
+              <td style="font-size:var(--tx-sm)">Mar 12, 2026</td>
+              <td>$100.00</td>
+              <td><span class="badge badge-ok"><span class="badge-dot"></span>Paid</span></td>
+              <td><button class="btn-sm btn-ghost">PDF</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ── Embed Snippet ── -->
+    <section id="sec-embed" class="db-sec">
+      <p class="db-sec-title">Embed Snippet</p>
+      <p class="db-sec-sub">Add a floating AI chat widget to your website</p>
+
+      <div class="db-card" style="max-width:640px;margin-bottom:16px">
+        <div class="db-card-title">Widget Code</div>
+        <p style="font-size:var(--tx-xs);color:var(--muted);margin-bottom:12px">
+          Paste this snippet before the closing <code style="background:var(--surface-2);padding:1px 4px;border-radius:3px">&lt;/body&gt;</code> tag on your website.
+          Visitors can ask AI about your business directly from your site.
+        </p>
+        <div style="position:relative;background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md);padding:16px;overflow-x:auto">
+          <pre id="embed-code" style="font-family:var(--font-mono);font-size:var(--tx-xs);color:var(--muted);line-height:1.7;white-space:pre;margin:0">&lt;script
+  src="https://embed.advocatemcp.com/widget.js"
+  data-slug="your-business-slug"
+  data-accent="#7d2550"
+  data-position="bottom-right"
+  async
+&gt;&lt;/script&gt;</pre>
+          <button class="btn-sm btn-ghost"
+                  style="position:absolute;top:8px;right:8px"
+                  onclick="navigator.clipboard.writeText(document.getElementById('embed-code').textContent);this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000)">
+            Copy
+          </button>
+        </div>
+      </div>
+
+      <div class="db-card" style="max-width:640px;margin-bottom:16px">
+        <div class="db-card-title">Widget Settings</div>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div>
+            <label style="display:block;font-size:var(--tx-sm);font-weight:500;margin-bottom:6px">Position</label>
+            <div style="display:flex;gap:8px">
+              <label style="display:flex;align-items:center;gap:6px;padding:8px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);cursor:pointer;font-size:var(--tx-sm)">
+                <input type="radio" name="embed-pos" value="bottom-right" checked style="accent-color:var(--accent)"> Bottom-right
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;padding:8px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);cursor:pointer;font-size:var(--tx-sm)">
+                <input type="radio" name="embed-pos" value="bottom-left" style="accent-color:var(--accent)"> Bottom-left
+              </label>
+            </div>
+          </div>
+          <div>
+            <label style="display:block;font-size:var(--tx-sm);font-weight:500;margin-bottom:6px">Accent Color</label>
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="color" value="#7d2550" style="width:36px;height:36px;border:1px solid var(--border);border-radius:var(--r-sm);cursor:pointer;background:none;padding:2px">
+              <input class="fi" type="text" value="#7d2550" style="width:120px;font-family:var(--font-mono);font-size:var(--tx-xs)">
+            </div>
+          </div>
+          <div>
+            <label style="display:flex;align-items:center;gap:8px;font-size:var(--tx-sm);cursor:pointer">
+              <input type="checkbox" checked style="accent-color:var(--accent)">
+              Show "Powered by Advocate" badge
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="db-card" style="max-width:640px">
+        <div class="db-card-title">WordPress Plugin</div>
+        <p style="font-size:var(--tx-sm);color:var(--muted);line-height:1.7;margin-bottom:12px">
+          Using WordPress? Install our plugin instead — it handles the embed automatically and syncs your business profile.
+        </p>
+        <a href="https://github.com/advocatemcp/wordpress-plugin" target="_blank" class="btn-sm btn-ghost" style="display:inline-flex;align-items:center;gap:6px">
+          <i data-lucide="download" style="width:13px;height:13px"></i>
+          Download WordPress Plugin
+        </a>
+      </div>
+    </section>
+
   </div><!-- #content -->
 </div><!-- #main -->
 
@@ -742,6 +1036,10 @@ tr:hover td{background:rgba(255,255,255,.02)}
     'recommendations':   'Recommendations',
     'settings':          'Settings',
     'domains':           'Domains',
+    'agent-config':      'Agent Config',
+    'competitor-radar':  'Competitor Radar',
+    'billing':           'Billing',
+    'embed':             'Embed Snippet',
   };
 
   var currentSection = 'overview';
@@ -839,6 +1137,17 @@ tr:hover td{background:rgba(255,255,255,.02)}
       });
   });
 })();
+</script>
+<script>
+/* Agent Config — add service row helper */
+function addServiceRow() {
+  var list = document.getElementById('cfg-services-list');
+  if (!list) return;
+  var row = document.createElement('div');
+  row.style.cssText = 'display:flex;align-items:center;gap:8px';
+  row.innerHTML = '<input class="fi" type="text" placeholder="e.g. Maintenance Coordination" style="flex:1"><button class="btn-sm btn-ghost" style="color:var(--red);flex-shrink:0" title="Remove" onclick="this.parentElement.remove()">×</button>';
+  list.appendChild(row);
+}
 </script>
 </body>
 </html>

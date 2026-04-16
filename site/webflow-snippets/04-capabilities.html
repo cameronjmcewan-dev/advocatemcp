@@ -1,0 +1,104 @@
+<!-- AdvocateMCP — Webflow Feature Grid (Capabilities) Snippet
+     6 icon-headline-body cards in a 3×2 grid.
+     ──────────────────────────────────────────────────────────── -->
+
+<style>
+.capabilities {
+  background: var(--surface);
+  border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+}
+.capabilities-inner { max-width: 1100px; margin: 0 auto; padding: 96px 40px; }
+.capabilities-header { max-width: 560px; margin-bottom: 56px; }
+.capabilities-header .s-label {
+  font-size: var(--tx-xs); font-weight: 600; text-transform: uppercase;
+  letter-spacing: .09em; color: var(--text-muted); margin-bottom: 10px;
+}
+.capabilities-header h2 {
+  font-family: var(--font-display); font-size: var(--h2);
+  line-height: 1.12; letter-spacing: -.025em; margin-bottom: 8px;
+}
+.capabilities-header p { font-size: var(--tx-base); color: var(--text-muted); line-height: 1.65; max-width: 500px; margin-top: 8px; }
+.cap-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 1px; background: var(--border);
+}
+.cap-card {
+  padding: 32px 28px; background: var(--surface);
+  transition: background 200ms, transform 200ms, box-shadow 200ms;
+}
+.cap-card:hover {
+  background: var(--surface-raised);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0,0,0,.25);
+}
+.cap-icon {
+  width: 36px; height: 36px; border-radius: var(--r-md);
+  background: var(--accent-dim); border: 1px solid var(--accent-ring);
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 14px; color: var(--accent);
+}
+.cap-icon svg { width: 17px; height: 17px; }
+.cap-title { font-size: var(--tx-lg); font-weight: 600; margin-bottom: 6px; }
+.cap-desc { font-size: var(--tx-sm); color: var(--text-muted); line-height: 1.6; }
+@media (max-width: 768px) {
+  .cap-grid { grid-template-columns: 1fr 1fr; }
+  .capabilities-inner { padding: 60px 20px; }
+}
+@media (max-width: 480px) {
+  .cap-grid { grid-template-columns: 1fr; }
+}
+</style>
+
+<section class="capabilities">
+  <div class="capabilities-inner">
+    <div class="capabilities-header">
+      <p class="s-label">Everything included</p>
+      <h2>All the infrastructure,<br>none of the complexity</h2>
+      <p>Set up once. Advocate handles the rest — from AI crawler compatibility to referral tracking to DNS.</p>
+    </div>
+    <div class="cap-grid">
+      <div class="cap-card">
+        <div class="cap-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M15 2v2M15 20v2M2 15h2M20 15h2M9 2v2M9 20v2M2 9h2M20 9h2"/></svg>
+        </div>
+        <div class="cap-title">AI Protocol</div>
+        <div class="cap-desc">Your profile is served via the Model Context Protocol — the open standard AI assistants use to query structured business data.</div>
+      </div>
+      <div class="cap-card">
+        <div class="cap-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        </div>
+        <div class="cap-title">Custom Domain</div>
+        <div class="cap-desc">Your AI profile lives at your own domain. Cloudflare for SaaS handles the hostname routing and SSL automatically.</div>
+      </div>
+      <div class="cap-card">
+        <div class="cap-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        </div>
+        <div class="cap-title">Referral Analytics</div>
+        <div class="cap-desc">Track every AI-driven referral. See which platforms send traffic, which queries trigger recommendations, and conversion rates.</div>
+      </div>
+      <div class="cap-card">
+        <div class="cap-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        </div>
+        <div class="cap-title">UTM Tracking</div>
+        <div class="cap-desc">Referral links are auto-tagged with utm_source=ai and the bot name so your existing analytics see every click.</div>
+      </div>
+      <div class="cap-card">
+        <div class="cap-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+        </div>
+        <div class="cap-title">Crawler Detection</div>
+        <div class="cap-desc">We distinguish AI crawlers from human visitors so your analytics aren't inflated and bots get the right response format.</div>
+      </div>
+      <div class="cap-card">
+        <div class="cap-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </div>
+        <div class="cap-title">Edge-Cached Responses</div>
+        <div class="cap-desc">Profiles are served from Cloudflare's global edge network — sub-100ms response times for AI crawlers worldwide.</div>
+      </div>
+    </div>
+  </div>
+</section>

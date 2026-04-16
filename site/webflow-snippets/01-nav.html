@@ -1,0 +1,83 @@
+<!-- AdvocateMCP — Webflow Nav Snippet
+     Paste into Webflow as a custom code embed in your navbar symbol.
+     Requires: tokens from webflow-head.html in <head>, Lucide icons loaded.
+     ──────────────────────────────────────────────────────────── -->
+
+<style>
+.nav-marketing {
+  position: sticky; top: 0; z-index: 200;
+  display: flex; align-items: center;
+  padding: 0 48px; height: 60px;
+  background: rgba(19,16,15,.82);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.nav-marketing-logo {
+  display: flex; align-items: center; gap: 8px;
+  font-size: var(--tx-sm); font-weight: 600; letter-spacing: -.01em;
+  flex-shrink: 0; color: var(--text-primary); text-decoration: none;
+}
+.nav-marketing-logo svg { width: 26px; height: 26px; }
+.nav-marketing-links {
+  display: flex; align-items: center; gap: 2px; margin-left: auto;
+}
+.nav-link {
+  padding: 6px 14px; font-size: var(--tx-sm);
+  color: var(--text-muted); border-radius: var(--r-xs);
+  transition: color 150ms, background 150ms; text-decoration: none;
+}
+.nav-link:hover { color: var(--text-primary); background: rgba(255,255,255,.06); }
+.nav-marketing-actions {
+  display: flex; align-items: center; gap: 12px; margin-left: 20px;
+}
+.nav-ham {
+  display: none; align-items: center; justify-content: center;
+  width: 34px; height: 34px; background: none;
+  border: 1px solid var(--border); border-radius: var(--r-xs);
+  color: var(--text-muted); margin-left: auto; cursor: pointer;
+}
+.nav-ham svg { width: 18px; height: 18px; }
+.nav-mobile {
+  display: none; position: fixed; inset: 60px 0 0; z-index: 199;
+  background: var(--bg); border-top: 1px solid var(--border);
+  flex-direction: column; padding: 20px; gap: 4px;
+}
+.nav-mobile.open { display: flex; }
+.nav-mobile .nav-link { padding: 12px 14px; font-size: var(--tx-base); color: var(--text-primary); }
+@media (max-width: 768px) {
+  .nav-marketing { padding: 0 20px; }
+  .nav-marketing-links, .nav-marketing-actions { display: none; }
+  .nav-ham { display: flex; }
+}
+</style>
+
+<nav class="nav-marketing">
+  <a href="/" class="nav-marketing-logo">
+    <svg viewBox="0 0 200 200" fill="none" stroke="#fff" stroke-width="14" stroke-linejoin="round" stroke-linecap="round">
+      <rect width="200" height="200" rx="40" fill="#7d2550" stroke="none"/>
+      <path d="M 30 100 L 70 70 L 100 100 L 70 130 Z M 170 100 L 130 70 L 100 100 L 130 130 Z"/>
+      <path d="M 100 30 L 70 70 L 100 100 L 130 70 Z M 100 170 L 70 130 L 100 100 L 130 130 Z"/>
+    </svg>
+    Advocate
+  </a>
+  <div class="nav-marketing-links">
+    <a class="nav-link" href="/how-it-works">How it works</a>
+    <a class="nav-link" href="/pricing">Pricing</a>
+    <a class="nav-link" href="/blog">Blog</a>
+    <a class="nav-link" href="https://customers.advocatemcp.com/login">Login</a>
+  </div>
+  <div class="nav-marketing-actions">
+    <a href="/onboarding" class="btn btn-primary btn-sm">Get Started →</a>
+  </div>
+  <button class="nav-ham" onclick="document.getElementById('nav-mobile').classList.toggle('open')" aria-label="Menu">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
+</nav>
+
+<div class="nav-mobile" id="nav-mobile">
+  <a class="nav-link" href="/how-it-works">How it works</a>
+  <a class="nav-link" href="/pricing">Pricing</a>
+  <a class="nav-link" href="/blog">Blog</a>
+  <a class="nav-link" href="https://customers.advocatemcp.com/login">Login</a>
+  <a href="/onboarding" class="btn btn-primary" style="margin-top:8px;justify-content:center">Get Started →</a>
+</div>

@@ -1,0 +1,126 @@
+<!-- AdvocateMCP — Webflow Footer Snippet
+     4-column layout + newsletter + socials
+     ──────────────────────────────────────────────────────────── -->
+
+<style>
+.site-footer { border-top: 1px solid var(--border); padding: 56px 40px 36px; }
+.footer-inner { max-width: 1200px; margin: 0 auto; }
+.footer-grid {
+  display: grid; grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 40px; margin-bottom: 48px;
+}
+.footer-brand { display: flex; flex-direction: column; gap: 14px; }
+.footer-brand-link {
+  display: flex; align-items: center; gap: 8px;
+  font-weight: 600; font-size: var(--tx-sm);
+  color: var(--text-primary); text-decoration: none;
+}
+.footer-brand-link svg { width: 24px; height: 24px; }
+.footer-tagline { font-size: var(--tx-sm); color: var(--text-muted); line-height: 1.65; max-width: 260px; }
+.footer-newsletter { display: flex; gap: 8px; margin-top: 4px; }
+.footer-newsletter input {
+  flex: 1; padding: 8px 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-sm);
+  color: var(--text-primary); font-family: var(--font-body); font-size: var(--tx-sm);
+}
+.footer-newsletter input:focus { outline: none; border-color: var(--accent); }
+.footer-newsletter input::placeholder { color: var(--text-muted); }
+.footer-col-title {
+  font-size: var(--tx-xs); font-weight: 600; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--text-muted); margin-bottom: 14px;
+}
+.footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 9px; }
+.footer-col a {
+  font-size: var(--tx-sm); color: var(--text-secondary);
+  transition: color 150ms; text-decoration: none;
+}
+.footer-col a:hover { color: var(--text-primary); }
+.footer-bottom {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 12px; padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+.footer-copy { font-size: var(--tx-xs); color: var(--text-muted); }
+.footer-socials { display: flex; gap: 12px; }
+.footer-social-link {
+  width: 32px; height: 32px; border-radius: var(--r-xs);
+  background: var(--surface); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted); transition: color 150ms;
+  text-decoration: none;
+}
+.footer-social-link:hover { color: var(--text-primary); }
+.footer-social-link svg { width: 14px; height: 14px; }
+.footer-notice {
+  font-size: .8rem; color: var(--text-muted); text-align: center;
+  padding: 12px 0 20px; border-top: 1px solid var(--border); margin-top: 4px;
+}
+.footer-notice a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+@media (max-width: 768px) {
+  .site-footer { padding: 48px 20px 28px; }
+  .footer-grid { grid-template-columns: 1fr 1fr; gap: 28px; }
+  .footer-brand { grid-column: 1 / -1; }
+}
+</style>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <a href="/" class="footer-brand-link">
+          <svg width="24" height="24" viewBox="0 0 200 200" fill="none" stroke="#fff" stroke-width="14" stroke-linejoin="round" stroke-linecap="round">
+            <rect width="200" height="200" rx="40" fill="#7d2550" stroke="none"/>
+            <path d="M 30 100 L 70 70 L 100 100 L 70 130 Z M 170 100 L 130 70 L 100 100 L 130 130 Z"/>
+            <path d="M 100 30 L 70 70 L 100 100 L 130 70 Z M 100 170 L 70 130 L 100 100 L 130 130 Z"/>
+          </svg>
+          Advocate
+        </a>
+        <p class="footer-tagline">Get your business recommended by every major AI assistant. Flat monthly. No code.</p>
+        <div class="footer-newsletter">
+          <input type="email" placeholder="your@email.com" aria-label="Email for updates">
+          <button class="btn btn-primary btn-sm" aria-label="Subscribe">Subscribe</button>
+        </div>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">Product</div>
+        <ul>
+          <li><a href="/how-it-works">How it works</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/blog">Blog</a></li>
+          <li><a href="https://customers.advocatemcp.com">Dashboard</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">Company</div>
+        <ul>
+          <li><a href="/about">About</a></li>
+          <li><a href="/blog">Blog</a></li>
+          <li><a href="/docs">Docs</a></li>
+          <li><a href="/contact">Contact</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <div class="footer-col-title">Legal</div>
+        <ul>
+          <li><a href="/privacy">Privacy Policy</a></li>
+          <li><a href="/terms">Terms of Service</a></li>
+          <li><a href="/dpa">DPA</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-notice" role="note">
+      Advocate uses automated AI to classify queries and generate business responses. <a href="/privacy">Learn more in our Privacy Policy.</a>
+    </div>
+    <div class="footer-bottom">
+      <p class="footer-copy">© 2026 Advocate. All rights reserved.</p>
+      <div class="footer-socials">
+        <a href="#" class="footer-social-link" aria-label="Twitter/X">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.742l7.737-8.835L1.254 2.25H8.08l4.259 5.629L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        </a>
+        <a href="#" class="footer-social-link" aria-label="LinkedIn">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6zM2 9h4v12H2z"/><circle cx="4" cy="4" r="2"/></svg>
+        </a>
+      </div>
+    </div>
+  </div>
+</footer>
