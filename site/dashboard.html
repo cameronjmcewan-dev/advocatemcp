@@ -729,6 +729,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 <script src="/js/dashboard-bots.js"></script>
 <script src="/js/dashboard-recs.js"></script>
 <script src="/js/dashboard-settings.js"></script>
+<script src="/js/dashboard-admin.js"></script>
 <script>
 /* ── Dashboard shell: auth gate, nav, theme, section routing ── */
 (function () {
@@ -812,6 +813,11 @@ tr:hover td{background:rgba(255,255,255,.02)}
         /* Pass user data to settings section if it registered */
         if (window.AMCP_SECTIONS.onUserLoaded) {
           window.AMCP_SECTIONS.onUserLoaded(user);
+        }
+
+        /* Admin god-mode: inject business switcher + aggregate view */
+        if (window.AMCP_ADMIN && user.role === 'admin') {
+          window.AMCP_ADMIN.init(user);
         }
       })
       .catch(function () { /* non-fatal */ });

@@ -93,9 +93,11 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   // 'Access-Control-Allow-Credentials' header in the response is ''
   // which must be 'true'".
   if (pathname === "/api/client/me"         && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
-  if (pathname === "/api/client/metrics"    && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
-  if (pathname === "/api/client/activity"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
-  if (pathname === "/api/client/rotate-key" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/metrics"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/all-metrics" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/all-metrics" && method === "GET")     return apiAllMetrics(request, env);
+  if (pathname === "/api/client/activity"    && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/rotate-key"  && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
 
   // ── Stripe / new onboarding API ──────────────────────────────────────────
   if (pathname === "/api/onboard/basic"     && method === "POST") return handleBasicOnboard(request, env);
@@ -329,6 +331,61 @@ async function apiMetrics(request: Request, env: Env): Promise<Response> {
 
   const data = await fetchAnalytics(biz, env);
   return withCors(jsonOk(data ?? { message: "No data available yet", slug: biz.slug }), request, { credentials: true });
+}
+
+// ── GET /api/client/all-metrics (admin only) ──────────────────────────────
+// Parallel-fetches analytics for every business. Returns an array of
+// {slug, name, domain, analytics} objects plus aggregated totals.
+
+async function apiAllMetrics(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  if (ctx.role !== "admin") return withCors(jsonErr(403, "Admin only"), request, { credentials: true });
+
+  const businesses = await getAllBusinesses(env.DB);
+  const results = await Promise.all(
+    businesses.map(async (biz) => {
+      const analytics = await fetchAnalytics(biz, env);
+      return {
+        slug: biz.slug,
+        name: biz.business_name,
+        domain: biz.domain ?? null,
+        plan: biz.plan ?? "free",
+        analytics,
+      };
+    }),
+  );
+
+  // Aggregate totals across all businesses
+  let totalQueries = 0;
+  let totalClicks = 0;
+  let totalClicks30d = 0;
+  const crawlerTotals: Record<string, number> = {};
+
+  for (const r of results) {
+    if (!r.analytics) continue;
+    totalQueries += r.analytics.total_queries ?? 0;
+    totalClicks += r.analytics.referral_clicks ?? 0;
+    totalClicks30d += r.analytics.referral_clicks_last_30_days ?? 0;
+    for (const [crawler, count] of Object.entries(r.analytics.queries_by_crawler ?? {})) {
+      crawlerTotals[crawler] = (crawlerTotals[crawler] ?? 0) + count;
+    }
+  }
+
+  return withCors(
+    jsonOk({
+      businesses: results,
+      totals: {
+        business_count: businesses.length,
+        total_queries: totalQueries,
+        total_clicks: totalClicks,
+        total_clicks_30d: totalClicks30d,
+        queries_by_crawler: crawlerTotals,
+      },
+    }),
+    request,
+    { credentials: true },
+  );
 }
 
 // ── GET /api/client/activity ───────────────────────────────────────────────
