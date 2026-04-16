@@ -1,11 +1,16 @@
 import { describe, it, expect, vi } from "vitest";
 import { deterministicQuote } from "./getQuote.js";
 
+// Fixtures match the wire format stored in businesses.pricing_json_v2 per
+// PricingRangeSchema: {service, min, max, unit?, currency?}.
 const pricing = {
   ranges: [
-    { service: "lawn mowing", low: 40, high: 40, currency: "USD" },
-    { service: "lawn mowing", low: 60, high: 90, currency: "USD", params: { size: "large" } },
-    { service: "hedge trimming", low: 30, high: 75, currency: "USD" },
+    { service: "lawn mowing", min: 40, max: 40, currency: "USD" },
+    { service: "lawn mowing", min: 60, max: 90, currency: "USD", params: { size: "large" } },
+    { service: "hedge trimming", min: 30, max: 75, currency: "USD" },
+    // Also cover the production-seed case where the range has no `currency`
+    // field (the schema doesn't require it); the tool defaults to USD.
+    { service: "drain cleaning", min: 150, max: 250 },
   ],
 };
 
@@ -34,6 +39,16 @@ describe("deterministicQuote", () => {
     // Caller supplied a param; the size-free row requires empty params, size-large row requires large.
     const q = deterministicQuote({ service: "lawn mowing", params: { size: "small" } }, pricing);
     expect(q).toBeNull();
+  });
+  it("defaults currency to USD when the range omits it (wire-format compat)", () => {
+    const q = deterministicQuote({ service: "drain cleaning", params: {} }, pricing);
+    expect(q).toEqual({
+      low: 150,
+      high: 250,
+      currency: "USD",
+      confidence: "range",
+      basis: "pricing_json_v2",
+    });
   });
 });
 
