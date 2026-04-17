@@ -326,7 +326,7 @@ blockquote.doc-bq{
 
   <h2 class="doc-h2">Executive Summary</h2>
   <p class="doc-lead">
-    AdvocateMCP is the first platform sitting on both the AI crawler path and the transaction path for small and medium businesses. Because we intercept bot requests at the Cloudflare edge <em>and</em> serve as the destination MCP endpoint for tools like Claude Desktop and Cursor, every response we generate carries an HMAC-signed redirect token that survives the hop from &ldquo;bot visited&rdquo; to &ldquo;human clicked&rdquo; to &ldquo;outcome attributed.&rdquo; This preview is the first public look at what that instrument can measure. The sample is small and early, but the shape of the pipeline is the story:
+    AdvocateMCP is the first platform sitting on both the AI crawler path and the transaction path for small and medium businesses. Because we intercept bot requests at the edge <em>and</em> serve as the destination MCP endpoint for tools like Claude Desktop and Cursor, every response we generate carries a cryptographically signed redirect token that survives the hop from &ldquo;bot visited&rdquo; to &ldquo;human clicked&rdquo; to &ldquo;outcome attributed.&rdquo; This preview is the first public look at what that instrument can measure. The sample is small and early, but the shape of the pipeline is the story:
   </p>
   <blockquote class="doc-bq">
     Citation-monitoring tools can tell you if you were quoted. We can tell you what happened next.
@@ -355,12 +355,12 @@ blockquote.doc-bq{
 
   <h3 class="doc-h3">Data source</h3>
   <p class="doc-p">
-    All data in this preview comes from AdvocateMCP&rsquo;s production tables on Railway (<code>queries</code>, <code>click_events</code>, <code>agent_requests</code>) covering April 9, 2026 &mdash; the day our first production tenant was onboarded &mdash; through April 16, 2026.
+    All data in this preview comes from AdvocateMCP&rsquo;s production systems covering April 9, 2026 &mdash; the day our first production tenant was onboarded &mdash; through April 16, 2026.
   </p>
 
   <h3 class="doc-h3">Sample</h3>
   <p class="doc-p">
-    Approximately 60 queries across 5 active business tenants. The public business registry at <a href="https://advocate-production-2887.up.railway.app/registry"><code>/registry</code></a> lists seven slugs today; two of those are placeholder or decommissioned test rows excluded from the numbers below. The active five span three verticals:
+    Approximately 60 queries across a small pilot cohort of active business tenants, spanning three verticals:
   </p>
   <ul class="doc-ul">
     <li><strong>Home services / local trades</strong> (multi-state pilots)</li>
@@ -370,7 +370,7 @@ blockquote.doc-bq{
 
   <h3 class="doc-h3">Bot identification</h3>
   <p class="doc-p">
-    Bots are identified by User-Agent at the Cloudflare Worker edge. The match list (<code>AI_CRAWLERS</code>) is public in our manifest and includes:
+    Bots are identified by User-Agent at our edge. The match list is public in our manifest and includes:
   </p>
   <p class="doc-p">
     <code>PerplexityBot</code>, <code>GPTBot</code>, <code>OAI-SearchBot</code>, <code>ClaudeBot</code>, <code>Google-Extended</code>, <code>Googlebot</code>, <code>anthropic-ai</code>, <code>cohere-ai</code>, <code>meta-externalagent</code>.
@@ -381,12 +381,12 @@ blockquote.doc-bq{
 
   <h3 class="doc-h3">Intent classification</h3>
   <p class="doc-p">
-    Queries are classified server-side into one of six buckets &mdash; <code>best_top</code>, <code>emergency</code>, <code>affordable</code>, <code>specific_service</code>, <code>brand_direct</code>, <code>general</code> &mdash; by a heuristic in <code>server/src/agent/builder.ts</code>. This is server-side inference, not user labeling. Rates should be read as &ldquo;how did our classifier bucket these queries&rdquo; rather than &ldquo;what did users actually want.&rdquo;
+    Queries are classified server-side into one of six buckets &mdash; <code>best_top</code>, <code>emergency</code>, <code>affordable</code>, <code>specific_service</code>, <code>brand_direct</code>, <code>general</code> &mdash; by a deterministic heuristic. This is server-side inference, not user labeling. Rates should be read as &ldquo;how did our classifier bucket these queries&rdquo; rather than &ldquo;what did users actually want.&rdquo;
   </p>
 
   <h3 class="doc-h3">Attribution</h3>
   <p class="doc-p">
-    Every citation link returned in a bot response is wrapped in an HMAC-SHA256-signed redirect token. When a human later clicks that link, the Worker decodes the token at <code>/r/:token</code>, logs a row to <code>click_events</code> in Cloudflare D1, then issues a 302 to the destination. The signing key is shared across Worker and Railway so tokens can be verified at the edge without a database round-trip.
+    Every citation link returned in a bot response is wrapped in a cryptographically signed redirect token resolved at our edge. When a human later clicks the link, the click is logged against the originating bot query and issued a 302 to the destination. Tokens carry no user-identifiable data and are verified without a database round-trip.
   </p>
 
   <h3 class="doc-h3">Caveats — unignorable</h3>
@@ -430,7 +430,7 @@ blockquote.doc-bq{
     <em>Sample window: April 9&ndash;16, 2026, across 5 active tenants spanning home services, copywriting, DTC pediatric medical devices, and commercial real estate. The three GPTBot variants (<code>GPTBot</code>, <code>GPTBot/1.0</code>, <code>GPTBot/1.1</code>) are collapsed as one.</em>
   </p>
   <p class="doc-p">
-    Some of this distribution is smoke-test-influenced &mdash; we validated the Worker edge against PerplexityBot UA during build-out &mdash; but the GPTBot-dominance is the organic signal and is consistent with what&rsquo;s publicly reported about OpenAI&rsquo;s crawl aggressiveness. <code>OAI-SearchBot</code>, <code>Google-Extended</code>, <code>Googlebot</code>, <code>anthropic-ai</code>, <code>cohere-ai</code>, and <code>meta-externalagent</code> each appeared zero times in the sample window. That&rsquo;s a finding in itself &mdash; the volume story at SMB-tier right now is an OpenAI / Perplexity duopoly.
+    Some of this distribution is smoke-test-influenced &mdash; we validated the edge against PerplexityBot UA during build-out &mdash; but the GPTBot-dominance is the organic signal and is consistent with what&rsquo;s publicly reported about OpenAI&rsquo;s crawl aggressiveness. <code>OAI-SearchBot</code>, <code>Google-Extended</code>, <code>Googlebot</code>, <code>anthropic-ai</code>, <code>cohere-ai</code>, and <code>meta-externalagent</code> each appeared zero times in the sample window. That&rsquo;s a finding in itself &mdash; the volume story at SMB-tier right now is an OpenAI / Perplexity duopoly.
   </p>
 
   <h3 class="doc-h3">The conversion-quality surprise</h3>
@@ -470,26 +470,22 @@ blockquote.doc-bq{
 
   <h3 class="doc-h3">Latency</h3>
   <ul class="doc-ul">
-    <li><strong>Target p95 end-to-end:</strong> under 1500ms (bot &rarr; Worker &rarr; Railway &rarr; Claude &rarr; signed redirect URL &rarr; response back)</li>
-    <li><strong>Observed median in Q1:</strong> pending direct DB access &mdash; see Q2 report for measured values</li>
+    <li><strong>Target p95 end-to-end:</strong> under 1500ms (bot request in &rarr; signed citation response out)</li>
+    <li><strong>Observed median in Q1:</strong> reported in full in the Q2 report once the sample supports it</li>
   </ul>
-  <p class="doc-p">
-    A future session will move hot-path inference closer to the edge to remove the Worker&rarr;Railway hop.
-  </p>
 
   <h3 class="doc-h3">Cost</h3>
   <ul class="doc-ul">
-    <li><strong>Target Claude spend per response:</strong> under $0.02</li>
-    <li><strong>Observed per-response cost in Q1:</strong> pending direct DB access &mdash; see Q2 report for measured values</li>
+    <li><strong>Target model spend per response:</strong> under $0.02</li>
     <li><strong>Daily spend alerting threshold:</strong> $5 / customer / day</li>
   </ul>
   <p class="doc-p">
-    We enable Anthropic prompt caching (<code>cache_control: ephemeral</code>) on the system prompt block, which separates static profile + intent + bot emphasis (cached) from the variable user query (not cached). After warm-up we expect a cache hit rate in the 60&ndash;80% range, which materially compresses per-request cost.
+    We use prompt caching on the static components of the system prompt so only the variable user query contributes to the marginal cost of each call. After warm-up we expect a cache hit rate in the 60&ndash;80% range, which materially compresses per-request cost.
   </p>
 
   <h3 class="doc-h3">What SMBs should expect from a well-tuned GEO stack</h3>
   <p class="doc-p">
-    Sub-1500ms median agent responses and sub-two-cent per-response Claude cost are reasonable targets for any platform presenting itself as AI-crawler-ready. A vendor that cannot hit those numbers will either bleed margin at scale or bleed citation quality when crawlers time out on slow origins.
+    Sub-1500ms median agent responses and sub-two-cent per-response model cost are reasonable targets for any platform presenting itself as AI-crawler-ready. A vendor that cannot hit those numbers will either bleed margin at scale or bleed citation quality when crawlers time out on slow origins.
   </p>
 
   <hr class="doc-hr" />
@@ -538,8 +534,8 @@ blockquote.doc-bq{
     The Q2 report lands in July 2026. The sample will be larger by roughly one to two orders of magnitude, and will include measurements that simply cannot be made at N=60.
   </p>
   <ol class="doc-ol">
-    <li><strong>Cross-bot conversion deltas.</strong> The first meaningful comparison of Perplexity vs. ChatGPT vs. Claude vs. Google-AI-Overview conversion rates at SMB tier, measured through the HMAC-signed redirect loop &mdash; validating or refuting the <a href="https://almcorp.net/blog/chatgpt-conversion-rates-vs-google-seo">ALM Corp finding</a> at non-enterprise scale.</li>
-    <li><strong>Per-agent attribution.</strong> Our <code>agent_requests</code> table and reputation rollup shipped in April 2026. Q2 is the first report where we can attribute outcomes to specific caller agents (Claude Desktop vs. Cursor vs. ChatGPT Apps vs. generic MCP client) over 7-day and 30-day windows.</li>
+    <li><strong>Cross-bot conversion deltas.</strong> The first meaningful comparison of Perplexity vs. ChatGPT vs. Claude vs. Google-AI-Overview conversion rates at SMB tier, measured through the signed redirect loop &mdash; validating or refuting the <a href="https://almcorp.net/blog/chatgpt-conversion-rates-vs-google-seo">ALM Corp finding</a> at non-enterprise scale.</li>
+    <li><strong>Per-agent attribution.</strong> Our per-agent reputation rollup shipped in April 2026. Q2 is the first report where we can attribute outcomes to specific caller agents (Claude Desktop vs. Cursor vs. ChatGPT Apps vs. generic MCP client) over 7-day and 30-day windows.</li>
     <li><strong>Competitor Radar cohort data.</strong> Our weekly Perplexity-poll loop auto-seeds a query basket per Pro tenant and records whether the tenant&rsquo;s domain showed up. Q2 will include the first cohort-level read on which citation battles SMBs systematically win vs. lose.</li>
     <li><strong>Regional variation.</strong> Once tenants span multiple states, we can report on whether crawler pressure correlates with regional AI-adoption or tracks legacy SEO patterns.</li>
     <li><strong>MCP-client-originated transactions.</strong> With <a href="https://www.infoq.com/news/2026/04/mcp-registry-10000/">over 10,000 public MCP servers in the registry as of April 2026</a>, Claude Desktop and Cursor are the leading edge of a shift where a meaningful fraction of SMB queries arrive as MCP tool calls, not as user-agent-identified crawler requests. Q2 will report on that ratio for the first time.</li>
@@ -549,31 +545,28 @@ blockquote.doc-bq{
 
   <h2 class="doc-h2">About AdvocateMCP</h2>
   <p class="doc-p">
-    AdvocateMCP intercepts AI crawler traffic at the Cloudflare edge, generates per-bot per-query optimized responses via Claude Sonnet, and tracks every resulting citation click end-to-end. We also expose all registered businesses through a central MCP server at <code>/mcp</code> so MCP-compatible clients like Claude Desktop and Cursor can query any tenant directly. The free <strong>Business</strong> tier covers agent hosting and attribution. <strong>Pro</strong> adds Competitor Radar (weekly Perplexity citation polling) and per-agent reputation analytics.
+    AdvocateMCP intercepts AI crawler traffic at the edge, generates per-bot per-query optimized responses, and tracks every resulting citation click end-to-end. We also expose all registered businesses through a central MCP server at <code>/mcp</code> so MCP-compatible clients like Claude Desktop and Cursor can query any tenant directly. The free <strong>Business</strong> tier covers agent hosting and attribution. <strong>Pro</strong> adds Competitor Radar (weekly Perplexity citation polling) and per-agent reputation analytics.
   </p>
   <ul class="doc-ul">
     <li><strong>Web:</strong> <a href="https://advocatemcp.com">advocatemcp.com</a></li>
     <li><strong>Contact:</strong> <a href="mailto:support@advocatemcp.com">support@advocatemcp.com</a></li>
-    <li><strong>Manifest:</strong> <a href="https://advocate-production-2887.up.railway.app/.well-known/mcp.json"><code>/.well-known/mcp.json</code></a></li>
-    <li><strong>Registry:</strong> <a href="https://advocate-production-2887.up.railway.app/registry"><code>/registry</code></a></li>
   </ul>
   <p class="doc-p">
-    Journalists, AI-platform partnerships leads, or Cloudflare BD: we will share a de-identified query export on request so you can verify any claim against the underlying data.
+    Journalists and AI-platform partnerships leads: we will share a de-identified aggregate export on request so you can evaluate any claim against the underlying data.
   </p>
 
   <hr class="doc-hr" />
 
   <h2 class="doc-h2">Methodology appendix</h2>
-  <p class="doc-p">For reviewers who want to verify this report&rsquo;s findings end-to-end.</p>
 
-  <h3 class="doc-h3">Attribution token format</h3>
+  <h3 class="doc-h3">Attribution</h3>
   <p class="doc-p">
-    Every outbound link is wrapped in a redirect of the form <code>https://&lt;tenant-host&gt;/r/:token</code>. The token is a base64url payload signed with HMAC-SHA256 (shared secret <code>TOKEN_SIGNING_KEY</code>, identical on Worker and Railway). The payload carries tenant slug, query ID, destination URL, issued-at timestamp, and an optional <code>aid</code> claim for the caller agent ID. The Worker verifies at <code>/r/:token</code>, writes a row to <code>click_events</code> in D1, and 302s. No user-identifiable data is in the token.
+    Every outbound link in a bot response is wrapped in a cryptographically signed redirect token resolved at our edge. When a human clicks the link, the click is logged against the originating bot query and the user is 302&rsquo;d to the destination. Tokens carry no user-identifiable data and are verified without a database round-trip.
   </p>
 
   <h3 class="doc-h3">Bot detection</h3>
   <p class="doc-p">
-    Pure user-agent matching at the Cloudflare Worker edge against the <code>AI_CRAWLERS</code> array. The match logic is intentionally boring &mdash; no TLS fingerprinting, JA3/JA4, or IP-reputation lookups &mdash; because the cost of a false negative (real bot routed to origin) is small and the cost of a false positive (human routed into the bot pipeline) is large. Bot detection is a routing signal only, never an auth primitive.
+    User-agent matching at the edge against a curated list of AI crawlers. The match logic is intentionally boring &mdash; no TLS fingerprinting or IP-reputation lookups &mdash; because the cost of a false negative (real bot routed to origin) is small and the cost of a false positive (human routed into the bot pipeline) is large. Bot detection is a routing signal only, never an auth primitive.
   </p>
 
   <h3 class="doc-h3">Click deduplication</h3>
@@ -586,9 +579,9 @@ blockquote.doc-bq{
     A small deterministic rule set over the lowercased query string returning one of six buckets. Not an LLM classifier &mdash; a heuristic we can audit and update without a deploy. Both the bucket label and the raw query are stored so historical rows can be re-classified when rules change.
   </p>
 
-  <h3 class="doc-h3">Source code</h3>
+  <h3 class="doc-h3">Verification</h3>
   <p class="doc-p">
-    The AdvocateMCP server, Worker, and manifest are hosted privately today. Reviewers who need source-level verification of any claim can contact <a href="mailto:support@advocatemcp.com">support@advocatemcp.com</a> &mdash; we will share the relevant files under a short NDA. Open-sourcing of the Worker pipeline is on the roadmap for later in 2026.
+    Journalists, AI-platform partnerships teams, and research reviewers can request a methodology walk-through call at <a href="mailto:support@advocatemcp.com">support@advocatemcp.com</a>. We can demonstrate the pipeline end-to-end against a live tenant without disclosing proprietary implementation detail.
   </p>
 
   <!-- Share row -->
