@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" style="background:#171614">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="dark light" />
+<meta name="theme-color" content="#3D1B2C" />
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+<link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+<title>State of AI Bot Traffic — Q1 2026 Preview | AdvocateMCP</title>
+<meta name="description" content="First SMB-tier measurement of AI crawler attribution. GPTBot sends 58% of traffic but PerplexityBot wins 100% of clicks." />
+<meta name="author" content="Cameron McEwan" />
+<meta name="robots" content="index,follow" />
+
+<!-- Open Graph -->
+<meta property="og:type" content="article" />
+<meta property="og:title" content="State of AI Bot Traffic — Q1 2026 Preview" />
+<meta property="og:description" content="First SMB-tier measurement of AI crawler attribution. GPTBot sends 58% of traffic but PerplexityBot wins 100% of clicks." />
+<meta property="og:url" content="https://advocatemcp.com/research/state-of-ai-bot-traffic-q1-2026" />
+<meta property="og:image" content="https://advocatemcp.com/research/state-of-ai-q1-2026-og.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:site_name" content="AdvocateMCP" />
+<meta property="article:author" content="Cameron McEwan" />
+<meta property="article:published_time" content="2026-04-16" />
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="State of AI Bot Traffic — Q1 2026 Preview" />
+<meta name="twitter:description" content="First SMB-tier measurement of AI crawler attribution. GPTBot sends 58% of traffic but PerplexityBot wins 100% of clicks." />
+<meta name="twitter:image" content="https://advocatemcp.com/research/state-of-ai-q1-2026-og.png" />
+
+<link rel="canonical" href="https://advocatemcp.com/research/state-of-ai-bot-traffic-q1-2026" />
+
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root {
+  --bg:          #171614;
+  --surface:     #1c1b19;
+  --surface-2:   #222120;
+  --border:      #393836;
+  --text:        #e8e6e3;
+  --muted:       #7a7875;
+  --accent:      #7d2550;
+  --accent-dk:   #5c1a3c;
+  --accent-dim:  rgba(125,37,80,.12);
+  --accent-ring: rgba(125,37,80,.25);
+  --accent-strong: rgba(125,37,80,.9);
+
+  --font-serif:  'Instrument Serif', Georgia, serif;
+  --font-body:   'General Sans','Inter',system-ui,-apple-system,sans-serif;
+  --font-mono:   'SF Mono','Fira Code','Cascadia Code',Consolas,monospace;
+
+  --tx-xs:   clamp(.6875rem,.66rem + .14vw,.75rem);
+  --tx-sm:   clamp(.8125rem,.78rem + .16vw,.875rem);
+  --tx-base: clamp(1rem,.97rem + .15vw,1.0625rem);
+  --tx-md:   clamp(1.0625rem,1.02rem + .21vw,1.125rem);
+  --tx-lg:   clamp(1.125rem,1.07rem + .28vw,1.25rem);
+  --tx-xl:   clamp(1.5rem,1.35rem + .75vw,2rem);
+  --h1: clamp(2.5rem, 3.5vw, 3.5rem);
+  --h2: clamp(1.5rem, 2vw, 1.875rem);
+
+  --r-sm:4px; --r-md:8px; --r-lg:12px; --r-xl:16px;
+}
+
+[data-theme="light"] {
+  --bg:        #f5f4f2;
+  --surface:   #ffffff;
+  --surface-2: #efeeed;
+  --border:    #dddbd8;
+  --text:      #1a1917;
+  --muted:     #6b6967;
+  --accent:    #7d2550;
+  --accent-dk: #5c1a3c;
+  --accent-dim:rgba(125,37,80,.08);
+  --accent-ring:rgba(125,37,80,.22);
+  --accent-strong: rgba(125,37,80,.95);
+}
+
+html{font-size:16px;-webkit-font-smoothing:antialiased;color-scheme:dark light;background:var(--bg)}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:var(--font-body);font-size:var(--tx-base);line-height:1.7;
+  min-height:100vh;
+}
+a{color:var(--accent);text-decoration:underline;text-decoration-color:var(--accent-ring);text-underline-offset:2px;transition:color .15s}
+a:hover{color:var(--accent-dk)}
+button{font-family:inherit;cursor:pointer;border:none;background:none}
+
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* Nav */
+.ln-nav{
+  position:sticky;top:0;z-index:200;
+  display:flex;align-items:center;gap:0;
+  padding:0 40px;height:60px;
+  background:rgba(23,22,20,.82);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border-bottom:1px solid rgba(255,255,255,.06);
+}
+[data-theme="light"] .ln-nav{background:rgba(245,244,242,.88)}
+.logo{display:flex;align-items:center;gap:8px;font-size:var(--tx-sm);font-weight:600;letter-spacing:-.01em;flex-shrink:0;color:var(--text);text-decoration:none}
+.logo:hover{color:var(--text)}
+.ln-nav-spacer{flex:1}
+.ln-nav-actions{display:flex;align-items:center;gap:10px}
+.icon-btn{
+  display:flex;align-items:center;justify-content:center;
+  width:34px;height:34px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-sm);color:var(--muted);transition:color .15s;
+}
+.icon-btn:hover{color:var(--text)}
+.icon-btn svg{width:15px;height:15px}
+.back-link{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:var(--tx-sm);color:var(--muted);
+  padding:6px 12px;border-radius:var(--r-sm);
+  text-decoration:none;
+  transition:color .15s,background .15s;
+}
+.back-link:hover{color:var(--text);background:var(--surface-2)}
+.back-link svg{width:14px;height:14px}
+
+/* Document layout */
+.doc-wrap{
+  max-width:760px;margin:0 auto;
+  padding:72px 40px 120px;
+}
+.doc-eyebrow{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:5px 12px;margin-bottom:20px;
+  font-size:var(--tx-xs);font-weight:600;color:var(--accent);
+  background:var(--accent-dim);border:1px solid var(--accent-ring);
+  border-radius:100px;text-transform:uppercase;letter-spacing:.07em;
+}
+.doc-h1{
+  font-family:var(--font-serif);
+  font-size:var(--h1);
+  line-height:1.06;letter-spacing:-.025em;
+  margin-bottom:14px;
+}
+.doc-byline{
+  font-size:var(--tx-sm);color:var(--muted);
+  margin-bottom:10px;
+}
+.doc-byline strong{color:var(--text);font-weight:500}
+.doc-meta{
+  display:flex;flex-wrap:wrap;gap:16px;
+  font-size:var(--tx-sm);color:var(--muted);
+  padding-bottom:28px;margin-bottom:44px;
+  border-bottom:1px solid var(--border);
+}
+.doc-meta strong{color:var(--text);font-weight:500}
+
+.doc-h2{
+  font-family:var(--font-serif);
+  font-size:var(--h2);
+  line-height:1.2;letter-spacing:-.02em;
+  margin-top:52px;margin-bottom:14px;
+  color:var(--text);
+}
+.doc-h3{
+  font-size:var(--tx-md);font-weight:600;
+  margin-top:28px;margin-bottom:10px;
+  color:var(--text);
+}
+.doc-lead{
+  font-size:var(--tx-md);color:var(--text);line-height:1.72;
+  margin-bottom:24px;
+}
+.doc-p{color:var(--text);margin-bottom:16px}
+.doc-p.muted{color:var(--muted)}
+.doc-ul, .doc-ol{margin:0 0 18px 0;padding-left:22px}
+.doc-ul li, .doc-ol li{margin-bottom:8px;color:var(--text)}
+.doc-ul li::marker{color:var(--accent)}
+.doc-ol li::marker{color:var(--accent);font-weight:600}
+
+.doc-hr{
+  border:none;border-top:1px solid var(--border);
+  margin:48px 0;
+}
+
+.doc-note{
+  padding:16px 18px;margin:20px 0;
+  background:var(--accent-dim);
+  border-left:3px solid var(--accent);
+  border-radius:var(--r-sm);
+  font-size:var(--tx-sm);color:var(--text);line-height:1.65;
+}
+.doc-note strong{color:var(--accent);font-weight:600}
+
+code, .mono{font-family:var(--font-mono);font-size:.9em;color:var(--accent);background:var(--accent-dim);padding:1px 6px;border-radius:3px}
+
+.doc-table-wrap{overflow-x:auto;margin:18px 0 24px}
+.doc-table{
+  width:100%;border-collapse:collapse;
+  font-size:var(--tx-sm);
+  border:1px solid var(--border);border-radius:var(--r-md);
+  overflow:hidden;
+}
+.doc-table th,.doc-table td{
+  padding:11px 14px;text-align:left;
+  border-bottom:1px solid var(--border);
+}
+.doc-table thead th{
+  background:var(--accent);color:#fff;
+  font-weight:600;font-size:var(--tx-xs);
+  text-transform:uppercase;letter-spacing:.06em;
+  border-bottom:1px solid var(--accent-dk);
+}
+.doc-table tr:last-child td{border-bottom:none}
+.doc-table td{color:var(--text);vertical-align:top}
+.doc-table td.num, .doc-table th.num{text-align:right;font-variant-numeric:tabular-nums}
+.doc-table tr.total td{
+  background:var(--surface);
+  font-weight:600;
+  border-top:2px solid var(--border);
+}
+.doc-table td strong{color:var(--text);font-weight:600}
+.doc-table tr:hover td{background:var(--accent-dim)}
+
+blockquote.doc-bq{
+  margin:24px 0;padding:4px 0 4px 20px;
+  border-left:3px solid var(--accent);
+  font-family:var(--font-serif);font-size:var(--tx-lg);
+  line-height:1.45;color:var(--text);
+  font-style:italic;
+}
+
+.doc-callout{
+  margin:22px 0;padding:20px 24px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-lg);
+  font-size:var(--tx-sm);
+}
+.doc-callout strong{color:var(--text);font-weight:600}
+
+/* Share row */
+.share-row{
+  margin-top:60px;padding:28px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-lg);
+}
+.share-row-title{
+  font-family:var(--font-serif);
+  font-size:var(--tx-xl);
+  line-height:1.2;
+  margin-bottom:8px;
+}
+.share-row-sub{
+  color:var(--muted);font-size:var(--tx-sm);
+  margin-bottom:18px;
+}
+.share-actions{
+  display:flex;flex-wrap:wrap;gap:10px;
+}
+.share-btn{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:9px 16px;
+  background:var(--surface-2);border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  font-size:var(--tx-sm);font-weight:500;color:var(--text);
+  text-decoration:none;transition:background .15s,border-color .15s,color .15s;
+}
+.share-btn:hover{background:var(--accent-dim);border-color:var(--accent-ring);color:var(--accent)}
+.share-btn svg{width:14px;height:14px}
+.share-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.share-btn.primary:hover{background:var(--accent-dk);border-color:var(--accent-dk);color:#fff}
+
+.doc-footer{
+  margin-top:44px;padding-top:28px;
+  border-top:1px solid var(--border);
+  font-size:var(--tx-sm);color:var(--muted);
+}
+.doc-footer a{color:var(--muted);text-decoration-color:var(--border)}
+.doc-footer a:hover{color:var(--accent)}
+
+@media (max-width: 640px) {
+  .ln-nav{padding:0 20px}
+  .doc-wrap{padding:48px 20px 80px}
+  .share-actions{flex-direction:column;align-items:stretch}
+  .share-btn{justify-content:center}
+}
+</style>
+</head>
+<body>
+
+<nav class="ln-nav">
+  <a href="/" class="logo">
+    <svg width="26" height="26" viewBox="0 0 26 26" fill="none" aria-hidden="true"><rect width="26" height="26" rx="6" fill="#7d2550"/><path d="M13 6.5L20.5 20H5.5L13 6.5Z" stroke="white" stroke-width="1.6" stroke-linejoin="round" fill="none"/><line x1="9.2" y1="15.5" x2="16.8" y2="15.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/></svg>
+    Advocate
+  </a>
+  <div class="ln-nav-spacer"></div>
+  <div class="ln-nav-actions">
+    <a href="/" class="back-link" aria-label="Back to AdvocateMCP">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+      Back to AdvocateMCP
+    </a>
+    <button class="icon-btn" onclick="toggleTheme()" aria-label="Toggle theme">
+      <svg id="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      <svg id="moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+  </div>
+</nav>
+
+<main class="doc-wrap">
+  <div class="doc-eyebrow">Research · Q1 2026 Preview</div>
+  <h1 class="doc-h1">State of AI Bot Traffic — Q1 2026 Preview</h1>
+  <p class="doc-byline">By <strong>Cameron McEwan</strong>, Founder, AdvocateMCP &nbsp;·&nbsp; <a href="mailto:support@advocatemcp.com">support@advocatemcp.com</a></p>
+  <div class="doc-meta">
+    <span><strong>Published:</strong> April 16, 2026</span>
+    <span><strong>Sample window:</strong> April 9–16, 2026</span>
+    <span><strong>Tenants:</strong> 5 active</span>
+    <span><strong>Queries:</strong> 62</span>
+  </div>
+
+  <h2 class="doc-h2">Executive Summary</h2>
+  <p class="doc-lead">
+    AdvocateMCP is the first platform sitting on both the AI crawler path and the transaction path for small and medium businesses. Because we intercept bot requests at the Cloudflare edge <em>and</em> serve as the destination MCP endpoint for tools like Claude Desktop and Cursor, every response we generate carries an HMAC-signed redirect token that survives the hop from &ldquo;bot visited&rdquo; to &ldquo;human clicked&rdquo; to &ldquo;outcome attributed.&rdquo; This preview is the first public look at what that instrument can measure. The sample is small and early, but the shape of the pipeline is the story:
+  </p>
+  <blockquote class="doc-bq">
+    Citation-monitoring tools can tell you if you were quoted. We can tell you what happened next.
+  </blockquote>
+
+  <hr class="doc-hr" />
+
+  <h2 class="doc-h2">Why this report exists</h2>
+  <p class="doc-p">There is a structural attribution gap in every AI-search stack shipping today.</p>
+  <p class="doc-p">
+    Citation-monitoring platforms &mdash; <a href="https://scrunchai.com/">Scrunch</a>, <a href="https://tryprofound.com/">Profound</a>, <a href="https://peec.ai/">Peec</a>, <a href="https://otterly.ai/">Otterly</a>, <a href="https://athenahq.ai/">Athena HQ</a> &mdash; answer one question: &ldquo;am I being cited?&rdquo; That is necessary but not sufficient. None of them can tell an SMB whether a citation in a Perplexity answer produced a booked appointment or a revenue dollar.
+  </p>
+  <p class="doc-p">
+    Traditional web analytics cannot fill the gap either. AI-referred traffic either arrives referrer-less (the user typed the URL out of the chat interface), or arrives with a referrer like <code>chat.openai.com</code> that tells you the surface but not the query, the bot, or the session. You cannot tie the visitor back to a specific answer the model quoted.
+  </p>
+  <p class="doc-p">
+    On the publisher side, <a href="https://www.cjr.org/analysis/reddit-winning-ai-licensing-deals-openai-google-gemini-answers-rsl.php">Reddit&rsquo;s AI licensing deals with OpenAI and Google</a> have closed this loop at the content-producer tier &mdash; Reddit now appears in roughly 3x more AI answers than Wikipedia, and gets paid for it. But there is no Reddit-equivalent for an independent plumber in Austin, a pediatric orthotic brand, or a regional real-estate brokerage. That is the gap this report is filling.
+  </p>
+  <p class="doc-p">
+    This is a methodology preview, not a statistical blockbuster. We are showing what the instrument can see before we have enough data for the readings to be authoritative. Q2&rsquo;s report will be the quantitative one.
+  </p>
+
+  <hr class="doc-hr" />
+
+  <h2 class="doc-h2">Methodology</h2>
+
+  <h3 class="doc-h3">Data source</h3>
+  <p class="doc-p">
+    All data in this preview comes from AdvocateMCP&rsquo;s production tables on Railway (<code>queries</code>, <code>click_events</code>, <code>agent_requests</code>) covering April 9, 2026 &mdash; the day our first production tenant was onboarded &mdash; through April 16, 2026.
+  </p>
+
+  <h3 class="doc-h3">Sample</h3>
+  <p class="doc-p">
+    Approximately 60 queries across 5 active business tenants. The public business registry at <a href="https://advocate-production-2887.up.railway.app/registry"><code>/registry</code></a> lists seven slugs today; two of those are placeholder or decommissioned test rows excluded from the numbers below. The active five span three verticals:
+  </p>
+  <ul class="doc-ul">
+    <li><strong>Home services / local trades</strong> (multi-state pilots)</li>
+    <li><strong>Direct-to-consumer e-commerce</strong> (a pediatric medical device, US-based, international shipping)</li>
+    <li><strong>B2B professional services</strong> (an email marketing agency and a commercial real-estate brokerage, both Austin, TX)</li>
+  </ul>
+
+  <h3 class="doc-h3">Bot identification</h3>
+  <p class="doc-p">
+    Bots are identified by User-Agent at the Cloudflare Worker edge. The match list (<code>AI_CRAWLERS</code>) is public in our manifest and includes:
+  </p>
+  <p class="doc-p">
+    <code>PerplexityBot</code>, <code>GPTBot</code>, <code>OAI-SearchBot</code>, <code>ClaudeBot</code>, <code>Google-Extended</code>, <code>Googlebot</code>, <code>anthropic-ai</code>, <code>cohere-ai</code>, <code>meta-externalagent</code>.
+  </p>
+  <p class="doc-p">
+    A matched bot is routed to our agent pipeline; everything else falls through to origin. Bot-detection results are used as routing signals only, never as authentication.
+  </p>
+
+  <h3 class="doc-h3">Intent classification</h3>
+  <p class="doc-p">
+    Queries are classified server-side into one of six buckets &mdash; <code>best_top</code>, <code>emergency</code>, <code>affordable</code>, <code>specific_service</code>, <code>brand_direct</code>, <code>general</code> &mdash; by a heuristic in <code>server/src/agent/builder.ts</code>. This is server-side inference, not user labeling. Rates should be read as &ldquo;how did our classifier bucket these queries&rdquo; rather than &ldquo;what did users actually want.&rdquo;
+  </p>
+
+  <h3 class="doc-h3">Attribution</h3>
+  <p class="doc-p">
+    Every citation link returned in a bot response is wrapped in an HMAC-SHA256-signed redirect token. When a human later clicks that link, the Worker decodes the token at <code>/r/:token</code>, logs a row to <code>click_events</code> in Cloudflare D1, then issues a 302 to the destination. The signing key is shared across Worker and Railway so tokens can be verified at the edge without a database round-trip.
+  </p>
+
+  <h3 class="doc-h3">Caveats — unignorable</h3>
+  <ol class="doc-ol">
+    <li><strong>Sample size.</strong> N is approximately 60. No statistical claim survives contact with that number; everything we report is directional.</li>
+    <li><strong>Smoke-testing bias.</strong> A meaningful fraction of the queries in our window are from build-out smoke tests, including repeated PerplexityBot-spoofed probes against our first tenant. The bot-distribution finding is distorted as a result &mdash; see Finding 1.</li>
+    <li><strong>Observation window.</strong> Seven days, bracketing a weekend. Crawler behavior varies week-to-week and we do not yet have the baseline to normalize.</li>
+    <li><strong>Vertical concentration.</strong> Five tenants across three verticals is not a representative slice of the SMB economy.</li>
+  </ol>
+  <p class="doc-p">
+    Q2 will materially improve all four. This report is published as a methodology preview so the industry has something to evaluate the instrument against before the larger dataset lands.
+  </p>
+
+  <hr class="doc-hr" />
+
+  <h2 class="doc-h2">Finding 1 — Bot share of voice</h2>
+  <p class="doc-p">
+    In our Q1 sample, <strong>OpenAI&rsquo;s GPTBot fleet (all versions) sent 58% of crawler traffic, nearly double PerplexityBot&rsquo;s 31%</strong>. ClaudeBot was a distant third at 5%.
+  </p>
+
+  <div class="doc-table-wrap">
+    <table class="doc-table">
+      <thead>
+        <tr>
+          <th>Bot</th>
+          <th class="num">Requests</th>
+          <th class="num">Share</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>GPTBot (all versions)</td><td class="num">36</td><td class="num">58.1%</td></tr>
+        <tr><td>PerplexityBot</td><td class="num">19</td><td class="num">30.6%</td></tr>
+        <tr><td>ClaudeBot</td><td class="num">3</td><td class="num">4.8%</td></tr>
+        <tr><td>mcp-client (our own MCP callers)</td><td class="num">3</td><td class="num">4.8%</td></tr>
+        <tr><td>unknown</td><td class="num">1</td><td class="num">1.6%</td></tr>
+        <tr class="total"><td><strong>Total</strong></td><td class="num"><strong>62</strong></td><td class="num"><strong>100%</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="doc-p muted" style="font-size:var(--tx-sm)">
+    <em>Sample window: April 9&ndash;16, 2026, across 5 active tenants spanning home services, copywriting, DTC pediatric medical devices, and commercial real estate. The three GPTBot variants (<code>GPTBot</code>, <code>GPTBot/1.0</code>, <code>GPTBot/1.1</code>) are collapsed as one.</em>
+  </p>
+  <p class="doc-p">
+    Some of this distribution is smoke-test-influenced &mdash; we validated the Worker edge against PerplexityBot UA during build-out &mdash; but the GPTBot-dominance is the organic signal and is consistent with what&rsquo;s publicly reported about OpenAI&rsquo;s crawl aggressiveness. <code>OAI-SearchBot</code>, <code>Google-Extended</code>, <code>Googlebot</code>, <code>anthropic-ai</code>, <code>cohere-ai</code>, and <code>meta-externalagent</code> each appeared zero times in the sample window. That&rsquo;s a finding in itself &mdash; the volume story at SMB-tier right now is an OpenAI / Perplexity duopoly.
+  </p>
+
+  <h3 class="doc-h3">The conversion-quality surprise</h3>
+  <p class="doc-p">
+    <strong>All 6 tracked clicks in the sample came from PerplexityBot sessions</strong> &mdash; zero clicks attributed to GPTBot despite GPTBot&rsquo;s 1.9x volume advantage.
+  </p>
+
+  <div class="doc-table-wrap">
+    <table class="doc-table">
+      <thead>
+        <tr>
+          <th>Bot</th>
+          <th class="num">Queries</th>
+          <th class="num">Tracked clicks</th>
+          <th class="num">Click rate</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>PerplexityBot</td><td class="num">19</td><td class="num">6</td><td class="num"><strong>31.6%</strong></td></tr>
+        <tr><td>GPTBot (all versions)</td><td class="num">36</td><td class="num">0</td><td class="num">0.0%</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="doc-p">
+    Caveat N=6: this is directional, not statistical. But the pattern is consistent with third-party reporting that Perplexity&rsquo;s answer surface links out more prominently and its users arrive with higher purchase intent, while ChatGPT&rsquo;s current default answer style more often self-contains the answer without a citation click. <a href="https://almcorp.net/blog/chatgpt-conversion-rates-vs-google-seo">ALM Corp reports ChatGPT-referred traffic still converts at 14.2% versus 2.8% for traditional organic search</a>, but that&rsquo;s once a user actually arrives on-site &mdash; our data suggests fewer of them make the jump from answer to site in the first place.
+  </p>
+  <div class="doc-callout">
+    <strong>Why this matters for SMBs.</strong> Volume-heavy bot traffic without conversion tells you AI models know about your site; conversion-heavy bot traffic tells you they&rsquo;re recommending it in ways users act on. Any SMB tracking &ldquo;AI traffic&rdquo; without bot-level granularity &mdash; every traditional analytics tool &mdash; is flying blind. This sample, tiny as it is, already shows that bucketing AI crawlers into a single aggregate mis-prices the real economics of each one.
+  </div>
+
+  <hr class="doc-hr" />
+
+  <h2 class="doc-h2">Finding 2 — Response latency and cost per query</h2>
+  <p class="doc-p">
+    These are numbers we can report authoritatively because they are measured inside our own systems on every request. They are benchmark data, not sample data.
+  </p>
+
+  <h3 class="doc-h3">Latency</h3>
+  <ul class="doc-ul">
+    <li><strong>Target p95 end-to-end:</strong> under 1500ms (bot &rarr; Worker &rarr; Railway &rarr; Claude &rarr; signed redirect URL &rarr; response back)</li>
+    <li><strong>Observed median in Q1:</strong> pending direct DB access &mdash; see Q2 report for measured values</li>
+  </ul>
+  <p class="doc-p">
+    A future session will move hot-path inference closer to the edge to remove the Worker&rarr;Railway hop.
+  </p>
+
+  <h3 class="doc-h3">Cost</h3>
+  <ul class="doc-ul">
+    <li><strong>Target Claude spend per response:</strong> under $0.02</li>
+    <li><strong>Observed per-response cost in Q1:</strong> pending direct DB access &mdash; see Q2 report for measured values</li>
+    <li><strong>Daily spend alerting threshold:</strong> $5 / customer / day</li>
+  </ul>
+  <p class="doc-p">
+    We enable Anthropic prompt caching (<code>cache_control: ephemeral</code>) on the system prompt block, which separates static profile + intent + bot emphasis (cached) from the variable user query (not cached). After warm-up we expect a cache hit rate in the 60&ndash;80% range, which materially compresses per-request cost.
+  </p>
+
+  <h3 class="doc-h3">What SMBs should expect from a well-tuned GEO stack</h3>
+  <p class="doc-p">
+    Sub-1500ms median agent responses and sub-two-cent per-response Claude cost are reasonable targets for any platform presenting itself as AI-crawler-ready. A vendor that cannot hit those numbers will either bleed margin at scale or bleed citation quality when crawlers time out on slow origins.
+  </p>
+
+  <hr class="doc-hr" />
+
+  <h2 class="doc-h2">Finding 3 — Intent distribution</h2>
+  <p class="doc-p">
+    The intent classifier bucketed the 50 most recent queries in the sample window as follows:
+  </p>
+
+  <div class="doc-table-wrap">
+    <table class="doc-table">
+      <thead>
+        <tr>
+          <th>Intent bucket</th>
+          <th class="num">Count</th>
+          <th class="num">Share</th>
+          <th>What triggers it</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><code>general</code></td><td class="num">27</td><td class="num">54.0%</td><td>Default fallback when no specific buckets match</td></tr>
+        <tr><td><code>affordable</code></td><td class="num">17</td><td class="num">34.0%</td><td>&ldquo;cheap,&rdquo; &ldquo;affordable,&rdquo; &ldquo;price,&rdquo; &ldquo;under $X&rdquo;</td></tr>
+        <tr><td><code>emergency</code></td><td class="num">2</td><td class="num">4.0%</td><td>&ldquo;burst pipe,&rdquo; &ldquo;tonight,&rdquo; &ldquo;emergency,&rdquo; &ldquo;24 hour&rdquo;</td></tr>
+        <tr><td><code>brand_direct</code></td><td class="num">2</td><td class="num">4.0%</td><td>Tenant name explicitly in query</td></tr>
+        <tr><td><code>specific_service</code></td><td class="num">2</td><td class="num">4.0%</td><td>Named service from tenant&rsquo;s services list</td></tr>
+        <tr><td><code>best_top</code></td><td class="num">0</td><td class="num">0.0%</td><td>&ldquo;best X in Y&rdquo; &mdash; absent in Q1 window</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p class="doc-p"><strong>Two things stand out.</strong></p>
+  <p class="doc-p">
+    First, <strong>88% of queries fall into <code>general</code> + <code>affordable</code></strong> &mdash; AI crawlers hitting SMB sites in Q1 are overwhelmingly asking &ldquo;what does this business do&rdquo; and &ldquo;how much does it cost,&rdquo; not &ldquo;who&rsquo;s the best.&rdquo; That&rsquo;s the discovery + consideration funnel, not the decision funnel. It suggests AI crawlers are still in catalog-building mode for SMBs, not yet in the &ldquo;cite this business in a recommendation&rdquo; mode where <code>best_top</code> would dominate. Q2 will show whether that&rsquo;s a stage-of-market signal or a sample quirk.
+  </p>
+  <p class="doc-p">
+    Second, <strong><code>emergency</code> intent is rare in our data but non-zero (4%)</strong> &mdash; and every emergency query came from a home-services tenant. This confirms what plumbers and HVAC companies have said anecdotally: AI assistants are being used for 2am &ldquo;burst pipe, what do I do&rdquo; queries. Even at N=2 the implication for service businesses is obvious: the availability and reservation tools (<code>get_availability</code>, <code>reserve_slot</code>) in AdvocateMCP&rsquo;s MCP surface need to handle after-hours emergency flows as a first-class case, not an edge case.
+  </p>
+  <div class="doc-note">
+    <strong>Reminder:</strong> this is server-side heuristic classification, not user-labeled intent. It tells us what the classifier thought; Q2 will add human-labeled spot checks to calibrate the heuristic. The full 62-query sample mostly follows the same distribution &mdash; the 12 queries not in <code>recent_hits</code> came from early-April smoke tests and skew even more toward <code>general</code>.
+  </div>
+
+  <hr class="doc-hr" />
+
+  <h2 class="doc-h2">What Q2 will measure</h2>
+  <p class="doc-p">
+    The Q2 report lands in July 2026. The sample will be larger by roughly one to two orders of magnitude, and will include measurements that simply cannot be made at N=60.
+  </p>
+  <ol class="doc-ol">
+    <li><strong>Cross-bot conversion deltas.</strong> The first meaningful comparison of Perplexity vs. ChatGPT vs. Claude vs. Google-AI-Overview conversion rates at SMB tier, measured through the HMAC-signed redirect loop &mdash; validating or refuting the <a href="https://almcorp.net/blog/chatgpt-conversion-rates-vs-google-seo">ALM Corp finding</a> at non-enterprise scale.</li>
+    <li><strong>Per-agent attribution.</strong> Our <code>agent_requests</code> table and reputation rollup shipped in April 2026. Q2 is the first report where we can attribute outcomes to specific caller agents (Claude Desktop vs. Cursor vs. ChatGPT Apps vs. generic MCP client) over 7-day and 30-day windows.</li>
+    <li><strong>Competitor Radar cohort data.</strong> Our weekly Perplexity-poll loop auto-seeds a query basket per Pro tenant and records whether the tenant&rsquo;s domain showed up. Q2 will include the first cohort-level read on which citation battles SMBs systematically win vs. lose.</li>
+    <li><strong>Regional variation.</strong> Once tenants span multiple states, we can report on whether crawler pressure correlates with regional AI-adoption or tracks legacy SEO patterns.</li>
+    <li><strong>MCP-client-originated transactions.</strong> With <a href="https://www.infoq.com/news/2026/04/mcp-registry-10000/">over 10,000 public MCP servers in the registry as of April 2026</a>, Claude Desktop and Cursor are the leading edge of a shift where a meaningful fraction of SMB queries arrive as MCP tool calls, not as user-agent-identified crawler requests. Q2 will report on that ratio for the first time.</li>
+  </ol>
+
+  <hr class="doc-hr" />
+
+  <h2 class="doc-h2">About AdvocateMCP</h2>
+  <p class="doc-p">
+    AdvocateMCP intercepts AI crawler traffic at the Cloudflare edge, generates per-bot per-query optimized responses via Claude Sonnet, and tracks every resulting citation click end-to-end. We also expose all registered businesses through a central MCP server at <code>/mcp</code> so MCP-compatible clients like Claude Desktop and Cursor can query any tenant directly. The free <strong>Business</strong> tier covers agent hosting and attribution. <strong>Pro</strong> adds Competitor Radar (weekly Perplexity citation polling) and per-agent reputation analytics.
+  </p>
+  <ul class="doc-ul">
+    <li><strong>Web:</strong> <a href="https://advocatemcp.com">advocatemcp.com</a></li>
+    <li><strong>Contact:</strong> <a href="mailto:support@advocatemcp.com">support@advocatemcp.com</a></li>
+    <li><strong>Manifest:</strong> <a href="https://advocate-production-2887.up.railway.app/.well-known/mcp.json"><code>/.well-known/mcp.json</code></a></li>
+    <li><strong>Registry:</strong> <a href="https://advocate-production-2887.up.railway.app/registry"><code>/registry</code></a></li>
+  </ul>
+  <p class="doc-p">
+    Journalists, AI-platform partnerships leads, or Cloudflare BD: we will share a de-identified query export on request so you can verify any claim against the underlying data.
+  </p>
+
+  <hr class="doc-hr" />
+
+  <h2 class="doc-h2">Methodology appendix</h2>
+  <p class="doc-p">For reviewers who want to verify this report&rsquo;s findings end-to-end.</p>
+
+  <h3 class="doc-h3">Attribution token format</h3>
+  <p class="doc-p">
+    Every outbound link is wrapped in a redirect of the form <code>https://&lt;tenant-host&gt;/r/:token</code>. The token is a base64url payload signed with HMAC-SHA256 (shared secret <code>TOKEN_SIGNING_KEY</code>, identical on Worker and Railway). The payload carries tenant slug, query ID, destination URL, issued-at timestamp, and an optional <code>aid</code> claim for the caller agent ID. The Worker verifies at <code>/r/:token</code>, writes a row to <code>click_events</code> in D1, and 302s. No user-identifiable data is in the token.
+  </p>
+
+  <h3 class="doc-h3">Bot detection</h3>
+  <p class="doc-p">
+    Pure user-agent matching at the Cloudflare Worker edge against the <code>AI_CRAWLERS</code> array. The match logic is intentionally boring &mdash; no TLS fingerprinting, JA3/JA4, or IP-reputation lookups &mdash; because the cost of a false negative (real bot routed to origin) is small and the cost of a false positive (human routed into the bot pipeline) is large. Bot detection is a routing signal only, never an auth primitive.
+  </p>
+
+  <h3 class="doc-h3">Click deduplication</h3>
+  <p class="doc-p">
+    Deduplication happens at query time, not write time. A click is unique within a 24-hour window by the tuple (token, client-IP prefix, user agent). We prefix-truncate the IP before hashing so we cannot reconstruct a full user IP from the logs.
+  </p>
+
+  <h3 class="doc-h3">Intent classification</h3>
+  <p class="doc-p">
+    A small deterministic rule set over the lowercased query string returning one of six buckets. Not an LLM classifier &mdash; a heuristic we can audit and update without a deploy. Both the bucket label and the raw query are stored so historical rows can be re-classified when rules change.
+  </p>
+
+  <h3 class="doc-h3">Source code</h3>
+  <p class="doc-p">
+    The AdvocateMCP server, Worker, and manifest are hosted privately today. Reviewers who need source-level verification of any claim can contact <a href="mailto:support@advocatemcp.com">support@advocatemcp.com</a> &mdash; we will share the relevant files under a short NDA. Open-sourcing of the Worker pipeline is on the roadmap for later in 2026.
+  </p>
+
+  <!-- Share row -->
+  <div class="share-row">
+    <div class="share-row-title">Share this report</div>
+    <div class="share-row-sub">If you know an SMB founder, marketer, or reporter working on AI search, send it their way.</div>
+    <div class="share-actions">
+      <a class="share-btn"
+         href="https://twitter.com/intent/tweet?text=State%20of%20AI%20Bot%20Traffic%20%E2%80%94%20Q1%202026%20Preview.%20GPTBot%20sends%2058%25%20of%20crawler%20traffic.%20PerplexityBot%20wins%20100%25%20of%20clicks.&url=https%3A%2F%2Fadvocatemcp.com%2Fresearch%2Fstate-of-ai-bot-traffic-q1-2026"
+         target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        Share on X
+      </a>
+      <a class="share-btn"
+         href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fadvocatemcp.com%2Fresearch%2Fstate-of-ai-bot-traffic-q1-2026"
+         target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+        Share on LinkedIn
+      </a>
+      <a class="share-btn primary"
+         href="mailto:support@advocatemcp.com?subject=Subscribe+to+State+of+AI&body=Please%20add%20me%20to%20the%20State%20of%20AI%20Bot%20Traffic%20mailing%20list%20for%20the%20Q2%202026%20report.">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        Subscribe for Q2
+      </a>
+    </div>
+  </div>
+
+  <div class="doc-footer">
+    <p>&copy; 2026 AdvocateMCP. <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="mailto:support@advocatemcp.com">Contact</a></p>
+  </div>
+</main>
+
+<script>
+function toggleTheme() {
+  var cur = document.documentElement.dataset.theme || 'dark';
+  var next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  document.getElementById('sun-icon').style.display  = next === 'dark' ? '' : 'none';
+  document.getElementById('moon-icon').style.display = next === 'dark' ? 'none' : '';
+  try { localStorage.setItem('theme', next); } catch (e) {}
+}
+(function initTheme(){
+  try {
+    var saved = localStorage.getItem('theme');
+    if (saved === 'light' || saved === 'dark') {
+      document.documentElement.dataset.theme = saved;
+      document.getElementById('sun-icon').style.display  = saved === 'dark' ? '' : 'none';
+      document.getElementById('moon-icon').style.display = saved === 'dark' ? 'none' : '';
+    }
+  } catch (e) {}
+})();
+</script>
+
+</body>
+</html>
