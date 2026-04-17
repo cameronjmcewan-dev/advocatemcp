@@ -41,19 +41,6 @@
   --r-xl: 16px;
 }
 
-/* Poppins applied to headings, buttons, and nav labels sitewide.
-   Body text, paragraphs, lists, and form inputs keep the existing body font. */
-h1, h2, h3, h4, h5, h6,
-button, .btn, .button,
-a.btn, a.button,
-nav a, .nav-link, .nav-item,
-.tab-label, .menu-item {
-  font-family: 'Poppins', system-ui, -apple-system, sans-serif;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-h1 { font-weight: 700; }
-
 [data-theme="light"] {
   --bg:             #faf8f7;
   --surface:        #ffffff;
