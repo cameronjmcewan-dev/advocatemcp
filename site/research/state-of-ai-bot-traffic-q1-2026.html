@@ -9,7 +9,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
 <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-<title>State of AI Bot Traffic — Q1 2026 Preview | AdvocateMCP</title>
+<title>State of AI Bot Traffic — Q1 2026 Preview | Advocate</title>
 <meta name="description" content="First SMB-tier measurement of AI crawler attribution. GPTBot sends 58% of traffic but PerplexityBot wins 100% of clicks." />
 <meta name="author" content="Cameron McEwan" />
 <meta name="robots" content="index,follow" />
@@ -22,7 +22,7 @@
 <meta property="og:image" content="https://advocatemcp.com/research/state-of-ai-q1-2026-og.png" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
-<meta property="og:site_name" content="AdvocateMCP" />
+<meta property="og:site_name" content="Advocate" />
 <meta property="article:author" content="Cameron McEwan" />
 <meta property="article:published_time" content="2026-04-16" />
 
@@ -302,9 +302,9 @@ blockquote.doc-bq{
   </a>
   <div class="ln-nav-spacer"></div>
   <div class="ln-nav-actions">
-    <a href="/" class="back-link" aria-label="Back to AdvocateMCP">
+    <a href="/" class="back-link" aria-label="Back to Advocate">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
-      Back to AdvocateMCP
+      Back to Advocate
     </a>
     <button class="icon-btn" onclick="toggleTheme()" aria-label="Toggle theme">
       <svg id="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
@@ -316,7 +316,7 @@ blockquote.doc-bq{
 <main class="doc-wrap">
   <div class="doc-eyebrow">Research · Q1 2026 Preview</div>
   <h1 class="doc-h1">State of AI Bot Traffic — Q1 2026 Preview</h1>
-  <p class="doc-byline">By <strong>Cameron McEwan</strong>, Founder, AdvocateMCP &nbsp;·&nbsp; <a href="mailto:support@advocatemcp.com">support@advocatemcp.com</a></p>
+  <p class="doc-byline">By <strong>Cameron McEwan</strong>, Founder, Advocate &nbsp;·&nbsp; <a href="mailto:support@advocatemcp.com">support@advocatemcp.com</a></p>
   <div class="doc-meta">
     <span><strong>Published:</strong> April 16, 2026</span>
     <span><strong>Sample window:</strong> April 9–16, 2026</span>
@@ -326,7 +326,7 @@ blockquote.doc-bq{
 
   <h2 class="doc-h2">Executive Summary</h2>
   <p class="doc-lead">
-    AdvocateMCP is the first platform sitting on both the AI crawler path and the transaction path for small and medium businesses. Because we intercept bot requests at the edge <em>and</em> serve as the destination MCP endpoint for tools like Claude Desktop and Cursor, every response we generate carries a cryptographically signed redirect token that survives the hop from &ldquo;bot visited&rdquo; to &ldquo;human clicked&rdquo; to &ldquo;outcome attributed.&rdquo; This preview is the first public look at what that instrument can measure. The sample is small and early, but the shape of the pipeline is the story:
+    Advocate is the first platform sitting on both the AI crawler path and the transaction path for small and medium businesses. Because we intercept bot requests at the edge <em>and</em> serve as the destination MCP endpoint for tools like Claude Desktop and Cursor, every response we generate carries a cryptographically signed redirect token that survives the hop from &ldquo;bot visited&rdquo; to &ldquo;human clicked&rdquo; to &ldquo;outcome attributed.&rdquo; This preview is the first public look at what that instrument can measure. The sample is small and early, but the shape of the pipeline is the story:
   </p>
   <blockquote class="doc-bq">
     Citation-monitoring tools can tell you if you were quoted. We can tell you what happened next.
@@ -355,7 +355,7 @@ blockquote.doc-bq{
 
   <h3 class="doc-h3">Data source</h3>
   <p class="doc-p">
-    All data in this preview comes from AdvocateMCP&rsquo;s production systems covering April 9, 2026 &mdash; the day our first production tenant was onboarded &mdash; through April 16, 2026.
+    All data in this preview comes from Advocate&rsquo;s production systems covering April 9, 2026 &mdash; the day our first production tenant was onboarded &mdash; through April 16, 2026.
   </p>
 
   <h3 class="doc-h3">Sample</h3>
@@ -521,7 +521,7 @@ blockquote.doc-bq{
     First, <strong>88% of queries fall into <code>general</code> + <code>affordable</code></strong> &mdash; AI crawlers hitting SMB sites in Q1 are overwhelmingly asking &ldquo;what does this business do&rdquo; and &ldquo;how much does it cost,&rdquo; not &ldquo;who&rsquo;s the best.&rdquo; That&rsquo;s the discovery + consideration funnel, not the decision funnel. It suggests AI crawlers are still in catalog-building mode for SMBs, not yet in the &ldquo;cite this business in a recommendation&rdquo; mode where <code>best_top</code> would dominate. Q2 will show whether that&rsquo;s a stage-of-market signal or a sample quirk.
   </p>
   <p class="doc-p">
-    Second, <strong><code>emergency</code> intent is rare in our data but non-zero (4%)</strong> &mdash; and every emergency query came from a home-services tenant. This confirms what plumbers and HVAC companies have said anecdotally: AI assistants are being used for 2am &ldquo;burst pipe, what do I do&rdquo; queries. Even at N=2 the implication for service businesses is obvious: the availability and reservation tools (<code>get_availability</code>, <code>reserve_slot</code>) in AdvocateMCP&rsquo;s MCP surface need to handle after-hours emergency flows as a first-class case, not an edge case.
+    Second, <strong><code>emergency</code> intent is rare in our data but non-zero (4%)</strong> &mdash; and every emergency query came from a home-services tenant. This confirms what plumbers and HVAC companies have said anecdotally: AI assistants are being used for 2am &ldquo;burst pipe, what do I do&rdquo; queries. Even at N=2 the implication for service businesses is obvious: the availability and reservation tools (<code>get_availability</code>, <code>reserve_slot</code>) in Advocate&rsquo;s MCP surface need to handle after-hours emergency flows as a first-class case, not an edge case.
   </p>
   <div class="doc-note">
     <strong>Reminder:</strong> this is server-side heuristic classification, not user-labeled intent. It tells us what the classifier thought; Q2 will add human-labeled spot checks to calibrate the heuristic. The full 62-query sample mostly follows the same distribution &mdash; the 12 queries not in <code>recent_hits</code> came from early-April smoke tests and skew even more toward <code>general</code>.
@@ -543,9 +543,9 @@ blockquote.doc-bq{
 
   <hr class="doc-hr" />
 
-  <h2 class="doc-h2">About AdvocateMCP</h2>
+  <h2 class="doc-h2">About Advocate</h2>
   <p class="doc-p">
-    AdvocateMCP intercepts AI crawler traffic at the edge, generates per-bot per-query optimized responses, and tracks every resulting citation click end-to-end. We also expose all registered businesses through a central MCP server at <code>/mcp</code> so MCP-compatible clients like Claude Desktop and Cursor can query any tenant directly. The free <strong>Business</strong> tier covers agent hosting and attribution. <strong>Pro</strong> adds Competitor Radar (weekly Perplexity citation polling) and per-agent reputation analytics.
+    Advocate intercepts AI crawler traffic at the edge, generates per-bot per-query optimized responses, and tracks every resulting citation click end-to-end. We also expose all registered businesses through a central MCP server at <code>/mcp</code> so MCP-compatible clients like Claude Desktop and Cursor can query any tenant directly. The free <strong>Business</strong> tier covers agent hosting and attribution. <strong>Pro</strong> adds Competitor Radar (weekly Perplexity citation polling) and per-agent reputation analytics.
   </p>
   <ul class="doc-ul">
     <li><strong>Web:</strong> <a href="https://advocatemcp.com">advocatemcp.com</a></li>
@@ -610,7 +610,7 @@ blockquote.doc-bq{
   </div>
 
   <div class="doc-footer">
-    <p>&copy; 2026 AdvocateMCP. <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="mailto:support@advocatemcp.com">Contact</a></p>
+    <p>&copy; 2026 Advocate. <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="mailto:support@advocatemcp.com">Contact</a></p>
   </div>
 </main>
 

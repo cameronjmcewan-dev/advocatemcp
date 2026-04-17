@@ -10,7 +10,7 @@ Use that URL everywhere. Do not shorten. Social crawlers need the canonical to h
 
 ## 1. LinkedIn post (primary)
 
-Post from Cameron's personal profile. Tag AdvocateMCP page. Keep line breaks — they read better on LinkedIn than one wall of text.
+Post from Cameron's personal profile. Tag Advocate page. Keep line breaks — they read better on LinkedIn than one wall of text.
 
 ```
 We just ran the first SMB-tier measurement of AI crawler attribution and one number broke the model we had been operating under.
@@ -43,7 +43,7 @@ I would love to hear from anyone else running this kind of measurement. What are
 
 ## 2. Twitter/X thread
 
-Post from `@cameronjmcewan` (or the AdvocateMCP handle if set up). One claim per tweet, concrete numbers on every line. Last tweet is the link — the algorithm penalizes links in the first tweet.
+Post from `@cameronjmcewan` (or the Advocate handle if set up). One claim per tweet, concrete numbers on every line. Last tweet is the link — the algorithm penalizes links in the first tweet.
 
 **Tweet 1 (hook):**
 ```
@@ -249,7 +249,7 @@ I shipped an AI bot attribution tool. Here's what Q1 data looks like for 6 small
 
 **Body:**
 ```
-A year ago the consensus was that AI search would quietly replace Google traffic for small businesses and no one would know how to measure the shift. I started building AdvocateMCP to fix that measurement gap.
+A year ago the consensus was that AI search would quietly replace Google traffic for small businesses and no one would know how to measure the shift. I started building Advocate to fix that measurement gap.
 
 Today I'm publishing the Q1 results from the first 6 businesses in production. Three findings worth the read:
 
