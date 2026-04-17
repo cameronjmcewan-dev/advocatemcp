@@ -187,7 +187,7 @@
           '<input type="password" class="fi" id="admin-secret-input" placeholder="Bearer token from wrangler secrets" autocomplete="off">' +
         '</label>' +
         '<div style="display:flex;gap:8px;align-items:center;margin-top:4px">' +
-          '<button type="button" class="btn-sm btn-primary-sm cta-btn" id="confirm-rotate">Rotate key for ' + esc(slug) + '</button>' +
+          '<button type="button" class="btn-sm btn-primary-sm" id="confirm-rotate">Rotate key for ' + esc(slug) + '</button>' +
           '<span id="rotate-status-drawer" style="font-size:var(--tx-xs);color:var(--muted)"></span>' +
         '</div>' +
       '</div>';

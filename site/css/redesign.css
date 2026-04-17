@@ -392,8 +392,18 @@ body > * { position: relative; z-index: 1; }
 .ln-price-card.pop:hover {
   transform: translateY(-12px) !important;
 }
-/* Legacy per-section button glow overrides removed — replaced by the
-   sitewide .cta-btn oxblood gradient at the bottom of this file. */
+.ln-price-card .btn-primary,
+.ln-final-cta .btn-primary,
+.ln-hero-cta .btn-primary {
+  box-shadow: 0 6px 22px var(--accent-glow);
+  transition: background .15s, border-color .15s, transform .15s, box-shadow .15s;
+}
+.ln-price-card .btn-primary:hover,
+.ln-final-cta .btn-primary:hover,
+.ln-hero-cta .btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 32px var(--accent-glow), 0 0 0 1px var(--accent-bright);
+}
 
 /* ── 13. Final CTA — background network echo ────────────────── */
 .ln-final-cta {
@@ -558,97 +568,4 @@ body > * { position: relative; z-index: 1; }
 }
 @media (max-width: 899px) {
   .rd-hero-canvas { display: none !important; }
-}
-
-/* ═════════════════════════════════════════════════════════════════
-   19. Sitewide primary CTA — glowing oxblood gradient
-   Applied via shared `.cta-btn` class AND auto-targets existing
-   `.btn-primary` / `.btn-primary-sm` / `.btn-submit` / `button.primary`
-   / `a.btn-primary` so every solid CTA picks up the glow.
-   Ghost/outlined buttons (.btn-ghost, .btn-link, etc.) are untouched.
-   ═════════════════════════════════════════════════════════════════ */
-
-:root {
-  /* Oxblood palette — fallback if the color agent hasn't merged yet.
-     Values match the canonical definitions so later merges no-op. */
-  --oxblood:          #4A0E0E;
-  --oxblood-light:    #7A1F1F;
-  --oxblood-dark:     #2E0808;
-  --oxblood-highlight:#8B2A2A;
-}
-
-.cta-btn,
-.btn-primary,
-.btn-primary-sm,
-.btn-submit,
-button.primary,
-a.btn-primary {
-  background: linear-gradient(
-    135deg,
-    var(--oxblood-dark) 0%,
-    var(--oxblood) 35%,
-    var(--oxblood-highlight) 55%,
-    var(--oxblood) 75%,
-    var(--oxblood-dark) 100%
-  ) !important;
-  background-size: 200% 200% !important;
-  background-position: 40% 40% !important;
-  color: #FFFFFF !important;
-  border: 1px solid rgba(139, 42, 42, 0.4) !important;
-  box-shadow:
-    0 0 30px rgba(74, 14, 14, 0.6),
-    0 0 60px rgba(74, 14, 14, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.3) !important;
-  transition: background-position .25s ease, box-shadow .25s ease, transform .25s ease !important;
-  cursor: pointer;
-}
-
-/* Only apply the full spec padding/weight to explicitly-classed CTAs so
-   compact variants (btn-sm, btn-primary-sm, btn-submit) keep their
-   existing dimensions. Border-radius is always preserved per spec. */
-.cta-btn {
-  /* Poppins is specified by the CTA design brief; falls back to the
-     site's General Sans body font if Poppins isn't loaded on a page. */
-  font-family: 'Poppins', 'General Sans', 'Inter', system-ui, sans-serif;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  padding: 14px 28px;
-  border-radius: 12px;
-}
-
-.cta-btn:hover,
-.btn-primary:hover,
-.btn-primary-sm:hover,
-.btn-submit:hover,
-button.primary:hover,
-a.btn-primary:hover {
-  background-position: 60% 60% !important;
-  box-shadow:
-    0 0 40px rgba(139, 42, 42, 0.75),
-    0 0 80px rgba(74, 14, 14, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.3) !important;
-  transform: translateY(-1px);
-}
-
-.cta-btn:active,
-.btn-primary:active,
-.btn-primary-sm:active,
-.btn-submit:active,
-button.primary:active,
-a.btn-primary:active {
-  transform: translateY(0);
-  box-shadow:
-    0 0 20px rgba(74, 14, 14, 0.5),
-    inset 0 1px 2px rgba(0, 0, 0, 0.4) !important;
-}
-
-.cta-btn:disabled,
-.btn-primary:disabled,
-.btn-primary-sm:disabled,
-.btn-submit:disabled {
-  opacity: .55;
-  cursor: not-allowed;
-  transform: none;
 }
