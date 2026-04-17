@@ -576,6 +576,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
   <p class="step-eyebrow">Step 3 of 10</p>
   <h1 class="step-title">Social proof</h1>
   <p class="step-desc">Your customer reputation — used to ground AI responses about your business.</p>
+  <p class="step-desc" style="font-size:var(--tx-xs);color:var(--muted);margin-top:-16px;margin-bottom:20px"><em>Self-reported figures. Advocate may attribute these as "customer-reported" in AI responses to preserve integrity.</em></p>
 
   <div class="field" id="f-star-rating">
     <label for="biz-star-rating">Average star rating</label>
@@ -1076,10 +1077,14 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 
   </div>
 
-  <!-- Confirm checkbox -->
+  <!-- Truth warranty + ToS acceptance -->
   <label class="confirm-row">
-    <input type="checkbox" class="confirm-check" id="confirm-check" />
-    <span class="confirm-text">I confirm this information is accurate and ready to publish to AI platforms.</span>
+    <input type="checkbox" class="confirm-check" id="confirm-truth" />
+    <span class="confirm-text">I warrant that all information above is true and accurate to the best of my knowledge.</span>
+  </label>
+  <label class="confirm-row">
+    <input type="checkbox" class="confirm-check" id="confirm-tos" />
+    <span class="confirm-text">I agree to the <a href="/terms.html" target="_blank" rel="noopener">Terms of Service</a> and <a href="/privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</span>
   </label>
 
   <!-- Error banner -->
@@ -1090,7 +1095,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 
   <div class="nav-row">
     <button class="btn btn-ghost" onclick="goBack(10)">← Back</button>
-    <button class="btn btn-primary" id="publish-btn" onclick="submitProfile()">
+    <button class="btn btn-primary" id="publish-btn" onclick="submitProfile()" disabled>
       <span class="btn-label">Publish My Profile</span>
       <div class="spinner"></div>
     </button>
@@ -1509,6 +1514,22 @@ document.addEventListener('change', e => {
   const field = e.target.closest('.field');
   if (field && field.classList.contains('has-error')) field.classList.remove('has-error');
 }, true);
+
+// Gate Publish button on both liability checkboxes
+function syncPublishBtnState() {
+  const btn = document.getElementById('publish-btn');
+  if (!btn) return;
+  const truth = document.getElementById('confirm-truth');
+  const tos = document.getElementById('confirm-tos');
+  btn.disabled = !(truth && truth.checked && tos && tos.checked);
+}
+document.addEventListener('DOMContentLoaded', () => {
+  ['confirm-truth', 'confirm-tos'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', syncPublishBtnState);
+  });
+  syncPublishBtnState();
+});
 
 // ── Draft Save/Resume ───────────────────────────────────────────────────────
 function saveDraft() {
@@ -1992,11 +2013,16 @@ function buildOnboardPayload() {
 const ONBOARD_ENDPOINT = 'https://customers.advocatemcp.com/api/onboard/public';
 
 async function submitProfile() {
-  if (!document.getElementById('confirm-check').checked) {
-    document.getElementById('confirm-check').focus();
-    const row = document.querySelector('.confirm-row');
-    row.style.borderColor = 'var(--red)';
-    setTimeout(() => { row.style.borderColor = ''; }, 1200);
+  const truthBox = document.getElementById('confirm-truth');
+  const tosBox = document.getElementById('confirm-tos');
+  if (!truthBox.checked || !tosBox.checked) {
+    const unchecked = !truthBox.checked ? truthBox : tosBox;
+    unchecked.focus();
+    const row = unchecked.closest('.confirm-row');
+    if (row) {
+      row.style.borderColor = 'var(--red)';
+      setTimeout(() => { row.style.borderColor = ''; }, 1200);
+    }
     return;
   }
 
@@ -2126,7 +2152,9 @@ function startOver() {
   setPlan('base');
   // Re-apply browser timezone auto-detect
   applyDetectedTimezone();
-  document.getElementById('confirm-check').checked = false;
+  document.getElementById('confirm-truth').checked = false;
+  document.getElementById('confirm-tos').checked = false;
+  syncPublishBtnState();
 
   document.getElementById('screen-success').style.display = 'none';
   document.getElementById('screen-success').classList.remove('active');
