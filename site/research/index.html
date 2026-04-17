@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" style="background:#171614">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="dark light" />
+<meta name="theme-color" content="#171614" />
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+<link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+<title>Research | Advocate</title>
+<meta name="description" content="Quarterly data on how AI crawlers and agents drive revenue to small businesses. Attribution, conversion, intent — measured end to end." />
+<meta name="robots" content="index,follow" />
+
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Research | Advocate" />
+<meta property="og:description" content="Quarterly data on how AI crawlers and agents drive revenue to small businesses." />
+<meta property="og:url" content="https://advocatemcp.com/research/" />
+<meta property="og:image" content="https://advocatemcp.com/research/state-of-ai-q1-2026-og.png" />
+<meta property="og:site_name" content="Advocate" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Research | Advocate" />
+<meta name="twitter:description" content="Quarterly data on how AI crawlers and agents drive revenue to small businesses." />
+<meta name="twitter:image" content="https://advocatemcp.com/research/state-of-ai-q1-2026-og.png" />
+
+<link rel="canonical" href="https://advocatemcp.com/research/" />
+
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root {
+  --bg:          #171614;
+  --surface:     #1c1b19;
+  --surface-2:   #222120;
+  --border:      #393836;
+  --text:        #e8e6e3;
+  --muted:       #7a7875;
+  --accent:      #7d2550;
+  --accent-dk:   #5c1a3c;
+  --accent-dim:  rgba(125,37,80,.12);
+  --accent-ring: rgba(125,37,80,.25);
+
+  --font-serif:  'Instrument Serif', Georgia, serif;
+  --font-body:   'General Sans','Inter',system-ui,-apple-system,sans-serif;
+
+  --tx-xs:   clamp(.6875rem,.66rem + .14vw,.75rem);
+  --tx-sm:   clamp(.8125rem,.78rem + .16vw,.875rem);
+  --tx-base: clamp(1rem,.97rem + .15vw,1.0625rem);
+  --tx-md:   clamp(1.0625rem,1.02rem + .21vw,1.125rem);
+
+  --r-sm:4px; --r-md:8px; --r-lg:12px; --r-xl:16px;
+}
+
+[data-theme="light"] {
+  --bg:        #f5f4f2;
+  --surface:   #ffffff;
+  --surface-2: #efeeed;
+  --border:    #dddbd8;
+  --text:      #1a1917;
+  --muted:     #6b6967;
+  --accent:    #7d2550;
+  --accent-dk: #5c1a3c;
+  --accent-dim:rgba(125,37,80,.08);
+  --accent-ring:rgba(125,37,80,.22);
+}
+
+html{font-size:16px;-webkit-font-smoothing:antialiased;color-scheme:dark light;background:var(--bg)}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:var(--font-body);font-size:var(--tx-base);line-height:1.7;
+  min-height:100vh;
+}
+a{color:var(--accent);text-decoration:underline;text-decoration-color:var(--accent-ring);text-underline-offset:2px;transition:color .15s}
+a:hover{color:var(--accent-dk)}
+button{font-family:inherit;cursor:pointer;border:none;background:none}
+
+/* Nav */
+.ln-nav{
+  position:sticky;top:0;z-index:200;
+  display:flex;align-items:center;gap:0;
+  padding:0 40px;height:60px;
+  background:rgba(23,22,20,.82);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  border-bottom:1px solid rgba(255,255,255,.06);
+}
+[data-theme="light"] .ln-nav{background:rgba(245,244,242,.88)}
+.logo{display:flex;align-items:center;gap:10px;font-size:var(--tx-md);font-weight:600;letter-spacing:-.01em;flex-shrink:0;color:var(--text);text-decoration:none}
+.logo:hover{color:var(--text)}
+.logo img{width:26px;height:26px;border-radius:5px;display:block}
+.ln-nav-spacer{flex:1}
+.ln-nav-actions{display:flex;align-items:center;gap:10px}
+.icon-btn{
+  display:flex;align-items:center;justify-content:center;
+  width:34px;height:34px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-sm);color:var(--muted);transition:color .15s;
+}
+.icon-btn:hover{color:var(--text)}
+.icon-btn svg{width:15px;height:15px}
+.back-link{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:var(--tx-sm);color:var(--muted);
+  padding:6px 12px;border-radius:var(--r-sm);
+  text-decoration:none;
+  transition:color .15s,background .15s;
+}
+.back-link:hover{color:var(--text);background:var(--surface-2)}
+.back-link svg{width:14px;height:14px}
+
+/* Page wrap */
+.wrap{max-width:960px;margin:0 auto;padding:88px 40px 120px}
+
+/* Hero */
+.hero-eyebrow{
+  font-family:var(--font-body);font-size:var(--tx-sm);
+  text-transform:uppercase;letter-spacing:.12em;font-weight:600;
+  color:var(--accent);margin-bottom:20px;
+}
+.hero-h1{
+  font-family:var(--font-serif);
+  font-size:clamp(2.5rem, 5.2vw, 4.25rem);
+  font-weight:400;line-height:1.02;letter-spacing:-.02em;
+  margin-bottom:24px;color:var(--text);max-width:800px;
+}
+.hero-h1 em{font-style:italic;color:var(--accent);}
+.hero-sub{
+  font-family:var(--font-serif);font-style:italic;
+  font-size:clamp(1.25rem, 2vw, 1.5rem);
+  line-height:1.5;color:var(--muted);max-width:680px;margin-bottom:8px;
+}
+.hero-desc{
+  font-size:var(--tx-md);color:var(--muted);line-height:1.7;
+  max-width:680px;margin-top:16px;
+}
+
+/* Divider */
+.section-divider{
+  margin:72px 0 40px;display:flex;align-items:center;gap:16px;
+  font-family:var(--font-body);font-size:var(--tx-sm);
+  text-transform:uppercase;letter-spacing:.12em;font-weight:600;
+  color:var(--muted);
+}
+.section-divider::after{content:"";flex:1;height:1px;background:var(--border)}
+
+/* Report card */
+.report-card{
+  display:block;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--r-lg);
+  padding:40px 44px;
+  text-decoration:none;color:var(--text);
+  transition:border-color .15s,background .15s,transform .15s;
+  margin-bottom:24px;
+}
+.report-card:hover{
+  border-color:var(--accent-ring);
+  background:var(--surface-2);
+  color:var(--text);
+  transform:translateY(-1px);
+}
+.report-card-top{
+  display:flex;align-items:center;gap:12px;margin-bottom:14px;
+  font-size:var(--tx-sm);color:var(--muted);
+}
+.pill{
+  display:inline-flex;align-items:center;
+  padding:3px 10px;border-radius:999px;
+  font-size:var(--tx-xs);font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+  background:var(--accent-dim);color:var(--accent);
+  border:1px solid var(--accent-ring);
+}
+.report-card-title{
+  font-family:var(--font-serif);font-weight:400;
+  font-size:clamp(1.75rem, 3vw, 2.25rem);
+  line-height:1.1;letter-spacing:-.01em;
+  margin-bottom:16px;color:var(--text);
+}
+.report-card-lead{
+  font-size:var(--tx-md);color:var(--muted);
+  line-height:1.65;max-width:640px;margin-bottom:28px;
+}
+.report-card-lead strong{color:var(--text);font-weight:600}
+
+.stat-row{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:24px;
+  padding:24px 0;border-top:1px solid var(--border);
+  margin-bottom:24px;
+}
+.stat-num{
+  font-family:var(--font-serif);font-style:italic;font-weight:400;
+  font-size:clamp(2rem, 3.5vw, 2.75rem);line-height:1;color:var(--accent);
+  margin-bottom:6px;letter-spacing:-.01em;
+}
+.stat-lbl{font-size:var(--tx-sm);color:var(--muted);line-height:1.4}
+
+.report-card-cta{
+  display:inline-flex;align-items:center;gap:6px;
+  color:var(--accent);font-weight:600;font-size:var(--tx-sm);
+  text-decoration:none;
+}
+.report-card:hover .report-card-cta{color:var(--accent-dk)}
+.report-card-cta svg{width:14px;height:14px;transition:transform .15s}
+.report-card:hover .report-card-cta svg{transform:translateX(3px)}
+
+/* Upcoming card */
+.upcoming-card{
+  background:transparent;
+  border:1px dashed var(--border);
+  border-radius:var(--r-lg);
+  padding:32px 44px;
+}
+.upcoming-top{
+  display:flex;align-items:center;gap:12px;margin-bottom:12px;
+  font-size:var(--tx-sm);color:var(--muted);
+}
+.upcoming-pill{
+  display:inline-flex;align-items:center;
+  padding:3px 10px;border-radius:999px;
+  font-size:var(--tx-xs);font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+  background:var(--surface-2);color:var(--muted);
+  border:1px solid var(--border);
+}
+.upcoming-title{
+  font-family:var(--font-serif);font-weight:400;
+  font-size:clamp(1.375rem, 2.5vw, 1.625rem);
+  line-height:1.2;letter-spacing:-.01em;
+  margin-bottom:12px;color:var(--text);
+}
+.upcoming-desc{font-size:var(--tx-md);color:var(--muted);line-height:1.65}
+
+/* Subscribe CTA */
+.subscribe{
+  margin-top:88px;
+  padding:36px 40px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--r-lg);
+  display:flex;gap:24px;align-items:center;flex-wrap:wrap;
+}
+.subscribe-text{flex:1;min-width:260px}
+.subscribe-h{font-family:var(--font-serif);font-size:1.5rem;font-weight:400;line-height:1.2;letter-spacing:-.01em;margin-bottom:6px}
+.subscribe-p{font-size:var(--tx-sm);color:var(--muted);line-height:1.5}
+.subscribe a.btn{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:11px 22px;border-radius:var(--r-sm);
+  background:var(--accent);color:#fff;
+  font-size:var(--tx-sm);font-weight:600;
+  text-decoration:none;border:1px solid var(--accent);
+  transition:background .15s,border-color .15s;
+}
+.subscribe a.btn:hover{background:var(--accent-dk);border-color:var(--accent-dk);color:#fff}
+
+/* Footer */
+.page-footer{
+  border-top:1px solid var(--border);
+  padding:32px 40px;
+  text-align:center;
+  font-size:var(--tx-sm);color:var(--muted);
+}
+.page-footer a{color:var(--muted);text-decoration:none;margin:0 10px}
+.page-footer a:hover{color:var(--text)}
+
+@media (max-width: 680px) {
+  .wrap{padding:56px 20px 80px}
+  .report-card{padding:28px 24px}
+  .upcoming-card{padding:24px}
+  .stat-row{grid-template-columns:1fr;gap:18px;padding:20px 0}
+  .subscribe{padding:28px 24px;flex-direction:column;align-items:flex-start}
+}
+</style>
+</head>
+<body>
+
+<nav class="ln-nav">
+  <a href="/" class="logo">
+    <img src="/icon-192.png" alt="" />
+    Advocate
+  </a>
+  <div class="ln-nav-spacer"></div>
+  <div class="ln-nav-actions">
+    <a href="/" class="back-link" aria-label="Back to Advocate">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+      Home
+    </a>
+    <button class="icon-btn" onclick="toggleTheme()" aria-label="Toggle theme">
+      <svg id="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+      <svg id="moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    </button>
+  </div>
+</nav>
+
+<main class="wrap">
+  <div class="hero-eyebrow">Advocate Research</div>
+  <h1 class="hero-h1">Measuring how AI <em>actually</em> sends business to the open web.</h1>
+  <p class="hero-sub">The first attribution data for small businesses in the AI-search era.</p>
+  <p class="hero-desc">
+    Every quarter we publish production-grade data on which AI crawlers reach small businesses, how that traffic converts, and what it means for the next twelve months of discovery. No scraped rankings, no PR numbers — measurements from the live pipeline.
+  </p>
+
+  <div class="section-divider">Published</div>
+
+  <a class="report-card" href="/research/state-of-ai-bot-traffic-q1-2026">
+    <div class="report-card-top">
+      <span class="pill">Q1 2026 Preview</span>
+      <span>·</span>
+      <span>April 16, 2026</span>
+      <span>·</span>
+      <span>12 min read</span>
+    </div>
+    <h2 class="report-card-title">State of AI Bot Traffic — Q1 2026 Preview</h2>
+    <p class="report-card-lead">
+      <strong>GPTBot sends the traffic. PerplexityBot gets the clicks.</strong> The first SMB-tier measurement of AI crawler attribution, drawn from the live edge pipeline across five active tenants and sixty-two bot queries. Methodology, findings, and what Q2 measures next.
+    </p>
+    <div class="stat-row">
+      <div>
+        <div class="stat-num">58%</div>
+        <div class="stat-lbl">Share of AI crawler traffic from GPTBot in Q1</div>
+      </div>
+      <div>
+        <div class="stat-num">100%</div>
+        <div class="stat-lbl">Share of attributed clicks from PerplexityBot</div>
+      </div>
+      <div>
+        <div class="stat-num">19%</div>
+        <div class="stat-lbl">Of bot queries classified as purchase-intent</div>
+      </div>
+    </div>
+    <span class="report-card-cta">
+      Read the report
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+    </span>
+  </a>
+
+  <div class="section-divider">Coming next</div>
+
+  <div class="upcoming-card">
+    <div class="upcoming-top">
+      <span class="upcoming-pill">Q2 2026 · Summer</span>
+    </div>
+    <h3 class="upcoming-title">Cross-bot conversion deltas at scale</h3>
+    <p class="upcoming-desc">
+      Ten× the sample, per-vertical breakdowns, per-agent attribution across Claude Desktop, Cursor, ChatGPT Apps, and generic MCP clients — plus the first cohort-level read on citation battles SMBs systematically win vs. lose through Competitor Radar.
+    </p>
+  </div>
+
+  <div class="subscribe">
+    <div class="subscribe-text">
+      <div class="subscribe-h">Get the Q2 report when it drops.</div>
+      <div class="subscribe-p">No newsletter padding. One email per quarterly report. Unsubscribe with one click.</div>
+    </div>
+    <a class="btn" href="mailto:support@advocatemcp.com?subject=Subscribe%20to%20Advocate%20Research&body=Please%20add%20me%20to%20the%20research%20list.">
+      Subscribe via email
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+    </a>
+  </div>
+</main>
+
+<footer class="page-footer">
+  &copy; 2026 Advocate ·
+  <a href="/">Home</a> ·
+  <a href="/privacy.html">Privacy</a> ·
+  <a href="/terms.html">Terms</a> ·
+  <a href="mailto:support@advocatemcp.com">Contact</a>
+</footer>
+
+<script>
+(function() {
+  const root = document.documentElement;
+  const saved = localStorage.getItem('theme');
+  const mql = window.matchMedia('(prefers-color-scheme: light)');
+  const initial = saved || (mql.matches ? 'light' : 'dark');
+  root.setAttribute('data-theme', initial);
+  updateIcons(initial);
+
+  window.toggleTheme = function() {
+    const cur = root.getAttribute('data-theme');
+    const next = cur === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    updateIcons(next);
+  };
+  function updateIcons(theme) {
+    const sun = document.getElementById('sun-icon');
+    const moon = document.getElementById('moon-icon');
+    if (!sun || !moon) return;
+    if (theme === 'dark') { sun.style.display = ''; moon.style.display = 'none'; }
+    else { sun.style.display = 'none'; moon.style.display = ''; }
+  }
+})();
+</script>
+</body>
+</html>
