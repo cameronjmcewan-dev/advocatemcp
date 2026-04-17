@@ -391,46 +391,53 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
         <span class="step-num">3</span>
         <svg class="check-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
-      <span class="ps-label">Quotes</span>
+      <span class="ps-label">Social</span>
     </div>
     <div class="ps" id="ps-4">
       <div class="ps-dot">
         <span class="step-num">4</span>
         <svg class="check-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
-      <span class="ps-label">Area</span>
+      <span class="ps-label">Credentials</span>
     </div>
     <div class="ps" id="ps-5">
       <div class="ps-dot">
         <span class="step-num">5</span>
         <svg class="check-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
-      <span class="ps-label">Hours</span>
+      <span class="ps-label">Area</span>
     </div>
     <div class="ps" id="ps-6">
       <div class="ps-dot">
         <span class="step-num">6</span>
         <svg class="check-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
-      <span class="ps-label">Leads</span>
+      <span class="ps-label">Hours</span>
     </div>
     <div class="ps" id="ps-7">
       <div class="ps-dot">
         <span class="step-num">7</span>
         <svg class="check-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
-      <span class="ps-label">Plan</span>
+      <span class="ps-label">Leads</span>
     </div>
     <div class="ps" id="ps-8">
       <div class="ps-dot">
         <span class="step-num">8</span>
         <svg class="check-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
-      <span class="ps-label">Account</span>
+      <span class="ps-label">Plan</span>
     </div>
     <div class="ps" id="ps-9">
       <div class="ps-dot">
         <span class="step-num">9</span>
+        <svg class="check-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <span class="ps-label">Account</span>
+    </div>
+    <div class="ps" id="ps-10">
+      <div class="ps-dot">
+        <span class="step-num">10</span>
         <svg class="check-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
       <span class="ps-label">Review</span>
@@ -440,7 +447,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 
 <!-- ══ STEP 1 ══════════════════════════════════════════════════════════════ -->
 <div class="card" id="step-1">
-  <p class="step-eyebrow">Step 1 of 9</p>
+  <p class="step-eyebrow">Step 1 of 10</p>
   <h1 class="step-title">Business basics</h1>
   <p class="step-desc">Tell us about your business so AI can accurately describe you to potential customers.</p>
 
@@ -479,6 +486,21 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
     </div>
   </div>
 
+  <div class="field" id="f-timezone">
+    <label for="biz-timezone">Timezone</label>
+    <select id="biz-timezone">
+      <option value="America/New_York">Eastern (New York)</option>
+      <option value="America/Chicago">Central (Chicago)</option>
+      <option value="America/Denver">Mountain (Denver)</option>
+      <option value="America/Phoenix">Mountain (Phoenix, no DST)</option>
+      <option value="America/Los_Angeles">Pacific (Los Angeles)</option>
+      <option value="America/Anchorage">Alaska</option>
+      <option value="Pacific/Honolulu">Hawaii</option>
+      <option value="other">Other — let me know at support@advocatemcp.com</option>
+    </select>
+    <p class="hint" style="font-size:var(--tx-xs);color:var(--muted);margin-top:6px">Used for scheduling availability in AI responses. Auto-detected from your browser by default.</p>
+  </div>
+
   <div class="field" id="f-description">
     <label for="biz-description">Tell us about your business</label>
     <textarea id="biz-description" rows="3" maxlength="2000" required placeholder="In 2-3 sentences, what does your business do? What customers do you serve?"></textarea>
@@ -502,7 +524,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 
 <!-- ══ STEP 2 ══════════════════════════════════════════════════════════════ -->
 <div class="card" id="step-2" style="display:none">
-  <p class="step-eyebrow">Step 2 of 9</p>
+  <p class="step-eyebrow">Step 2 of 10</p>
   <h1 class="step-title">Services &amp; pricing</h1>
   <p class="step-desc">AI will use this to describe what you do and match you with the right customers.</p>
 
@@ -551,7 +573,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 
 <!-- ══ STEP 3 — SOCIAL PROOF ═══════════════════════════════════════════════ -->
 <div class="card" id="step-3" style="display:none">
-  <p class="step-eyebrow">Step 3 of 9</p>
+  <p class="step-eyebrow">Step 3 of 10</p>
   <h1 class="step-title">Social proof</h1>
   <p class="step-desc">Your customer reputation — used to ground AI responses about your business.</p>
 
@@ -612,14 +634,78 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
   <div class="nav-row">
     <button class="btn btn-ghost" onclick="goBack(3)">← Back</button>
     <button class="btn btn-primary" onclick="goNext(3)">
+      <span class="btn-label">Next →</span>
+    </button>
+  </div>
+</div>
+
+<!-- ══ STEP 4 — CREDENTIALS (conditional) ═══════════════════════════════════ -->
+<div class="card" id="step-4" style="display:none">
+  <p class="step-eyebrow">Step 4 of 10</p>
+  <h1 class="step-title">Credentials</h1>
+  <p class="step-desc">Optional but strongly recommended for home services, medical, legal, and financial businesses. AI responses will attribute these with a "consumers can verify via the appropriate licensing board" hint.</p>
+
+  <div class="field">
+    <label>Licensed?</label>
+    <!-- Hidden input mirrors the selected radio-opt for easy programmatic read/verification -->
+    <input type="hidden" id="biz-licensed" value="" />
+    <div class="radio-group">
+      <div class="radio-opt" onclick="setLicensed('yes')" data-val="yes">
+        <div class="radio-dot"><div class="radio-dot-inner"></div></div>
+        Yes
+      </div>
+      <div class="radio-opt" onclick="setLicensed('no')" data-val="no">
+        <div class="radio-dot"><div class="radio-dot-inner"></div></div>
+        No
+      </div>
+      <div class="radio-opt" onclick="setLicensed('na')" data-val="na">
+        <div class="radio-dot"><div class="radio-dot-inner"></div></div>
+        Not applicable
+      </div>
+    </div>
+  </div>
+
+  <div class="field" id="f-licenses" style="display:none">
+    <label>License numbers</label>
+    <div id="licenses-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px"></div>
+    <button class="btn btn-ghost" style="font-size:var(--tx-sm);padding:6px 14px" onclick="addLicenseEntry()">
+      + Add license
+    </button>
+    <p class="hint" style="font-size:var(--tx-xs);color:var(--muted);margin-top:6px">Name + number for each license. E.g., "TX Contractors Board" / "12345".</p>
+  </div>
+
+  <div class="field">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+      <input type="checkbox" id="biz-insured" style="accent-color:var(--accent)"> Insured
+    </label>
+  </div>
+
+  <div class="field">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+      <input type="checkbox" id="biz-bonded" style="accent-color:var(--accent)"> Bonded
+    </label>
+  </div>
+
+  <div class="field">
+    <label>Certifications</label>
+    <div id="certifications-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px"></div>
+    <button class="btn btn-ghost" id="cert-add-btn" style="font-size:var(--tx-sm);padding:6px 14px" onclick="addCertificationEntry()">
+      + Add certification (max 5)
+    </button>
+    <p class="hint" style="font-size:var(--tx-xs);color:var(--muted);margin-top:6px">Industry or trade certifications. E.g., "NATE Certified", "EPA Section 608".</p>
+  </div>
+
+  <div class="nav-row">
+    <button class="btn btn-ghost" onclick="goBack(4)">← Back</button>
+    <button class="btn btn-primary" onclick="goNext(4)">
       <span class="btn-label">Next: Coverage Area →</span>
     </button>
   </div>
 </div>
 
-<!-- ══ STEP 4 — COVERAGE AREA ═══════════════════════════════════════════════ -->
-<div class="card" id="step-4" style="display:none">
-  <p class="step-eyebrow">Step 4 of 9</p>
+<!-- ══ STEP 5 — COVERAGE AREA ═══════════════════════════════════════════════ -->
+<div class="card" id="step-5" style="display:none">
+  <p class="step-eyebrow">Step 5 of 10</p>
   <h1 class="step-title">Coverage area</h1>
   <p class="step-desc">Where do you serve customers? AI will use this to match you with local queries.</p>
 
@@ -651,16 +737,16 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
   </div>
 
   <div class="nav-row">
-    <button class="btn btn-ghost" onclick="goBack(4)">← Back</button>
-    <button class="btn btn-primary" onclick="goNext(4)">
+    <button class="btn btn-ghost" onclick="goBack(5)">← Back</button>
+    <button class="btn btn-primary" onclick="goNext(5)">
       <span class="btn-label">Next: Hours →</span>
     </button>
   </div>
 </div>
 
-<!-- ══ STEP 5 — OPERATING HOURS ═════════════════════════════════════════════ -->
-<div class="card" id="step-5" style="display:none">
-  <p class="step-eyebrow">Step 5 of 9</p>
+<!-- ══ STEP 6 — OPERATING HOURS ═════════════════════════════════════════════ -->
+<div class="card" id="step-6" style="display:none">
+  <p class="step-eyebrow">Step 6 of 10</p>
   <h1 class="step-title">Operating hours</h1>
   <p class="step-desc">Let AI know when you're available so it can set accurate expectations.</p>
 
@@ -718,17 +804,24 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
     </div>
   </div>
 
+  <div class="field">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+      <input type="checkbox" id="biz-emergency-24-7" style="accent-color:var(--accent)"> Available for emergency / after-hours service?
+    </label>
+    <p class="hint" style="font-size:var(--tx-xs);color:var(--muted);margin-top:6px">Check if you respond to 2am "burst pipe" type calls. Shapes how AI assistants route urgent queries to you.</p>
+  </div>
+
   <div class="nav-row">
-    <button class="btn btn-ghost" onclick="goBack(5)">← Back</button>
-    <button class="btn btn-primary" onclick="goNext(5)">
+    <button class="btn btn-ghost" onclick="goBack(6)">← Back</button>
+    <button class="btn btn-primary" onclick="goNext(6)">
       <span class="btn-label">Next: Lead Routing →</span>
     </button>
   </div>
 </div>
 
-<!-- ══ STEP 6 — LEADS (was step 3) ═════════════════════════════════════════ -->
-<div class="card" id="step-6" style="display:none">
-  <p class="step-eyebrow">Step 6 of 9</p>
+<!-- ══ STEP 7 — LEADS ══════════════════════════════════════════════════════ -->
+<div class="card" id="step-7" style="display:none">
+  <p class="step-eyebrow">Step 7 of 10</p>
   <h1 class="step-title">Customers &amp; lead routing</h1>
   <p class="step-desc">Tell AI who to send your way and where to route them when they're ready.</p>
 
@@ -782,16 +875,16 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
   </div>
 
   <div class="nav-row">
-    <button class="btn btn-ghost" onclick="goBack(6)">← Back</button>
-    <button class="btn btn-primary" onclick="goNext(6)">
+    <button class="btn btn-ghost" onclick="goBack(7)">← Back</button>
+    <button class="btn btn-primary" onclick="goNext(7)">
       <span class="btn-label">Next: Pick Plan →</span>
     </button>
   </div>
 </div>
 
-<!-- ══ STEP 7 — PLAN SELECTION ═════════════════════════════════════════════ -->
-<div class="card" id="step-7" style="display:none">
-  <p class="step-eyebrow">Step 7 of 9</p>
+<!-- ══ STEP 8 — PLAN SELECTION ═════════════════════════════════════════════ -->
+<div class="card" id="step-8" style="display:none">
+  <p class="step-eyebrow">Step 8 of 10</p>
   <h1 class="step-title">Pick your plan</h1>
   <p class="step-desc">Choose the plan that fits your business. You can upgrade or downgrade any time.</p>
 
@@ -830,16 +923,16 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
   </div>
 
   <div class="nav-row">
-    <button class="btn btn-ghost" onclick="goBack(7)">← Back</button>
-    <button class="btn btn-primary" onclick="goNext(7)">
+    <button class="btn btn-ghost" onclick="goBack(8)">← Back</button>
+    <button class="btn btn-primary" onclick="goNext(8)">
       <span class="btn-label">Next: Create Account →</span>
     </button>
   </div>
 </div>
 
-<!-- ══ STEP 8 — ACCOUNT CREATION ═══════════════════════════════════════════ -->
-<div class="card" id="step-8" style="display:none">
-  <p class="step-eyebrow">Step 8 of 9</p>
+<!-- ══ STEP 9 — ACCOUNT CREATION ═══════════════════════════════════════════ -->
+<div class="card" id="step-9" style="display:none">
+  <p class="step-eyebrow">Step 9 of 10</p>
   <h1 class="step-title">Create your account</h1>
   <p class="step-desc">Set up your login to access the Advocate dashboard and manage your AI profile.</p>
 
@@ -862,16 +955,16 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
   </div>
 
   <div class="nav-row">
-    <button class="btn btn-ghost" onclick="goBack(8)">← Back</button>
-    <button class="btn btn-primary" onclick="goNext(8)">
+    <button class="btn btn-ghost" onclick="goBack(9)">← Back</button>
+    <button class="btn btn-primary" onclick="goNext(9)">
       <span class="btn-label">Review Profile →</span>
     </button>
   </div>
 </div>
 
-<!-- ══ STEP 9 — REVIEW ═════════════════════════════════════════════════════ -->
-<div class="card" id="step-9" style="display:none">
-  <p class="step-eyebrow">Step 9 of 9</p>
+<!-- ══ STEP 10 — REVIEW ════════════════════════════════════════════════════ -->
+<div class="card" id="step-10" style="display:none">
+  <p class="step-eyebrow">Step 10 of 10</p>
   <h1 class="step-title">Review &amp; confirm</h1>
   <p class="step-desc">Make sure everything looks right before publishing your profile to AI platforms.</p>
 
@@ -919,16 +1012,28 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
       </div>
     </div>
 
+    <!-- Credentials -->
+    <div class="review-section" id="rv-section-credentials" style="display:none">
+      <div class="review-section-hd">
+        <span class="review-section-title">Credentials</span>
+        <button class="edit-link" onclick="goToStep(4)">Edit</button>
+      </div>
+      <div class="review-grid">
+        <div class="rv full"><span class="rv-label">Summary</span><span class="rv-val" id="rv-credentials">—</span></div>
+      </div>
+    </div>
+
     <!-- Coverage -->
     <div class="review-section">
       <div class="review-section-hd">
         <span class="review-section-title">Coverage area &amp; hours</span>
-        <button class="edit-link" onclick="goToStep(4)">Edit</button>
+        <button class="edit-link" onclick="goToStep(5)">Edit</button>
       </div>
       <div class="review-grid">
         <div class="rv full"><span class="rv-label">Service areas</span><span class="rv-val" id="rv-areas">—</span></div>
         <div class="rv"><span class="rv-label">Radius</span><span class="rv-val" id="rv-radius">—</span></div>
         <div class="rv"><span class="rv-label">Hours</span><span class="rv-val" id="rv-hours">—</span></div>
+        <div class="rv"><span class="rv-label">Emergency</span><span class="rv-val" id="rv-emergency">—</span></div>
       </div>
     </div>
 
@@ -936,7 +1041,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
     <div class="review-section">
       <div class="review-section-hd">
         <span class="review-section-title">Customers &amp; lead routing</span>
-        <button class="edit-link" onclick="goToStep(6)">Edit</button>
+        <button class="edit-link" onclick="goToStep(7)">Edit</button>
       </div>
       <div class="review-grid">
         <div class="rv full"><span class="rv-label">Ideal customer</span><span class="rv-val" id="rv-customer">—</span></div>
@@ -950,7 +1055,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
     <div class="review-section">
       <div class="review-section-hd">
         <span class="review-section-title">Plan</span>
-        <button class="edit-link" onclick="goToStep(7)">Edit</button>
+        <button class="edit-link" onclick="goToStep(8)">Edit</button>
       </div>
       <div class="review-grid">
         <div class="rv"><span class="rv-label">Selected plan</span><span class="rv-val" id="rv-plan">Base — $100/mo</span></div>
@@ -961,7 +1066,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
     <div class="review-section">
       <div class="review-section-hd">
         <span class="review-section-title">Account</span>
-        <button class="edit-link" onclick="goToStep(8)">Edit</button>
+        <button class="edit-link" onclick="goToStep(9)">Edit</button>
       </div>
       <div class="review-grid">
         <div class="rv"><span class="rv-label">Email</span><span class="rv-val" id="rv-email">—</span></div>
@@ -984,7 +1089,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
   </div>
 
   <div class="nav-row">
-    <button class="btn btn-ghost" onclick="goBack(9)">← Back</button>
+    <button class="btn btn-ghost" onclick="goBack(10)">← Back</button>
     <button class="btn btn-primary" id="publish-btn" onclick="submitProfile()">
       <span class="btn-label">Publish My Profile</span>
       <div class="spinner"></div>
@@ -1031,8 +1136,19 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 
 <script>
 // ── Constants ──────────────────────────────────────────────────────────────
-const TOTAL_STEPS = 9;
+const TOTAL_STEPS = 10;
+const CREDENTIALS_STEP = 4;
 const DRAFT_KEY = 'advocate_onboarding_draft';
+
+// Industries where the Credentials step is shown. Must match biz-industry <option> values.
+const CREDENTIAL_RELEVANT_INDUSTRIES = [
+  'home_services',
+  'legal',
+  'medical',
+  'financial_services',
+  'real_estate',
+  'other',
+];
 
 // ── State ───────────────────────────────────────────────────────────────────
 const state = {
@@ -1044,6 +1160,11 @@ const state = {
   starRating: null,
   reviewCount: null,
   reviewPlatform: '',
+  licensed: '',
+  insured: false,
+  bonded: false,
+  emergency247: false,
+  timezone: '',
 };
 
 const INDUSTRY_LABELS = {
@@ -1108,21 +1229,34 @@ const PLAN_LABELS = {
 const API_BASE = 'https://advocate-production-2887.up.railway.app';
 
 // ── Navigation ──────────────────────────────────────────────────────────────
+function showsCredentialsStep() {
+  const industry = v('biz-industry');
+  return CREDENTIAL_RELEVANT_INDUSTRIES.indexOf(industry) !== -1;
+}
+
 function goNext(fromStep) {
   if (!validateStep(fromStep)) return;
   saveDraft();
-  goToStep(fromStep + 1);
+  let next = fromStep + 1;
+  if (next === CREDENTIALS_STEP && !showsCredentialsStep()) next = CREDENTIALS_STEP + 1;
+  goToStep(next);
 }
 
 function goBack(fromStep) {
   saveDraft();
-  goToStep(fromStep - 1);
+  let prev = fromStep - 1;
+  if (prev === CREDENTIALS_STEP && !showsCredentialsStep()) prev = CREDENTIALS_STEP - 1;
+  goToStep(prev);
 }
 
 function goToStep(n) {
   // Hide current
   const cur = document.getElementById(`step-${state.step}`);
   if (cur) cur.style.display = 'none';
+
+  // Hide the Credentials progress pip when the industry doesn't call for it
+  const credPip = document.getElementById(`ps-${CREDENTIALS_STEP}`);
+  if (credPip) credPip.style.display = showsCredentialsStep() ? '' : 'none';
 
   // Update progress dots
   for (let i = 1; i <= TOTAL_STEPS; i++) {
@@ -1154,7 +1288,7 @@ function setConsult(val) {
 
 function setLeadType(val) {
   state.leadType = val;
-  document.querySelectorAll('#step-6 .radio-opt').forEach(el => {
+  document.querySelectorAll('#step-7 .radio-opt').forEach(el => {
     el.classList.toggle('selected', el.dataset.val === val);
   });
   document.getElementById('lead-dest-label').textContent = LEAD_DEST_LABELS[val];
@@ -1168,9 +1302,88 @@ function setLeadType(val) {
 
 function setPlan(val) {
   state.plan = val;
-  document.querySelectorAll('#step-7 .radio-opt').forEach(el => {
+  document.querySelectorAll('#step-8 .radio-opt').forEach(el => {
     el.classList.toggle('selected', el.dataset.val === val);
   });
+}
+
+// ── Credentials step helpers ────────────────────────────────────────────────
+function setLicensed(val) {
+  state.licensed = val;
+  const hidden = document.getElementById('biz-licensed');
+  if (hidden) hidden.value = val;
+  document.querySelectorAll('#step-4 .radio-group .radio-opt').forEach(el => {
+    el.classList.toggle('selected', el.dataset.val === val);
+  });
+  const licField = document.getElementById('f-licenses');
+  if (licField) licField.style.display = val === 'yes' ? '' : 'none';
+  // Seed one empty row when switching to yes and none exist yet
+  if (val === 'yes') {
+    const list = document.getElementById('licenses-list');
+    if (list && list.children.length === 0) addLicenseEntry();
+  }
+}
+
+function addLicenseEntry() {
+  const list = document.getElementById('licenses-list');
+  if (!list) return;
+  const row = document.createElement('div');
+  row.className = 'license-entry';
+  row.style.cssText = 'display:flex;align-items:center;gap:8px';
+  row.innerHTML = `
+    <input type="text" class="license-name" placeholder="Issuing body (e.g. TX Contractors Board)" style="flex:2" />
+    <input type="text" class="license-number" placeholder="License #" style="flex:1" />
+    <button class="btn btn-ghost" style="padding:6px 10px;color:var(--red);font-size:var(--tx-sm)" onclick="this.parentElement.remove()">×</button>
+  `;
+  list.appendChild(row);
+}
+
+function addCertificationEntry() {
+  const list = document.getElementById('certifications-list');
+  if (!list) return;
+  if (list.children.length >= 5) return;
+  const row = document.createElement('div');
+  row.className = 'certification-entry';
+  row.style.cssText = 'display:flex;align-items:center;gap:8px';
+  row.innerHTML = `
+    <input type="text" class="certification-input" placeholder='e.g. NATE Certified' style="flex:1" />
+    <button class="btn btn-ghost" style="padding:6px 10px;color:var(--red);font-size:var(--tx-sm)" onclick="removeCertificationEntry(this)">×</button>
+  `;
+  list.appendChild(row);
+  updateCertAddButton();
+}
+
+function removeCertificationEntry(btn) {
+  const entry = btn.parentElement;
+  if (entry) entry.remove();
+  updateCertAddButton();
+}
+
+function updateCertAddButton() {
+  const list = document.getElementById('certifications-list');
+  const btn = document.getElementById('cert-add-btn');
+  if (!list || !btn) return;
+  btn.disabled = list.children.length >= 5;
+  btn.style.opacity = btn.disabled ? '.5' : '';
+  btn.style.pointerEvents = btn.disabled ? 'none' : '';
+}
+
+function getLicenses() {
+  const out = [];
+  document.querySelectorAll('#licenses-list .license-entry').forEach(e => {
+    const n = (e.querySelector('.license-name') || {}).value || '';
+    const num = (e.querySelector('.license-number') || {}).value || '';
+    if (n.trim() || num.trim()) out.push({ name: n.trim(), number: num.trim() });
+  });
+  return out;
+}
+
+function getCertifications() {
+  const out = [];
+  document.querySelectorAll('#certifications-list .certification-input').forEach(inp => {
+    if (inp.value.trim()) out.push(inp.value.trim());
+  });
+  return out;
 }
 
 // ── Array editors ───────────────────────────────────────────────────────────
@@ -1249,9 +1462,9 @@ function validateStep(step) {
     ok = !setError('f-review-platform', !v('biz-review-platform').trim()) && ok;
   }
 
-  // Steps 4,5 are optional — no required fields
+  // Steps 4 (Credentials), 5 (Coverage), 6 (Hours) are optional — no required fields
 
-  if (step === 6) {
+  if (step === 7) {
     ok = !setError('f-ideal-customer', !v('biz-customer').trim())   && ok;
     const dest = v('biz-lead-dest').trim();
     let destBad = !dest;
@@ -1263,7 +1476,7 @@ function validateStep(step) {
     ok = !setError('f-response-time', !v('biz-response').trim()) && ok;
   }
 
-  if (step === 8) {
+  if (step === 9) {
     const email = v('acct-email').trim();
     ok = !setError('f-email', !email || !isValidEmail(email)) && ok;
     ok = !setError('f-fullname', !v('acct-name').trim()) && ok;
@@ -1300,19 +1513,28 @@ document.addEventListener('change', e => {
 // ── Draft Save/Resume ───────────────────────────────────────────────────────
 function saveDraft() {
   try {
+    const insuredEl = document.getElementById('biz-insured');
+    const bondedEl = document.getElementById('biz-bonded');
+    const emergencyEl = document.getElementById('biz-emergency-24-7');
     const draft = {
       step: state.step,
       consultation: state.consultation,
       leadType: state.leadType,
       plan: state.plan,
+      licensed: state.licensed,
+      insured: !!(insuredEl && insuredEl.checked),
+      bonded: !!(bondedEl && bondedEl.checked),
+      emergency247: !!(emergencyEl && emergencyEl.checked),
       fields: {},
       quotes: getQuotes(),
       serviceAreas: getServiceAreas(),
       hours: getHours(),
+      licenses: getLicenses(),
+      certifications: getCertifications(),
       savedAt: Date.now(),
     };
     // Save all input/select/textarea values
-    const ids = ['biz-name','biz-industry','biz-city','biz-state','biz-website',
+    const ids = ['biz-name','biz-industry','biz-city','biz-state','biz-timezone','biz-website',
                  'biz-description','biz-services','biz-pricing','biz-diff',
                  'biz-star-rating','biz-review-count','biz-review-platform',
                  'biz-customer','biz-lead-dest','biz-response','biz-radius',
@@ -1341,6 +1563,45 @@ function loadDraft() {
     if (draft.consultation !== undefined) setConsult(draft.consultation);
     if (draft.leadType) setLeadType(draft.leadType);
     if (draft.plan) setPlan(draft.plan);
+    if (draft.licensed) setLicensed(draft.licensed);
+    const insuredEl = document.getElementById('biz-insured');
+    if (insuredEl && draft.insured) insuredEl.checked = true;
+    const bondedEl = document.getElementById('biz-bonded');
+    if (bondedEl && draft.bonded) bondedEl.checked = true;
+    const emergencyEl = document.getElementById('biz-emergency-24-7');
+    if (emergencyEl && draft.emergency247) emergencyEl.checked = true;
+    // Restore license entries
+    if (draft.licenses && draft.licenses.length > 0) {
+      const list = document.getElementById('licenses-list');
+      if (list) {
+        list.innerHTML = '';
+        draft.licenses.forEach(lic => {
+          addLicenseEntry();
+          const last = list.lastElementChild;
+          if (last) {
+            const nameEl = last.querySelector('.license-name');
+            const numEl = last.querySelector('.license-number');
+            if (nameEl) nameEl.value = lic.name || '';
+            if (numEl) numEl.value = lic.number || '';
+          }
+        });
+      }
+    }
+    // Restore certifications
+    if (draft.certifications && draft.certifications.length > 0) {
+      const list = document.getElementById('certifications-list');
+      if (list) {
+        list.innerHTML = '';
+        draft.certifications.forEach(cert => {
+          addCertificationEntry();
+          const last = list.lastElementChild;
+          if (last) {
+            const inp = last.querySelector('.certification-input');
+            if (inp) inp.value = cert;
+          }
+        });
+      }
+    }
     // Restore quotes
     if (draft.quotes && draft.quotes.length > 0) {
       const list = document.getElementById('quotes-list');
@@ -1457,6 +1718,40 @@ function populateReview() {
     .join(', ') || 'Not set';
   setText('rv-hours', hoursSummary);
 
+  // Emergency / 24-7
+  const emergencyEl = document.getElementById('biz-emergency-24-7');
+  setText('rv-emergency', emergencyEl && emergencyEl.checked ? '✓ Available 24/7' : '—');
+
+  // Credentials — only show section if industry is credential-relevant
+  const credSection = document.getElementById('rv-section-credentials');
+  if (credSection) {
+    if (showsCredentialsStep()) {
+      credSection.style.display = '';
+      const parts = [];
+      if (state.licensed === 'yes') {
+        const licenses = getLicenses();
+        if (licenses.length > 0) {
+          parts.push('Licensed: ' + licenses.map(l => `${l.name}${l.number ? ' #' + l.number : ''}`).join(', '));
+        } else {
+          parts.push('Licensed');
+        }
+      } else if (state.licensed === 'no') {
+        parts.push('Not licensed');
+      } else if (state.licensed === 'na') {
+        parts.push('License not applicable');
+      }
+      const insuredEl = document.getElementById('biz-insured');
+      if (insuredEl && insuredEl.checked) parts.push('Insured');
+      const bondedEl = document.getElementById('biz-bonded');
+      if (bondedEl && bondedEl.checked) parts.push('Bonded');
+      const certs = getCertifications();
+      if (certs.length > 0) parts.push('Certifications: ' + certs.join(', '));
+      setText('rv-credentials', parts.length > 0 ? parts.join(' · ') : 'None added');
+    } else {
+      credSection.style.display = 'none';
+    }
+  }
+
   // Leads
   setText('rv-customer', v('biz-customer') || '—');
   setText('rv-leadtype', LEAD_TYPE_LABELS[state.leadType] || '—');
@@ -1509,6 +1804,9 @@ async function submitProfile() {
   const serviceAreas = getServiceAreas();
   if (serviceAreas.length === 0) serviceAreas.push(`${city}, ${state_val}`);
 
+  // NOTE: timezone is collected client-side but NOT sent to backend until
+  // OnboardingPayloadSchema adds a `timezone` field. See plan file Out-of-scope
+  // item #2 for followup.
   const payload = {
     business_id: slugify(name),
     name,
@@ -1590,10 +1888,27 @@ function startOver() {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
-  ['biz-industry','biz-pricing','biz-review-platform','biz-response','biz-radius'].forEach(id => {
+  ['biz-industry','biz-pricing','biz-review-platform','biz-response','biz-radius','biz-timezone'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.selectedIndex = 0;
   });
+  ['biz-insured','biz-bonded','biz-emergency-24-7'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.checked = false;
+  });
+  // Reset credentials lists
+  const licList = document.getElementById('licenses-list');
+  if (licList) licList.innerHTML = '';
+  const certList = document.getElementById('certifications-list');
+  if (certList) certList.innerHTML = '';
+  updateCertAddButton();
+  // Reset licensed radio selection
+  document.querySelectorAll('#step-4 .radio-group .radio-opt').forEach(el => el.classList.remove('selected'));
+  state.licensed = '';
+  state.insured = false;
+  state.bonded = false;
+  state.emergency247 = false;
+  state.timezone = '';
   state.description = '';
   state.starRating = null;
   state.reviewCount = null;
@@ -1601,6 +1916,8 @@ function startOver() {
   setConsult(true);
   setLeadType('website');
   setPlan('base');
+  // Re-apply browser timezone auto-detect
+  applyDetectedTimezone();
   document.getElementById('confirm-check').checked = false;
 
   document.getElementById('screen-success').style.display = 'none';
@@ -1616,6 +1933,41 @@ function startOver() {
   }
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+
+// ── Timezone auto-detect ────────────────────────────────────────────────────
+function applyDetectedTimezone() {
+  const sel = document.getElementById('biz-timezone');
+  if (!sel) return;
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const match = Array.from(sel.options).find(o => o.value === tz);
+    sel.value = match ? tz : 'other';
+  } catch {
+    sel.value = 'other';
+  }
+  state.timezone = sel.value;
+}
+applyDetectedTimezone();
+
+const tzEl = document.getElementById('biz-timezone');
+if (tzEl) {
+  tzEl.addEventListener('change', () => { state.timezone = tzEl.value; saveDraft(); });
+}
+
+// Keep the Credentials progress pip in sync when industry changes
+const industryEl = document.getElementById('biz-industry');
+if (industryEl) {
+  industryEl.addEventListener('change', () => {
+    const credPip = document.getElementById(`ps-${CREDENTIALS_STEP}`);
+    if (credPip) credPip.style.display = showsCredentialsStep() ? '' : 'none';
+  });
+}
+
+// Initial visibility of the Credentials pip (hidden until an industry is picked)
+(() => {
+  const credPip = document.getElementById(`ps-${CREDENTIALS_STEP}`);
+  if (credPip) credPip.style.display = showsCredentialsStep() ? '' : 'none';
+})();
 
 // ── Draft resume on load ────────────────────────────────────────────────────
 const hasDraft = loadDraft();
