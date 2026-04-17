@@ -1770,14 +1770,227 @@ function setText(id, val) {
 }
 
 // ── Slug generation ─────────────────────────────────────────────────────────
+// Must match the Worker endpoint's regex: /^[a-z0-9][a-z0-9-]*[a-z0-9]?$/, 2-60 chars.
 function slugify(name) {
-  return name.toLowerCase()
+  return name.toLowerCase().trim()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 60);
+    .slice(0, 60)
+    .replace(/-+$/, '');
+}
+
+// ── Step-to-field mapping (for validation error → goToStep navigation) ──────
+const FIELD_TO_STEP = {
+  name: 1, description: 1, category: 1, location: 1, timezone: 1, website: 1,
+  services: 2, pricing_tier: 2,
+  star_rating: 3, review_count: 3, review_platform: 3,
+  credentials_json: 4,
+  service_area_keywords: 5, service_radius_miles: 5,
+  hours_json: 6,
+  lead_routing_json: 7,
+  plan: 8,
+  email: 9, password: 9,
+};
+
+// ── Map review_platform <option> value → ratings_json key ───────────────────
+// Schema accepts google|yelp|facebook|bbb. Any other value (e.g. "other") is
+// dropped rather than sent as an unknown key, so we don't send ratings_json at
+// all in that case.
+const REVIEW_PLATFORM_TO_RATINGS_KEY = {
+  google: 'google',
+  yelp: 'yelp',
+  facebook: 'facebook',
+  bbb: 'bbb',
+};
+
+// ── Map review_platform <option> value → customer_quotes_json.source ────────
+// Schema enum is google|yelp|facebook|bbb|direct. Anything else → 'direct'.
+const REVIEW_PLATFORM_TO_QUOTE_SOURCE = {
+  google: 'google',
+  yelp: 'yelp',
+  facebook: 'facebook',
+  bbb: 'bbb',
+};
+
+// ── Build the /api/onboard/public payload from current wizard state ─────────
+// Pure — reads DOM + module state, returns a plain object. Exposed for the
+// optional ?debug=1 harness at the bottom of this script.
+function buildOnboardPayload() {
+  const name = v('biz-name').trim();
+  const city = v('biz-city').trim();
+  const state_val = v('biz-state').trim().toUpperCase();
+  const category = v('biz-industry').trim();
+  const description = v('biz-description').trim();
+  const website = v('biz-website').trim();
+  const services_text = v('biz-services').trim();
+  const pricing_tier_raw = v('biz-pricing');
+  const differentiators_text = v('biz-diff').trim();
+  const starRatingRaw = v('biz-star-rating').trim();
+  const reviewCountRaw = v('biz-review-count').trim();
+  const review_platform = v('biz-review-platform');
+  const leadDest = v('biz-lead-dest').trim();
+  const acct_email = v('acct-email').trim().toLowerCase();
+  const radiusRaw = v('biz-radius');
+
+  // services: split the free-text Step 2 textarea on newlines/commas, drop empties
+  const services = services_text
+    .split(/\n|,/)
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  // Outer location string — schema accepts a single string, so we join city/state
+  const location = [city, state_val].filter(Boolean).join(', ');
+
+  // ── hours_json — 7-day grid, rows ordered Mon..Sun ────────────────────────
+  const dayKeys = ['mon','tue','wed','thu','fri','sat','sun'];
+  const rows = document.querySelectorAll('.hours-row');
+  const hours_json = {};
+  let hoursEverOpen = false;
+  rows.forEach((row, i) => {
+    const key = dayKeys[i];
+    if (!key) return;
+    const closed = row.querySelector('.hours-closed');
+    const open = row.querySelector('.hours-open');
+    const close = row.querySelector('.hours-close');
+    if (closed && closed.checked) {
+      hours_json[key] = null;
+    } else if (open && close && open.value && close.value) {
+      hours_json[key] = { open: open.value, close: close.value };
+      hoursEverOpen = true;
+    } else {
+      hours_json[key] = null;
+    }
+  });
+  const emergencyEl = document.getElementById('biz-emergency-24-7');
+  hours_json.emergency_24_7 = !!(emergencyEl && emergencyEl.checked);
+
+  // ── credentials_json — only if the industry shows the step ────────────────
+  let credentials_json;
+  if (showsCredentialsStep()) {
+    const licenses = getLicenses();
+    const certifications = getCertifications();
+    const insuredEl = document.getElementById('biz-insured');
+    const bondedEl = document.getElementById('biz-bonded');
+    credentials_json = {
+      licenses,
+      insured: !!(insuredEl && insuredEl.checked),
+      bonded: !!(bondedEl && bondedEl.checked),
+      certifications,
+    };
+  }
+
+  // ── lead_routing_json ─────────────────────────────────────────────────────
+  // Step 7 "lead-dest" radio is website|booking|phone|email. Schema only
+  // allows phone|email|form|text. website/booking both map to form with
+  // form_url set; email → email field; phone → phone field.
+  let lead_routing_json;
+  let outer_referral_url = '';
+  if (leadDest) {
+    if (state.leadType === 'email') {
+      lead_routing_json = { preferred_channel: 'email', email: leadDest };
+      outer_referral_url = `mailto:${leadDest}`;
+    } else if (state.leadType === 'phone') {
+      lead_routing_json = { preferred_channel: 'phone', phone: leadDest };
+      outer_referral_url = `tel:${leadDest}`;
+    } else {
+      // website or booking — both land as form with form_url
+      if (isValidUrl(leadDest)) {
+        lead_routing_json = { preferred_channel: 'form', form_url: leadDest };
+        outer_referral_url = leadDest;
+      }
+    }
+  }
+
+  // ── customer_quotes_json ──────────────────────────────────────────────────
+  // Wizard collects { text, name, title } per entry. Schema wants
+  // { quote, author, source }. Map title into author if present else fall
+  // back to name, and use review_platform as the source.
+  const quoteSource = REVIEW_PLATFORM_TO_QUOTE_SOURCE[review_platform] || 'direct';
+  const wizardQuotes = getQuotes();
+  const customer_quotes_json = wizardQuotes
+    .filter(q => (q.text || '').trim() && (q.name || '').trim())
+    .map(q => ({
+      quote: q.text.trim().slice(0, 500),
+      author: (q.name.trim() + (q.title ? `, ${q.title.trim()}` : '')).slice(0, 120),
+      source: quoteSource,
+    }));
+
+  // ── ratings_json — keyed by review_platform if it maps to a known key ─────
+  let ratings_json;
+  const starRating = parseFloat(starRatingRaw);
+  const reviewCount = parseInt(reviewCountRaw, 10);
+  const ratingsKey = REVIEW_PLATFORM_TO_RATINGS_KEY[review_platform];
+  if (ratingsKey && Number.isFinite(starRating) && Number.isFinite(reviewCount)) {
+    ratings_json = { [ratingsKey]: { rating: starRating, count: reviewCount } };
+  }
+
+  // ── pricing_tier — schema enum budget|mid-range|premium ───────────────────
+  // The Step 2 dropdown uses legacy bucket values (under_500, 500_2000, ...).
+  // Map each to the nearest enum. Drop if it doesn't map.
+  const PRICING_TIER_MAP = {
+    under_500:    'budget',
+    '500_2000':   'budget',
+    '2000_5000':  'mid-range',
+    '5000_plus':  'premium',
+    project_based:'mid-range',
+  };
+  const pricing_tier = PRICING_TIER_MAP[pricing_tier_raw];
+
+  // ── service_radius_miles ──────────────────────────────────────────────────
+  let service_radius_miles;
+  const radiusN = parseInt(radiusRaw, 10);
+  if (Number.isFinite(radiusN) && radiusN > 0) service_radius_miles = radiusN;
+
+  // ── service_area_keywords — join any Step 5 service-area entries ──────────
+  const serviceAreas = getServiceAreas();
+  const service_area_keywords = serviceAreas.length > 0 ? serviceAreas.join(', ') : undefined;
+
+  // ── Compose the profile object — only include keys with real values ───────
+  const profile = {
+    name,
+    description,
+    category,
+    location,
+    services,
+    star_rating: Number.isFinite(starRating) ? starRating : undefined,
+    review_count: Number.isFinite(reviewCount) ? reviewCount : undefined,
+    plan: state.plan,
+  };
+  if (website && isValidUrl(website)) profile.website = website;
+  if (pricing_tier) profile.pricing_tier = pricing_tier;
+  if (credentials_json) profile.credentials_json = credentials_json;
+  if (hoursEverOpen || hours_json.emergency_24_7) profile.hours_json = hours_json;
+  if (service_radius_miles) profile.service_radius_miles = service_radius_miles;
+  if (service_area_keywords) profile.service_area_keywords = service_area_keywords;
+  if (lead_routing_json) profile.lead_routing_json = lead_routing_json;
+  if (customer_quotes_json.length > 0) profile.customer_quotes_json = customer_quotes_json;
+  if (ratings_json) profile.ratings_json = ratings_json;
+  if (differentiators_text) profile.differentiators_text = differentiators_text.slice(0, 1500);
+
+  const outer = {
+    slug: slugify(name),
+    name,
+    email: acct_email,
+    plan: state.plan,
+    profile,
+  };
+  if (outer_referral_url && /^https?:\/\//.test(outer_referral_url)) {
+    outer.referral_url = outer_referral_url;
+  }
+  return outer;
 }
 
 // ── Submission ──────────────────────────────────────────────────────────────
+// Endpoint: POST https://customers.advocatemcp.com/api/onboard/public
+// On success: redirects the browser to Stripe Checkout (data.checkoutUrl).
+// On validation_error: parses the ';'-joined error string, maps each field
+// back to its owning step via FIELD_TO_STEP, navigates to the earliest
+// offending step, and shows the errors inline in the error banner.
+//
+// NOTE: timezone is collected client-side but NOT sent to backend — schema
+// does not yet have a timezone field. See plan out-of-scope item #2.
+const ONBOARD_ENDPOINT = 'https://customers.advocatemcp.com/api/onboard/public';
+
 async function submitProfile() {
   if (!document.getElementById('confirm-check').checked) {
     document.getElementById('confirm-check').focus();
@@ -1790,80 +2003,75 @@ async function submitProfile() {
   const btn = document.getElementById('publish-btn');
   btn.classList.add('loading');
   btn.disabled = true;
-  document.getElementById('submit-error').classList.remove('show');
+  const errBanner = document.getElementById('submit-error');
+  errBanner.classList.remove('show');
 
-  const name = v('biz-name').trim();
-  const city = v('biz-city').trim();
-  const state_val = v('biz-state').trim().toUpperCase();
-  const leadDest = v('biz-lead-dest').trim();
-
-  let referralUrl = leadDest;
-  if (state.leadType === 'phone') referralUrl = `tel:${leadDest}`;
-  if (state.leadType === 'email') referralUrl = `mailto:${leadDest}`;
-
-  const serviceAreas = getServiceAreas();
-  if (serviceAreas.length === 0) serviceAreas.push(`${city}, ${state_val}`);
-
-  // NOTE: timezone is collected client-side but NOT sent to backend until
-  // OnboardingPayloadSchema adds a `timezone` field. See plan file Out-of-scope
-  // item #2 for followup.
-  const payload = {
-    business_id: slugify(name),
-    name,
-    category: v('biz-industry'),
-    location: {
-      city,
-      state: state_val,
-      service_areas: serviceAreas,
-    },
-    contact: {
-      website:     state.leadType === 'website' ? leadDest : (v('biz-website').trim() || ''),
-      booking_url: state.leadType === 'booking' ? leadDest : '',
-      phone:       state.leadType === 'phone'   ? leadDest : '',
-      email:       state.leadType === 'email'   ? leadDest : '',
-    },
-    referral_url: referralUrl,
-    services: [
-      {
-        name: 'Our Services',
-        description: v('biz-services').trim(),
-        price_range: PRICING_LABELS[v('biz-pricing')] || '',
-      }
-    ],
-    pricing_tier: v('biz-pricing'),
-    free_consultation: state.consultation,
-    differentiators: v('biz-diff').trim() ? [v('biz-diff').trim()] : [],
-    ideal_customer: v('biz-customer').trim(),
-    response_time: RESPONSE_LABELS[v('biz-response')] || '',
-    availability: RESPONSE_LABELS[v('biz-response')] || '',
-    quotes: getQuotes(),
-    hours: getHours(),
-    plan: state.plan,
-    account: {
-      email: v('acct-email').trim(),
-      full_name: v('acct-name').trim(),
-    },
-    onboarded_via: 'advocatemcp_wizard_v2',
-  };
+  const payload = buildOnboardPayload();
 
   try {
-    const res = await fetch(`${API_BASE}/api/businesses`, {
+    const res = await fetch(ONBOARD_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
 
-    if (res.ok || res.status === 409) {
+    let data = null;
+    try { data = await res.json(); } catch {}
+
+    if (res.ok && data && data.checkoutUrl) {
       clearDraft();
-      showSuccess();
+      // Hand the browser off to Stripe Checkout. complete.html picks up the
+      // session_id on return and polls /api/onboard/session/:id.
+      window.location.href = data.checkoutUrl;
       return;
     }
 
-    throw new Error(`${res.status}`);
+    // Validation error from Worker: { error: "validation_error", message: "field: reason; field2: reason" }
+    if (res.status === 400 && data && data.error === 'validation_error') {
+      showValidationErrors(data.message || '');
+      btn.classList.remove('loading');
+      btn.disabled = false;
+      return;
+    }
+
+    // Anything else — show the generic banner with whatever server text we got
+    const msg = (data && (data.message || data.error)) || `Server error (HTTP ${res.status})`;
+    showSubmitError(msg);
+    btn.classList.remove('loading');
+    btn.disabled = false;
   } catch (err) {
     btn.classList.remove('loading');
     btn.disabled = false;
-    document.getElementById('submit-error').classList.add('show');
+    showSubmitError((err && err.message) ? `Network error: ${err.message}` : 'Network error');
+  }
+}
+
+function showSubmitError(msg) {
+  const banner = document.getElementById('submit-error');
+  const span = banner.querySelector('span');
+  if (span) span.textContent = msg;
+  banner.classList.add('show');
+}
+
+function showValidationErrors(joined) {
+  // Worker joins with '; '. Each part looks like "description: required string"
+  // or "slug (lowercase alphanumeric + hyphens, 2-60 chars)".
+  const parts = joined.split(/;\s*/).map(s => s.trim()).filter(Boolean);
+  let earliestStep = Infinity;
+  for (const part of parts) {
+    const fieldName = part.split(/[\s:(]/)[0];
+    const step = FIELD_TO_STEP[fieldName];
+    if (typeof step === 'number' && step < earliestStep) earliestStep = step;
+  }
+  const label = parts.length > 0
+    ? `Please fix: ${parts.join('; ')}`
+    : 'Please review your answers and try again.';
+  showSubmitError(label);
+  if (Number.isFinite(earliestStep)) {
+    // Skip credentials step if the industry doesn't show it
+    let target = earliestStep;
+    if (target === CREDENTIALS_STEP && !showsCredentialsStep()) target = CREDENTIALS_STEP + 1;
+    goToStep(target);
   }
 }
 
@@ -1978,6 +2186,12 @@ if (hasDraft) {
   banner.innerHTML = '✓ Draft restored <button onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;padding:0 0 0 4px">×</button>';
   document.body.appendChild(banner);
   setTimeout(() => { if (banner.parentElement) banner.remove(); }, 4000);
+}
+
+// ── Debug harness — ?debug=1 logs the payload builder output to console ─────
+if (window.location.search.includes('debug=1')) {
+  window.__buildOnboardPayload = buildOnboardPayload;
+  console.log('[advocate onboarding] debug mode — call __buildOnboardPayload() to inspect payload');
 }
 </script>
 </body>
