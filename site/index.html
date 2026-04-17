@@ -162,7 +162,9 @@ img,svg{display:block}
 .ln-hero{
   position:relative;overflow:hidden;
   padding:120px 40px 100px;
+  min-height:90vh;
   text-align:center;
+  display:flex;flex-direction:column;justify-content:center;
 }
 .ln-hero-bg{
   position:absolute;inset:0;z-index:0;
@@ -739,7 +741,7 @@ tr:hover td{background:var(--surface-2)}
   .ln-nav{padding:0 20px}
   .ln-nav-links,.ln-nav-actions{display:none}
   .ln-ham{display:flex}
-  .ln-hero{padding:72px 20px 60px}
+  .ln-hero{padding:72px 20px 60px;min-height:auto}
   .ln-h1{font-size:clamp(2.5rem,8vw,3.5rem)}
   .ln-browser{display:none}
   .ln-hero-proof{margin-bottom:0}
@@ -2081,7 +2083,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 </script>
-<script type="module" src="/js/hero-scene.js"></script>
+<script type="module" src="/js/earth-hero-scene.js"></script>
 <script type="module" src="/js/network-scene.js"></script>
 </body>
 </html>
