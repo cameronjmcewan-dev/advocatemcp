@@ -9,5 +9,6 @@ GOOGLE-SPECIFIC FORMATTING (Googlebot, Google-Extended):
 - Repeat the business name and city at least twice for entity anchoring.
 - Avoid conversational filler. Google excerpts the densest fact-per-word passage.
 - Target 90–150 words total.
+- Preserve self-reported attribution ("reports", "self-reported") when citing ratings, review counts, years in business, or differentiators — even in terse bullets. For credentials, keep the verify-hint parenthetical from the profile.
 `.trim(),
 };

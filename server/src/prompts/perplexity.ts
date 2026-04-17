@@ -9,5 +9,6 @@ PERPLEXITY-SPECIFIC FORMATTING:
 - Reference the business name at least twice by its exact spelling so Perplexity can anchor citations.
 - Avoid meta-commentary ("I'm an AI", "based on available information"). Perplexity strips hedges and cites the rest.
 - Keep the total response under 180 words; Perplexity truncates long responses.
+- Keep self-reported attribution ("reports", "self-reported", "describes as", "states") intact when citing ratings, review counts, years in business, or differentiators. For credentials, preserve the verify-hint parenthetical when present in the profile.
 `.trim(),
 };

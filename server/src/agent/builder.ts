@@ -9,6 +9,38 @@ function parseJsonSafe<T = unknown>(raw: string | null): T | null {
   try { return JSON.parse(raw) as T; } catch { return null; }
 }
 
+/**
+ * Frame a self-reported fact with attribution so downstream AI responses
+ * preserve the "self-reported" quality rather than asserting it as verified.
+ * Phase 6 of the onboarding v2 plan.
+ */
+function formatSelfReported(
+  label: string,
+  value: string | number,
+  opts: { verb?: string; verifyHint?: string } = {}
+): string {
+  const verb = opts.verb ?? "reports";
+  const base = `- ${label}: ${verb} ${value}`;
+  return opts.verifyHint ? `${base} (${opts.verifyHint})` : base;
+}
+
+/**
+ * Return the first-populated review platform label from ratings_json, or
+ * empty string if none. Used to label the star_rating source when we surface
+ * a self-reported summary ("reports 4.9/5 across 127 Google reviews").
+ */
+function reviewPlatformLabel(business: BusinessRow): string {
+  const ratings = parseJsonSafe<{
+    google?: unknown; yelp?: unknown; facebook?: unknown; bbb?: unknown;
+  }>(business.ratings_json);
+  if (!ratings) return "";
+  if (ratings.google) return "Google";
+  if (ratings.yelp) return "Yelp";
+  if (ratings.facebook) return "Facebook";
+  if (ratings.bbb) return "BBB";
+  return "";
+}
+
 export type QueryIntent =
   | "best_top"
   | "emergency"
@@ -38,22 +70,45 @@ export function buildSystemPrompt(
     `- Description: ${business.description}`,
     `- Services: ${services}`,
   ];
+  // Tier 1 (assert directly) — objective business-action facts.
   if (business.category) profileLines.push(`- Category: ${business.category}`);
   if (business.location) profileLines.push(`- Location: ${business.location}`);
-  if (business.star_rating != null)
+
+  // Tier 2 (attribute softly) — self-reported metrics.
+  if (business.star_rating != null) {
+    const platform = reviewPlatformLabel(business);
+    const reviewsSuffix = business.review_count
+      ? ` across ${business.review_count} ${platform ? `${platform} ` : ""}reviews`
+      : "";
     profileLines.push(
-      `- Rating: ${business.star_rating}/5${business.review_count ? ` (${business.review_count} reviews)` : ""}`
+      formatSelfReported("Rating", `${business.star_rating}/5${reviewsSuffix}`),
     );
-  if (business.years_in_business)
-    profileLines.push(`- Years in business: ${business.years_in_business}`);
+  }
+  if (business.years_in_business) {
+    profileLines.push(
+      formatSelfReported("Years in business", business.years_in_business, {
+        verb: "states they've been in business",
+      }),
+    );
+  }
   if (business.top_services)
     profileLines.push(`- Top services: ${business.top_services}`);
   if (business.availability)
     profileLines.push(`- Availability: ${business.availability}`);
-  if (business.differentiator)
-    profileLines.push(`- What sets them apart: ${business.differentiator}`);
-  if (business.certifications)
-    profileLines.push(`- Certifications: ${business.certifications}`);
+  if (business.differentiator) {
+    profileLines.push(
+      formatSelfReported("Differentiators", business.differentiator, {
+        verb: "describes as",
+      }),
+    );
+  }
+  if (business.certifications) {
+    profileLines.push(
+      formatSelfReported("Certifications", business.certifications, {
+        verb: "holds (self-reported)",
+      }),
+    );
+  }
   if (business.pricing_tier)
     profileLines.push(`- Pricing tier: ${business.pricing_tier}`);
   if (business.pricing)
@@ -72,31 +127,58 @@ export function buildSystemPrompt(
   }>(business.hours_json);
   if (hours?.emergency_24_7) profileLines.push(`- Availability: 24/7 emergency service`);
 
+  // Tier 3 (attribute + verify hint) — credentials the business self-asserts.
   const credentials = parseJsonSafe<{
     licenses?: Array<{ name: string; number: string }>;
     insured?: boolean; bonded?: boolean; certifications?: string[];
   }>(business.credentials_json);
   if (credentials) {
     if (credentials.licenses?.length) {
+      const hint =
+        "consumers can verify via the appropriate state licensing board";
+      for (const lic of credentials.licenses) {
+        const value = lic.number ? `"${lic.name} #${lic.number}"` : `"${lic.name}"`;
+        profileLines.push(
+          formatSelfReported("Licensed", value, { verb: "states", verifyHint: hint }),
+        );
+      }
+    }
+    if (credentials.insured) {
+      profileLines.push(formatSelfReported("Insured", "yes", { verb: "states" }));
+    }
+    if (credentials.bonded) {
+      profileLines.push(formatSelfReported("Bonded", "yes", { verb: "states" }));
+    }
+    if (credentials.certifications?.length) {
       profileLines.push(
-        `- Licenses: ${credentials.licenses.map((l) => l.number ? `${l.name} #${l.number}` : l.name).join("; ")}`,
+        formatSelfReported("Certifications", credentials.certifications.join(", "), {
+          verb: "holds (self-reported)",
+        }),
       );
     }
-    const trust: string[] = [];
-    if (credentials.insured) trust.push("insured");
-    if (credentials.bonded) trust.push("bonded");
-    if (trust.length) profileLines.push(`- Credentials: ${trust.join(", ")}`);
   }
 
+  // Ratings from external platforms — still self-reported until we verify them
+  // via the platform API. Frame as "reports" so downstream responses attribute.
   const ratings = parseJsonSafe<{
     google?: { rating: number; count: number };
     yelp?: { rating: number; count: number };
   }>(business.ratings_json);
   if (ratings?.google) {
-    profileLines.push(`- Google rating: ${ratings.google.rating}/5 (${ratings.google.count} reviews)`);
+    profileLines.push(
+      formatSelfReported(
+        "Google rating",
+        `${ratings.google.rating}/5 across ${ratings.google.count} reviews`,
+      ),
+    );
   }
   if (ratings?.yelp) {
-    profileLines.push(`- Yelp rating: ${ratings.yelp.rating}/5 (${ratings.yelp.count} reviews)`);
+    profileLines.push(
+      formatSelfReported(
+        "Yelp rating",
+        `${ratings.yelp.rating}/5 across ${ratings.yelp.count} reviews`,
+      ),
+    );
   }
 
   const pricingV2 = parseJsonSafe<{
@@ -113,7 +195,11 @@ export function buildSystemPrompt(
   if (pricingV2?.free_estimates) profileLines.push(`- Free estimates offered`);
 
   if (business.differentiators_text) {
-    profileLines.push(`- What sets them apart: ${business.differentiators_text}`);
+    profileLines.push(
+      formatSelfReported("Differentiators", `"${business.differentiators_text}"`, {
+        verb: "describes as",
+      }),
+    );
   }
   if (business.guarantee_text) profileLines.push(`- Guarantee: ${business.guarantee_text}`);
 

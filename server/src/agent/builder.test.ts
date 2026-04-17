@@ -124,20 +124,28 @@ describe("buildSystemPrompt — per-bot emphasis", () => {
     expect(p).toMatch(/TRAINING-CRAWLER FORMATTING/);
   });
 
-  it("omits per-bot section when crawler is unknown", () => {
+  it("falls back to default attribution-framing block when crawler is unknown", () => {
+    // Phase 6: default block now carries a generic self-reported attribution
+    // instruction so unknown crawlers still preserve the "reports" framing.
     const p = buildSystemPrompt(mkBiz(), "general", "RandomBot/1.0");
-    expect(p).not.toMatch(/CRAWLER-SPECIFIC FORMATTING/);
-    expect(p).not.toMatch(/SPECIFIC FORMATTING/);
+    expect(p).toMatch(/CRAWLER-SPECIFIC FORMATTING/);
+    expect(p).toMatch(/GENERAL ATTRIBUTION FRAMING/);
+    // But none of the named-bot blocks leak in.
+    expect(p).not.toMatch(/PERPLEXITY-SPECIFIC/);
+    expect(p).not.toMatch(/OPENAI-SPECIFIC/);
+    expect(p).not.toMatch(/CLAUDE-SPECIFIC/);
+    expect(p).not.toMatch(/GOOGLE-SPECIFIC/);
+    expect(p).not.toMatch(/TRAINING-CRAWLER/);
   });
 
-  it("omits per-bot section when crawler is null", () => {
+  it("falls back to default attribution-framing block when crawler is null", () => {
     const p = buildSystemPrompt(mkBiz(), "general", null);
-    expect(p).not.toMatch(/CRAWLER-SPECIFIC FORMATTING/);
+    expect(p).toMatch(/GENERAL ATTRIBUTION FRAMING/);
   });
 
-  it("omits per-bot section when crawler is undefined", () => {
+  it("falls back to default attribution-framing block when crawler is undefined", () => {
     const p = buildSystemPrompt(mkBiz(), "general", undefined);
-    expect(p).not.toMatch(/CRAWLER-SPECIFIC FORMATTING/);
+    expect(p).toMatch(/GENERAL ATTRIBUTION FRAMING/);
   });
 
   it("preserves intent emphasis alongside per-bot block (layering)", () => {
@@ -155,9 +163,17 @@ describe("buildSystemPrompt — per-bot emphasis", () => {
   });
 
   it("backward compatible: two-arg call works with no crawler arg", () => {
-    // This exercises the default-undefined path.
+    // This exercises the default-undefined path. Phase 6: the default block
+    // now carries the generic attribution-framing instruction, so the
+    // CRAWLER-SPECIFIC FORMATTING header does appear — but none of the
+    // named-bot blocks leak in.
     const p = buildSystemPrompt(mkBiz(), "general");
-    expect(p).not.toMatch(/SPECIFIC FORMATTING/);
+    expect(p).not.toMatch(/PERPLEXITY-SPECIFIC/);
+    expect(p).not.toMatch(/OPENAI-SPECIFIC/);
+    expect(p).not.toMatch(/CLAUDE-SPECIFIC/);
+    expect(p).not.toMatch(/GOOGLE-SPECIFIC/);
+    expect(p).not.toMatch(/TRAINING-CRAWLER/);
+    expect(p).toMatch(/GENERAL ATTRIBUTION FRAMING/);
   });
 });
 
