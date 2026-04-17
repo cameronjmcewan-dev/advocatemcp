@@ -229,6 +229,15 @@ body > * { position: relative; z-index: 1; }
     0 24px 60px rgba(0,0,0,0.5),
     0 0 48px var(--accent-glow-2);
 }
+
+/* Feature 3 (smart lead routing): match the depth of the other mocks */
+.ln-feat-row:nth-of-type(3) .ln-mock {
+  border: 1px solid var(--border-accent);
+  box-shadow:
+    0 24px 60px rgba(0,0,0,0.5),
+    0 0 0 1px rgba(92,21,50,0.25),
+    0 0 48px var(--accent-glow-2);
+}
 .ln-mini-bar-fill {
   background: linear-gradient(90deg, var(--accent) 0%, var(--accent-bright) 100%) !important;
   box-shadow: 0 0 12px var(--accent-glow);
