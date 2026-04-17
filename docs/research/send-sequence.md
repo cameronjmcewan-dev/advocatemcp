@@ -17,7 +17,7 @@ Tuesday 8am PT because:
 Heads-up emails to a tight circle. One-line, no ask, no link.
 
 **Recipients (5 total):**
-- 1–2 customers who agreed to be on-record sources (WCC's owner, Bamboo Brace's owner)
+- The one paying customer who agreed to be on-record (WCC's owner)
 - 1–2 "friends of the company" who will boost organically — other solo SaaS founders with relevant audiences
 - 1 journalist you have a warm relationship with (if any) — give them the link as a private embargo
 
@@ -29,8 +29,9 @@ Subject: Heads-up — publishing Tuesday
 Hi [name],
 
 Publishing our first State of AI Bot Traffic report Tuesday 8am PT. TL;DR:
-First closed-loop AI attribution data from small businesses — methodology
-preview of what the instrument sees in its first week of production.
+Advocate built and validated a closed-loop AI attribution instrument for
+small businesses. Q1 is the methodology preview. Q2 is the first
+quantitative report.
 
 No ask — just want you to hear it from me before the socials. Happy to
 send the full report early if useful.
@@ -172,7 +173,7 @@ Post with reframed angle — "what this means for Google Business Profile-era th
 
 ### 2:00 PM — First customer outreach off the report
 
-Email your existing paying customers (all 4 of them). Subject: `You're part of Q1's research`. Thank them, show them the report, offer a private data cut showing their own tenant's stats vs. the aggregate. This is retention gold.
+Email your paying customer (WCC). Subject: `You're part of Q1's research`. Thank them, show them the report, offer a private data cut showing their tenant's stats in context. This is retention gold — and worth treating with extra care given they are the only live-customer data point in Q1.
 
 ---
 
@@ -248,7 +249,7 @@ If you hit the low end of each, that is a successful Q1 launch. Q2 builds on thi
 
 ### The HN thread gets flagged / buried
 
-Don't re-submit the same URL. Write a companion blog post with a different angle ("We found PerplexityBot is the only AI crawler that actually converts — here's why") and submit that to HN on day 5. Fresh URL, related content, no rule violation.
+Don't re-submit the same URL. Write a companion blog post with a different angle ("Why our one-customer sample showed PerplexityBot dominance when industry reports say GPTBot — and what Q2 will actually measure") and submit that to HN on day 5. Fresh URL, related content, no rule violation.
 
 ### A reporter writes a piece that misrepresents the data
 
