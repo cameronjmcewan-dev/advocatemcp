@@ -1077,47 +1077,66 @@ async function apiDomainInfo(request: Request, env: Env): Promise<Response> {
     }
   }
 
-  // Worker Route introspection needs Workers Routes:Read scope on the API
-  // token, which our current token doesn't carry. Instead, probe the domain
-  // empirically: fire a bot-UA request at the root, and if the response is
-  // our Worker's structured JSON (ai_generated + powered_by:"AdvocateMCP"),
-  // we know the route is wired correctly. This doesn't introspect the CF
-  // edge config, but it tells us what matters — "is bot traffic landing on
-  // our Worker right now?" — which is the question the dashboard actually
-  // needs answered.
+  // Worker Route introspection via CF Workers Routes API.
+  //
+  // We previously did an empirical self-probe (fetch https://{domain}/ with a
+  // bot UA and check for `ai_generated:true + powered_by:"AdvocateMCP"`). That
+  // approach fails on Cloudflare Workers because a Worker's fetch() to a URL
+  // served by the same Worker script hits CF's subrequest-loop protection
+  // and returns 522/empty/timeout — producing a false "missing" even when
+  // the route is live and serving real bot traffic (verified via direct
+  // curl + queries.last_bot_hit showing recent activity).
+  //
+  // Now: query CF's authoritative Workers Routes list and check for a
+  // pattern matching `{domain}/*`. Requires `Workers Routes: Read` scope
+  // on CF_API_TOKEN (we added this Apr 16 2026 for auto-provisioning).
   const workerRoutePattern = biz.domain ? `${biz.domain}/*` : null;
   let workerRoutePresent: boolean | null = null;
   let workerRouteNote: string | undefined;
 
-  if (biz.domain) {
-    try {
-      const probeRes = await fetch(`https://${biz.domain}/`, {
-        method: "GET",
-        headers: { "User-Agent": "PerplexityBot/1.0 (+https://perplexity.ai/bot)" },
-        signal: AbortSignal.timeout(5000),
-        redirect: "follow",
-      });
-      if (probeRes.ok) {
-        const ct = probeRes.headers.get("content-type") ?? "";
-        if (ct.includes("application/json")) {
-          const body = await probeRes.json() as Record<string, unknown>;
-          if (body.ai_generated === true && body.powered_by === "AdvocateMCP") {
-            workerRoutePresent = true;
-          } else {
-            workerRoutePresent = false;
-            workerRouteNote = "domain responded but not with Worker's bot response";
-          }
+  if (biz.domain && workerRoutePattern) {
+    if (!env.CF_API_TOKEN || !env.CF_ZONE_ID) {
+      workerRouteNote = "CF_API_TOKEN / CF_ZONE_ID not configured; cannot verify";
+    } else {
+      try {
+        const listRes = await fetch(
+          `https://api.cloudflare.com/client/v4/zones/${env.CF_ZONE_ID}/workers/routes`,
+          {
+            headers: { Authorization: `Bearer ${env.CF_API_TOKEN}` },
+            signal: AbortSignal.timeout(5000),
+          },
+        );
+        if (!listRes.ok) {
+          workerRouteNote = `CF routes API returned HTTP ${listRes.status}`;
         } else {
-          workerRoutePresent = false;
-          workerRouteNote = "domain returned non-JSON to bot UA — Worker not intercepting";
+          const data = await listRes.json() as {
+            success?: boolean;
+            result?: Array<{ pattern: string; script: string; id: string }>;
+          };
+          if (data.success === true && Array.isArray(data.result)) {
+            const matching = data.result.find((r) => r.pattern === workerRoutePattern);
+            workerRoutePresent = Boolean(matching);
+            if (!matching) {
+              // Also accept wildcard parent matches (e.g. *.hosted.advocatemcp.com/*
+              // covers any subdomain under our hosted namespace without a
+              // per-tenant entry).
+              const wildcardMatch = data.result.find((r) => {
+                if (!r.pattern.startsWith("*.")) return false;
+                const parent = r.pattern.replace(/^\*\./, "").replace(/\/\*$/, "");
+                return biz.domain!.endsWith("." + parent);
+              });
+              if (wildcardMatch) {
+                workerRoutePresent = true;
+                workerRouteNote = `covered by wildcard route ${wildcardMatch.pattern}`;
+              }
+            }
+          } else {
+            workerRouteNote = "CF routes API returned unexpected shape";
+          }
         }
-      } else {
-        workerRoutePresent = false;
-        workerRouteNote = `probe returned HTTP ${probeRes.status}`;
+      } catch (err) {
+        workerRouteNote = `CF routes API fetch failed: ${err instanceof Error ? err.message : "unknown"}`;
       }
-    } catch (err) {
-      workerRouteNote = `probe failed: ${err instanceof Error ? err.message : "unknown"}`;
-      // leave workerRoutePresent at null — "we don't know"
     }
   }
 
