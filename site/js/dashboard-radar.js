@@ -133,8 +133,8 @@
     // Inline SVG mini-chart stretched full width.
     var W = 600, H = 60, pad = 6;
     var step = vals.length > 1 ? (W - pad * 2) / (vals.length - 1) : 0;
-    var accent = window.AMCP_THEME ? window.AMCP_THEME.accent() : '#7d2550';
-    var accentDim = window.AMCP_THEME ? window.AMCP_THEME.accentDim() : 'rgba(125,37,80,.12)';
+    var accent = window.AMCP_THEME ? window.AMCP_THEME.accent() : '#4A0E0E';
+    var accentDim = window.AMCP_THEME ? window.AMCP_THEME.accentDim() : 'rgba(74, 14, 14,.12)';
 
     var pts = vals.map(function (v, i) {
       var x = pad + i * step;

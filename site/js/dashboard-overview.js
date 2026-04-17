@@ -182,7 +182,7 @@
     var isDark = (window.AMCP_THEME && window.AMCP_THEME.isDark)
       ? window.AMCP_THEME.isDark()
       : document.documentElement.getAttribute('data-theme') !== 'light';
-    var accent = window.AMCP_THEME ? window.AMCP_THEME.accent() : '#7d2550';
+    var accent = window.AMCP_THEME ? window.AMCP_THEME.accent() : '#4A0E0E';
     var gridColor = isDark ? 'rgba(57,56,54,.5)' : 'rgba(221,219,216,.7)';
     var textColor = isDark ? '#7a7875' : '#6b6967';
 

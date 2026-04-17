@@ -6,9 +6,17 @@
 
 /* ── 1. Supplementary design tokens ──────────────────────────── */
 :root {
-  --accent-bright: #a03569;
-  --accent-glow:   rgba(125, 37, 80, 0.35);
-  --accent-glow-2: rgba(125, 37, 80, 0.18);
+  /* Oxblood brand palette — shared by other agents */
+  --oxblood:           #4A0E0E;
+  --oxblood-light:     #7A1F1F;
+  --oxblood-dark:      #2E0808;
+  --oxblood-highlight: #8B2A2A;
+  --oxblood-glow:      rgba(74, 14, 14, 0.55);
+  --oxblood-hover:     #5C1212;
+
+  --accent-bright: #8B2A2A;
+  --accent-glow:   rgba(74, 14, 14, 0.35);
+  --accent-glow-2: rgba(74, 14, 14, 0.18);
   --border-accent: rgba(168, 41, 58, 0.4);
   --glass-bg:      rgba(26, 13, 16, 0.6);
   --glass-border:  rgba(245, 237, 228, 0.07);
@@ -18,10 +26,10 @@
 }
 
 [data-theme="light"] {
-  --accent-bright: #a03569;
-  --accent-glow:   rgba(125, 37, 80, 0.18);
-  --accent-glow-2: rgba(125, 37, 80, 0.08);
-  --border-accent: rgba(125, 37, 80, 0.28);
+  --accent-bright: #8B2A2A;
+  --accent-glow:   rgba(74, 14, 14, 0.18);
+  --accent-glow-2: rgba(74, 14, 14, 0.08);
+  --border-accent: rgba(74, 14, 14, 0.28);
   --glass-bg:      rgba(255, 255, 255, 0.62);
   --glass-border:  rgba(26, 25, 23, 0.08);
 }
@@ -64,8 +72,8 @@ body > * { position: relative; z-index: 1; }
 }
 .rd-halo-hot::before {
   background:
-    radial-gradient(ellipse 60% 55% at 50% 30%, rgba(125,37,80,.30) 0%, transparent 62%),
-    radial-gradient(ellipse 80% 60% at 50% 100%, rgba(125,37,80,.15) 0%, transparent 70%);
+    radial-gradient(ellipse 60% 55% at 50% 30%, rgba(74, 14, 14,.30) 0%, transparent 62%),
+    radial-gradient(ellipse 80% 60% at 50% 100%, rgba(74, 14, 14,.15) 0%, transparent 70%);
 }
 
 /* ── 4. Full-bleed + container helpers ────────────────────────── */
@@ -189,7 +197,7 @@ body > * { position: relative; z-index: 1; }
   border: 1px solid var(--border-accent);
   box-shadow:
     0 24px 60px rgba(0,0,0,0.5),
-    0 0 0 1px rgba(125,37,80,0.25),
+    0 0 0 1px rgba(74, 14, 14,0.25),
     0 0 48px var(--accent-glow-2);
   animation: rd-bob 6s ease-in-out infinite;
 }
@@ -305,7 +313,7 @@ body > * { position: relative; z-index: 1; }
   color: var(--text) !important;
 }
 .ln-tab.on {
-  background: linear-gradient(90deg, var(--accent) 0%, rgba(125,37,80,0.15) 120%) !important;
+  background: linear-gradient(90deg, var(--accent) 0%, rgba(74, 14, 14,0.15) 120%) !important;
   border-color: var(--border-accent) !important;
   color: #fff !important;
   box-shadow: 0 6px 22px var(--accent-glow), 0 0 0 1px var(--border-accent) inset;
@@ -424,7 +432,7 @@ body > * { position: relative; z-index: 1; }
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 60% 70% at 50% 50%, rgba(125,37,80,.18) 0%, transparent 62%),
+    radial-gradient(ellipse 60% 70% at 50% 50%, rgba(74, 14, 14,.18) 0%, transparent 62%),
     conic-gradient(from 0deg at 50% 50%, transparent 0deg, var(--accent-glow-2) 60deg, transparent 120deg, var(--accent-glow-2) 220deg, transparent 280deg);
   filter: blur(40px);
   opacity: 0.6;
@@ -480,7 +488,7 @@ body > * { position: relative; z-index: 1; }
   inset: 0;
   z-index: -1;
   background:
-    radial-gradient(ellipse 55% 55% at 50% 50%, rgba(125,37,80,.25) 0%, transparent 65%),
+    radial-gradient(ellipse 55% 55% at 50% 50%, rgba(74, 14, 14,.25) 0%, transparent 65%),
     radial-gradient(ellipse 100% 100% at 50% 50%, rgba(0,0,0,0.4) 0%, transparent 80%);
 }
 .rd-network-canvas {

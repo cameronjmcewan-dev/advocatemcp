@@ -90,7 +90,7 @@ async function bootHero(canvas) {
   const logo = new THREE.Group();
   const layerCount = 4;
   const baseSize   = 2.6;
-  const accent     = new THREE.Color('#7d2550');
+  const accent     = new THREE.Color('#4A0E0E');
 
   for (let i = 0; i < layerCount; i++) {
     const material = new THREE.MeshPhysicalMaterial({

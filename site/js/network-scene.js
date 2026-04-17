@@ -65,8 +65,8 @@ async function bootNetwork(canvas, section) {
   const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 100);
   camera.position.set(0, 0, 12);
 
-  const accent       = new THREE.Color('#7d2550');
-  const accentBright = new THREE.Color('#a03569');
+  const accent       = new THREE.Color('#4A0E0E');
+  const accentBright = new THREE.Color('#8B2A2A');
 
   // Lighting (the scene is mostly emissive but we still want a little fill)
   scene.add(new THREE.AmbientLight(0xffffff, 0.25));
