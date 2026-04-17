@@ -60,3 +60,31 @@ API_BASE_URL = "https://advocate-production-2887.up.railway.app"
 pattern   = "customers.advocatemcp.com/*"
 zone_name = "advocatemcp.com"
 
+# Public-wizard tenants are all subdomains of hosted.advocatemcp.com
+# (see worker/src/routes/stripe.ts line 406 where the synthetic domain
+# gets assigned as `${slug}.hosted.advocatemcp.com`). A wildcard at
+# this depth is SAFE — unlike the Apr 13 *.advocatemcp.com incident,
+# *.hosted.advocatemcp.com doesn't shadow the Pages project at the
+# apex and catches only our own namespace. Every current + future
+# public-wizard signup is covered declaratively here with no per-
+# tenant API calls needed.
+[[routes]]
+pattern   = "*.hosted.advocatemcp.com/*"
+zone_name = "advocatemcp.com"
+
+# Custom-domain tenants — one [[routes]] entry per tenant. Currently
+# just WCC. When a new custom-domain customer signs up, the Stripe
+# webhook's ensureWorkerRouteForHostname() (worker/src/routes/domains.ts)
+# creates the route via CF API at signup time. BUT: that API-created
+# route can get dropped on subsequent `wrangler deploy` if wrangler
+# reconciles declared-vs-actual routes. Declaring them here too makes
+# the config the source of truth and survives every deploy. Trade-off:
+# operator must add a line here per new custom-domain tenant.
+#
+# This was the root cause of the Apr 16 2026 incident: WCC's route
+# was API-created at 4pm, dropped by subsequent Worker deploys, and
+# bot traffic started returning 522 again ~3 hours later.
+[[routes]]
+pattern   = "www.workmancopyco.com/*"
+zone_name = "advocatemcp.com"
+
