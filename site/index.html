@@ -19,6 +19,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;1,600;1,700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/css/redesign.css" />
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -27,6 +28,14 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
 :root {
+  /* Oxblood palette (shared with sitewide color agent; definitions are identical so they merge cleanly) */
+  --oxblood:           #4A0E0E;
+  --oxblood-light:     #7A1F1F;
+  --oxblood-dark:      #2E0808;
+  --oxblood-highlight: #8B2A2A;
+  --oxblood-glow:      rgba(74, 14, 14, 0.55);
+  --oxblood-hover:     #5C1212;
+
   --bg:          #050202;
   --surface:     #0d0507;
   --surface-2:   #140a0c;
@@ -788,6 +797,140 @@ tr:hover td{background:var(--surface-2)}
 @media(max-width:480px){
   .kpi-grid{grid-template-columns:1fr 1fr}
 }
+
+/* ════════════════════════════════════════
+   HERO REDESIGN (Apr 17 2026)
+   Only affects index.html header + hero + new mobile bottom tab bar.
+   Relies on sitewide Poppins load + sitewide .cta-btn (from parallel agents);
+   defines local helpers here. Oxblood vars defined at :root above.
+   ════════════════════════════════════════ */
+
+/* Brand tile in header */
+.brand-tile{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:34px;height:34px;border-radius:8px;
+  background:linear-gradient(180deg,var(--oxblood-light) 0%,var(--oxblood) 60%,var(--oxblood-dark) 100%);
+  box-shadow:0 4px 14px var(--oxblood-glow),inset 0 1px 0 rgba(255,255,255,.14);
+  color:#fff;flex-shrink:0;
+}
+.brand-tile svg{width:18px;height:18px;stroke:#fff}
+.logo.logo-redesigned{
+  font-family:'Poppins','General Sans','Inter',system-ui,sans-serif;
+  font-weight:600;font-size:20px;letter-spacing:-.01em;color:#fff;gap:10px;
+}
+[data-theme="light"] .logo.logo-redesigned{color:var(--text)}
+
+/* Hero emblem — translucent iridescent 4-point star */
+.hero-emblem{
+  display:block;margin:0 auto 36px;
+  width:min(58vw,360px);height:auto;
+  filter:drop-shadow(0 0 24px rgba(255,210,220,.22)) drop-shadow(0 0 60px rgba(138,42,42,.35));
+  animation:emblem-float 7s ease-in-out infinite;
+}
+@keyframes emblem-float{
+  0%,100%{transform:translateY(0)}
+  50%{transform:translateY(-6px)}
+}
+@media(prefers-reduced-motion:reduce){.hero-emblem{animation:none}}
+
+/* Hero headline override (Poppins, not serif) */
+.ln-hero-inner .ln-h1{
+  font-family:'Poppins','General Sans','Inter',system-ui,sans-serif;
+  font-weight:700;
+  letter-spacing:-.02em;
+  font-size:clamp(2.75rem,6vw,4.5rem);
+  color:#fff;
+  line-height:1.05;
+  margin-bottom:22px;
+}
+.ln-hero-inner .ln-h1 em{
+  font-style:italic;color:#fff;font-weight:700;
+}
+.ln-hero-inner .ln-hero-sub{
+  color:#c9b8be;font-size:clamp(.95rem,1.6vw,1.0625rem);
+  line-height:1.55;max-width:560px;
+}
+
+/* Outlined secondary CTA used in hero */
+.ln-hero-inner .btn-outline-white{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:13px 26px;font-size:var(--tx-base);font-weight:500;
+  color:#fff;background:transparent;border:1px solid rgba(255,255,255,.85);
+  border-radius:100px;line-height:1;white-space:nowrap;
+  font-family:'Poppins','General Sans','Inter',system-ui,sans-serif;
+  transition:background .15s,border-color .15s;
+}
+.ln-hero-inner .btn-outline-white:hover{background:rgba(255,255,255,.08)}
+
+/* Hero proof row — slightly lighter muted white to match screenshot */
+.ln-hero-inner .ln-hero-proof{color:rgba(255,255,255,.72);font-size:13px}
+
+/* Dark radial hero background — warmer center, near-black edges */
+.ln-hero.hero-redesigned .ln-hero-bg{
+  background:radial-gradient(ellipse 80% 70% at 50% 35%, #4A1020 0%, #2a0a14 45%, #1A0508 85%) !important;
+}
+
+/* Header: hide top nav links on mobile (moved to bottom tab bar) */
+@media(max-width:768px){
+  .ln-nav .ln-nav-links,
+  .ln-nav .ln-ham{display:none !important}
+  .ln-nav-actions{display:flex !important;margin-left:auto;gap:8px}
+}
+
+/* Round icon button variant for header theme toggle */
+.icon-btn.icon-btn-round{
+  border-radius:50%;background:transparent;border:1px solid rgba(255,255,255,.35);
+  color:rgba(255,255,255,.85);width:38px;height:38px;
+}
+.icon-btn.icon-btn-round:hover{color:#fff;border-color:#fff}
+[data-theme="light"] .icon-btn.icon-btn-round{border-color:var(--border);color:var(--muted)}
+
+/* Fallback .cta-btn styling (in case sitewide CTA agent hasn't landed yet).
+   Uses same oxblood gradient vocabulary so it merges cleanly. */
+.cta-btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:13px 26px;font-size:var(--tx-base);font-weight:600;line-height:1;
+  color:#fff;white-space:nowrap;border:none;border-radius:100px;cursor:pointer;
+  font-family:'Poppins','General Sans','Inter',system-ui,sans-serif;
+  background:linear-gradient(180deg,var(--oxblood-highlight) 0%,var(--oxblood) 55%,var(--oxblood-dark) 100%);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,.06),
+    0 8px 24px var(--oxblood-glow),
+    inset 0 1px 0 rgba(255,255,255,.22),
+    inset 0 -1px 0 rgba(0,0,0,.35);
+  transition:filter .15s,transform .15s,box-shadow .15s;
+}
+.cta-btn:hover{filter:brightness(1.08);box-shadow:0 0 0 1px rgba(255,255,255,.08),0 10px 30px var(--oxblood-glow),inset 0 1px 0 rgba(255,255,255,.28),inset 0 -1px 0 rgba(0,0,0,.35)}
+.cta-btn:active{transform:translateY(1px)}
+.cta-btn.cta-btn-sm{padding:9px 18px;font-size:var(--tx-sm)}
+
+/* ── Mobile bottom tab bar ── */
+.bottom-tabs{display:none}
+@media(max-width:768px){
+  .bottom-tabs{
+    display:flex;position:fixed;left:0;right:0;bottom:0;z-index:210;
+    background:#1A0508;
+    border-top:1px solid rgba(255,255,255,.06);
+    padding:10px 0 calc(8px + env(safe-area-inset-bottom));
+    min-height:70px;
+  }
+  .bottom-tabs .bt-tab{
+    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+    color:rgba(255,255,255,.55);
+    font-family:'Poppins','General Sans','Inter',system-ui,sans-serif;
+    font-size:11px;font-weight:500;
+    background:none;border:none;text-decoration:none;
+    transition:color .15s;
+  }
+  .bottom-tabs .bt-tab svg{width:24px;height:24px;stroke-width:1.75}
+  .bottom-tabs .bt-tab.active,.bottom-tabs .bt-tab:hover{color:#fff}
+
+  /* Clear the bottom tab bar on the last section */
+  .ln-footer{padding-bottom:calc(28px + 90px + env(safe-area-inset-bottom)) !important}
+}
+@media(min-width:769px){
+  .bottom-tabs{display:none !important}
+}
 </style>
 </head>
 <body>
@@ -797,8 +940,10 @@ tr:hover td{background:var(--surface-2)}
 
 <!-- Nav -->
 <nav class="ln-nav">
-  <a href="#home" class="logo">
-    <img src="/icon-192.png" alt="Advocate" width="26" height="26" style="border-radius:5px;display:block" />
+  <a href="#home" class="logo logo-redesigned" aria-label="Advocate home">
+    <span class="brand-tile" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 4 20h16z"/><path d="M8.5 15h7"/></svg>
+    </span>
     Advocate
   </a>
   <div class="ln-nav-links">
@@ -809,11 +954,11 @@ tr:hover td{background:var(--surface-2)}
     <a class="nav-link" href="/dashboard.html">Dashboard →</a>
   </div>
   <div class="ln-nav-actions">
-    <button class="icon-btn" onclick="toggleTheme()" aria-label="Toggle theme">
+    <button class="icon-btn icon-btn-round" onclick="toggleTheme()" aria-label="Toggle theme">
       <i data-lucide="sun" id="land-sun"></i>
       <i data-lucide="moon" id="land-moon" style="display:none"></i>
     </button>
-    <a href="/onboarding.html" class="btn btn-primary btn-sm">Get Started →</a>
+    <a href="/onboarding.html" class="btn btn-primary cta-btn btn-sm">Get Started →</a>
   </div>
   <button class="ln-ham" onclick="toggleMobileMenu()" aria-label="Menu">
     <i data-lucide="menu" id="ham-icon"></i>
@@ -827,22 +972,46 @@ tr:hover td{background:var(--surface-2)}
   <a class="nav-link" href="#home" onclick="navScrollTo('ln-pricing');toggleMobileMenu()">Pricing</a>
   <a class="nav-link" href="/research/" onclick="toggleMobileMenu()">Research</a>
   <a class="nav-link" href="/dashboard.html" onclick="toggleMobileMenu()">Dashboard →</a>
-  <a href="/onboarding.html" class="btn btn-primary" style="margin-top:8px;justify-content:center">Get Started →</a>
+  <a href="/onboarding.html" class="btn btn-primary cta-btn" style="margin-top:8px;justify-content:center">Get Started →</a>
 </div>
 
 <!-- Hero -->
-<section class="ln-hero rd-halo-hot">
+<section class="ln-hero rd-halo-hot hero-redesigned">
   <canvas class="rd-hero-canvas" aria-hidden="true"></canvas>
   <div class="ln-hero-bg"></div>
   <div class="ln-hero-inner">
-    <div class="ln-eyebrow">
-      <i data-lucide="zap" style="width:10px;height:10px"></i>
-      AI-native business presence
-    </div>
+    <!-- Iridescent 4-point star / compass-rose emblem -->
+    <svg class="hero-emblem" viewBox="0 0 240 240" role="img" aria-label="Advocate emblem" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="emb-stroke" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%"  stop-color="#ffe6ee" stop-opacity=".95"/>
+          <stop offset="50%" stop-color="#ffc9d5" stop-opacity=".75"/>
+          <stop offset="100%" stop-color="#ffffff" stop-opacity=".55"/>
+        </linearGradient>
+        <linearGradient id="emb-fill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#ffffff" stop-opacity=".18"/>
+          <stop offset="100%" stop-color="#ffffff" stop-opacity=".04"/>
+        </linearGradient>
+        <filter id="emb-inner" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="1.2"/>
+        </filter>
+      </defs>
+      <g fill="url(#emb-fill)" stroke="url(#emb-stroke)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
+        <!-- Vertical concave diamond -->
+        <path d="M120 18 C132 72 168 108 222 120 C168 132 132 168 120 222 C108 168 72 132 18 120 C72 108 108 72 120 18 Z"/>
+        <!-- Rotated 45° diamond overlay for the 4-point compass-rose feel -->
+        <path opacity=".85" transform="rotate(45 120 120)" d="M120 40 C128 78 162 112 200 120 C162 128 128 162 120 200 C112 162 78 128 40 120 C78 112 112 78 120 40 Z"/>
+      </g>
+      <!-- Inner bright highlight ring -->
+      <g fill="none" stroke="#ffffff" stroke-opacity=".35" stroke-width="1.2" filter="url(#emb-inner)">
+        <path d="M120 56 C128 92 148 112 184 120 C148 128 128 148 120 184 C112 148 92 128 56 120 C92 112 112 92 120 56 Z"/>
+      </g>
+    </svg>
+
     <h1 class="ln-h1">Get found by AI,<br><em>not buried by it</em></h1>
     <p class="ln-hero-sub">When someone asks ChatGPT, Perplexity, or Claude for a business like yours, Advocate makes sure your name comes up — with a direct link to reach you.</p>
     <div class="ln-hero-cta">
-      <a href="/onboarding.html" class="btn btn-primary" style="padding:13px 26px;font-size:var(--tx-base)">Start Getting Recommended →</a>
+      <a href="/onboarding.html" class="btn btn-primary cta-btn" style="padding:13px 26px;font-size:var(--tx-base)">Start Getting Recommended →</a>
       <a href="#home" class="btn btn-ghost" onclick="navScrollTo('ln-features')" style="padding:13px 26px;font-size:var(--tx-base)">See how it works</a>
     </div>
     <div class="ln-hero-proof">
@@ -1097,7 +1266,7 @@ tr:hover td{background:var(--surface-2)}
       </div>
     </div>
     <div style="text-align:center;margin-top:48px" class="fade-up">
-      <a href="/onboarding.html" class="btn btn-primary" style="padding:13px 28px;font-size:var(--tx-base)">Get your AI profile live →</a>
+      <a href="/onboarding.html" class="btn btn-primary cta-btn" style="padding:13px 28px;font-size:var(--tx-base)">Get your AI profile live →</a>
     </div>
   </div>
 </div>
@@ -1148,7 +1317,7 @@ tr:hover td{background:var(--surface-2)}
           <div class="ln-panel-stat"><span class="ln-panel-stat-val">3×</span><span class="ln-panel-stat-lbl">more qualified leads vs. paid search</span></div>
           <h3 class="ln-panel-h">AI is the new way renters find property managers</h3>
           <p class="ln-panel-p">When someone asks "best property management company in Austin," Advocate ensures your firm appears — with your services, portfolio size, and a direct link to schedule a consultation.</p>
-          <a href="/onboarding.html" class="btn btn-primary">Get started for real estate →</a>
+          <a href="/onboarding.html" class="btn btn-primary cta-btn">Get started for real estate →</a>
         </div>
         <div class="ln-mock" style="max-width:100%">
           <div class="ln-mock-bar">
@@ -1174,7 +1343,7 @@ tr:hover td{background:var(--surface-2)}
           <div class="ln-panel-stat"><span class="ln-panel-stat-val">58%</span><span class="ln-panel-stat-lbl">of people now ask AI for attorney recommendations</span></div>
           <h3 class="ln-panel-h">Be the attorney that shows up when clients ask AI</h3>
           <p class="ln-panel-p">Clients increasingly ask "who's the best estate planning attorney near me" to an AI before calling anyone. Advocate positions your firm to answer that query directly.</p>
-          <a href="/onboarding.html" class="btn btn-primary">Get started for legal →</a>
+          <a href="/onboarding.html" class="btn btn-primary cta-btn">Get started for legal →</a>
         </div>
         <div class="ln-mock" style="max-width:100%">
           <div class="ln-mock-bar">
@@ -1200,7 +1369,7 @@ tr:hover td{background:var(--surface-2)}
           <div class="ln-panel-stat"><span class="ln-panel-stat-val">$0</span><span class="ln-panel-stat-lbl">per-click fees. Flat monthly, unlimited AI referrals</span></div>
           <h3 class="ln-panel-h">Win "near me" queries before they hit Google</h3>
           <p class="ln-panel-p">HVAC, plumbing, landscaping, cleaning — AI assistants are now the first stop before Google for service queries. Advocate puts you in the answer, not the search results.</p>
-          <a href="/onboarding.html" class="btn btn-primary">Get started for home services →</a>
+          <a href="/onboarding.html" class="btn btn-primary cta-btn">Get started for home services →</a>
         </div>
         <div class="ln-mock" style="max-width:100%">
           <div class="ln-mock-bar">
@@ -1226,7 +1395,7 @@ tr:hover td{background:var(--surface-2)}
           <div class="ln-panel-stat"><span class="ln-panel-stat-val">142ms</span><span class="ln-panel-stat-lbl">average AI response time from our edge network</span></div>
           <h3 class="ln-panel-h">Be the practice AI recommends for new patients</h3>
           <p class="ln-panel-p">From dentists to chiropractors to functional medicine — patients ask AI for healthcare recommendations. Advocate ensures your practice is cited with accurate, current information.</p>
-          <a href="/onboarding.html" class="btn btn-primary">Get started for medical →</a>
+          <a href="/onboarding.html" class="btn btn-primary cta-btn">Get started for medical →</a>
         </div>
         <div class="ln-mock" style="max-width:100%">
           <div class="ln-mock-bar">
@@ -1307,7 +1476,7 @@ tr:hover td{background:var(--surface-2)}
     </div>
   </div>
   <div style="padding:32px 40px 0;max-width:1100px;margin:0 auto" class="fade-up">
-    <a href="/onboarding.html" class="btn btn-primary" style="padding:13px 28px;font-size:var(--tx-base)">See all customer stories →</a>
+    <a href="/onboarding.html" class="btn btn-primary cta-btn" style="padding:13px 28px;font-size:var(--tx-base)">See all customer stories →</a>
   </div>
 </div>
 
@@ -1347,7 +1516,7 @@ tr:hover td{background:var(--surface-2)}
           <li>Per-agent reputation analytics</li>
           <li>Priority support</li>
         </ul>
-        <a href="/onboarding.html?tier=pro" class="btn btn-primary" style="width:100%;justify-content:center">Get started</a>
+        <a href="/onboarding.html?tier=pro" class="btn btn-primary cta-btn" style="width:100%;justify-content:center">Get started</a>
       </div>
       <div class="ln-price-card">
         <div class="ln-price-name">Enterprise</div>
@@ -1373,7 +1542,7 @@ tr:hover td{background:var(--surface-2)}
     <h2 class="ln-cta-h">Your competitors will be on AI.<br><em>Will you?</em></h2>
     <p class="ln-cta-sub">AI-powered recommendations are the new word of mouth. The businesses that show up first will capture leads that others never see.</p>
     <div class="ln-cta-actions">
-      <a href="/onboarding.html" class="btn btn-primary" style="padding:14px 32px;font-size:var(--tx-base)">Start from $100/month →</a>
+      <a href="/onboarding.html" class="btn btn-primary cta-btn" style="padding:14px 32px;font-size:var(--tx-base)">Start from $100/month →</a>
       <a href="#home" class="btn btn-ghost" onclick="navScrollTo('ln-features')" style="padding:14px 32px;font-size:var(--tx-base)">See how it works</a>
     </div>
   </div>
@@ -1391,7 +1560,7 @@ tr:hover td{background:var(--surface-2)}
         <p class="ln-footer-tagline">Get your business recommended by every major AI assistant. Flat monthly. No code.</p>
         <div class="ln-newsletter">
           <input type="email" placeholder="your@email.com" aria-label="Email for updates">
-          <button class="btn btn-primary btn-sm" aria-label="Subscribe to updates">Subscribe</button>
+          <button class="btn btn-primary cta-btn btn-sm" aria-label="Subscribe to updates">Subscribe</button>
         </div>
       </div>
       <div>
@@ -1435,6 +1604,26 @@ tr:hover td{background:var(--surface-2)}
     </div>
   </div>
 </footer>
+
+<!-- Mobile bottom tab bar (landing page only; visible <=768px) -->
+<nav class="bottom-tabs" aria-label="Primary">
+  <a href="#home" class="bt-tab active" aria-label="Home" aria-current="page">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9.5 12 3l9 6.5V21a1 1 0 0 1-1 1h-5v-7h-6v7H4a1 1 0 0 1-1-1z"/></svg>
+    <span>Home</span>
+  </a>
+  <a href="#features" class="bt-tab" aria-label="Features" onclick="navScrollTo('ln-features')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+    <span>Features</span>
+  </a>
+  <a href="#industries" class="bt-tab" aria-label="Industries" onclick="navScrollTo('ln-outcomes')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="4" width="3" height="14"/></svg>
+    <span>Industries</span>
+  </a>
+  <a href="#pricing" class="bt-tab" aria-label="Pricing" onclick="navScrollTo('ln-pricing')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    <span>Pricing</span>
+  </a>
+</nav>
 
 </div><!-- #page-home -->
 
@@ -1539,7 +1728,7 @@ tr:hover td{background:var(--surface-2)}
         <div class="tbl-wrap">
           <div class="tbl-head">
             <span class="tbl-head-title">Domains</span>
-            <button class="btn btn-primary btn-sm" onclick="openModal()">
+            <button class="btn btn-primary cta-btn btn-sm" onclick="openModal()">
               <i data-lucide="plus" style="width:12px;height:12px"></i>
               Activate New Domain
             </button>
@@ -1570,7 +1759,7 @@ tr:hover td{background:var(--surface-2)}
         <div class="tbl-wrap" style="margin-top:0">
           <div class="tbl-head">
             <span class="tbl-head-title">All Domains</span>
-            <button class="btn btn-primary btn-sm" onclick="openModal()">
+            <button class="btn btn-primary cta-btn btn-sm" onclick="openModal()">
               <i data-lucide="plus" style="width:12px;height:12px"></i>
               Activate New Domain
             </button>
@@ -1667,7 +1856,7 @@ tr:hover td{background:var(--surface-2)}
       </div>
       <div class="modal-foot">
         <button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button>
-        <button class="btn btn-primary btn-sm" onclick="submitDomain()">Activate →</button>
+        <button class="btn btn-primary cta-btn btn-sm" onclick="submitDomain()">Activate →</button>
       </div>
     </div>
 
