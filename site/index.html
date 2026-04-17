@@ -430,7 +430,7 @@ img,svg{display:block}
 .ln-price{padding:110px 40px}
 .ln-price-inner{max-width:1100px;margin:0 auto}
 .ln-price-hd{max-width:480px;margin-bottom:48px}
-.ln-price-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:680px}
+.ln-price-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;max-width:1040px}
 .ln-price-card{
   padding:36px 32px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-xl);position:relative;
   transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease;
@@ -1384,8 +1384,8 @@ tr:hover td{background:var(--surface-2)}
     </div>
     <div class="ln-price-grid fade-up">
       <div class="ln-price-card">
-        <div class="ln-price-name">Starter</div>
-        <div class="ln-price-amt">$49</div>
+        <div class="ln-price-name">Base</div>
+        <div class="ln-price-amt">$100</div>
         <div class="ln-price-per">per month</div>
         <ul class="ln-price-list">
           <li>1 business profile</li>
@@ -1394,21 +1394,37 @@ tr:hover td{background:var(--surface-2)}
           <li>Referral tracking dashboard</li>
           <li>Email support</li>
         </ul>
-        <a href="/onboarding.html" class="btn btn-ghost" style="width:100%;justify-content:center">Get started</a>
+        <a href="/onboarding.html?tier=base" class="btn btn-ghost" style="width:100%;justify-content:center">Get started</a>
       </div>
       <div class="ln-price-card pop">
         <div class="ln-pop-badge">Most Popular</div>
         <div class="ln-price-name">Pro</div>
-        <div class="ln-price-amt">$149</div>
+        <div class="ln-price-amt">$250</div>
         <div class="ln-price-per">per month</div>
         <ul class="ln-price-list">
           <li>Up to 5 business profiles</li>
           <li>Priority AI indexing</li>
           <li>Advanced analytics &amp; exports</li>
           <li>Custom business categories</li>
+          <li>Competitor Radar (weekly Perplexity polling)</li>
+          <li>Per-agent reputation analytics</li>
           <li>Priority support</li>
         </ul>
-        <a href="/onboarding.html" class="btn btn-primary" style="width:100%;justify-content:center">Get started</a>
+        <a href="/onboarding.html?tier=pro" class="btn btn-primary" style="width:100%;justify-content:center">Get started</a>
+      </div>
+      <div class="ln-price-card">
+        <div class="ln-price-name">Enterprise</div>
+        <div class="ln-price-amt">Custom</div>
+        <div class="ln-price-per">book a consultation</div>
+        <ul class="ln-price-list">
+          <li>Unlimited business profiles</li>
+          <li>Custom SLAs</li>
+          <li>White-label options</li>
+          <li>Dedicated success manager</li>
+          <li>Custom integrations</li>
+          <li>Volume / agency pricing</li>
+        </ul>
+        <a href="mailto:support@advocatemcp.com?subject=Enterprise%20Consultation%20Request&body=Hi%20Advocate%20team%2C%0A%0AI%27d%20like%20to%20discuss%20an%20Enterprise%20plan%20for%3A%0A%0ACompany%3A%0ABusiness%20profiles%20needed%3A%0AUse%20case%3A%0A%0AThanks%21" class="btn btn-ghost" style="width:100%;justify-content:center">Book a consultation →</a>
       </div>
     </div>
   </div>
@@ -1420,7 +1436,7 @@ tr:hover td{background:var(--surface-2)}
     <h2 class="ln-cta-h">Your competitors will be on AI.<br><em>Will you?</em></h2>
     <p class="ln-cta-sub">AI-powered recommendations are the new word of mouth. The businesses that show up first will capture leads that others never see.</p>
     <div class="ln-cta-actions">
-      <a href="/onboarding.html" class="btn btn-primary" style="padding:14px 32px;font-size:var(--tx-base)">Start for $49/month →</a>
+      <a href="/onboarding.html" class="btn btn-primary" style="padding:14px 32px;font-size:var(--tx-base)">Start from $100/month →</a>
       <a href="#home" class="btn btn-ghost" onclick="navScrollTo('ln-features')" style="padding:14px 32px;font-size:var(--tx-base)">See how it works</a>
     </div>
   </div>
