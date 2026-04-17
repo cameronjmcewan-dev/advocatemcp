@@ -273,12 +273,42 @@
   }
 
   // ── Formatters ──────────────────────────────────────────────────────────
+  /**
+   * Parse a timestamp that may come from SQLite `datetime('now')` in the
+   * form "YYYY-MM-DD HH:MM:SS" (space-separated, no timezone suffix).
+   *
+   * Chrome/Safari parse that string as LOCAL time instead of UTC, so a
+   * value that's actually UTC becomes wall-clock-local and appears
+   * several hours in the future for anyone in a negative UTC offset.
+   * This is what produced the "Last bot hit: -11530s ago" bug on the
+   * Domains dashboard (Austin = UTC-5, so SQLite's UTC-but-unlabeled
+   * timestamp appeared 5 hours ahead).
+   *
+   * ISO 8601 with a timezone suffix ("2026-04-16T23:30:00Z" or +offset)
+   * is parsed correctly — pass those through unchanged.
+   */
+  function parseServerTs(ts) {
+    if (typeof ts === 'string' && /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$/.test(ts)) {
+      // SQLite datetime() shape — treat as UTC.
+      return new Date(ts.replace(' ', 'T') + 'Z');
+    }
+    return new Date(ts);
+  }
+
   function fmtTs(ts) {
     if (!ts) return '';
-    var d = new Date(ts);
+    var d = parseServerTs(ts);
     if (isNaN(d.getTime())) return String(ts);
     var now  = new Date();
     var diff = (now.getTime() - d.getTime()) / 1000;
+    // Clock-drift safety: if the server's clock is a few seconds ahead
+    // of ours, or if rounding pushes into the negative, treat as "just
+    // now" rather than rendering "-4s ago". Beyond ~2 minutes of drift
+    // we surface the raw date — signals a real problem worth noticing.
+    if (diff < 0) {
+      if (diff > -120) return 'just now';
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
     if (diff < 60)    return Math.floor(diff) + 's ago';
     if (diff < 3600)  return Math.floor(diff / 60) + 'm ago';
     if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
