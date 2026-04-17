@@ -43,7 +43,7 @@ The enterprise-tier players here (Profound, Scrunch) are publishing citation-mon
 Happy to walk through the method on a call if useful — I can show live traffic hitting a real business tenant and the attribution loop closing end to end.
 
 Cameron McEwan
-Founder, AdvocateMCP
+Founder, Advocate
 [phone]
 ```
 
@@ -78,7 +78,7 @@ Priority tiers. Send in waves — 5 per day, not all 20 at once. Over-dispatchin
 
 ### Wave 3 — business + founder-story, day 3
 
-11. **Jessica Mathews — Fortune Term Sheet** — VC/startup angle. AdvocateMCP vs Profound is a Term Sheet story. `jessica.mathews@fortune.com`
+11. **Jessica Mathews — Fortune Term Sheet** — VC/startup angle. Advocate vs Profound is a Term Sheet story. `jessica.mathews@fortune.com`
 12. **Anita Ramaswamy — The Information** — B2B SaaS + founder profiles. `anita@theinformation.com`
 13. **Rebecca Bellan — TechCrunch** — covers agents + commerce. The 19% purchase-intent stat is her angle. `rebecca.bellan@techcrunch.com`
 14. **Hayden Field — CNBC** — AI + enterprise adoption. `hayden.field@nbcuni.com`
@@ -134,7 +134,7 @@ PerplexityBot behaves differently — its answers surface inline citations the u
 
 ### Q4: Is this a paid tool? Are you selling something?
 
-Yes — AdvocateMCP is a SaaS product (pricing at advocatemcp.com/pricing). The report is not gated. We published it because attribution data at this tier has not existed, not because we are running a lead-gen campaign. Journalists who want to frame it as promotional content have every right to. We think the data speaks for itself; the commercial incentive does not change the numbers.
+Yes — Advocate is a SaaS product (pricing at advocatemcp.com/pricing). The report is not gated. We published it because attribution data at this tier has not existed, not because we are running a lead-gen campaign. Journalists who want to frame it as promotional content have every right to. We think the data speaks for itself; the commercial incentive does not change the numbers.
 
 ### Q5: Can I verify your data independently?
 
@@ -142,7 +142,7 @@ Yes. Three ways:
 
 1. The methodology section of the report lists exact table names, time windows, and the attribution mechanism (HMAC-SHA256 signed redirect tokens).
 2. We can walk you through the live instance on a call — show a bot query hitting the edge, the response being generated, and a simulated click resolving back through the attribution endpoint.
-3. We publish the AdvocateMCP manifest at `/.well-known/mcp.json` for any tenant site, which documents the capabilities and schemas the measurement depends on.
+3. We publish the Advocate manifest at `/.well-known/mcp.json` for any tenant site, which documents the capabilities and schemas the measurement depends on.
 
 ### Q6: What about privacy?
 
@@ -158,7 +158,7 @@ Three upgrades:
 
 ### Q8: Are you funded?
 
-Bootstrapped. Running on $0 outside revenue. Cofounder + solo engineer. Full transparency in the report's "About AdvocateMCP" section.
+Bootstrapped. Running on $0 outside revenue. Cofounder + solo engineer. Full transparency in the report's "About Advocate" section.
 
 ### Q9: Do you have customers who will talk on the record?
 

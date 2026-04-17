@@ -2,14 +2,14 @@
 
 **Draft v1 — Apr 16 2026**
 
-By Cameron McEwan, Founder, AdvocateMCP
+By Cameron McEwan, Founder, Advocate
 Contact: support@advocatemcp.com
 
 ---
 
 ## Executive Summary
 
-AdvocateMCP is the first platform sitting on both the AI crawler path and the transaction path for small and medium businesses. Because we intercept bot requests at the edge AND serve as the destination MCP endpoint for tools like Claude Desktop and Cursor, every response we generate carries a cryptographically signed redirect token that survives the hop from "bot visited" to "human clicked" to "outcome attributed." This preview is the first public look at what that instrument can measure. The sample is small and early, but the shape of the pipeline is the story: citation-monitoring tools can tell you if you were quoted — we can tell you what happened next.
+Advocate is the first platform sitting on both the AI crawler path and the transaction path for small and medium businesses. Because we intercept bot requests at the edge AND serve as the destination MCP endpoint for tools like Claude Desktop and Cursor, every response we generate carries a cryptographically signed redirect token that survives the hop from "bot visited" to "human clicked" to "outcome attributed." This preview is the first public look at what that instrument can measure. The sample is small and early, but the shape of the pipeline is the story: citation-monitoring tools can tell you if you were quoted — we can tell you what happened next.
 
 ---
 
@@ -30,7 +30,7 @@ This is a methodology preview, not a statistical blockbuster. We are showing wha
 ## Methodology
 
 ### Data source
-All data in this preview comes from AdvocateMCP's production systems covering April 9, 2026 — the day our first production tenant was onboarded — through April 16, 2026.
+All data in this preview comes from Advocate's production systems covering April 9, 2026 — the day our first production tenant was onboarded — through April 16, 2026.
 
 ### Sample
 Approximately 60 queries across a small pilot cohort of active business tenants, spanning three verticals:
@@ -131,7 +131,7 @@ The intent classifier bucketed the 50 most recent queries in the sample window a
 
 First, **88% of queries fall into `general` + `affordable`** — AI crawlers hitting SMB sites in Q1 are overwhelmingly asking "what does this business do" and "how much does it cost," not "who's the best." That's the discovery + consideration funnel, not the decision funnel. It suggests AI crawlers are still in catalog-building mode for SMBs, not yet in the "cite this business in a recommendation" mode where `best_top` would dominate. Q2 will show whether that's a stage-of-market signal or a sample quirk.
 
-Second, **`emergency` intent is rare in our data but non-zero (4%)** — and every emergency query came from a home-services tenant. This confirms what plumbers and HVAC companies have said anecdotally: AI assistants are being used for 2am "burst pipe, what do I do" queries. Even at N=2 the implication for service businesses is obvious: the availability and reservation tools (`get_availability`, `reserve_slot`) in AdvocateMCP's MCP surface need to handle after-hours emergency flows as a first-class case, not an edge case.
+Second, **`emergency` intent is rare in our data but non-zero (4%)** — and every emergency query came from a home-services tenant. This confirms what plumbers and HVAC companies have said anecdotally: AI assistants are being used for 2am "burst pipe, what do I do" queries. Even at N=2 the implication for service businesses is obvious: the availability and reservation tools (`get_availability`, `reserve_slot`) in Advocate's MCP surface need to handle after-hours emergency flows as a first-class case, not an edge case.
 
 **Reminder:** this is server-side heuristic classification, not user-labeled intent. It tells us what the classifier thought; Q2 will add human-labeled spot checks to calibrate the heuristic. The full 62-query sample mostly follows the same distribution — the 12 queries not in `recent_hits` came from early-April smoke tests and skew even more toward `general`.
 
@@ -149,9 +149,9 @@ The Q2 report lands in July 2026. The sample will be larger by roughly one to tw
 
 ---
 
-## About AdvocateMCP
+## About Advocate
 
-AdvocateMCP intercepts AI crawler traffic at the edge, generates per-bot per-query optimized responses, and tracks every resulting citation click end-to-end. We also expose all registered businesses through a central MCP server at `/mcp` so MCP-compatible clients like Claude Desktop and Cursor can query any tenant directly. The free **Business** tier covers agent hosting and attribution. **Pro** adds Competitor Radar (weekly Perplexity citation polling) and per-agent reputation analytics.
+Advocate intercepts AI crawler traffic at the edge, generates per-bot per-query optimized responses, and tracks every resulting citation click end-to-end. We also expose all registered businesses through a central MCP server at `/mcp` so MCP-compatible clients like Claude Desktop and Cursor can query any tenant directly. The free **Business** tier covers agent hosting and attribution. **Pro** adds Competitor Radar (weekly Perplexity citation polling) and per-agent reputation analytics.
 
 - **Web:** [advocatemcp.com](https://advocatemcp.com)
 - **Contact:** [support@advocatemcp.com](mailto:support@advocatemcp.com)
