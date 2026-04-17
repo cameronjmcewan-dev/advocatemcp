@@ -154,13 +154,13 @@ async function bootHero(canvas) {
   const start = performance.now();
   function tick(now) {
     const t = (now - start) / 1000;
-    // Idle rotation
-    logo.rotation.y = t * 0.08;
-    // Parallax tilt — max ~8°
-    const tiltX = mouseY *  0.14;
-    const tiltY = mouseX *  0.14;
-    logo.rotation.x += (tiltX - logo.rotation.x) * 0.05;
-    logo.rotation.y += (logo.rotation.y + tiltY - logo.rotation.y) * 0.0; // y already driven by idle spin; we layer parallax as a gentle offset
+    // Idle rotation (continuous)
+    const idleY = t * 0.08;
+    // Parallax tilt — max ~8°. Blend mouse offset with idle spin for Y.
+    const targetX =  mouseY * 0.14;
+    const targetY =  idleY + mouseX * 0.12;
+    logo.rotation.x += (targetX - logo.rotation.x) * 0.06;
+    logo.rotation.y += (targetY - logo.rotation.y) * 0.06;
     logo.position.x += (mouseX * 0.2 - logo.position.x) * 0.04;
     logo.position.y += (-mouseY * 0.15 - logo.position.y) * 0.04;
 
