@@ -8,51 +8,46 @@ Pitch email, reporter list, and FAQ for journalist outreach. Goal: 2–3 placeme
 
 ## Pitch email template
 
-Keep it under 200 words. Reporters skim. Lead with the one number that breaks the model, then the method, then the offer.
+Keep it under 200 words. Reporters skim. Lead with the instrument (what's new), then the early signal, then the offer.
 
 ### Subject line A/B — pick one per outlet, don't A/B within one reporter
 
-A. `GPTBot sends 58% of AI crawler traffic. It gets 0% of the clicks.`
+A. `First closed-loop AI attribution data from small businesses — methodology preview`
 
-B. `First SMB-tier data on AI crawler attribution — findings attached`
+B. `We built AI crawler attribution for SMBs. Publishing the first week of production data.`
 
-C. `We measured AI bot attribution for small businesses. Two bots, two different products.`
+C. `Nobody has measured which AI bot drives revenue to small businesses. We just started.`
 
 **Defaults:**
-- Tier-1 general tech (TechCrunch, Fortune, Axios): use A. The number is the hook.
+- Tier-1 general tech (TechCrunch, Fortune, Axios): use A. The novelty is the hook.
 - Trade/industry (Search Engine Land, Marketing Brew, The Information): use B. Sounds like research, not pitch.
-- Independent reporters who cover AI infrastructure specifically: use C. They'll appreciate the thesis framing.
+- Independent reporters who cover AI infrastructure specifically: use C. They'll appreciate the gap framing.
 
 ### Body
 
 ```
 Hi [FIRST NAME],
 
-I run a small tool that intercepts AI crawler requests at the edge for small businesses, returns a citation-ready response, and tracks every outbound link with a signed token so I can attribute downstream clicks back to the specific bot that drove them.
+I run a tool that intercepts AI crawler requests at the edge for small businesses, generates per-bot citation-ready responses, and tracks every outbound link with a signed redirect token so I can attribute downstream clicks back to the specific bot that drove them.
 
-Today I'm publishing Q1 2026 results from the first 6 businesses in production. The headline finding:
+Today I'm publishing a methodology preview — the first week of production data across three real tenants. Honest numbers: 20 organic queries classified from 64 total (59% was our own probe traffic from build-out, fully disclosed).
 
-GPTBot sent 58% of AI crawler traffic. Every attributed click in the dataset came from PerplexityBot. GPTBot's 36 queries produced zero clicks.
+On the clean subset: GPTBot sent 50% of queries, PerplexityBot 25%, ClaudeBot 25%. The only organic click we could unambiguously attribute came from PerplexityBot. Too early to claim a pattern, but the instrument is working and Q2 will be the first quantitative report.
 
-Read on GPTBot as an indexing crawler (user reads the cached answer, never clicks) vs. Perplexity as a routing crawler (inline citations users actively click). The business impact is not symmetric.
+Nobody at SMB tier has closed this attribution loop before. Profound and Scrunch monitor enterprise citations. Reddit gets ~$60M/year from Google for training data access. But there's no equivalent for an independent plumber or a pediatric orthotic brand.
 
-Full methodology + findings: https://advocatemcp.com/research/state-of-ai-bot-traffic-q1-2026
-
-The enterprise-tier players here (Profound, Scrunch) are publishing citation-monitoring data. Nobody at the SMB tier has published attribution data. This is the first cut.
-
-Happy to walk through the method on a call if useful — I can show live traffic hitting a real business tenant and the attribution loop closing end to end.
+Happy to walk through the method on a call — I can show live traffic hitting a real tenant and the attribution loop closing end to end.
 
 Cameron McEwan
 Founder, Advocate
 [phone]
 ```
 
-**Why ~170 words works:**
-- Opens with what you do in plain language, no brand puffery
-- Lead finding is one specific number, not a range
-- Second paragraph explains the mechanism so the reporter has a story, not a stat
-- Offers a call with live demo — reporters cite tools they've seen, not tools they've read about
-- Signs with phone, not Calendly — reporters under deadline call, they don't book
+**Why this version works:**
+- Opens with what you do in plain language
+- Leads with the instrument (novelty), not a single number
+- Discloses the probe-traffic ratio upfront — reporter trust
+- Offers a call with live demo
 
 ---
 
@@ -80,7 +75,7 @@ Priority tiers. Send in waves — 5 per day, not all 20 at once. Over-dispatchin
 
 11. **Jessica Mathews — Fortune Term Sheet** — VC/startup angle. Advocate vs Profound is a Term Sheet story. `jessica.mathews@fortune.com`
 12. **Anita Ramaswamy — The Information** — B2B SaaS + founder profiles. `anita@theinformation.com`
-13. **Rebecca Bellan — TechCrunch** — covers agents + commerce. The 19% purchase-intent stat is her angle. `rebecca.bellan@techcrunch.com`
+13. **Rebecca Bellan — TechCrunch** — covers agents + commerce. The methodology angle is her beat. `rebecca.bellan@techcrunch.com`
 14. **Hayden Field — CNBC** — AI + enterprise adoption. `hayden.field@nbcuni.com`
 15. **Kyle Wiggers — TechCrunch** — AI policy + research tooling. `kyle.wiggers@techcrunch.com`
 
@@ -114,33 +109,27 @@ Profound and Scrunch measure which brands are cited in AI answers (Fortune 500 s
 
 Short version: they measure visibility, we measure attribution.
 
-### Q2: The sample size is small. Why publish now?
+### Q2: The sample size is very small. Why publish now?
 
-Two reasons. First, no one else is publishing this data at any sample size for SMBs — the category is blank. Putting a directional finding on the record is more useful than waiting another two quarters to publish a larger-N study that is still the only one in the field.
+Three reasons. First, nobody at SMB tier has published the closed-loop methodology — the instrument is the contribution, not the numbers. Second, we're explicit about the limits: 20 organic queries classified from 64 total, 59% probe traffic from build-out, 1–2 unambiguously organic clicks. We disclose the classification in the methodology section.
 
-Second, we are explicit in the report about the statistical limits. N=62 queries, N=6 clicks. We flag it in the methodology section and again in the caveats. We are not asking readers to bet a business on this data — we are asking them to update their priors. That is a lower evidentiary bar and one a small dataset can meet.
+Third, there's a directionally interesting signal — PerplexityBot routes users who click through while GPTBot's queries haven't produced an attributed click yet. We want this hypothesis on the record before Q2 triples the sample. We're not asking reporters to bet on the numbers — we're asking them to cover the instrument and the methodology.
 
-### Q3: "Zero GPTBot clicks" sounds like a measurement bug. How do you know it's real?
+### Q3: "Only 1–2 organic clicks" — is the instrument even working?
 
-It was our first hypothesis too. What we did to rule it out:
+Yes. The attribution loop captured click events across multiple bot types and tenants. The signed redirect tokens resolve correctly. The reason the organic click count is low is that the tenants are new — they've been in production for one week. Q2 will have a full quarter of organic traffic across more tenants.
 
-- The attribution loop captured clicks from 5 other bot types in the same window, including ClaudeBot with only 1 total query. The instrument is not broken.
-- GPTBot queries produced server-200 responses with properly signed citation tokens. The tokens were valid. No click came in against any of them.
-- We spot-checked the GPTBot queries' content — the responses were not somehow degenerate or lower-quality than PerplexityBot responses. Same system, same tenants, same method.
-
-The mechanism we believe is at play: GPTBot fetches and caches content for later answer-generation inside ChatGPT. When a user later asks a question, ChatGPT serves the cached answer without the user ever clicking a source link. So even a well-cited response generates no click.
-
-PerplexityBot behaves differently — its answers surface inline citations the user actively clicks. It functions as a referrer. GPTBot functions as a library.
+What we can say: the instrument attributed its first organic bot click on April 10 (DMRE tenant, PerplexityBot, query about commercial land sales). That's the proof the loop closes. Scale is what Q2 adds.
 
 ### Q4: Is this a paid tool? Are you selling something?
 
-Yes — Advocate is a SaaS product (pricing at advocatemcp.com/pricing). The report is not gated. We published it because attribution data at this tier has not existed, not because we are running a lead-gen campaign. Journalists who want to frame it as promotional content have every right to. We think the data speaks for itself; the commercial incentive does not change the numbers.
+Yes — Advocate is a SaaS product (pricing at advocatemcp.com/pricing). The report is not gated. We published it because attribution data at this tier has not existed, not because we are running a lead-gen campaign. Journalists who want to frame it as promotional content have every right to. We think the methodology speaks for itself; the commercial incentive does not change the instrument.
 
 ### Q5: Can I verify your data independently?
 
 Yes. Three ways:
 
-1. The methodology section of the report lists exact table names, time windows, and the attribution mechanism (HMAC-SHA256 signed redirect tokens).
+1. The methodology section of the report lists the classification logic, time windows, and the attribution mechanism (HMAC-SHA256 signed redirect tokens).
 2. We can walk you through the live instance on a call — show a bot query hitting the edge, the response being generated, and a simulated click resolving back through the attribution endpoint.
 3. We publish the Advocate manifest at `/.well-known/mcp.json` for any tenant site, which documents the capabilities and schemas the measurement depends on.
 
@@ -183,9 +172,9 @@ Embargo email language:
 ```
 Hi [FIRST NAME],
 
-Publishing Q1 attribution data on [DATE] public. Offering an embargoed briefing 48 hours prior if helpful — data, methodology walkthrough, and a call with me to ask anything. Embargo would lift at [TIME] on [DATE], matching public publish.
+Publishing Q1 AI attribution methodology preview on [DATE] public. Offering an embargoed briefing 48 hours prior if helpful — instrument walkthrough, early data, and a call with me to ask anything. Embargo would lift at [TIME] on [DATE], matching public publish.
 
-Two sentences on the finding: GPTBot sent 58% of AI crawler traffic to SMBs in Q1. 100% of attributed clicks came from PerplexityBot.
+Two sentences on what's new: first closed-loop AI attribution data from small businesses. 20 organic queries, 3 tenants, 3 bots — methodology preview before the quantitative Q2 report.
 
 Interested?
 
@@ -202,7 +191,7 @@ Day 1 (publish): Wave 1 pitches go out in the morning, social posts in the after
 Day 2: Wave 2 pitches go out. Reply to any Wave 1 questions. Nudge any Wave 1 silence after 24h.
 Day 3: Wave 3 pitches go out. Monitor inbound.
 Day 5: Wave 4 pitches + any followup to silent Wave 2/3 reporters with one-line nudge.
-Day 10: Consolidation email to any reporter who engaged but didn't place: "Saw you liked the data — happy to provide the Q2 exclusive when ready."
+Day 10: Consolidation email to any reporter who engaged but didn't place: "Saw you liked the methodology — happy to provide the Q2 exclusive when ready."
 
 ---
 
