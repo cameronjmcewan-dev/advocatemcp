@@ -29,8 +29,8 @@ Subject: Heads-up — publishing Tuesday
 Hi [name],
 
 Publishing our first State of AI Bot Traffic report Tuesday 8am PT. TL;DR:
-GPTBot sends 58% of AI crawler traffic to small businesses, PerplexityBot
-got 100% of attributed clicks.
+First closed-loop AI attribution data from small businesses — methodology
+preview of what the instrument sees in its first week of production.
 
 No ask — just want you to hear it from me before the socials. Happy to
 send the full report early if useful.
@@ -59,7 +59,7 @@ ls -la scripts/deploy-pages.sh
 **Pre-flight checklist:**
 
 - [ ] Report proofread one more time. Read it aloud to catch anything clunky.
-- [ ] All 3 external citations still 200 (ALM, InfoQ, CJR). Click each.
+- [ ] Both external citations still 200 (InfoQ, CJR). Click each. ALM was retracted (NXDOMAIN).
 - [ ] OG image preview tool: paste `https://advocatemcp.com/research/state-of-ai-bot-traffic-q1-2026` into `https://www.opengraph.xyz` — verify image, title, description all render.
 - [ ] Twitter card validator: `https://cards-dev.twitter.com/validator` — same paste, verify `summary_large_image` card renders.
 - [ ] LinkedIn post inspector: `https://www.linkedin.com/post-inspector/` — same paste.
