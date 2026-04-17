@@ -1,0 +1,649 @@
+/* ═════════════════════════════════════════════════════════════════
+   Advocate — Redesign layer
+   Sits on top of existing inline styles. No copy changes. Pure visuals.
+   See /advocate-website-design.md for rationale + tokens.
+   ═════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Supplementary design tokens ──────────────────────────── */
+:root {
+  --accent-bright: #a03569;
+  --accent-glow:   rgba(125, 37, 80, 0.35);
+  --accent-glow-2: rgba(125, 37, 80, 0.18);
+  --border-accent: rgba(168, 41, 58, 0.4);
+  --glass-bg:      rgba(26, 13, 16, 0.6);
+  --glass-border:  rgba(245, 237, 228, 0.07);
+  --glass-blur:    20px;
+  --container-w:   1280px;
+  --beam-cycle:    8s;
+}
+
+[data-theme="light"] {
+  --accent-bright: #a03569;
+  --accent-glow:   rgba(125, 37, 80, 0.18);
+  --accent-glow-2: rgba(125, 37, 80, 0.08);
+  --border-accent: rgba(125, 37, 80, 0.28);
+  --glass-bg:      rgba(255, 255, 255, 0.62);
+  --glass-border:  rgba(26, 25, 23, 0.08);
+}
+
+/* ── 2. Background grain overlay (kills banding) ─────────────── */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.9 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+/* Ensure actual page content stays above the grain */
+body > * { position: relative; z-index: 1; }
+
+/* ── 3. Glow halo backgrounds (full-bleed wallpaper) ──────────── */
+.rd-halo-soft,
+.rd-halo-med,
+.rd-halo-hot {
+  position: relative;
+  isolation: isolate;
+}
+.rd-halo-soft::before,
+.rd-halo-med::before,
+.rd-halo-hot::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+.rd-halo-soft::before {
+  background: radial-gradient(ellipse 70% 70% at 50% 40%, var(--accent-glow-2) 0%, transparent 70%);
+}
+.rd-halo-med::before {
+  background: radial-gradient(ellipse 70% 80% at 50% 50%, var(--accent-glow) 0%, transparent 68%);
+}
+.rd-halo-hot::before {
+  background:
+    radial-gradient(ellipse 60% 55% at 50% 30%, rgba(125,37,80,.30) 0%, transparent 62%),
+    radial-gradient(ellipse 80% 60% at 50% 100%, rgba(125,37,80,.15) 0%, transparent 70%);
+}
+
+/* ── 4. Full-bleed + container helpers ────────────────────────── */
+.rd-bleed {
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+}
+.rd-container {
+  max-width: var(--container-w);
+  margin-inline: auto;
+  padding-inline: 40px;
+}
+@media (max-width: 720px) {
+  .rd-container { padding-inline: 20px; }
+}
+
+/* ── 5. Glass panel primitive ─────────────────────────────────── */
+.rd-glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--r-xl);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.04) inset,
+    0 24px 60px rgba(0,0,0,0.45),
+    0 0 0 1px var(--border-accent) inset;
+  transition: transform .18s ease-out, box-shadow .18s ease-out;
+}
+.rd-glass-hover:hover {
+  transform: translateY(-4px);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.06) inset,
+    0 32px 72px rgba(0,0,0,0.55),
+    0 0 0 1px var(--border-accent) inset,
+    0 0 40px var(--accent-glow);
+}
+[data-theme="light"] .rd-glass {
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.8) inset,
+    0 16px 40px rgba(0,0,0,0.08),
+    0 0 0 1px var(--border-accent) inset;
+}
+
+/* ── 6. Hero enhancements ─────────────────────────────────────── */
+.ln-hero {
+  overflow: hidden;
+  padding-top: 120px;
+  padding-bottom: 100px;
+}
+.ln-hero::after {
+  /* horizontal beam sweep */
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -30%;
+  width: 40%;
+  height: 100%;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent 0%, var(--accent-glow-2) 45%, transparent 100%);
+  filter: blur(40px);
+  animation: rd-beam var(--beam-cycle) ease-in-out infinite;
+  opacity: 0.55;
+  z-index: 0;
+}
+@keyframes rd-beam {
+  0%, 100% { transform: translateX(0); opacity: 0; }
+  40% { opacity: 0.55; }
+  50% { transform: translateX(280%); opacity: 0.55; }
+  60% { opacity: 0; }
+}
+/* Hero canvas (Three.js floating logo) */
+.rd-hero-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .6s ease;
+}
+.rd-hero-canvas.rd-ready { opacity: 1; }
+/* Keep hero inner content above the canvas */
+.ln-hero-inner { position: relative; z-index: 2; }
+.ln-hero-bg { z-index: 0; }
+
+/* Enlarge the browser mockup shadow/glow so it feels elevated */
+.ln-browser {
+  box-shadow:
+    0 32px 80px rgba(0,0,0,0.55),
+    0 0 0 1px rgba(255,255,255,0.04),
+    0 0 60px var(--accent-glow-2) !important;
+}
+
+/* Upgrade the ticker with gradient fade edges + slower scroll */
+.ln-ticker { position: relative; }
+.ln-ticker::before,
+.ln-ticker::after {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 120px;
+  pointer-events: none;
+  z-index: 2;
+}
+.ln-ticker::before { left: 0;  background: linear-gradient(90deg, var(--surface) 0%, transparent 100%); }
+.ln-ticker::after  { right: 0; background: linear-gradient(270deg, var(--surface) 0%, transparent 100%); }
+.ticker-track { animation-duration: 42s !important; }
+
+/* ── 7. Feature rows — wider breathing room ───────────────────── */
+.ln-feat-row {
+  max-width: var(--container-w) !important;
+  gap: 96px !important;
+  padding: 120px 40px !important;
+}
+
+/* Terminal chrome variant of the mock card */
+.ln-feat-row:nth-of-type(1) .ln-mock {
+  border: 1px solid var(--border-accent);
+  box-shadow:
+    0 24px 60px rgba(0,0,0,0.5),
+    0 0 0 1px rgba(125,37,80,0.25),
+    0 0 48px var(--accent-glow-2);
+  animation: rd-bob 6s ease-in-out infinite;
+}
+@keyframes rd-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
+}
+
+/* Faint grid wallpaper behind feature rows section */
+#ln-features {
+  position: relative;
+  isolation: isolate;
+}
+#ln-features::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--border-accent) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border-accent) 1px, transparent 1px);
+  background-size: 60px 60px;
+  opacity: 0.15;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, black 0%, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, black 0%, transparent 75%);
+}
+
+/* Feature 2 (analytics): glass + animated bars */
+.ln-feat-row:nth-of-type(2) .ln-mock {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  border: 1px solid var(--border-accent);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.04) inset,
+    0 24px 60px rgba(0,0,0,0.5),
+    0 0 48px var(--accent-glow-2);
+}
+.ln-mini-bar-fill {
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent-bright) 100%) !important;
+  box-shadow: 0 0 12px var(--accent-glow);
+  transform-origin: left;
+  transition: width .9s cubic-bezier(.2,.8,.2,1);
+}
+/* Pre-animation state; toggled on scroll-into-view */
+.ln-feat-row:nth-of-type(2):not(.rd-bars-in) .ln-mini-bar-fill { width: 0 !important; }
+
+/* Feature 3 (referral flow): animated arrow pulse */
+.ln-flow-arrow {
+  color: var(--accent) !important;
+  animation: rd-arrow-pulse 2.8s ease-in-out infinite;
+}
+@keyframes rd-arrow-pulse {
+  0%, 100% { opacity: 0.35; transform: translateY(0); }
+  50%      { opacity: 1;    transform: translateY(2px); }
+}
+.ln-flow-step { transition: box-shadow .25s, border-color .25s; }
+.ln-flow-step:hover {
+  border-color: var(--border-accent);
+  box-shadow: 0 0 24px var(--accent-glow-2);
+}
+
+/* ── 8. Capabilities grid — hover glow-lift + top-edge accent ── */
+.ln-caps-inner { max-width: var(--container-w) !important; }
+.ln-cap {
+  position: relative;
+  transition: background .25s, transform .25s, box-shadow .25s !important;
+}
+.ln-cap::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--accent) 50%, transparent 100%);
+  box-shadow: 0 0 12px var(--accent-glow);
+  transition: width .35s ease-out;
+  pointer-events: none;
+}
+.ln-cap:hover::before { width: 80%; }
+.ln-cap:hover {
+  transform: translateY(-6px) !important;
+  box-shadow: 0 20px 48px rgba(0,0,0,0.5), 0 0 32px var(--accent-glow-2) !important;
+}
+.ln-cap:hover .ln-cap-icon {
+  box-shadow: 0 0 20px var(--accent-glow);
+  transform: rotate(-4deg) scale(1.05);
+}
+.ln-cap-icon { transition: box-shadow .25s, transform .25s; }
+
+/* ── 9. Trust band — wider ──────────────────────────────────── */
+.ln-trust-inner { max-width: var(--container-w) !important; }
+
+/* ── 10. Outcomes / Industries — pill tabs + cross-fade ─────── */
+.ln-outcomes-inner { max-width: var(--container-w) !important; }
+.ln-tab-bar {
+  border-bottom: 1px solid var(--border-accent) !important;
+  gap: 8px !important;
+  padding-bottom: 4px !important;
+}
+.ln-tab {
+  border-radius: 100px !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  margin-bottom: 0 !important;
+  padding: 10px 20px !important;
+  transition: background .2s, border-color .2s, color .2s, box-shadow .2s !important;
+}
+.ln-tab:hover {
+  background: var(--accent-dim) !important;
+  color: var(--text) !important;
+}
+.ln-tab.on {
+  background: linear-gradient(90deg, var(--accent) 0%, rgba(125,37,80,0.15) 120%) !important;
+  border-color: var(--border-accent) !important;
+  color: #fff !important;
+  box-shadow: 0 6px 22px var(--accent-glow), 0 0 0 1px var(--border-accent) inset;
+}
+.ln-tab-panels .ln-panel {
+  transition: opacity .18s ease-out;
+}
+.ln-tab-panels .ln-panel:not(.on) { opacity: 0; }
+.ln-tab-panels .ln-panel.on       { opacity: 1; }
+/* Glass treatment for the mocked AI answer cards inside industry tabs */
+.ln-panel .ln-mock {
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  border: 1px solid var(--border-accent) !important;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.04) inset,
+    0 18px 48px rgba(0,0,0,0.45),
+    0 0 32px var(--accent-glow-2) !important;
+}
+
+/* ── 11. Customer stories — glass + gradient numbers ────────── */
+.ln-cases-hd { max-width: var(--container-w) !important; }
+.ln-case {
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  border: 1px solid var(--border-accent) !important;
+  width: 320px !important;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.04) inset,
+    0 18px 48px rgba(0,0,0,0.4);
+}
+.ln-case:hover {
+  border-color: var(--accent) !important;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.06) inset,
+    0 28px 64px rgba(0,0,0,0.55),
+    0 0 40px var(--accent-glow) !important;
+}
+.ln-case-metric-val {
+  background: linear-gradient(135deg, var(--accent-bright) 0%, var(--accent) 60%, var(--accent-dk) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: rd-stat-pulse 4.2s ease-in-out infinite;
+}
+@keyframes rd-stat-pulse {
+  0%, 100% { filter: brightness(1);    }
+  50%      { filter: brightness(1.2);  }
+}
+
+/* ── 12. Pricing — Pro card elevated + glow ─────────────────── */
+.ln-price-inner { max-width: var(--container-w) !important; }
+.ln-price {
+  position: relative;
+  isolation: isolate;
+}
+.ln-price::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(ellipse 50% 60% at 50% 50%, var(--accent-glow) 0%, transparent 70%);
+  pointer-events: none;
+}
+.ln-price-card {
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  border: 1px solid var(--glass-border) !important;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.04) inset,
+    0 18px 48px rgba(0,0,0,0.4);
+}
+.ln-price-card.pop {
+  transform: translateY(-8px);
+  border-color: var(--accent) !important;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.06) inset,
+    0 28px 64px rgba(0,0,0,0.55),
+    0 0 48px var(--accent-glow) !important;
+}
+.ln-price-card.pop:hover {
+  transform: translateY(-12px) !important;
+}
+.ln-price-card .btn-primary,
+.ln-final-cta .btn-primary,
+.ln-hero-cta .btn-primary {
+  box-shadow: 0 6px 22px var(--accent-glow);
+  transition: background .15s, border-color .15s, transform .15s, box-shadow .15s;
+}
+.ln-price-card .btn-primary:hover,
+.ln-final-cta .btn-primary:hover,
+.ln-hero-cta .btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 32px var(--accent-glow), 0 0 0 1px var(--accent-bright);
+}
+
+/* ── 13. Final CTA — background network echo ────────────────── */
+.ln-final-cta {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+.ln-final-cta .ln-cta-h em {
+  background: linear-gradient(90deg, var(--accent-bright) 0%, var(--accent) 60%, var(--accent-dk) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.ln-final-cta::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 60% 70% at 50% 50%, rgba(125,37,80,.18) 0%, transparent 62%),
+    conic-gradient(from 0deg at 50% 50%, transparent 0deg, var(--accent-glow-2) 60deg, transparent 120deg, var(--accent-glow-2) 220deg, transparent 280deg);
+  filter: blur(40px);
+  opacity: 0.6;
+  animation: rd-conic-spin 32s linear infinite;
+}
+@keyframes rd-conic-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── 14. Footer — wordmark halo + hairline ──────────────────── */
+.ln-footer {
+  position: relative;
+  border-top: 1px solid var(--border-accent) !important;
+}
+.ln-footer::before {
+  content: "";
+  position: absolute;
+  top: -1px; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--accent) 50%, transparent 100%);
+  box-shadow: 0 0 16px var(--accent-glow);
+  pointer-events: none;
+}
+.ln-footer-inner { max-width: var(--container-w) !important; }
+.ln-footer-brand .logo {
+  position: relative;
+  isolation: isolate;
+}
+.ln-footer-brand .logo::before {
+  content: "";
+  position: absolute;
+  inset: -20px;
+  z-index: -1;
+  background: radial-gradient(ellipse 80% 200% at 0% 50%, var(--accent-glow-2) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* ── 15. Network constellation centerpiece ──────────────────── */
+.rd-network {
+  position: relative;
+  min-height: 90vh;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  isolation: isolate;
+  padding: 80px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.rd-network::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse 55% 55% at 50% 50%, rgba(125,37,80,.25) 0%, transparent 65%),
+    radial-gradient(ellipse 100% 100% at 50% 50%, rgba(0,0,0,0.4) 0%, transparent 80%);
+}
+.rd-network-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  opacity: 0;
+  transition: opacity .6s ease;
+}
+.rd-network-canvas.rd-ready { opacity: 1; }
+.rd-network-overlay {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  max-width: 620px;
+  padding: 0 40px;
+  pointer-events: none;
+}
+.rd-network-overlay .s-label {
+  font-size: var(--tx-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+.rd-network-overlay h2 {
+  font-family: var(--font-serif);
+  font-size: var(--h2);
+  line-height: 1.1;
+  letter-spacing: -.025em;
+  color: var(--text);
+}
+.rd-network-overlay h2 em {
+  font-style: italic;
+  color: var(--accent);
+}
+/* Static SVG fallback visible when the WebGL scene never initializes */
+.rd-network-fallback {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.rd-network-fallback svg {
+  width: min(760px, 90%);
+  height: auto;
+  opacity: 0.9;
+}
+.rd-has-webgl .rd-network-fallback { display: none; }
+
+/* ── 16. Dashboard restyle (shared across dashboard.html + #page-dashboard) ── */
+.db-side {
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  border-right: 1px solid var(--border-accent) !important;
+}
+.db-nav-item {
+  position: relative;
+  transition: background .18s, color .18s !important;
+}
+.db-nav-item::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 6px; bottom: 6px;
+  width: 2px;
+  background: var(--accent);
+  border-radius: 2px;
+  opacity: 0;
+  transform: scaleY(0.5);
+  transition: opacity .2s, transform .2s;
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+.db-nav-item.on::before {
+  opacity: 1;
+  transform: scaleY(1);
+}
+.db-nav-item.on {
+  background: var(--accent-dim) !important;
+  color: var(--accent) !important;
+}
+.db-top,
+.db-topbar {
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  border-bottom: 1px solid var(--border-accent) !important;
+}
+.db-stat,
+.db-card,
+.db-panel,
+.db-widget {
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  border: 1px solid var(--glass-border) !important;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.04) inset,
+    0 12px 32px rgba(0,0,0,0.3);
+}
+.db-stat-val,
+.db-stat-value,
+.db-metric-val {
+  color: var(--accent) !important;
+}
+.db-table th,
+.db-table td {
+  border-color: var(--border-accent) !important;
+}
+.db-table tbody tr:hover {
+  background: var(--accent-dim) !important;
+}
+.db-modal,
+.db-modal-body,
+.db-modal-content {
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  border: 1px solid var(--border-accent) !important;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.04) inset,
+    0 32px 80px rgba(0,0,0,0.6),
+    0 0 48px var(--accent-glow-2);
+}
+.db-modal-backdrop,
+.db-overlay {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  background: rgba(0,0,0,0.6) !important;
+}
+
+/* ── 17. Responsive tweaks ──────────────────────────────────── */
+@media (max-width: 960px) {
+  :root { --container-w: 100%; }
+  .ln-feat-row {
+    grid-template-columns: 1fr !important;
+    gap: 40px !important;
+    padding: 80px 20px !important;
+  }
+  .rd-network { min-height: 70vh; }
+}
+
+/* ── 18. prefers-reduced-motion + mobile WebGL gate ─────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .ln-hero::after,
+  .ln-final-cta::before,
+  .rd-hero-canvas,
+  .rd-network-canvas { display: none !important; }
+}
+@media (max-width: 899px) {
+  .rd-hero-canvas,
+  .rd-network-canvas { display: none !important; }
+}
