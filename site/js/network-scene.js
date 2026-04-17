@@ -1,8 +1,10 @@
 // ═══════════════════════════════════════════════════════════════════
 // Advocate — Network constellation centerpiece
-// Glowing maroon arcs from AI nodes → logo → lead dots, with bloom.
+// Glowing oxblood arcs from AI nodes → logo → lead dots, with bloom.
 // Lazy-loaded, mobile/reduced-motion gated (CSS also hides canvas).
 // ═══════════════════════════════════════════════════════════════════
+
+import { theme } from './theme.js';
 
 const SECTION_SELECTOR = '.rd-network';
 const CANVAS_SELECTOR  = '.rd-network-canvas';
@@ -65,8 +67,8 @@ async function bootNetwork(canvas, section) {
   const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 100);
   camera.position.set(0, 0, 12);
 
-  const accent       = new THREE.Color('#7d2550');
-  const accentBright = new THREE.Color('#a03569');
+  const accent       = new THREE.Color(theme.accent);
+  const accentBright = new THREE.Color(theme.accentBright);
 
   // Lighting (the scene is mostly emissive but we still want a little fill)
   scene.add(new THREE.AmbientLight(0xffffff, 0.25));

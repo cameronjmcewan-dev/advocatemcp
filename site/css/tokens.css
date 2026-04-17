@@ -1,0 +1,57 @@
+/* ═════════════════════════════════════════════════════════════════
+   Advocate — Design tokens
+   Single source of truth for color, typography, and radius.
+   Import at top of <head> on every public page, BEFORE other sheets.
+   ═════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Color — dark mode (default) */
+  --bg:             #050202;
+  --surface:        #0d0507;
+  --surface-2:      #140a0c;
+  --border:         #2a1418;
+  --text:           #e8e3e0;
+  --muted:          #8a7c78;
+  --accent:         #3d0a22;
+  --accent-dk:      #2a0617;
+  --accent-bright:  #5c1532;
+  --accent-dim:     rgba(61, 10, 34, 0.18);
+  --accent-ring:    rgba(61, 10, 34, 0.30);
+  --accent-glow:    rgba(92, 21, 50, 0.35);
+
+  /* Typography */
+  --font-serif:  'Instrument Serif', Georgia, serif;
+  --font-body:   'General Sans', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono:   'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+
+  --tx-xs:   clamp(.6875rem, .66rem + .14vw, .75rem);
+  --tx-sm:   clamp(.8125rem, .78rem + .16vw, .875rem);
+  --tx-base: clamp(1rem, .97rem + .15vw, 1.0625rem);
+  --tx-md:   clamp(1.0625rem, 1.02rem + .21vw, 1.125rem);
+  --tx-lg:   clamp(1.125rem, 1.07rem + .28vw, 1.25rem);
+  --tx-xl:   clamp(1.5rem, 1.35rem + .75vw, 2rem);
+
+  --h1: clamp(4rem, 5.5vw, 5rem);
+  --h2: clamp(2.5rem, 3.5vw, 3rem);
+
+  /* Radius */
+  --r-sm: 4px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+}
+
+[data-theme="light"] {
+  --bg:             #faf8f7;
+  --surface:        #ffffff;
+  --surface-2:      #f0ecea;
+  --border:         #d8d1ce;
+  --text:           #1a0a0e;
+  --muted:          #6b6360;
+  --accent:         #3d0a22;
+  --accent-dk:      #2a0617;
+  --accent-bright:  #5c1532;
+  --accent-dim:     rgba(61, 10, 34, 0.10);
+  --accent-ring:    rgba(61, 10, 34, 0.22);
+  --accent-glow:    rgba(92, 21, 50, 0.20);
+}

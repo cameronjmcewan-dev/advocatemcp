@@ -6,6 +6,8 @@
 //   - .ln-hero is intersecting the viewport
 // ═══════════════════════════════════════════════════════════════════
 
+import { theme } from './theme.js';
+
 const CANVAS_SELECTOR  = '.rd-hero-canvas';
 const HERO_SELECTOR    = '.ln-hero';
 const LOGO_TEXTURE_URL = '/icon-512.png'; // PNG with transparency, already in /site
@@ -90,7 +92,7 @@ async function bootHero(canvas) {
   const logo = new THREE.Group();
   const layerCount = 4;
   const baseSize   = 2.6;
-  const accent     = new THREE.Color('#7d2550');
+  const accent     = new THREE.Color(theme.accent);
 
   for (let i = 0; i < layerCount; i++) {
     const material = new THREE.MeshPhysicalMaterial({

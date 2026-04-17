@@ -8,7 +8,7 @@
     var v = getComputedStyle(document.documentElement)
       .getPropertyValue('--accent')
       .trim();
-    return v || '#7d2550';
+    return v || '#3d0a22';
   }
 
   function accentDim() {
