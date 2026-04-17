@@ -479,6 +479,13 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
     </div>
   </div>
 
+  <div class="field" id="f-description">
+    <label for="biz-description">Tell us about your business</label>
+    <textarea id="biz-description" rows="3" maxlength="2000" required placeholder="In 2-3 sentences, what does your business do? What customers do you serve?"></textarea>
+    <p class="field-error">Please tell us about your business</p>
+    <p class="hint" style="font-size:var(--tx-xs);color:var(--muted);margin-top:6px">Required. Up to 2000 characters.</p>
+  </div>
+
   <div class="field" id="f-website">
     <label for="biz-website">Business website <span class="opt">(optional)</span></label>
     <input type="url" id="biz-website" placeholder="https://yourbusiness.com" />
@@ -542,11 +549,42 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
   </div>
 </div>
 
-<!-- ══ STEP 3 — QUOTES/TESTIMONIALS ════════════════════════════════════════ -->
+<!-- ══ STEP 3 — SOCIAL PROOF ═══════════════════════════════════════════════ -->
 <div class="card" id="step-3" style="display:none">
   <p class="step-eyebrow">Step 3 of 9</p>
-  <h1 class="step-title">Quotes &amp; testimonials</h1>
-  <p class="step-desc">Add customer quotes that AI can reference when recommending your business. Optional but powerful.</p>
+  <h1 class="step-title">Social proof</h1>
+  <p class="step-desc">Your customer reputation — used to ground AI responses about your business.</p>
+
+  <div class="field" id="f-star-rating">
+    <label for="biz-star-rating">Average star rating</label>
+    <input type="number" id="biz-star-rating" min="0" max="5" step="0.1" required placeholder="4.8" />
+    <p class="field-error">Please enter a rating between 0 and 5</p>
+    <p class="hint" style="font-size:var(--tx-xs);color:var(--muted);margin-top:6px">Your average rating across Google, Yelp, or wherever customers review you. Self-reported.</p>
+  </div>
+
+  <div class="field" id="f-review-count">
+    <label for="biz-review-count">Approximate review count</label>
+    <input type="number" id="biz-review-count" min="0" step="1" required placeholder="127" />
+    <p class="field-error">Please enter your approximate review count</p>
+    <p class="hint" style="font-size:var(--tx-xs);color:var(--muted);margin-top:6px">Roughly how many reviews you have total. A rough number is fine.</p>
+  </div>
+
+  <div class="field" id="f-review-platform">
+    <label for="biz-review-platform">Primary review platform</label>
+    <select id="biz-review-platform" required>
+      <option value="" disabled selected>Select...</option>
+      <option value="google">Google</option>
+      <option value="yelp">Yelp</option>
+      <option value="facebook">Facebook</option>
+      <option value="bbb">Better Business Bureau</option>
+      <option value="other">Other</option>
+    </select>
+    <p class="field-error">Please select your primary review platform</p>
+    <p class="hint" style="font-size:var(--tx-xs);color:var(--muted);margin-top:6px">Where most of your reviews live. This shapes how we attribute the rating in AI responses.</p>
+  </div>
+
+  <h3 style="font-size:var(--tx-sm);font-weight:600;color:var(--muted);margin:28px 0 12px;text-transform:uppercase;letter-spacing:.05em">Testimonials (optional)</h3>
+  <p style="font-size:var(--tx-sm);color:var(--muted);margin-bottom:16px">Add customer quotes that AI can reference when recommending your business.</p>
 
   <div id="quotes-list">
     <div class="quote-entry" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r-lg);padding:16px;margin-bottom:12px">
@@ -850,6 +888,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
         <div class="rv"><span class="rv-label">Industry</span><span class="rv-val" id="rv-industry">—</span></div>
         <div class="rv"><span class="rv-label">Location</span><span class="rv-val" id="rv-location">—</span></div>
         <div class="rv"><span class="rv-label">Website</span><span class="rv-val" id="rv-website">—</span></div>
+        <div class="rv full"><span class="rv-label">About</span><span class="rv-val" id="rv-description">—</span></div>
       </div>
     </div>
 
@@ -867,13 +906,15 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
       </div>
     </div>
 
-    <!-- Quotes -->
+    <!-- Social proof -->
     <div class="review-section">
       <div class="review-section-hd">
-        <span class="review-section-title">Quotes &amp; testimonials</span>
+        <span class="review-section-title">Social proof</span>
         <button class="edit-link" onclick="goToStep(3)">Edit</button>
       </div>
       <div class="review-grid">
+        <div class="rv"><span class="rv-label">Star rating</span><span class="rv-val" id="rv-star-rating">—</span></div>
+        <div class="rv"><span class="rv-label">Reviews</span><span class="rv-val" id="rv-review-count">—</span></div>
         <div class="rv full"><span class="rv-label">Testimonials</span><span class="rv-val" id="rv-quotes">—</span></div>
       </div>
     </div>
@@ -999,6 +1040,10 @@ const state = {
   consultation: true,
   leadType: 'website',
   plan: 'base',
+  description: '',
+  starRating: null,
+  reviewCount: null,
+  reviewPlatform: '',
 };
 
 const INDUSTRY_LABELS = {
@@ -1180,6 +1225,7 @@ function validateStep(step) {
     ok = !setError('f-industry',!v('biz-industry').trim())&& ok;
     ok = !setError('f-city',    !v('biz-city').trim())    && ok;
     ok = !setError('f-state',   !v('biz-state').trim())   && ok;
+    ok = !setError('f-description', !v('biz-description').trim()) && ok;
     const web = v('biz-website').trim();
     const webBad = web && !isValidUrl(web);
     ok = !setError('f-website', webBad) && ok;
@@ -1190,7 +1236,20 @@ function validateStep(step) {
     ok = !setError('f-pricing',  !v('biz-pricing').trim())  && ok;
   }
 
-  // Steps 3,4,5 are optional — no required fields
+  if (step === 3) {
+    const ratingRaw = v('biz-star-rating').trim();
+    const rating = parseFloat(ratingRaw);
+    const ratingBad = !ratingRaw || Number.isNaN(rating) || rating < 0 || rating > 5;
+    ok = !setError('f-star-rating', ratingBad) && ok;
+
+    const countRaw = v('biz-review-count').trim();
+    const countBad = !countRaw || !/^\d+$/.test(countRaw);
+    ok = !setError('f-review-count', countBad) && ok;
+
+    ok = !setError('f-review-platform', !v('biz-review-platform').trim()) && ok;
+  }
+
+  // Steps 4,5 are optional — no required fields
 
   if (step === 6) {
     ok = !setError('f-ideal-customer', !v('biz-customer').trim())   && ok;
@@ -1254,8 +1313,9 @@ function saveDraft() {
     };
     // Save all input/select/textarea values
     const ids = ['biz-name','biz-industry','biz-city','biz-state','biz-website',
-                 'biz-services','biz-pricing','biz-diff','biz-customer',
-                 'biz-lead-dest','biz-response','biz-radius',
+                 'biz-description','biz-services','biz-pricing','biz-diff',
+                 'biz-star-rating','biz-review-count','biz-review-platform',
+                 'biz-customer','biz-lead-dest','biz-response','biz-radius',
                  'acct-email','acct-name'];
     ids.forEach(id => { draft.fields[id] = v(id); });
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
@@ -1361,10 +1421,21 @@ function populateReview() {
   setText('rv-industry', INDUSTRY_LABELS[v('biz-industry')] || '—');
   setText('rv-location', [v('biz-city'), v('biz-state')].filter(Boolean).join(', ') || '—');
   setText('rv-website',  v('biz-website') || '—');
+  const descRaw = (v('biz-description') || '').trim();
+  setText('rv-description', descRaw ? (descRaw.length > 180 ? descRaw.slice(0, 180) + '…' : descRaw) : '—');
   setText('rv-services', v('biz-services') || '—');
   setText('rv-pricing',  PRICING_LABELS[v('biz-pricing')] || '—');
   setText('rv-consult',  state.consultation ? 'Yes' : 'No');
   setText('rv-diff',     v('biz-diff') || '—');
+
+  // Social proof — rating + count
+  const ratingRaw = (v('biz-star-rating') || '').trim();
+  setText('rv-star-rating', ratingRaw ? `${ratingRaw} / 5 stars` : '—');
+  const countRaw = (v('biz-review-count') || '').trim();
+  const platform = v('biz-review-platform');
+  const PLATFORM_LABELS = { google: 'Google', yelp: 'Yelp', facebook: 'Facebook', bbb: 'BBB', other: 'other platforms' };
+  const platformLabel = PLATFORM_LABELS[platform] || '';
+  setText('rv-review-count', countRaw ? `~${countRaw} reviews${platformLabel ? ' on ' + platformLabel : ''}` : '—');
 
   // Quotes
   const quotes = getQuotes();
@@ -1513,15 +1584,20 @@ function showSuccess() {
 
 function startOver() {
   clearDraft();
-  ['biz-name','biz-city','biz-state','biz-website','biz-services',
-   'biz-diff','biz-customer','biz-lead-dest','acct-email','acct-name','acct-password'].forEach(id => {
+  ['biz-name','biz-city','biz-state','biz-website','biz-description','biz-services',
+   'biz-diff','biz-star-rating','biz-review-count',
+   'biz-customer','biz-lead-dest','acct-email','acct-name','acct-password'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
-  ['biz-industry','biz-pricing','biz-response','biz-radius'].forEach(id => {
+  ['biz-industry','biz-pricing','biz-review-platform','biz-response','biz-radius'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.selectedIndex = 0;
   });
+  state.description = '';
+  state.starRating = null;
+  state.reviewCount = null;
+  state.reviewPlatform = '';
   setConsult(true);
   setLeadType('website');
   setPlan('base');
