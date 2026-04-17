@@ -876,8 +876,88 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
   </div>
 
   <div class="nav-row">
-    <button class="btn btn-ghost" onclick="goBack(3)">← Back</button>
-    <button class="btn btn-primary" onclick="goNext(3)">
+    <button class="btn btn-ghost" onclick="goBack(7)">← Back</button>
+    <button class="btn btn-primary" onclick="goNext(7)">
+      <span class="btn-label">Next: Pick a plan →</span>
+    </button>
+  </div>
+</div>
+
+<!-- ══ STEP 8 — PICK YOUR PLAN ═════════════════════════════════════════════ -->
+<div class="card" id="step-8" style="display:none">
+  <p class="step-eyebrow">Step 8 of 10</p>
+  <h1 class="step-title">Pick your plan</h1>
+  <p class="step-desc">Choose the plan that fits your business. You can upgrade or downgrade any time.</p>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px">
+    <div class="radio-opt selected" onclick="setPlan('base')" data-val="base" style="flex-direction:column;align-items:flex-start;padding:20px">
+      <div style="display:flex;align-items:center;gap:8px;width:100%;margin-bottom:12px">
+        <div class="radio-dot"><div class="radio-dot-inner"></div></div>
+        <span style="font-weight:600">Base</span>
+        <span style="margin-left:auto;font-family:var(--font-serif);font-size:1.25rem">$100</span>
+        <span style="font-size:var(--tx-xs);color:var(--muted)">/mo</span>
+      </div>
+      <ul style="list-style:none;display:flex;flex-direction:column;gap:6px;font-size:var(--tx-xs);color:var(--muted)">
+        <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> AI recommendation presence</li>
+        <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> Custom domain endpoint</li>
+        <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> Referral tracking dashboard</li>
+        <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> Full analytics &amp; activity log</li>
+        <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> Email support</li>
+      </ul>
+    </div>
+    <div class="radio-opt" onclick="setPlan('pro')" data-val="pro" style="flex-direction:column;align-items:flex-start;padding:20px;position:relative">
+      <div style="position:absolute;top:-1px;right:16px;background:var(--accent);color:#fff;font-size:.65rem;font-weight:600;padding:2px 8px;border-radius:0 0 var(--r-sm) var(--r-sm);text-transform:uppercase;letter-spacing:.04em">Popular</div>
+      <div style="display:flex;align-items:center;gap:8px;width:100%;margin-bottom:12px">
+        <div class="radio-dot"><div class="radio-dot-inner"></div></div>
+        <span style="font-weight:600">Pro</span>
+        <span style="margin-left:auto;font-family:var(--font-serif);font-size:1.25rem">$250</span>
+        <span style="font-size:var(--tx-xs);color:var(--muted)">/mo</span>
+      </div>
+      <ul style="list-style:none;display:flex;flex-direction:column;gap:6px;font-size:var(--tx-xs);color:var(--muted)">
+        <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> Everything in Base</li>
+        <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> Competitor Radar</li>
+        <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> Priority AI indexing</li>
+        <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> Advanced analytics &amp; exports</li>
+        <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> Custom query basket (15)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="nav-row">
+    <button class="btn btn-ghost" onclick="goBack(8)">← Back</button>
+    <button class="btn btn-primary" onclick="goNext(8)">
+      <span class="btn-label">Next: Create account →</span>
+    </button>
+  </div>
+</div>
+
+<!-- ══ STEP 9 — ACCOUNT CREATION ═══════════════════════════════════════════ -->
+<div class="card" id="step-9" style="display:none">
+  <p class="step-eyebrow">Step 9 of 10</p>
+  <h1 class="step-title">Create your account</h1>
+  <p class="step-desc">Set up your login to access the Advocate dashboard and manage your AI profile.</p>
+
+  <div class="field" id="f-email">
+    <label for="acct-email">Email address</label>
+    <input type="email" id="acct-email" placeholder="you@yourbusiness.com" autocomplete="email" />
+    <p class="field-error">Please enter a valid email</p>
+  </div>
+
+  <div class="field" id="f-fullname">
+    <label for="acct-name">Full name</label>
+    <input type="text" id="acct-name" placeholder="Jane Smith" autocomplete="name" />
+    <p class="field-error">Full name is required</p>
+  </div>
+
+  <div class="field" id="f-password">
+    <label for="acct-password">Password</label>
+    <input type="password" id="acct-password" placeholder="Min 8 characters" autocomplete="new-password" />
+    <p class="field-error">Password must be at least 8 characters</p>
+  </div>
+
+  <div class="nav-row">
+    <button class="btn btn-ghost" onclick="goBack(9)">← Back</button>
+    <button class="btn btn-primary" onclick="goNext(9)">
       <span class="btn-label">Review Profile →</span>
     </button>
   </div>
@@ -1014,7 +1094,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
   </div>
 
   <div class="nav-row">
-    <button class="btn btn-ghost" onclick="goBack(4)">← Back</button>
+    <button class="btn btn-ghost" onclick="goBack(10)">← Back</button>
     <button class="btn btn-primary" id="publish-btn" onclick="submitProfile()">
       <span class="btn-label">Publish My Profile</span>
       <div class="spinner"></div>

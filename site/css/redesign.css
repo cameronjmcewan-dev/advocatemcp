@@ -553,6 +553,72 @@ body > * { position: relative; z-index: 1; }
   }
 }
 
+/* ── 17.A Hero text stays light over dark Earth canvas (both themes) ── */
+/* The Earth texture is always dark regardless of site theme; the headline
+   and sub must remain cream/high-contrast or it becomes unreadable in
+   light mode. */
+.ln-hero,
+.ln-hero .ln-h1,
+.ln-hero .ln-hero-sub,
+.ln-hero .ln-hero-proof {
+  color: #f0e7d4;
+}
+.ln-hero .ln-h1 {
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.55);
+}
+.ln-hero .ln-hero-sub,
+.ln-hero .ln-hero-proof {
+  color: rgba(240, 231, 212, 0.78);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
+}
+.ln-hero .ln-eyebrow {
+  background: rgba(92, 21, 50, 0.22);
+  border-color: rgba(240, 231, 212, 0.28);
+  color: #f0e7d4;
+}
+.ln-hero .ln-h1 em {
+  color: #f0e7d4;
+}
+[data-theme="light"] .ln-hero .ln-eyebrow {
+  background: rgba(92, 21, 50, 0.35);
+  border-color: rgba(240, 231, 212, 0.4);
+  color: #f0e7d4;
+}
+
+/* ── 17.B Smart Lead Routing mock card (feature row 3) — shadow parity ── */
+/* Feature rows 1 and 2 have explicit dark+glow shadow treatments; row 3
+   was falling through to only the base .ln-mock style which is nearly
+   invisible in light mode. Match the treatment. */
+.ln-feat-row:nth-of-type(3) .ln-mock {
+  background: var(--glass-bg);
+  border: 1px solid var(--border-accent);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.04) inset,
+    0 24px 60px rgba(0,0,0,0.5),
+    0 0 48px var(--accent-glow-2);
+}
+[data-theme="light"] .ln-feat-row:nth-of-type(3) .ln-mock {
+  background: var(--surface);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.6) inset,
+    0 12px 32px rgba(26,10,14,0.08),
+    0 4px 12px rgba(61,10,34,0.06);
+}
+
+/* ── 17.C Final CTA halo — subdue in light mode ── */
+/* The rotating conic gradient reads as a faint glow in dark mode but as a
+   pink blob against a light background. Dial opacity way down in light. */
+[data-theme="light"] .ln-final-cta::before {
+  opacity: 0.15;
+  filter: blur(60px);
+}
+[data-theme="light"] .ln-final-cta .ln-cta-h em {
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent-dk) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
 /* ── 18. prefers-reduced-motion + mobile WebGL gate ─────────── */
 @media (prefers-reduced-motion: reduce) {
   *,
