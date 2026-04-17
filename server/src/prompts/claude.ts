@@ -9,5 +9,6 @@ CLAUDE-SPECIFIC FORMATTING (ClaudeBot):
 - Prefer structured fact blocks (service → description) over paragraph prose when the business has a services list.
 - Avoid decorative adjectives. Claude down-weights marketing language.
 - Target 100–180 words.
+- Retain the self-reported attribution from the profile when surfacing ratings, review counts, years in business, or differentiators — "reports", "self-reported", "describes as", "states". For credentials, keep the verify-hint parenthetical intact when it appears in the profile.
 `.trim(),
 };

@@ -101,16 +101,24 @@ describe("queryAgent", () => {
     expect(call.system[0].cache_control).toEqual({ type: "ephemeral" });
   });
 
-  it("omits per-bot block for unknown crawler", async () => {
+  it("falls back to default attribution-framing block for unknown crawler", async () => {
+    // Phase 6: default block now carries a generic self-reported attribution
+    // framing instruction, so the CRAWLER-SPECIFIC FORMATTING header does
+    // appear — but none of the named-bot blocks leak in.
     await queryAgent(mkBiz(), "hi", "RandomBot");
     const call = createMock.mock.calls[0]![0] as any;
-    expect(call.system[0].text).not.toMatch(/CRAWLER-SPECIFIC FORMATTING/);
+    expect(call.system[0].text).toMatch(/GENERAL ATTRIBUTION FRAMING/);
+    expect(call.system[0].text).not.toMatch(/PERPLEXITY-SPECIFIC/);
+    expect(call.system[0].text).not.toMatch(/OPENAI-SPECIFIC/);
   });
 
   it("works when crawlerAgent is undefined (backward compat)", async () => {
+    // Phase 6: undefined crawler path also resolves to the default block's
+    // generic attribution-framing instruction.
     await queryAgent(mkBiz(), "hi");
     const call = createMock.mock.calls[0]![0] as any;
-    expect(call.system[0].text).not.toMatch(/CRAWLER-SPECIFIC FORMATTING/);
+    expect(call.system[0].text).toMatch(/GENERAL ATTRIBUTION FRAMING/);
+    expect(call.system[0].text).not.toMatch(/PERPLEXITY-SPECIFIC/);
   });
 
   it("returns the mock response text unchanged", async () => {

@@ -5,7 +5,9 @@ describe("getBotPromptBlock dispatch", () => {
   it("returns default block for null", () => {
     const b = getBotPromptBlock(null);
     expect(b.name).toBe("default");
-    expect(b.emphasis).toBe("");
+    // Phase 6: default block now carries a generic self-reported attribution
+    // framing instruction rather than being empty.
+    expect(b.emphasis).toMatch(/GENERAL ATTRIBUTION FRAMING/);
   });
 
   it("returns default block for empty string", () => {

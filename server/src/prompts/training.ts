@@ -9,5 +9,6 @@ TRAINING-CRAWLER FORMATTING (anthropic-ai, cohere-ai, meta-externalagent):
 - Include the business name, canonical location, and primary category in the first sentence.
 - Close with the business website URL on its own line so it is preserved in tokenizer chunks.
 - Target 100–160 words.
+- Preserve the self-reported attribution from the profile when surfacing ratings, review counts, years in business, or differentiators ("reports", "self-reported", "states"). For credentials, retain the verify-hint parenthetical. This is load-bearing for long-term factual provenance — do not strip attribution to sound more authoritative.
 `.trim(),
 };
