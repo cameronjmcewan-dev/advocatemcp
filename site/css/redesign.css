@@ -14,7 +14,7 @@
   --oxblood-glow:      rgba(74, 14, 14, 0.55);
   --oxblood-hover:     #5C1212;
 
-  --accent-bright: #a03569;
+  --accent-bright: #8B2A2A;
   --accent-glow:   rgba(74, 14, 14, 0.35);
   --accent-glow-2: rgba(74, 14, 14, 0.18);
   --border-accent: rgba(168, 41, 58, 0.4);
@@ -26,7 +26,7 @@
 }
 
 [data-theme="light"] {
-  --accent-bright: #a03569;
+  --accent-bright: #8B2A2A;
   --accent-glow:   rgba(74, 14, 14, 0.18);
   --accent-glow-2: rgba(74, 14, 14, 0.08);
   --border-accent: rgba(74, 14, 14, 0.28);
