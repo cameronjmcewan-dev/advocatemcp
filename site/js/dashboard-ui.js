@@ -17,12 +17,12 @@
   function accent() {
     return (window.AMCP_THEME && window.AMCP_THEME.accent)
       ? window.AMCP_THEME.accent()
-      : '#7d2550';
+      : '#3d0a22';
   }
   function accentDim() {
     return (window.AMCP_THEME && window.AMCP_THEME.accentDim)
       ? window.AMCP_THEME.accentDim()
-      : 'rgba(125,37,80,.12)';
+      : 'rgba(61,10,34,.18)';
   }
 
   // ── sparkline: 60×20 inline SVG polyline ─────────────────────────────────

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark" style="background:#171614">
+<html lang="en" data-theme="dark" style="background:#050202">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -14,6 +14,7 @@
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:image" content="https://advocatemcp.com/og-image.png" />
 <link rel="preconnect" href="https://api.fontshare.com" />
+<link rel="stylesheet" href="/css/tokens.css" />
 <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -26,16 +27,16 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
 :root {
-  --bg:          #171614;
-  --surface:     #1c1b19;
-  --surface-2:   #222120;
-  --border:      #393836;
-  --text:        #e8e6e3;
-  --muted:       #7a7875;
-  --accent:      #7d2550;
-  --accent-dk:   #5c1a3c;
-  --accent-dim:  rgba(125,37,80,.12);
-  --accent-ring: rgba(125,37,80,.25);
+  --bg:          #050202;
+  --surface:     #0d0507;
+  --surface-2:   #140a0c;
+  --border:      #2a1418;
+  --text:        #e8e3e0;
+  --muted:       #8a7c78;
+  --accent:      #3d0a22;
+  --accent-dk:   #2a0617;
+  --accent-dim:  rgba(61,10,34,.12);
+  --accent-ring: rgba(61,10,34,.25);
   --green:       #3fb950;
   --yellow:      #d29922;
   --red:         #f85149;
@@ -62,19 +63,19 @@
 }
 
 [data-theme="light"] {
-  --bg:        #f5f4f2;
+  --bg:        #faf8f7;
   --surface:   #ffffff;
-  --surface-2: #efeeed;
-  --border:    #dddbd8;
-  --text:      #1a1917;
-  --muted:     #6b6967;
-  --accent:    #7d2550;
-  --accent-dk: #5c1a3c;
-  --accent-dim:rgba(125,37,80,.08);
-  --accent-ring:rgba(125,37,80,.22);
+  --surface-2: #f0ecea;
+  --border:    #d8d1ce;
+  --text:      #1a0a0e;
+  --muted:     #6b6360;
+  --accent:    #3d0a22;
+  --accent-dk: #2a0617;
+  --accent-dim:rgba(61,10,34,.08);
+  --accent-ring:rgba(61,10,34,.22);
 }
 
-html{font-size:16px;-webkit-font-smoothing:antialiased;color-scheme:dark light;background:#171614}
+html{font-size:16px;-webkit-font-smoothing:antialiased;color-scheme:dark light;background:#050202}
 body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:var(--tx-base);line-height:1.6;min-height:100vh}
 a{color:inherit;text-decoration:none}
 button{font-family:inherit;cursor:pointer;border:none;background:none}
@@ -161,11 +162,13 @@ img,svg{display:block}
 .ln-hero{
   position:relative;overflow:hidden;
   padding:120px 40px 100px;
+  min-height:90vh;
   text-align:center;
+  display:flex;flex-direction:column;justify-content:center;
 }
 .ln-hero-bg{
   position:absolute;inset:0;z-index:0;
-  background:radial-gradient(ellipse 60% 50% at 50% 0%, rgba(125,37,80,.22) 0%, transparent 70%);
+  background:radial-gradient(ellipse 60% 50% at 50% 0%, rgba(61,10,34,.22) 0%, transparent 70%);
   pointer-events:none;
 }
 .ln-hero-inner{position:relative;z-index:1;max-width:760px;margin:0 auto}
@@ -427,7 +430,7 @@ img,svg{display:block}
 .ln-price{padding:110px 40px}
 .ln-price-inner{max-width:1100px;margin:0 auto}
 .ln-price-hd{max-width:480px;margin-bottom:48px}
-.ln-price-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:680px}
+.ln-price-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;max-width:1040px}
 .ln-price-card{
   padding:36px 32px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-xl);position:relative;
   transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease;
@@ -437,8 +440,8 @@ img,svg{display:block}
   box-shadow:0 16px 40px rgba(0,0,0,.3);
   border-color:var(--accent-ring);
 }
-.ln-price-card.pop{border-color:rgba(125,37,80,.4)}
-[data-theme="light"] .ln-price-card.pop{border-color:rgba(125,37,80,.35)}
+.ln-price-card.pop{border-color:rgba(61,10,34,.4)}
+[data-theme="light"] .ln-price-card.pop{border-color:rgba(61,10,34,.35)}
 .ln-pop-badge{
   position:absolute;top:-1px;right:24px;
   background:var(--accent);color:#fff;
@@ -456,7 +459,7 @@ img,svg{display:block}
 /* ── Final CTA ── */
 .ln-final-cta{
   padding:120px 40px;text-align:center;
-  background:radial-gradient(ellipse 70% 80% at 50% 50%, rgba(125,37,80,.15) 0%, transparent 65%);
+  background:radial-gradient(ellipse 70% 80% at 50% 50%, rgba(61,10,34,.15) 0%, transparent 65%);
   border-top:1px solid var(--border);
 }
 .ln-cta-h{font-family:var(--font-serif);font-size:var(--h2);line-height:1.1;letter-spacing:-.03em;margin-bottom:18px}
@@ -532,7 +535,7 @@ img,svg{display:block}
   border:1px solid var(--accent-ring);border-radius:var(--r-md);
   font-size:var(--tx-sm);font-weight:500;transition:background .15s;
 }
-.db-add-btn:hover{background:rgba(125,37,80,.18)}
+.db-add-btn:hover{background:rgba(61,10,34,.18)}
 .db-add-btn svg{width:14px;height:14px}
 
 /* Main */
@@ -738,7 +741,7 @@ tr:hover td{background:var(--surface-2)}
   .ln-nav{padding:0 20px}
   .ln-nav-links,.ln-nav-actions{display:none}
   .ln-ham{display:flex}
-  .ln-hero{padding:72px 20px 60px}
+  .ln-hero{padding:72px 20px 60px;min-height:auto}
   .ln-h1{font-size:clamp(2.5rem,8vw,3.5rem)}
   .ln-browser{display:none}
   .ln-hero-proof{margin-bottom:0}
@@ -795,7 +798,7 @@ tr:hover td{background:var(--surface-2)}
 <!-- Nav -->
 <nav class="ln-nav">
   <a href="#home" class="logo">
-    <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><rect width="26" height="26" rx="6" fill="#7d2550"/><path d="M13 6.5L20.5 20H5.5L13 6.5Z" stroke="white" stroke-width="1.6" stroke-linejoin="round" fill="none"/><line x1="9.2" y1="15.5" x2="16.8" y2="15.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/></svg>
+    <img src="/icon-192.png" alt="Advocate" width="26" height="26" style="border-radius:5px;display:block" />
     Advocate
   </a>
   <div class="ln-nav-links">
@@ -1021,9 +1024,9 @@ tr:hover td{background:var(--surface-2)}
       <svg viewBox="0 0 760 460" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <radialGradient id="rdNetCore" cx="50%" cy="50%" r="50%">
-            <stop offset="0%"   stop-color="#a03569" stop-opacity=".8"/>
-            <stop offset="60%"  stop-color="#7d2550" stop-opacity=".35"/>
-            <stop offset="100%" stop-color="#7d2550" stop-opacity="0"/>
+            <stop offset="0%"   stop-color="#5c1532" stop-opacity=".8"/>
+            <stop offset="60%"  stop-color="#3d0a22" stop-opacity=".35"/>
+            <stop offset="100%" stop-color="#3d0a22" stop-opacity="0"/>
           </radialGradient>
           <radialGradient id="rdNetNode" cx="50%" cy="50%" r="50%">
             <stop offset="0%" stop-color="#fff" stop-opacity=".95"/>
@@ -1032,7 +1035,7 @@ tr:hover td{background:var(--surface-2)}
         </defs>
         <circle cx="380" cy="230" r="200" fill="url(#rdNetCore)"/>
         <!-- Inbound arcs from 5 AI nodes → center -->
-        <g stroke="#7d2550" stroke-width="1.25" fill="none" opacity=".8">
+        <g stroke="#3d0a22" stroke-width="1.25" fill="none" opacity=".8">
           <path d="M140,120 Q260,80 380,230"/>
           <path d="M620,120 Q500,80 380,230"/>
           <path d="M100,330 Q230,370 380,230"/>
@@ -1040,7 +1043,7 @@ tr:hover td{background:var(--surface-2)}
           <path d="M380,40  Q400,120 380,230"/>
         </g>
         <!-- Outbound arcs from center → lead dots -->
-        <g stroke="#a03569" stroke-width="1" fill="none" opacity=".7" stroke-dasharray="2 3">
+        <g stroke="#5c1532" stroke-width="1" fill="none" opacity=".7" stroke-dasharray="2 3">
           <path d="M380,230 Q250,330 80,380"/>
           <path d="M380,230 Q510,330 690,380"/>
           <path d="M380,230 Q300,400 200,440"/>
@@ -1057,14 +1060,14 @@ tr:hover td{background:var(--surface-2)}
           <circle cx="380" cy="40"  r="8"  fill="#f5ede4"/><circle cx="380" cy="40"  r="18" fill="url(#rdNetNode)" opacity=".55"/>
         </g>
         <!-- Lead dots -->
-        <g fill="#a03569">
+        <g fill="#5c1532">
           <circle cx="80"  cy="380" r="4"/><circle cx="690" cy="380" r="4"/>
           <circle cx="200" cy="440" r="3"/><circle cx="560" cy="440" r="3"/>
           <circle cx="720" cy="240" r="3"/><circle cx="40"  cy="240" r="3"/>
         </g>
         <!-- Center logo mark -->
         <g transform="translate(356,206)">
-          <rect width="48" height="48" rx="12" fill="#7d2550"/>
+          <rect width="48" height="48" rx="12" fill="#3d0a22"/>
           <path d="M24 12L38 37H10Z" stroke="#fff" stroke-width="2" stroke-linejoin="round" fill="none"/>
           <line x1="16.5" y1="29" x2="31.5" y2="29" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
         </g>
@@ -1381,8 +1384,8 @@ tr:hover td{background:var(--surface-2)}
     </div>
     <div class="ln-price-grid fade-up">
       <div class="ln-price-card">
-        <div class="ln-price-name">Starter</div>
-        <div class="ln-price-amt">$49</div>
+        <div class="ln-price-name">Base</div>
+        <div class="ln-price-amt">$100</div>
         <div class="ln-price-per">per month</div>
         <ul class="ln-price-list">
           <li>1 business profile</li>
@@ -1391,21 +1394,37 @@ tr:hover td{background:var(--surface-2)}
           <li>Referral tracking dashboard</li>
           <li>Email support</li>
         </ul>
-        <a href="/onboarding.html" class="btn btn-ghost" style="width:100%;justify-content:center">Get started</a>
+        <a href="/onboarding.html?tier=base" class="btn btn-ghost" style="width:100%;justify-content:center">Get started</a>
       </div>
       <div class="ln-price-card pop">
         <div class="ln-pop-badge">Most Popular</div>
         <div class="ln-price-name">Pro</div>
-        <div class="ln-price-amt">$149</div>
+        <div class="ln-price-amt">$250</div>
         <div class="ln-price-per">per month</div>
         <ul class="ln-price-list">
           <li>Up to 5 business profiles</li>
           <li>Priority AI indexing</li>
           <li>Advanced analytics &amp; exports</li>
           <li>Custom business categories</li>
+          <li>Competitor Radar (weekly Perplexity polling)</li>
+          <li>Per-agent reputation analytics</li>
           <li>Priority support</li>
         </ul>
-        <a href="/onboarding.html" class="btn btn-primary" style="width:100%;justify-content:center">Get started</a>
+        <a href="/onboarding.html?tier=pro" class="btn btn-primary" style="width:100%;justify-content:center">Get started</a>
+      </div>
+      <div class="ln-price-card">
+        <div class="ln-price-name">Enterprise</div>
+        <div class="ln-price-amt">Custom</div>
+        <div class="ln-price-per">book a consultation</div>
+        <ul class="ln-price-list">
+          <li>Unlimited business profiles</li>
+          <li>Custom SLAs</li>
+          <li>White-label options</li>
+          <li>Dedicated success manager</li>
+          <li>Custom integrations</li>
+          <li>Volume / agency pricing</li>
+        </ul>
+        <a href="mailto:support@advocatemcp.com?subject=Enterprise%20Consultation%20Request&body=Hi%20Advocate%20team%2C%0A%0AI%27d%20like%20to%20discuss%20an%20Enterprise%20plan%20for%3A%0A%0ACompany%3A%0ABusiness%20profiles%20needed%3A%0AUse%20case%3A%0A%0AThanks%21" class="btn btn-ghost" style="width:100%;justify-content:center">Book a consultation →</a>
       </div>
     </div>
   </div>
@@ -1417,7 +1436,7 @@ tr:hover td{background:var(--surface-2)}
     <h2 class="ln-cta-h">Your competitors will be on AI.<br><em>Will you?</em></h2>
     <p class="ln-cta-sub">AI-powered recommendations are the new word of mouth. The businesses that show up first will capture leads that others never see.</p>
     <div class="ln-cta-actions">
-      <a href="/onboarding.html" class="btn btn-primary" style="padding:14px 32px;font-size:var(--tx-base)">Start for $49/month →</a>
+      <a href="/onboarding.html" class="btn btn-primary" style="padding:14px 32px;font-size:var(--tx-base)">Start from $100/month →</a>
       <a href="#home" class="btn btn-ghost" onclick="navScrollTo('ln-features')" style="padding:14px 32px;font-size:var(--tx-base)">See how it works</a>
     </div>
   </div>
@@ -1429,7 +1448,7 @@ tr:hover td{background:var(--surface-2)}
     <div class="ln-footer-top">
       <div class="ln-footer-brand">
         <a href="#home" class="logo">
-          <svg width="24" height="24" viewBox="0 0 26 26" fill="none"><rect width="26" height="26" rx="6" fill="#7d2550"/><path d="M13 6.5L20.5 20H5.5L13 6.5Z" stroke="white" stroke-width="1.6" stroke-linejoin="round" fill="none"/><line x1="9.2" y1="15.5" x2="16.8" y2="15.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <img src="/icon-192.png" alt="Advocate" width="24" height="24" style="border-radius:5px;display:block" />
           Advocate
         </a>
         <p class="ln-footer-tagline">Get your business recommended by every major AI assistant. Flat monthly. No code.</p>
@@ -1489,7 +1508,7 @@ tr:hover td{background:var(--surface-2)}
   <!-- Sidebar -->
   <aside class="db-side">
     <div class="db-logo">
-      <svg width="22" height="22" viewBox="0 0 26 26" fill="none"><rect width="26" height="26" rx="6" fill="#7d2550"/><path d="M13 6.5L20.5 20H5.5L13 6.5Z" stroke="white" stroke-width="1.6" stroke-linejoin="round" fill="none"/><line x1="9.2" y1="15.5" x2="16.8" y2="15.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <img src="/icon-192.png" alt="Advocate" width="22" height="22" style="border-radius:5px;display:block" />
       Advocate
     </div>
     <nav class="db-nav">
@@ -1789,9 +1808,9 @@ function toggleTheme() {
 }
 
 function refreshChartColors() {
-  const tick  = state.theme === 'dark' ? '#7a7875' : '#6b6967';
+  const tick  = state.theme === 'dark' ? '#8a7c78' : '#6b6360';
   const grid  = state.theme === 'dark' ? 'rgba(57,56,54,.5)' : 'rgba(200,198,196,.5)';
-  const tooltip = { backgroundColor: state.theme === 'dark' ? '#222120' : '#fff', titleColor: state.theme === 'dark' ? '#e8e6e3' : '#1a1917', bodyColor: state.theme === 'dark' ? '#7a7875' : '#6b6967', borderColor: state.theme === 'dark' ? '#393836' : '#dddbd8', borderWidth: 1 };
+  const tooltip = { backgroundColor: state.theme === 'dark' ? '#140a0c' : '#fff', titleColor: state.theme === 'dark' ? '#e8e3e0' : '#1a0a0e', bodyColor: state.theme === 'dark' ? '#8a7c78' : '#6b6360', borderColor: state.theme === 'dark' ? '#2a1418' : '#d8d1ce', borderWidth: 1 };
   [state.chartMain, state.chartAnalytics].forEach(c => {
     if (!c) return;
     c.options.scales.x.ticks.color = tick;
@@ -1840,14 +1859,14 @@ function initDashboard() {
 
 function chartConfig(canvasId, height) {
   const isDark = state.theme === 'dark';
-  const tick  = isDark ? '#7a7875' : '#6b6967';
+  const tick  = isDark ? '#8a7c78' : '#6b6360';
   const grid  = isDark ? 'rgba(57,56,54,.5)' : 'rgba(200,198,196,.5)';
-  const tip   = { backgroundColor: isDark ? '#222120' : '#fff', titleColor: isDark ? '#e8e6e3' : '#1a1917', bodyColor: isDark ? '#7a7875' : '#6b6967', borderColor: isDark ? '#393836' : '#dddbd8', borderWidth: 1, padding: 10, cornerRadius: 6 };
+  const tip   = { backgroundColor: isDark ? '#140a0c' : '#fff', titleColor: isDark ? '#e8e3e0' : '#1a0a0e', bodyColor: isDark ? '#8a7c78' : '#6b6360', borderColor: isDark ? '#2a1418' : '#d8d1ce', borderWidth: 1, padding: 10, cornerRadius: 6 };
   return {
     type: 'bar',
     data: {
       labels: CHART_LABELS,
-      datasets: [{ data: CHART_DATA, backgroundColor:'rgba(125,37,80,.65)', borderColor:'rgba(125,37,80,1)', borderWidth:1, borderRadius:3, borderSkipped:false }]
+      datasets: [{ data: CHART_DATA, backgroundColor:'rgba(61,10,34,.65)', borderColor:'rgba(61,10,34,1)', borderWidth:1, borderRadius:3, borderSkipped:false }]
     },
     options: {
       responsive:true, maintainAspectRatio:false,
@@ -2080,7 +2099,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 </script>
-<script type="module" src="/js/hero-scene.js"></script>
+<script type="module" src="/js/earth-hero-scene.js"></script>
 <script type="module" src="/js/network-scene.js"></script>
 </body>
 </html>

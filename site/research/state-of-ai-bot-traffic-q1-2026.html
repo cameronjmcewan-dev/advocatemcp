@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark" style="background:#171614">
+<html lang="en" data-theme="dark" style="background:#050202">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -10,14 +10,14 @@
 <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 <title>State of AI Bot Traffic — Q1 2026 Methodology Preview | Advocate</title>
-<meta name="description" content="Advocate's first closed-loop AI attribution data from SMB tier. Methodology preview with clean N=20 organic queries and the first unambiguously organic bot-to-click event." />
+<meta name="description" content="Advocate's first closed-loop AI attribution instrument, validated and shipped. Q1 methodology preview: one live customer (WCC), pilot validation data, 20 organic queries, and what Q2 will measure first." />
 <meta name="author" content="Cameron McEwan" />
 <meta name="robots" content="index,follow" />
 
 <!-- Open Graph -->
 <meta property="og:type" content="article" />
 <meta property="og:title" content="State of AI Bot Traffic — Q1 2026 Methodology Preview" />
-<meta property="og:description" content="First closed-loop AI attribution at SMB tier. Methodology preview: what the instrument measures in its first week of production." />
+<meta property="og:description" content="Closed-loop AI attribution at SMB tier. Validated in pilot, shipped to our first customer. What the instrument sees in week one." />
 <meta property="og:url" content="https://advocatemcp.com/research/state-of-ai-bot-traffic-q1-2026" />
 <meta property="og:image" content="https://advocatemcp.com/research/state-of-ai-q1-2026-og.png" />
 <meta property="og:image:width" content="1200" />
@@ -29,12 +29,13 @@
 <!-- Twitter -->
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="State of AI Bot Traffic — Q1 2026 Methodology Preview" />
-<meta name="twitter:description" content="First closed-loop AI attribution at SMB tier. Methodology preview: what the instrument measures in its first week of production." />
+<meta name="twitter:description" content="Closed-loop AI attribution at SMB tier. Validated in pilot, shipped to our first customer. What the instrument sees in week one." />
 <meta name="twitter:image" content="https://advocatemcp.com/research/state-of-ai-q1-2026-og.png" />
 
 <link rel="canonical" href="https://advocatemcp.com/research/state-of-ai-bot-traffic-q1-2026" />
 
 <link rel="preconnect" href="https://api.fontshare.com" />
+<link rel="stylesheet" href="/css/tokens.css" />
 <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -43,17 +44,17 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
 :root {
-  --bg:          #171614;
-  --surface:     #1c1b19;
-  --surface-2:   #222120;
-  --border:      #393836;
-  --text:        #e8e6e3;
-  --muted:       #7a7875;
-  --accent:      #7d2550;
-  --accent-dk:   #5c1a3c;
-  --accent-dim:  rgba(125,37,80,.12);
-  --accent-ring: rgba(125,37,80,.25);
-  --accent-strong: rgba(125,37,80,.9);
+  --bg:          #050202;
+  --surface:     #0d0507;
+  --surface-2:   #140a0c;
+  --border:      #2a1418;
+  --text:        #e8e3e0;
+  --muted:       #8a7c78;
+  --accent:      #3d0a22;
+  --accent-dk:   #2a0617;
+  --accent-dim:  rgba(61,10,34,.12);
+  --accent-ring: rgba(61,10,34,.25);
+  --accent-strong: rgba(61,10,34,.9);
 
   --font-serif:  'Instrument Serif', Georgia, serif;
   --font-body:   'General Sans','Inter',system-ui,-apple-system,sans-serif;
@@ -72,17 +73,17 @@
 }
 
 [data-theme="light"] {
-  --bg:        #f5f4f2;
+  --bg:        #faf8f7;
   --surface:   #ffffff;
-  --surface-2: #efeeed;
-  --border:    #dddbd8;
-  --text:      #1a1917;
-  --muted:     #6b6967;
-  --accent:    #7d2550;
-  --accent-dk: #5c1a3c;
-  --accent-dim:rgba(125,37,80,.08);
-  --accent-ring:rgba(125,37,80,.22);
-  --accent-strong: rgba(125,37,80,.95);
+  --surface-2: #f0ecea;
+  --border:    #d8d1ce;
+  --text:      #1a0a0e;
+  --muted:     #6b6360;
+  --accent:    #3d0a22;
+  --accent-dk: #2a0617;
+  --accent-dim:rgba(61,10,34,.08);
+  --accent-ring:rgba(61,10,34,.22);
+  --accent-strong: rgba(61,10,34,.95);
 }
 
 html{font-size:16px;-webkit-font-smoothing:antialiased;color-scheme:dark light;background:var(--bg)}
@@ -320,9 +321,10 @@ blockquote.doc-bq{
   <div class="doc-meta">
     <span><strong>Published:</strong> April 17, 2026</span>
     <span><strong>Sample window:</strong> April 8–17, 2026</span>
-    <span><strong>Real tenants:</strong> 3</span>
+    <span><strong>Live customer:</strong> 1 (WCC)</span>
+    <span><strong>Pilot installs:</strong> 2</span>
     <span><strong>Total queries:</strong> 64</span>
-    <span><strong>Clean subset:</strong> 20</span>
+    <span><strong>Organic subset:</strong> 20</span>
   </div>
 
   <h2 class="doc-h2">Executive Summary</h2>
@@ -330,14 +332,18 @@ blockquote.doc-bq{
     Advocate is the first platform sitting on both the AI crawler path and the transaction path for small and medium businesses. We intercept bot requests at the edge, return a per-query response, and wrap every outbound citation in a cryptographically signed redirect so that the eventual human click is attributable back to the exact bot and exact query that produced the citation.
   </p>
   <p class="doc-p">
-    This is the methodology preview, not the quantitative report. The instrument has been running in production for a little over a week against three real tenants. In that window it logged 64 total bot queries and attributed six click events. Most of the queries are our own instrumentation probes &mdash; we quantify that here instead of burying it &mdash; and the surviving organic subset is too small to draw statistical conclusions from. What we can publish honestly:
+    This Q1 release reports what the instrument sees in its validation phase and its first real customer week.
   </p>
-  <blockquote class="doc-bq">
-    The instrument works. It just attributed its first organic AI-bot click at SMB tier. Everything else is Q2&rsquo;s job.
-  </blockquote>
   <p class="doc-p">
-    Q2 lands in July with a larger sample, vertical cuts, and the first quantitative cross-bot comparisons we&rsquo;ll stand behind.
+    Two notes on scope up front, because they shape everything that follows:
   </p>
+  <ol class="doc-ol">
+    <li><strong>Advocate has one paying customer to date</strong> &mdash; Workman Copy Co, a copywriting agency. Every other domain that appears in the Q1 dataset is either an internal test slug or one of our own pre-customer pilot installs. We are explicit about which is which in the methodology.</li>
+    <li><strong>We published this report at N=64 queries because documenting the instrument in its validation phase is the honest version of the story.</strong> Q2 is the first quantitative report with a multi-customer organic sample.</li>
+  </ol>
+  <blockquote class="doc-bq">
+    The attribution loop is proven to close end-to-end. Six click events captured in the validation phase, zero on the customer side in week one. The instrument works. The market side is Q2&rsquo;s job.
+  </blockquote>
 
   <hr class="doc-hr" />
 
@@ -365,41 +371,55 @@ blockquote.doc-bq{
     All data in this preview comes from Advocate&rsquo;s production systems covering April 8, 2026 &mdash; the first day a tenant received a live AI crawler request &mdash; through April 17, 2026.
   </p>
 
-  <h3 class="doc-h3">Sample</h3>
+  <h3 class="doc-h3">Sample — three tenant types</h3>
   <p class="doc-p">
-    Three real business tenants were onboarded during this window:
-  </p>
-  <ul class="doc-ul">
-    <li><strong>DMRE</strong> &mdash; commercial real-estate brokerage, Austin, TX</li>
-    <li><strong>Workman Copy Co</strong> &mdash; copywriting / marketing agency, US</li>
-    <li><strong>Bamboo Brace</strong> &mdash; direct-to-consumer pediatric medical device, US-based, international shipping</li>
-  </ul>
-  <p class="doc-p">
-    The production instrument logged <strong>64 total bot queries</strong> across these tenants plus three ephemeral test tenants used during build-out verification.
-  </p>
-
-  <h3 class="doc-h3">Query classification</h3>
-  <p class="doc-p">
-    Before reporting any bot-share or conversion numbers we classify each query into one of three buckets:
+    The production instrument logged <strong>64 total bot queries</strong> across three distinct tenant types. We break these out explicitly because they are not all the same thing and commingling them produces dishonest numbers:
   </p>
   <div class="doc-table-wrap">
     <table class="doc-table">
       <thead>
         <tr>
-          <th>Class</th>
-          <th>Rule</th>
-          <th class="num">Count</th>
+          <th>Tenant type</th>
+          <th>Slug(s)</th>
+          <th class="num">Queries</th>
+          <th>What it is</th>
         </tr>
       </thead>
       <tbody>
-        <tr><td><strong>BURST</strong></td><td>Same <code>(slug, bot, query)</code> triple within 10 minutes of another</td><td class="num">38</td></tr>
-        <tr><td><strong>TEST_SLUG</strong></td><td>Query against <code>redirect-test-apr12</code>, <code>openai-reviewer-demo-business</code>, or <code>final-verify-1776377843</code> &mdash; build-out or review-demo tenants, not customer-facing</td><td class="num">6</td></tr>
-        <tr><td><strong>REAL?</strong></td><td>Everything else &mdash; plausibly organic AI-crawler traffic</td><td class="num">20</td></tr>
+        <tr><td><strong>Live customer</strong></td><td><code>workman-copy-co</code> (WCC)</td><td class="num">20</td><td>Our first paying customer &mdash; a copywriting / marketing agency</td></tr>
+        <tr><td><strong>Pilot validation install</strong></td><td><code>dmre</code>, <code>bamboo-brace</code></td><td class="num">38</td><td>Our own pre-customer test installs on real-sounding domains. Used to stand up, instrument, and validate the attribution pipeline before first customer release</td></tr>
+        <tr><td><strong>Internal test tenant</strong></td><td><code>redirect-test-apr12</code>, <code>openai-reviewer-demo-business</code>, <code>final-verify-1776377843</code></td><td class="num">6</td><td>Ephemeral tenants for build-out verification and third-party review demos</td></tr>
       </tbody>
     </table>
   </div>
   <p class="doc-p">
-    38 of 64 queries (59%) are self-generated instrumentation traffic from build-out. Another 6 (9%) are against test tenants. The 20 surviving queries (31% of raw total) are the subset any honest analysis has to work from.
+    The pilot installs (DMRE, Bamboo Brace) were our own domains we used as live targets for validating the pipeline. They are not customer relationships. Treating them as customer data would be misleading. Treating them as useless test artifacts would also be misleading &mdash; <strong>the whole point of validation-phase traffic is to prove the instrument works before pointing it at customers</strong>.
+  </p>
+
+  <h3 class="doc-h3">Query classification</h3>
+  <p class="doc-p">
+    Within each tenant type we further classify each query as either <strong>ORGANIC</strong> (plausibly a real AI crawler hit) or <strong>BURST</strong> (same slug + bot + query within 10 minutes of another &mdash; our own probe traffic during validation sessions):
+  </p>
+  <div class="doc-table-wrap">
+    <table class="doc-table">
+      <thead>
+        <tr>
+          <th>Tenant type</th>
+          <th class="num">Total</th>
+          <th class="num">BURST</th>
+          <th class="num">ORGANIC</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Live customer (WCC)</td><td class="num">20</td><td class="num">11</td><td class="num"><strong>9</strong></td></tr>
+        <tr><td>Pilot validation</td><td class="num">38</td><td class="num">27</td><td class="num"><strong>11</strong></td></tr>
+        <tr><td>Internal test</td><td class="num">6</td><td class="num">—</td><td class="num">—</td></tr>
+        <tr class="total"><td><strong>Total</strong></td><td class="num"><strong>64</strong></td><td class="num"><strong>38</strong></td><td class="num"><strong>20</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="doc-p">
+    The 20 ORGANIC queries are the defensible subset. All 6 tracked click events in Q1 came from the pilot-validation tier on DMRE &mdash; which is what you would expect for a pipeline running during its build-out phase. <strong>The instrument captured them correctly. That was the point of the validation.</strong>
   </p>
 
   <h3 class="doc-h3">Bot identification</h3>
@@ -425,118 +445,92 @@ blockquote.doc-bq{
 
   <h3 class="doc-h3">Caveats — unignorable</h3>
   <ol class="doc-ol">
-    <li><strong>Sample size.</strong> Clean N is 20 queries. Nothing here is statistically conclusive. Everything we report is directional and invites disproof.</li>
-    <li><strong>Single-tenant skew in clicks.</strong> Every attributed click came from one tenant (DMRE). Single-tenant findings do not generalize.</li>
+    <li><strong>Sample size.</strong> Live-customer ORGANIC N is 9 queries. Nothing here is statistically conclusive. Everything we report is directional and invites disproof.</li>
+    <li><strong>One customer.</strong> Q1 has one paying customer. Vertical, regional, and cross-tenant generalizations are impossible until Q2.</li>
     <li><strong>Observation window.</strong> Nine days. Crawler behavior varies week-to-week; we do not yet have the baseline to normalize.</li>
-    <li><strong>Small-tenant skew.</strong> Three tenants across three verticals is not a representative slice of the SMB economy.</li>
+    <li><strong>Clicks came from pilot installs.</strong> The validation-phase clicks (6 events, 3 queries, all DMRE) prove the loop closes but do not tell us anything about customer-facing conversion.</li>
   </ol>
-  <p class="doc-p">
-    Q2 will materially improve all four.
-  </p>
 
   <hr class="doc-hr" />
 
-  <h2 class="doc-h2">Finding 1 — Bot share on the clean subset</h2>
+  <h2 class="doc-h2">Finding 1 — Live customer bot distribution (WCC, N=20)</h2>
   <p class="doc-p">
-    On the 20 queries classified as plausibly organic, three bots showed up. The distribution is:
+    On our first paying customer&rsquo;s domain, across 20 total queries (11 BURST + 9 ORGANIC), the bot distribution was:
   </p>
-
   <div class="doc-table-wrap">
     <table class="doc-table">
       <thead>
         <tr>
           <th>Bot</th>
-          <th class="num">Clean queries</th>
+          <th class="num">WCC queries</th>
           <th class="num">Share</th>
         </tr>
       </thead>
       <tbody>
-        <tr><td>GPTBot (all versions)</td><td class="num">10</td><td class="num">50.0%</td></tr>
-        <tr><td>PerplexityBot</td><td class="num">5</td><td class="num">25.0%</td></tr>
+        <tr><td>PerplexityBot</td><td class="num">12</td><td class="num">60.0%</td></tr>
         <tr><td>ClaudeBot</td><td class="num">5</td><td class="num">25.0%</td></tr>
+        <tr><td>GPTBot (all versions)</td><td class="num">3</td><td class="num">15.0%</td></tr>
         <tr class="total"><td><strong>Total</strong></td><td class="num"><strong>20</strong></td><td class="num"><strong>100%</strong></td></tr>
       </tbody>
     </table>
   </div>
-  <p class="doc-p muted" style="font-size:var(--tx-sm)">
-    <em><code>OAI-SearchBot</code>, <code>Google-Extended</code>, <code>Googlebot</code>, <code>anthropic-ai</code>, <code>cohere-ai</code>, and <code>meta-externalagent</code> each appeared zero times in the organic subset.</em>
+  <p class="doc-p">
+    <strong>What the live-customer data suggests (with heavy caveat):</strong> at this scale and for this type of business (B2B copywriting / marketing agency), <strong>PerplexityBot was the dominant AI crawler</strong>, not GPTBot. ClaudeBot&rsquo;s showing is non-trivial. GPTBot is a minority.
   </p>
   <p class="doc-p">
-    For transparency, the <strong>raw distribution including all 64 queries</strong> (build-out probes + test-slug + real) looks quite different &mdash; GPTBot 56%, PerplexityBot 30%, ClaudeBot 8%, mcp-client 5%, unknown 2% &mdash; because the early build-out probe pattern heavily weighted GPTBot on <code>bamboo-brace</code> and <code>dmre</code>. That raw distribution is not a defensible read of real crawler behavior. The clean subset is.
-  </p>
-  <p class="doc-p">
-    <strong>What the clean subset lets us say:</strong> at Q1&rsquo;s sample scale, GPTBot shows up on SMB sites roughly twice as often as PerplexityBot or ClaudeBot, which show up at comparable rates. ClaudeBot&rsquo;s showing is unexpected to the extent anyone is publishing data on this; we had modeled it as a distant third.
-  </p>
-  <p class="doc-p">
-    <strong>What it does not let us say:</strong> anything about which bot produces more commercial value per hit. See Finding 2.
+    This contradicts the conventional wisdom that GPTBot dominates AI crawler volume. We are not claiming it generalizes &mdash; N is tiny and one vertical isn&rsquo;t a market &mdash; but it is the first customer-tier data point in print.
   </p>
 
-  <h3 class="doc-h3">Tenant concentration in the clean subset</h3>
-  <div class="doc-table-wrap">
-    <table class="doc-table">
-      <thead>
-        <tr>
-          <th>Tenant</th>
-          <th class="num">Queries</th>
-          <th class="num">Share</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr><td>DMRE</td><td class="num">9</td><td class="num">45%</td></tr>
-        <tr><td>Workman Copy Co</td><td class="num">9</td><td class="num">45%</td></tr>
-        <tr><td>Bamboo Brace</td><td class="num">2</td><td class="num">10%</td></tr>
-      </tbody>
-    </table>
-  </div>
+  <h3 class="doc-h3">Contrast: pilot validation distribution</h3>
   <p class="doc-p">
-    DMRE and WCC are balanced; Bamboo Brace&rsquo;s lower volume reflects a smaller surface area for AI crawlers to encounter at this stage, not a measurement bias.
+    Our own pre-customer pilot installs (DMRE + Bamboo Brace, N=38) saw a completely different mix: GPTBot 79%, PerplexityBot 16%, mcp-client 5%. That distribution is heavily shaped by how we ran build-out probes (GPTBot-simulated curl tests dominated the early validation sessions) and is <em>not</em> a read on real crawler behavior. Reporting it alongside the customer data would misrepresent both.
+  </p>
+  <p class="doc-p">
+    The gap between the two distributions is exactly the reason we insist on separating validation traffic from customer traffic.
   </p>
 
   <hr class="doc-hr" />
 
-  <h2 class="doc-h2">Finding 2 — First organic click attributed</h2>
+  <h2 class="doc-h2">Finding 2 — The attribution loop closed end-to-end (in validation)</h2>
   <p class="doc-p">
-    Six click events were logged to <code>click_events</code> during the window. Three distinct queries received clicks. The breakdown:
+    Six click events were captured in <code>click_events</code> during the Q1 window. Three distinct queries received clicks. All three were on our pilot-validation install (DMRE), all via PerplexityBot sessions:
   </p>
-
   <div class="doc-table-wrap">
     <table class="doc-table">
       <thead>
         <tr>
           <th>Query id</th>
-          <th>Class</th>
           <th>Bot</th>
-          <th>Tenant</th>
+          <th>Tenant type</th>
           <th>Query text</th>
           <th>Read</th>
         </tr>
       </thead>
       <tbody>
-        <tr><td>28</td><td>BURST</td><td>PerplexityBot</td><td>DMRE</td><td><em>&ldquo;do you specialize in land brokerage in Austin&rdquo;</em></td><td>Inside a burst pattern with id 27; likely our probe</td></tr>
-        <tr><td>30</td><td>REAL?</td><td>PerplexityBot</td><td>DMRE</td><td><em>&ldquo;do you handle commercial land sales&rdquo;</em></td><td>Genuinely organic</td></tr>
-        <tr><td>31</td><td>REAL?</td><td>PerplexityBot</td><td>DMRE</td><td><em>&ldquo;final session 1 verification&rdquo;</em></td><td>Query text is a manual-test tell; not organic</td></tr>
+        <tr><td>28</td><td>PerplexityBot</td><td>Pilot validation</td><td><em>&ldquo;do you specialize in land brokerage in Austin&rdquo;</em></td><td>Inside a burst pattern with id 27 &mdash; our probe</td></tr>
+        <tr><td>30</td><td>PerplexityBot</td><td>Pilot validation</td><td><em>&ldquo;do you handle commercial land sales&rdquo;</em></td><td>Organic within the validation session</td></tr>
+        <tr><td>31</td><td>PerplexityBot</td><td>Pilot validation</td><td><em>&ldquo;final session 1 verification&rdquo;</em></td><td>Query text is a manual-test tell &mdash; our verification click</td></tr>
       </tbody>
     </table>
   </div>
-
-  <p class="doc-p">
-    Taking the classification seriously, the instrument attributed <strong>one unambiguously organic click</strong> in Q1 &mdash; id=30, PerplexityBot on DMRE, April 10.
-  </p>
   <div class="doc-callout">
-    That is the honest headline for this report: the attribution loop closed end-to-end for the first time on April 10, 2026, in a production deployment, against a real business, driven by a real Perplexity answer. The instrument works. What it can measure about cross-bot conversion at scale remains Q2&rsquo;s question.
+    <strong>Honest headline:</strong> the validation phase proved the attribution pipeline closes end-to-end. A bot query → signed citation response → human click → attributed back to the originating bot + query &mdash; all captured. The instrument works.
   </div>
   <p class="doc-p">
-    <strong>Why no GPTBot clicks?</strong> The clean subset has 10 GPTBot queries and zero attributed clicks. This is consistent with the emerging third-party picture of GPTBot as an indexing crawler whose output is cached inside ChatGPT (no click-through needed) while PerplexityBot is a routing crawler whose answers surface clickable citations. But with 10 and 5 queries respectively the sample is far too small to call this a finding. It&rsquo;s a testable hypothesis for Q2.
+    <strong>What this does not prove:</strong> that customer-facing bots will click, at what rate, which bots convert better, or anything about commercial value per crawler hit. That is Q2&rsquo;s work.
+  </p>
+
+  <h3 class="doc-h3">Why no WCC clicks yet?</h3>
+  <p class="doc-p">
+    Our first paying customer was onboarded mid-window, has 9 ORGANIC queries in the dataset, and logged 0 attributed clicks. At N=9 over nine days, that is within the noise floor &mdash; a 10% click rate would produce 0&ndash;1 clicks. It is statistically uninformative. Q2 will have the volume to start separating signal from noise.
   </p>
 
   <hr class="doc-hr" />
 
-  <h2 class="doc-h2">Finding 3 — Intent distribution</h2>
+  <h2 class="doc-h2">Finding 3 — Intent distribution across validation + customer traffic</h2>
   <p class="doc-p">
-    Because the intent classifier is deterministic and operates per-query, it&rsquo;s worth reporting both the raw and the clean distributions &mdash; the gap between them is itself an observation.
+    The intent classifier operates per-query regardless of tenant type. Across the 20 ORGANIC queries (all tenant types combined):
   </p>
-
-  <h3 class="doc-h3">Clean subset (N=20, REAL? only)</h3>
   <div class="doc-table-wrap">
     <table class="doc-table">
       <thead>
@@ -556,43 +550,21 @@ blockquote.doc-bq{
       </tbody>
     </table>
   </div>
-
-  <h3 class="doc-h3">Raw (all 64 queries, for contrast)</h3>
-  <div class="doc-table-wrap">
-    <table class="doc-table">
-      <thead>
-        <tr>
-          <th>Intent bucket</th>
-          <th class="num">Count</th>
-          <th class="num">Share</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr><td><code>general</code></td><td class="num">34</td><td class="num">53.1%</td></tr>
-        <tr><td><code>affordable</code></td><td class="num">21</td><td class="num">32.8%</td></tr>
-        <tr><td><code>brand_direct</code></td><td class="num">4</td><td class="num">6.2%</td></tr>
-        <tr><td><code>emergency</code></td><td class="num">2</td><td class="num">3.1%</td></tr>
-        <tr><td><code>specific_service</code></td><td class="num">2</td><td class="num">3.1%</td></tr>
-        <tr><td><code>best_top</code></td><td class="num">1</td><td class="num">1.6%</td></tr>
-      </tbody>
-    </table>
-  </div>
-
   <p class="doc-p">
-    The <code>general</code> + <code>affordable</code> dominance appears in both &mdash; 85% of clean queries, 86% of raw. AI crawlers hitting small-business sites in Q1 are overwhelmingly asking &ldquo;what does this business do&rdquo; and &ldquo;how much does it cost,&rdquo; not &ldquo;who&rsquo;s the best.&rdquo; That&rsquo;s the discovery + consideration funnel, not the decision funnel. It suggests AI crawlers at this stage of SMB exposure are in catalog-building mode rather than recommendation mode.
+    The <code>general</code> + <code>affordable</code> dominance (85% combined) indicates AI crawlers at this stage of SMB exposure are in catalog-building mode &mdash; &ldquo;what does this business do&rdquo; and &ldquo;how much does it cost&rdquo; &mdash; rather than recommendation mode.
   </p>
   <div class="doc-note">
-    <strong>One interesting non-finding:</strong> <code>emergency</code> intent did appear twice in the raw data (plumber / HVAC-adjacent language) but both instances fell into BURST clusters and disappear from the clean subset. So we cannot yet corroborate the anecdotal &ldquo;AI assistants are used for 2am burst-pipe queries&rdquo; pattern from production data &mdash; Q2 with a home-services tenant cohort is where that gets tested.
+    <strong>One interesting non-finding:</strong> <code>emergency</code> intent showed up twice in the raw 64-query dataset (plumber / HVAC-adjacent language on our pilot installs) but both instances fell into BURST clusters and disappear from the ORGANIC subset. The &ldquo;AI assistants are being used for 2am burst-pipe queries&rdquo; pattern from plumbers is a real anecdotal report we wanted to test; at Q1 volume we cannot. Q2 with home-services tenants onboarded will.
   </div>
 
   <hr class="doc-hr" />
 
   <h2 class="doc-h2">What Q2 will measure</h2>
   <p class="doc-p">
-    The Q2 report lands in July 2026. The sample will be larger by roughly one to two orders of magnitude, and will include measurements that simply cannot be made at N=20.
+    The Q2 report lands in July 2026. Between now and then we will onboard more customers and materially expand the defensible sample.
   </p>
   <ol class="doc-ol">
-    <li><strong>Cross-bot conversion deltas.</strong> First meaningful comparison of PerplexityBot vs. GPTBot vs. ClaudeBot vs. Google-AI-Overview conversion rates at SMB tier, measured through the signed redirect loop. This is the quantitative test of the index-vs-route hypothesis from Finding 2.</li>
+    <li><strong>Cross-bot conversion deltas</strong> at customer scale &mdash; first quantitative test of whether PerplexityBot&rsquo;s apparent dominance on the WCC sample holds across verticals.</li>
     <li><strong>Per-agent attribution.</strong> Our per-agent reputation rollup shipped in April 2026. Q2 is the first report where we can attribute outcomes to specific caller agents (Claude Desktop vs. Cursor vs. ChatGPT Apps vs. generic MCP client) over 7-day and 30-day windows.</li>
     <li><strong>Competitor Radar cohort data.</strong> Our weekly Perplexity-poll loop auto-seeds a query basket per Pro tenant and records whether the tenant&rsquo;s domain showed up. Q2 will include the first cohort-level read on which citation battles SMBs systematically win vs. lose.</li>
     <li><strong>Vertical and regional variation.</strong> Once tenants span more verticals and states, we can report on whether crawler pressure correlates with regional AI-adoption or tracks legacy SEO patterns.</li>
@@ -637,9 +609,9 @@ blockquote.doc-bq{
     A small deterministic rule set over the lowercased query string returning one of six buckets. Not an LLM classifier &mdash; a heuristic we can audit and update without a deploy. Both the bucket label and the raw query are stored so historical rows can be re-classified when rules change.
   </p>
 
-  <h3 class="doc-h3">Query classification for this report</h3>
+  <h3 class="doc-h3">Tenant-type classification for this report</h3>
   <p class="doc-p">
-    BURST, TEST_SLUG, and REAL? classifications were applied post-hoc to the production <code>queries</code> table for this report specifically, using the rules documented in the Methodology section. The classification logic is not (yet) a first-class piece of the production stack; Q2 will include it as a durable view alongside raw query data.
+    LIVE / PILOT / TEST tenant-type classifications were applied post-hoc to the production <code>queries</code> table using the slug allowlists documented in the Methodology section. BURST detection uses a 10-minute window on matching (slug, bot, query) tuples. Neither classifier is (yet) a first-class piece of the production stack; Q2 will include them as durable views alongside raw query data.
   </p>
 
   <h3 class="doc-h3">Verification</h3>

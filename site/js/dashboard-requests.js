@@ -62,9 +62,9 @@
     var isDark = (window.AMCP_THEME && window.AMCP_THEME.isDark)
       ? window.AMCP_THEME.isDark()
       : document.documentElement.getAttribute('data-theme') !== 'light';
-    var accent  = window.AMCP_THEME ? window.AMCP_THEME.accent() : '#7d2550';
+    var accent  = window.AMCP_THEME ? window.AMCP_THEME.accent() : '#3d0a22';
     var gridCol = isDark ? 'rgba(57,56,54,.5)' : 'rgba(221,219,216,.7)';
-    var txtCol  = isDark ? '#7a7875' : '#6b6967';
+    var txtCol  = isDark ? '#8a7c78' : '#6b6360';
 
     requestsChart = new Chart(canvas, {
       type: 'line',

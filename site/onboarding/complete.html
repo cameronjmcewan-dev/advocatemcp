@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark" style="background:#171614">
+<html lang="en" data-theme="dark" style="background:#050202">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,6 +7,7 @@
 <meta name="robots" content="noindex,nofollow" />
 <title>Setting up your account — Advocate</title>
 <link rel="preconnect" href="https://api.fontshare.com" />
+<link rel="stylesheet" href="/css/tokens.css" />
 <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -15,16 +16,16 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
 :root {
-  --bg:          #171614;
-  --surface:     #1c1b19;
-  --surface-2:   #222120;
-  --border:      #393836;
-  --text:        #e8e6e3;
-  --muted:       #7a7875;
-  --accent:      #7d2550;
-  --accent-dk:   #5c1a3c;
-  --accent-dim:  rgba(125,37,80,.12);
-  --accent-ring: rgba(125,37,80,.25);
+  --bg:          #050202;
+  --surface:     #0d0507;
+  --surface-2:   #140a0c;
+  --border:      #2a1418;
+  --text:        #e8e3e0;
+  --muted:       #8a7c78;
+  --accent:      #3d0a22;
+  --accent-dk:   #2a0617;
+  --accent-dim:  rgba(61,10,34,.12);
+  --accent-ring: rgba(61,10,34,.25);
   --green:       #3fb950;
   --yellow:      #d29922;
   --red:         #f85149;
@@ -43,19 +44,19 @@
 }
 
 [data-theme="light"] {
-  --bg:         #f5f4f2;
+  --bg:         #faf8f7;
   --surface:    #ffffff;
-  --surface-2:  #efeeed;
-  --border:     #dddbd8;
-  --text:       #1a1917;
-  --muted:      #6b6967;
-  --accent:     #7d2550;
-  --accent-dk:  #5c1a3c;
-  --accent-dim: rgba(125,37,80,.08);
-  --accent-ring:rgba(125,37,80,.22);
+  --surface-2:  #f0ecea;
+  --border:     #d8d1ce;
+  --text:       #1a0a0e;
+  --muted:      #6b6360;
+  --accent:     #3d0a22;
+  --accent-dk:  #2a0617;
+  --accent-dim: rgba(61,10,34,.08);
+  --accent-ring:rgba(61,10,34,.22);
 }
 
-html{font-size:16px;-webkit-font-smoothing:antialiased;color-scheme:dark light;background:#171614}
+html{font-size:16px;-webkit-font-smoothing:antialiased;color-scheme:dark light;background:#050202}
 body{
   background:var(--bg);color:var(--text);
   font-family:var(--font-body);font-size:var(--tx-base);line-height:1.6;
@@ -138,11 +139,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 <div class="card">
 
   <div class="logo">
-    <svg width="22" height="22" viewBox="0 0 26 26" fill="none">
-      <rect width="26" height="26" rx="6" fill="#7d2550"/>
-      <path d="M13 6.5L20.5 20H5.5L13 6.5Z" stroke="white" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
-      <line x1="9.2" y1="15.5" x2="16.8" y2="15.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/>
-    </svg>
+    <img src="/icon-192.png" alt="Advocate" width="22" height="22" style="border-radius:5px;display:block" />
     Advocate
   </div>
 
@@ -185,7 +182,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 
     <h1 class="h">You're all set.</h1>
     <p class="sub">
-      Your AdvocateMCP account is active and ready. Sign in to your dashboard to
+      Your Advocate account is active and ready. Sign in to your dashboard to
       finish your business profile and watch AI crawler traffic land.
     </p>
 

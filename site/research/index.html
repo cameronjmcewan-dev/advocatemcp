@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark" style="background:#171614">
+<html lang="en" data-theme="dark" style="background:#050202">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="dark light" />
-<meta name="theme-color" content="#171614" />
+<meta name="theme-color" content="#050202" />
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
 <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
 <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
@@ -27,6 +27,7 @@
 <link rel="canonical" href="https://advocatemcp.com/research/" />
 
 <link rel="preconnect" href="https://api.fontshare.com" />
+<link rel="stylesheet" href="/css/tokens.css" />
 <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -36,16 +37,16 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
 :root {
-  --bg:          #171614;
-  --surface:     #1c1b19;
-  --surface-2:   #222120;
-  --border:      #393836;
-  --text:        #e8e6e3;
-  --muted:       #7a7875;
-  --accent:      #7d2550;
-  --accent-dk:   #5c1a3c;
-  --accent-dim:  rgba(125,37,80,.12);
-  --accent-ring: rgba(125,37,80,.25);
+  --bg:          #050202;
+  --surface:     #0d0507;
+  --surface-2:   #140a0c;
+  --border:      #2a1418;
+  --text:        #e8e3e0;
+  --muted:       #8a7c78;
+  --accent:      #3d0a22;
+  --accent-dk:   #2a0617;
+  --accent-dim:  rgba(61,10,34,.12);
+  --accent-ring: rgba(61,10,34,.25);
 
   --font-serif:  'Instrument Serif', Georgia, serif;
   --font-body:   'General Sans','Inter',system-ui,-apple-system,sans-serif;
@@ -59,16 +60,16 @@
 }
 
 [data-theme="light"] {
-  --bg:        #f5f4f2;
+  --bg:        #faf8f7;
   --surface:   #ffffff;
-  --surface-2: #efeeed;
-  --border:    #dddbd8;
-  --text:      #1a1917;
-  --muted:     #6b6967;
-  --accent:    #7d2550;
-  --accent-dk: #5c1a3c;
-  --accent-dim:rgba(125,37,80,.08);
-  --accent-ring:rgba(125,37,80,.22);
+  --surface-2: #f0ecea;
+  --border:    #d8d1ce;
+  --text:      #1a0a0e;
+  --muted:     #6b6360;
+  --accent:    #3d0a22;
+  --accent-dk: #2a0617;
+  --accent-dim:rgba(61,10,34,.08);
+  --accent-ring:rgba(61,10,34,.22);
 }
 
 html{font-size:16px;-webkit-font-smoothing:antialiased;color-scheme:dark light;background:var(--bg)}
@@ -309,28 +310,28 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 
   <a class="report-card" href="/research/state-of-ai-bot-traffic-q1-2026">
     <div class="report-card-top">
-      <span class="pill">Q1 2026 Preview</span>
+      <span class="pill">Q1 2026 Methodology Preview</span>
       <span>·</span>
-      <span>April 16, 2026</span>
+      <span>April 17, 2026</span>
       <span>·</span>
       <span>12 min read</span>
     </div>
-    <h2 class="report-card-title">State of AI Bot Traffic — Q1 2026 Preview</h2>
+    <h2 class="report-card-title">State of AI Bot Traffic — Q1 2026 Methodology Preview</h2>
     <p class="report-card-lead">
-      <strong>First closed-loop AI attribution at SMB tier.</strong> A methodology preview reporting what the instrument sees in its first week of production — 20 organic queries across three real tenants, classified from 64 total. Methodology, early signals, and what Q2 measures next.
+      <strong>Closed-loop AI attribution at SMB tier — validated and shipped.</strong> One paying customer (WCC), two pilot validation installs, 64 total queries, 20 organic, 6 captured click events. The instrument works; Q2 is the first multi-customer quantitative report.
     </p>
     <div class="stat-row">
       <div>
-        <div class="stat-num">N=20</div>
-        <div class="stat-lbl">Organic queries classified from 64 total</div>
+        <div class="stat-num">1</div>
+        <div class="stat-lbl">Live paying customer in Q1 (Workman Copy Co)</div>
       </div>
       <div>
-        <div class="stat-num">3</div>
-        <div class="stat-lbl">Real tenants in the clean sample</div>
+        <div class="stat-num">20</div>
+        <div class="stat-lbl">Organic bot queries classified from 64 total</div>
       </div>
       <div>
-        <div class="stat-num">3</div>
-        <div class="stat-lbl">Bots observed: GPTBot, PerplexityBot, ClaudeBot</div>
+        <div class="stat-num">6</div>
+        <div class="stat-lbl">Click events captured — loop closed end-to-end</div>
       </div>
     </div>
     <span class="report-card-cta">

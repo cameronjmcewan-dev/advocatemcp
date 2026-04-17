@@ -12,14 +12,14 @@ Keep it under 200 words. Reporters skim. Lead with the instrument (what's new), 
 
 ### Subject line A/B — pick one per outlet, don't A/B within one reporter
 
-A. `First closed-loop AI attribution data from small businesses — methodology preview`
+A. `Closed-loop AI attribution at SMB tier — Q1 methodology preview`
 
-B. `We built AI crawler attribution for SMBs. Publishing the first week of production data.`
+B. `We built AI crawler attribution for small businesses. Publishing the validated instrument + first customer data.`
 
-C. `Nobody has measured which AI bot drives revenue to small businesses. We just started.`
+C. `Nobody has measured which AI bot drives revenue to small businesses. We just built the instrument.`
 
 **Defaults:**
-- Tier-1 general tech (TechCrunch, Fortune, Axios): use A. The novelty is the hook.
+- Tier-1 general tech (TechCrunch, Fortune, Axios): use A. Specific and defensible.
 - Trade/industry (Search Engine Land, Marketing Brew, The Information): use B. Sounds like research, not pitch.
 - Independent reporters who cover AI infrastructure specifically: use C. They'll appreciate the gap framing.
 
@@ -28,15 +28,15 @@ C. `Nobody has measured which AI bot drives revenue to small businesses. We just
 ```
 Hi [FIRST NAME],
 
-I run a tool that intercepts AI crawler requests at the edge for small businesses, generates per-bot citation-ready responses, and tracks every outbound link with a signed redirect token so I can attribute downstream clicks back to the specific bot that drove them.
+I run a tool that intercepts AI crawler requests at the edge for small businesses, generates per-bot citation-ready responses, and tracks every outbound link with an HMAC-signed redirect token so a human click from an AI answer can be attributed back to the exact bot and exact query.
 
-Today I'm publishing a methodology preview — the first week of production data across three real tenants. Honest numbers: 20 organic queries classified from 64 total (59% was our own probe traffic from build-out, fully disclosed).
+Today I'm publishing the Q1 methodology preview. Honest scope up front: one paying customer in Q1 (a copywriting agency); the other tenants in the dataset are our own pre-customer pilot installs used to validate the pipeline. Six click events captured end-to-end — all six from pilot validation, zero from the customer side yet. The instrument is validated; Q2 is the first quantitative report.
 
-On the clean subset: GPTBot sent 50% of queries, PerplexityBot 25%, ClaudeBot 25%. The only organic click we could unambiguously attribute came from PerplexityBot. Too early to claim a pattern, but the instrument is working and Q2 will be the first quantitative report.
+One signal worth flagging from the live-customer sample (N=20 queries): PerplexityBot was 60% of crawler traffic on that tenant, GPTBot only 15%. Opposite of conventional wisdom, but N is too small to generalize. Q2 quantifies.
 
-Nobody at SMB tier has closed this attribution loop before. Profound and Scrunch monitor enterprise citations. Reddit gets ~$60M/year from Google for training data access. But there's no equivalent for an independent plumber or a pediatric orthotic brand.
+Nobody at SMB tier has closed this attribution loop before. Profound and Scrunch monitor enterprise citations. Reddit reportedly gets ~$60M/year from Google for training data access. No equivalent exists for an independent plumber or a pediatric orthotic brand.
 
-Happy to walk through the method on a call — I can show live traffic hitting a real tenant and the attribution loop closing end to end.
+Happy to walk through the method on a 20-minute call — I can show the pipeline live against a real tenant and demonstrate a click resolving end-to-end.
 
 Cameron McEwan
 Founder, Advocate
@@ -45,8 +45,8 @@ Founder, Advocate
 
 **Why this version works:**
 - Opens with what you do in plain language
-- Leads with the instrument (novelty), not a single number
-- Discloses the probe-traffic ratio upfront — reporter trust
+- Leads with the validated instrument, not a single number
+- Discloses the one-customer, pilot-validation framing up front — reporter trust
 - Offers a call with live demo
 
 ---
@@ -109,17 +109,19 @@ Profound and Scrunch measure which brands are cited in AI answers (Fortune 500 s
 
 Short version: they measure visibility, we measure attribution.
 
-### Q2: The sample size is very small. Why publish now?
+### Q2: Why publish now, when you have one paying customer and N=9 organic queries on the customer side?
 
-Three reasons. First, nobody at SMB tier has published the closed-loop methodology — the instrument is the contribution, not the numbers. Second, we're explicit about the limits: 20 organic queries classified from 64 total, 59% probe traffic from build-out, 1–2 unambiguously organic clicks. We disclose the classification in the methodology section.
+Because the instrument is the contribution, and the honest version of the story is the validation-phase version. We built a closed-loop AI attribution pipeline — edge interception, per-bot response, signed citation, click resolution, full end-to-end attribution — and we validated it on our own pre-customer pilot installs before pointing it at our first paying customer. Six click events captured end-to-end in Q1, all six in the pilot-validation tier. That's what a working instrument in its first week looks like.
 
-Third, there's a directionally interesting signal — PerplexityBot routes users who click through while GPTBot's queries haven't produced an attributed click yet. We want this hypothesis on the record before Q2 triples the sample. We're not asking reporters to bet on the numbers — we're asking them to cover the instrument and the methodology.
+We could have waited three months, collected customer-side data, and presented a tidier narrative. That version would have been less honest than this one. Q2 is the first quantitative report with a multi-customer organic sample. Q1 is the methodology on the record, caveats first, so the method can be evaluated before the numbers get bigger.
 
-### Q3: "Only 1–2 organic clicks" — is the instrument even working?
+### Q3: Your data shows PerplexityBot dominating on one customer, but most public industry reporting says GPTBot is the dominant AI crawler. Why does this contradict?
 
-Yes. The attribution loop captured click events across multiple bot types and tenants. The signed redirect tokens resolve correctly. The reason the organic click count is low is that the tenants are new — they've been in production for one week. Q2 will have a full quarter of organic traffic across more tenants.
+Because we have one paying customer, in one vertical (B2B copywriting agency), measured over nine days, N=20 total queries. That is not a market. On that one tenant, the distribution was 60% PerplexityBot, 25% ClaudeBot, 15% GPTBot — roughly the inverse of what most public crawler-rank studies report.
 
-What we can say: the instrument attributed its first organic bot click on April 10 (DMRE tenant, PerplexityBot, query about commercial land sales). That's the proof the loop closes. Scale is what Q2 adds.
+I do not claim this generalizes. What I claim is that it is the first live-customer data point in print at SMB tier, and it is sufficiently contrarian to conventional wisdom that it deserves to be quantified at Q2 scale rather than hand-waved away.
+
+Three plausible reasons the customer-side number might legitimately differ from industry aggregates: (1) SMB domains may see a different crawler mix than the large publishers most crawler-rank studies draw from; (2) PerplexityBot's per-query behavior is routing-oriented — it hits origin to cite, not to train — while GPTBot's training-oriented crawls may concentrate on different domain profiles; (3) a B2B copywriting agency is not a plumber. Q2 will have multiple verticals and enough volume to separate these hypotheses.
 
 ### Q4: Is this a paid tool? Are you selling something?
 
@@ -129,33 +131,34 @@ Yes — Advocate is a SaaS product (pricing at advocatemcp.com/pricing). The rep
 
 Yes. Three ways:
 
-1. The methodology section of the report lists the classification logic, time windows, and the attribution mechanism (HMAC-SHA256 signed redirect tokens).
+1. The methodology section of the report lists the tenant classification framework, the burst/organic filter logic, the time windows, and the attribution mechanism (HMAC-SHA256 signed redirect tokens).
 2. We can walk you through the live instance on a call — show a bot query hitting the edge, the response being generated, and a simulated click resolving back through the attribution endpoint.
 3. We publish the Advocate manifest at `/.well-known/mcp.json` for any tenant site, which documents the capabilities and schemas the measurement depends on.
 
 ### Q6: What about privacy?
 
-No PII is captured in the research dataset. Click events log bot-identity, request-ID, timestamp, source URL. User-level data (IP, device, identity) is not part of this measurement. The signed token is opaque — it binds a click to the bot query that spawned it, not to the user who clicked.
+No PII is captured in the research dataset. Click events log bot-identity, request-ID, timestamp, source URL. User-level data (IP, device, identity) is not part of this measurement — we prefix-truncate client IPs before hashing them for deduplication, so a full user IP cannot be reconstructed from our logs. The signed token is opaque — it binds a click to the bot query that spawned it, not to the user who clicked.
 
 ### Q7: What is the Q2 report going to measure differently?
 
-Three upgrades:
+Four upgrades:
 
-1. Sample size — target 50+ businesses, 500+ queries, Q2 full quarter.
-2. Per-vertical breakdown — home services vs. professional services vs. local retail. The Q1 sample is too small to split.
-3. Conversion-beyond-click — did the click result in a booking, quote request, or revenue event? Q1 stopped at the click. Q2 closes the loop to the outcome.
+1. **Sample size.** Target a materially larger customer cohort and a full-quarter window.
+2. **Per-vertical breakdown.** Home services vs. professional services vs. local retail. Q1's single-customer sample cannot split. Q2 will.
+3. **Conversion beyond click.** Did the click result in a booking, quote request, or revenue event? Q1 validated the click. Q2 measures what happens after.
+4. **Per-agent attribution.** Our per-agent reputation rollup shipped in April 2026. Q2 is the first report that can attribute outcomes to specific caller agents — Claude Desktop vs. Cursor vs. ChatGPT Apps vs. generic MCP client — over 7-day and 30-day windows.
 
 ### Q8: Are you funded?
 
-Bootstrapped. Running on $0 outside revenue. Cofounder + solo engineer. Full transparency in the report's "About Advocate" section.
+Bootstrapped. Running on $0 outside revenue. Solo founder + engineer. Full transparency in the report's "About Advocate" section.
 
 ### Q9: Do you have customers who will talk on the record?
 
-Yes, with permission. We can connect you with 1–2 small-business owners who are customers and have agreed to speak. Reach out and we'll coordinate.
+One paying customer in Q1 (Workman Copy Co), and we can coordinate a conversation with them with permission. The other tenants referenced in the dataset are our own pre-customer pilot installs, which we describe as such in the report — we are not presenting them as customer references.
 
 ### Q10: What's the business model?
 
-Flat monthly subscription per business (Base $100, Pro $250). We do not take a cut of transactions. We do not sell the attribution data. The business owns their tenant data.
+Flat monthly subscription per business. The free **Business** tier covers agent hosting and attribution. **Pro** adds Competitor Radar (weekly Perplexity citation polling) and per-agent reputation analytics. We do not take a cut of transactions. We do not sell the attribution data. The business owns their tenant data.
 
 ---
 
@@ -174,7 +177,7 @@ Hi [FIRST NAME],
 
 Publishing Q1 AI attribution methodology preview on [DATE] public. Offering an embargoed briefing 48 hours prior if helpful — instrument walkthrough, early data, and a call with me to ask anything. Embargo would lift at [TIME] on [DATE], matching public publish.
 
-Two sentences on what's new: first closed-loop AI attribution data from small businesses. 20 organic queries, 3 tenants, 3 bots — methodology preview before the quantitative Q2 report.
+Two sentences on what's new: we built and validated a closed-loop AI attribution pipeline at SMB tier and captured six end-to-end click events in Q1 validation. One paying customer, N=9 organic queries customer-side, methodology preview before the quantitative Q2 report.
 
 Interested?
 

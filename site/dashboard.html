@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark" style="background:#171614">
+<html lang="en" data-theme="dark" style="background:#050202">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="color-scheme" content="dark light" />
 <title>Dashboard — Advocate</title>
 <link rel="preconnect" href="https://api.fontshare.com" />
+<link rel="stylesheet" href="/css/tokens.css" />
 <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -17,16 +18,16 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
 :root {
-  --bg:          #171614;
-  --surface:     #1c1b19;
-  --surface-2:   #222120;
-  --border:      #393836;
-  --text:        #e8e6e3;
-  --muted:       #7a7875;
-  --accent:      #7d2550;
-  --accent-dk:   #5c1a3c;
-  --accent-dim:  rgba(125,37,80,.12);
-  --accent-ring: rgba(125,37,80,.25);
+  --bg:          #050202;
+  --surface:     #0d0507;
+  --surface-2:   #140a0c;
+  --border:      #2a1418;
+  --text:        #e8e3e0;
+  --muted:       #8a7c78;
+  --accent:      #3d0a22;
+  --accent-dk:   #2a0617;
+  --accent-dim:  rgba(61,10,34,.12);
+  --accent-ring: rgba(61,10,34,.25);
   --green:       #3fb950;
   --yellow:      #d29922;
   --red:         #f85149;
@@ -47,19 +48,19 @@
 }
 
 [data-theme="light"] {
-  --bg:         #f5f4f2;
+  --bg:         #faf8f7;
   --surface:    #ffffff;
-  --surface-2:  #efeeed;
-  --border:     #dddbd8;
-  --text:       #1a1917;
-  --muted:      #6b6967;
-  --accent:     #7d2550;
-  --accent-dk:  #5c1a3c;
-  --accent-dim: rgba(125,37,80,.08);
-  --accent-ring:rgba(125,37,80,.22);
+  --surface-2:  #f0ecea;
+  --border:     #d8d1ce;
+  --text:       #1a0a0e;
+  --muted:      #6b6360;
+  --accent:     #3d0a22;
+  --accent-dk:  #2a0617;
+  --accent-dim: rgba(61,10,34,.08);
+  --accent-ring:rgba(61,10,34,.22);
 }
 
-html{font-size:16px;-webkit-font-smoothing:antialiased;color-scheme:dark light;background:#171614}
+html{font-size:16px;-webkit-font-smoothing:antialiased;color-scheme:dark light;background:#050202}
 body{
   background:var(--bg);color:var(--text);
   font-family:var(--font-body);font-size:var(--tx-base);line-height:1.6;
@@ -129,9 +130,17 @@ img,svg{display:block}
 
 /* ── Topbar ── */
 #topbar{
+  position:relative;
   display:flex;align-items:center;gap:12px;
   padding:0 24px;height:56px;flex-shrink:0;
-  background:var(--bg);border-bottom:1px solid var(--border);
+  background:linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%);
+  border-bottom:1px solid var(--border);
+  z-index:10;
+}
+#topbar::after{
+  content:"";position:absolute;bottom:-1px;left:10%;right:10%;height:1px;
+  background:linear-gradient(90deg, transparent 0%, var(--accent) 50%, transparent 100%);
+  opacity:.7;pointer-events:none;
 }
 .db-crumb{
   display:flex;align-items:center;gap:8px;
@@ -178,17 +187,50 @@ img,svg{display:block}
 /* ── KPI grid ── */
 .kpi-grid{
   display:grid;grid-template-columns:repeat(4,1fr);
-  gap:12px;margin-bottom:20px;
+  gap:16px;margin-bottom:24px;
 }
 .kpi-card{
-  padding:20px;background:var(--surface);
-  border:1px solid var(--border);border-radius:var(--r-lg);
+  position:relative;
+  padding:22px 22px 20px;
+  background:linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%);
+  border:1px solid var(--border);border-radius:var(--r-xl);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.02) inset,
+    0 0 0 1px rgba(255,255,255,.01) inset,
+    0 12px 32px rgba(0,0,0,.28),
+    0 0 40px var(--accent-dim);
+  transition:border-color .2s, box-shadow .2s, transform .2s;
+  overflow:hidden;
+}
+.kpi-card::before{
+  content:"";position:absolute;top:0;left:16px;right:16px;height:1px;
+  background:linear-gradient(90deg, transparent 0%, var(--accent-ring) 50%, transparent 100%);
+  pointer-events:none;
+}
+.kpi-card:hover{
+  border-color:var(--accent-ring);
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.03) inset,
+    0 16px 40px rgba(0,0,0,.35),
+    0 0 60px var(--accent-dim);
+  transform:translateY(-1px);
+}
+[data-theme="light"] .kpi-card{
+  background:var(--surface);
+  box-shadow:
+    0 1px 2px rgba(26,10,14,.04),
+    0 8px 24px rgba(26,10,14,.06);
+}
+[data-theme="light"] .kpi-card:hover{
+  box-shadow:
+    0 2px 4px rgba(26,10,14,.06),
+    0 16px 40px rgba(61,10,34,.10);
 }
 .kpi-label{
-  font-size:var(--tx-xs);font-weight:500;text-transform:uppercase;
-  letter-spacing:.07em;color:var(--muted);margin-bottom:10px;
+  font-size:var(--tx-xs);font-weight:600;text-transform:uppercase;
+  letter-spacing:.09em;color:var(--muted);margin-bottom:12px;
 }
-.kpi-val{font-size:var(--tx-xl);font-weight:600;line-height:1;margin-bottom:6px}
+.kpi-val{font-size:var(--tx-xl);font-weight:600;line-height:1;margin-bottom:6px;color:var(--text)}
 .kpi-hint{font-size:var(--tx-xs);color:var(--muted)}
 
 /* ── Cards ── */
@@ -372,11 +414,11 @@ tr:hover td{background:rgba(255,255,255,.02)}
 
 /* ── Heatmap color scale ── */
 .hm-0{background:var(--surface-2)}
-.hm-1{background:rgba(125,37,80,.2)}
-.hm-2{background:rgba(125,37,80,.4)}
-.hm-3{background:rgba(125,37,80,.6)}
-.hm-4{background:rgba(125,37,80,.8)}
-.hm-5{background:rgba(125,37,80,1)}
+.hm-1{background:rgba(61,10,34,.2)}
+.hm-2{background:rgba(61,10,34,.4)}
+.hm-3{background:rgba(61,10,34,.6)}
+.hm-4{background:rgba(61,10,34,.8)}
+.hm-5{background:rgba(61,10,34,1)}
 
 /* ── Error state ── */
 .error-banner{
@@ -509,11 +551,7 @@ body.pro-tier .db-nav-item[data-pro-only]{display:flex}
 <!-- ── Sidebar ── -->
 <aside id="sidebar">
   <div class="db-logo">
-    <svg width="22" height="22" viewBox="0 0 26 26" fill="none">
-      <rect width="26" height="26" rx="6" fill="#7d2550"/>
-      <path d="M13 6.5L20.5 20H5.5L13 6.5Z" stroke="white" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
-      <line x1="9.2" y1="15.5" x2="16.8" y2="15.5" stroke="white" stroke-width="1.6" stroke-linecap="round"/>
-    </svg>
+    <img src="/icon-192.png" alt="Advocate" width="22" height="22" style="border-radius:5px;display:block" />
     Advocate
   </div>
   <nav class="db-nav" id="db-nav">
