@@ -4,8 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Set Up Your Profile — Advocate</title>
-<link rel="preconnect" href="https://api.fontshare.com" />
 <link rel="stylesheet" href="/css/tokens.css" />
+<link rel="preconnect" href="https://api.fontshare.com" />
 <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -17,14 +17,14 @@
 :root {
   --bg:          #050202;
   --surface:     #0d0507;
-  --surface-2:   #140a0c;
-  --border:      #2a1418;
+  --surface-2:   #222120;
+  --border:      #393836;
   --text:        #e8e3e0;
-  --muted:       #8a7c78;
+  --muted:       #7a7875;
   --accent:      #3d0a22;
-  --accent-dk:   #2a0617;
-  --accent-dim:  rgba(61,10,34,.12);
-  --accent-ring: rgba(61,10,34,.25);
+  --accent-dk:   #8f2d5d;
+  --accent-dim:  rgba(61,10,34,.1);
+  --accent-ring: rgba(61,10,34,.24);
   --green:       #3fb950;
   --red:         #f85149;
   --red-dim:     rgba(248,81,73,.1);
@@ -357,7 +357,6 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
   .btn-ghost{width:auto}
 }
 </style>
-<link rel="stylesheet" href="/css/redesign.css" />
 </head>
 <body>
 
@@ -392,11 +391,46 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
         <span class="step-num">3</span>
         <svg class="check-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
-      <span class="ps-label">Leads</span>
+      <span class="ps-label">Quotes</span>
     </div>
     <div class="ps" id="ps-4">
       <div class="ps-dot">
         <span class="step-num">4</span>
+        <svg class="check-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <span class="ps-label">Area</span>
+    </div>
+    <div class="ps" id="ps-5">
+      <div class="ps-dot">
+        <span class="step-num">5</span>
+        <svg class="check-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <span class="ps-label">Hours</span>
+    </div>
+    <div class="ps" id="ps-6">
+      <div class="ps-dot">
+        <span class="step-num">6</span>
+        <svg class="check-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <span class="ps-label">Leads</span>
+    </div>
+    <div class="ps" id="ps-7">
+      <div class="ps-dot">
+        <span class="step-num">7</span>
+        <svg class="check-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <span class="ps-label">Plan</span>
+    </div>
+    <div class="ps" id="ps-8">
+      <div class="ps-dot">
+        <span class="step-num">8</span>
+        <svg class="check-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <span class="ps-label">Account</span>
+    </div>
+    <div class="ps" id="ps-9">
+      <div class="ps-dot">
+        <span class="step-num">9</span>
         <svg class="check-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7l3.5 3.5 5.5-6" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </div>
       <span class="ps-label">Review</span>
@@ -406,7 +440,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 
 <!-- ══ STEP 1 ══════════════════════════════════════════════════════════════ -->
 <div class="card" id="step-1">
-  <p class="step-eyebrow">Step 1 of 4</p>
+  <p class="step-eyebrow">Step 1 of 9</p>
   <h1 class="step-title">Business basics</h1>
   <p class="step-desc">Tell us about your business so AI can accurately describe you to potential customers.</p>
 
@@ -461,7 +495,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 
 <!-- ══ STEP 2 ══════════════════════════════════════════════════════════════ -->
 <div class="card" id="step-2" style="display:none">
-  <p class="step-eyebrow">Step 2 of 4</p>
+  <p class="step-eyebrow">Step 2 of 9</p>
   <h1 class="step-title">Services &amp; pricing</h1>
   <p class="step-desc">AI will use this to describe what you do and match you with the right customers.</p>
 
@@ -503,14 +537,160 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
   <div class="nav-row">
     <button class="btn btn-ghost" onclick="goBack(2)">← Back</button>
     <button class="btn btn-primary" onclick="goNext(2)">
-      <span class="btn-label">Next: Leads →</span>
+      <span class="btn-label">Next: Quotes →</span>
     </button>
   </div>
 </div>
 
-<!-- ══ STEP 3 ══════════════════════════════════════════════════════════════ -->
+<!-- ══ STEP 3 — QUOTES/TESTIMONIALS ════════════════════════════════════════ -->
 <div class="card" id="step-3" style="display:none">
-  <p class="step-eyebrow">Step 3 of 4</p>
+  <p class="step-eyebrow">Step 3 of 9</p>
+  <h1 class="step-title">Quotes &amp; testimonials</h1>
+  <p class="step-desc">Add customer quotes that AI can reference when recommending your business. Optional but powerful.</p>
+
+  <div id="quotes-list">
+    <div class="quote-entry" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r-lg);padding:16px;margin-bottom:12px">
+      <div class="field" style="margin-bottom:12px">
+        <label>Quote</label>
+        <textarea class="quote-text" rows="2" placeholder="e.g. &quot;Best property management company we've ever worked with. They saved us 20 hours/month.&quot;"></textarea>
+      </div>
+      <div class="field-row" style="display:flex;gap:12px">
+        <div class="field half" style="flex:1">
+          <label>Name</label>
+          <input type="text" class="quote-name" placeholder="John Smith" />
+        </div>
+        <div class="field half" style="flex:1">
+          <label>Title/Company <span class="opt">(optional)</span></label>
+          <input type="text" class="quote-title" placeholder="Owner, Acme Properties" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn btn-ghost" style="font-size:var(--tx-sm);padding:8px 14px;margin-bottom:8px" onclick="addQuoteEntry()">
+    + Add another quote
+  </button>
+
+  <div class="nav-row">
+    <button class="btn btn-ghost" onclick="goBack(3)">← Back</button>
+    <button class="btn btn-primary" onclick="goNext(3)">
+      <span class="btn-label">Next: Coverage Area →</span>
+    </button>
+  </div>
+</div>
+
+<!-- ══ STEP 4 — COVERAGE AREA ═══════════════════════════════════════════════ -->
+<div class="card" id="step-4" style="display:none">
+  <p class="step-eyebrow">Step 4 of 9</p>
+  <h1 class="step-title">Coverage area</h1>
+  <p class="step-desc">Where do you serve customers? AI will use this to match you with local queries.</p>
+
+  <div class="field" id="f-service-areas">
+    <label>Service areas</label>
+    <div id="service-areas-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <input type="text" class="service-area-input" placeholder="e.g. South Austin, TX" style="flex:1" />
+        <button class="btn btn-ghost" style="padding:6px 10px;color:var(--red);font-size:var(--tx-sm)" onclick="this.parentElement.remove()">×</button>
+      </div>
+    </div>
+    <button class="btn btn-ghost" style="font-size:var(--tx-sm);padding:6px 14px" onclick="addServiceArea()">
+      + Add another area
+    </button>
+  </div>
+
+  <div class="field">
+    <label>Service radius <span class="opt">(optional)</span></label>
+    <select id="biz-radius">
+      <option value="" disabled selected>Select radius</option>
+      <option value="5mi">Within 5 miles</option>
+      <option value="10mi">Within 10 miles</option>
+      <option value="25mi">Within 25 miles</option>
+      <option value="50mi">Within 50 miles</option>
+      <option value="statewide">Statewide</option>
+      <option value="nationwide">Nationwide</option>
+      <option value="remote">Remote / Online only</option>
+    </select>
+  </div>
+
+  <div class="nav-row">
+    <button class="btn btn-ghost" onclick="goBack(4)">← Back</button>
+    <button class="btn btn-primary" onclick="goNext(4)">
+      <span class="btn-label">Next: Hours →</span>
+    </button>
+  </div>
+</div>
+
+<!-- ══ STEP 5 — OPERATING HOURS ═════════════════════════════════════════════ -->
+<div class="card" id="step-5" style="display:none">
+  <p class="step-eyebrow">Step 5 of 9</p>
+  <h1 class="step-title">Operating hours</h1>
+  <p class="step-desc">Let AI know when you're available so it can set accurate expectations.</p>
+
+  <div class="field">
+    <label>Business schedule</label>
+    <div style="display:flex;flex-direction:column;gap:8px" id="hours-grid">
+      <div style="display:grid;grid-template-columns:80px 1fr 1fr auto;gap:8px;align-items:center;font-size:var(--tx-sm)">
+        <span style="color:var(--muted);font-weight:500">Day</span>
+        <span style="color:var(--muted);font-weight:500">Open</span>
+        <span style="color:var(--muted);font-weight:500">Close</span>
+        <span></span>
+      </div>
+      <div class="hours-row" style="display:grid;grid-template-columns:80px 1fr 1fr auto;gap:8px;align-items:center">
+        <span style="font-size:var(--tx-sm)">Mon</span>
+        <input type="time" class="fi hours-open" value="09:00" style="font-size:var(--tx-sm)" />
+        <input type="time" class="fi hours-close" value="17:00" style="font-size:var(--tx-sm)" />
+        <label style="display:flex;align-items:center;gap:4px;font-size:var(--tx-xs);color:var(--muted);white-space:nowrap"><input type="checkbox" class="hours-closed" style="accent-color:var(--accent)"> Closed</label>
+      </div>
+      <div class="hours-row" style="display:grid;grid-template-columns:80px 1fr 1fr auto;gap:8px;align-items:center">
+        <span style="font-size:var(--tx-sm)">Tue</span>
+        <input type="time" class="fi hours-open" value="09:00" style="font-size:var(--tx-sm)" />
+        <input type="time" class="fi hours-close" value="17:00" style="font-size:var(--tx-sm)" />
+        <label style="display:flex;align-items:center;gap:4px;font-size:var(--tx-xs);color:var(--muted);white-space:nowrap"><input type="checkbox" class="hours-closed" style="accent-color:var(--accent)"> Closed</label>
+      </div>
+      <div class="hours-row" style="display:grid;grid-template-columns:80px 1fr 1fr auto;gap:8px;align-items:center">
+        <span style="font-size:var(--tx-sm)">Wed</span>
+        <input type="time" class="fi hours-open" value="09:00" style="font-size:var(--tx-sm)" />
+        <input type="time" class="fi hours-close" value="17:00" style="font-size:var(--tx-sm)" />
+        <label style="display:flex;align-items:center;gap:4px;font-size:var(--tx-xs);color:var(--muted);white-space:nowrap"><input type="checkbox" class="hours-closed" style="accent-color:var(--accent)"> Closed</label>
+      </div>
+      <div class="hours-row" style="display:grid;grid-template-columns:80px 1fr 1fr auto;gap:8px;align-items:center">
+        <span style="font-size:var(--tx-sm)">Thu</span>
+        <input type="time" class="fi hours-open" value="09:00" style="font-size:var(--tx-sm)" />
+        <input type="time" class="fi hours-close" value="17:00" style="font-size:var(--tx-sm)" />
+        <label style="display:flex;align-items:center;gap:4px;font-size:var(--tx-xs);color:var(--muted);white-space:nowrap"><input type="checkbox" class="hours-closed" style="accent-color:var(--accent)"> Closed</label>
+      </div>
+      <div class="hours-row" style="display:grid;grid-template-columns:80px 1fr 1fr auto;gap:8px;align-items:center">
+        <span style="font-size:var(--tx-sm)">Fri</span>
+        <input type="time" class="fi hours-open" value="09:00" style="font-size:var(--tx-sm)" />
+        <input type="time" class="fi hours-close" value="17:00" style="font-size:var(--tx-sm)" />
+        <label style="display:flex;align-items:center;gap:4px;font-size:var(--tx-xs);color:var(--muted);white-space:nowrap"><input type="checkbox" class="hours-closed" style="accent-color:var(--accent)"> Closed</label>
+      </div>
+      <div class="hours-row" style="display:grid;grid-template-columns:80px 1fr 1fr auto;gap:8px;align-items:center">
+        <span style="font-size:var(--tx-sm)">Sat</span>
+        <input type="time" class="fi hours-open" value="10:00" style="font-size:var(--tx-sm)" />
+        <input type="time" class="fi hours-close" value="14:00" style="font-size:var(--tx-sm)" />
+        <label style="display:flex;align-items:center;gap:4px;font-size:var(--tx-xs);color:var(--muted);white-space:nowrap"><input type="checkbox" class="hours-closed" style="accent-color:var(--accent)"> Closed</label>
+      </div>
+      <div class="hours-row" style="display:grid;grid-template-columns:80px 1fr 1fr auto;gap:8px;align-items:center">
+        <span style="font-size:var(--tx-sm)">Sun</span>
+        <input type="time" class="fi hours-open" style="font-size:var(--tx-sm)" />
+        <input type="time" class="fi hours-close" style="font-size:var(--tx-sm)" />
+        <label style="display:flex;align-items:center;gap:4px;font-size:var(--tx-xs);color:var(--muted);white-space:nowrap"><input type="checkbox" class="hours-closed" checked style="accent-color:var(--accent)"> Closed</label>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-row">
+    <button class="btn btn-ghost" onclick="goBack(5)">← Back</button>
+    <button class="btn btn-primary" onclick="goNext(5)">
+      <span class="btn-label">Next: Lead Routing →</span>
+    </button>
+  </div>
+</div>
+
+<!-- ══ STEP 6 — LEADS (was step 3) ═════════════════════════════════════════ -->
+<div class="card" id="step-6" style="display:none">
+  <p class="step-eyebrow">Step 6 of 9</p>
   <h1 class="step-title">Customers &amp; lead routing</h1>
   <p class="step-desc">Tell AI who to send your way and where to route them when they're ready.</p>
 
@@ -564,16 +744,96 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
   </div>
 
   <div class="nav-row">
-    <button class="btn btn-ghost" onclick="goBack(3)">← Back</button>
-    <button class="btn btn-primary" onclick="goNext(3)">
+    <button class="btn btn-ghost" onclick="goBack(6)">← Back</button>
+    <button class="btn btn-primary" onclick="goNext(6)">
+      <span class="btn-label">Next: Pick Plan →</span>
+    </button>
+  </div>
+</div>
+
+<!-- ══ STEP 7 — PLAN SELECTION ═════════════════════════════════════════════ -->
+<div class="card" id="step-7" style="display:none">
+  <p class="step-eyebrow">Step 7 of 9</p>
+  <h1 class="step-title">Pick your plan</h1>
+  <p class="step-desc">Choose the plan that fits your business. You can upgrade or downgrade any time.</p>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px">
+    <div class="radio-opt selected" onclick="setPlan('base')" data-val="base" style="flex-direction:column;align-items:flex-start;padding:20px">
+      <div style="display:flex;align-items:center;gap:8px;width:100%;margin-bottom:12px">
+        <div class="radio-dot"><div class="radio-dot-inner"></div></div>
+        <span style="font-weight:600">Base</span>
+        <span style="margin-left:auto;font-family:var(--font-serif);font-size:1.25rem">$100</span>
+        <span style="font-size:var(--tx-xs);color:var(--muted)">/mo</span>
+      </div>
+      <ul style="list-style:none;display:flex;flex-direction:column;gap:6px;font-size:var(--tx-xs);color:var(--muted)">
+        <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> AI recommendation presence</li>
+        <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> Custom domain endpoint</li>
+        <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> Referral tracking dashboard</li>
+        <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> Full analytics &amp; activity log</li>
+        <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> Email support</li>
+      </ul>
+    </div>
+    <div class="radio-opt" onclick="setPlan('pro')" data-val="pro" style="flex-direction:column;align-items:flex-start;padding:20px;position:relative">
+      <div style="position:absolute;top:-1px;right:16px;background:var(--accent);color:#fff;font-size:.65rem;font-weight:600;padding:2px 8px;border-radius:0 0 var(--r-sm) var(--r-sm);text-transform:uppercase;letter-spacing:.04em">Popular</div>
+      <div style="display:flex;align-items:center;gap:8px;width:100%;margin-bottom:12px">
+        <div class="radio-dot"><div class="radio-dot-inner"></div></div>
+        <span style="font-weight:600">Pro</span>
+        <span style="margin-left:auto;font-family:var(--font-serif);font-size:1.25rem">$250</span>
+        <span style="font-size:var(--tx-xs);color:var(--muted)">/mo</span>
+      </div>
+      <ul style="list-style:none;display:flex;flex-direction:column;gap:6px;font-size:var(--tx-xs);color:var(--muted)">
+        <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> Everything in Base</li>
+        <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> Competitor Radar</li>
+        <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> Priority AI indexing</li>
+        <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> Advanced analytics &amp; exports</li>
+        <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> Custom query basket (15)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="nav-row">
+    <button class="btn btn-ghost" onclick="goBack(7)">← Back</button>
+    <button class="btn btn-primary" onclick="goNext(7)">
+      <span class="btn-label">Next: Create Account →</span>
+    </button>
+  </div>
+</div>
+
+<!-- ══ STEP 8 — ACCOUNT CREATION ═══════════════════════════════════════════ -->
+<div class="card" id="step-8" style="display:none">
+  <p class="step-eyebrow">Step 8 of 9</p>
+  <h1 class="step-title">Create your account</h1>
+  <p class="step-desc">Set up your login to access the Advocate dashboard and manage your AI profile.</p>
+
+  <div class="field" id="f-email">
+    <label for="acct-email">Email address</label>
+    <input type="email" id="acct-email" placeholder="you@yourbusiness.com" autocomplete="email" />
+    <p class="field-error">Please enter a valid email</p>
+  </div>
+
+  <div class="field" id="f-fullname">
+    <label for="acct-name">Full name</label>
+    <input type="text" id="acct-name" placeholder="Jane Smith" autocomplete="name" />
+    <p class="field-error">Full name is required</p>
+  </div>
+
+  <div class="field" id="f-password">
+    <label for="acct-password">Password</label>
+    <input type="password" id="acct-password" placeholder="Min 8 characters" autocomplete="new-password" />
+    <p class="field-error">Password must be at least 8 characters</p>
+  </div>
+
+  <div class="nav-row">
+    <button class="btn btn-ghost" onclick="goBack(8)">← Back</button>
+    <button class="btn btn-primary" onclick="goNext(8)">
       <span class="btn-label">Review Profile →</span>
     </button>
   </div>
 </div>
 
-<!-- ══ STEP 4 — REVIEW ═════════════════════════════════════════════════════ -->
-<div class="card" id="step-4" style="display:none">
-  <p class="step-eyebrow">Step 4 of 4</p>
+<!-- ══ STEP 9 — REVIEW ═════════════════════════════════════════════════════ -->
+<div class="card" id="step-9" style="display:none">
+  <p class="step-eyebrow">Step 9 of 9</p>
   <h1 class="step-title">Review &amp; confirm</h1>
   <p class="step-desc">Make sure everything looks right before publishing your profile to AI platforms.</p>
 
@@ -607,17 +867,64 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
       </div>
     </div>
 
+    <!-- Quotes -->
+    <div class="review-section">
+      <div class="review-section-hd">
+        <span class="review-section-title">Quotes &amp; testimonials</span>
+        <button class="edit-link" onclick="goToStep(3)">Edit</button>
+      </div>
+      <div class="review-grid">
+        <div class="rv full"><span class="rv-label">Testimonials</span><span class="rv-val" id="rv-quotes">—</span></div>
+      </div>
+    </div>
+
+    <!-- Coverage -->
+    <div class="review-section">
+      <div class="review-section-hd">
+        <span class="review-section-title">Coverage area &amp; hours</span>
+        <button class="edit-link" onclick="goToStep(4)">Edit</button>
+      </div>
+      <div class="review-grid">
+        <div class="rv full"><span class="rv-label">Service areas</span><span class="rv-val" id="rv-areas">—</span></div>
+        <div class="rv"><span class="rv-label">Radius</span><span class="rv-val" id="rv-radius">—</span></div>
+        <div class="rv"><span class="rv-label">Hours</span><span class="rv-val" id="rv-hours">—</span></div>
+      </div>
+    </div>
+
     <!-- Leads -->
     <div class="review-section">
       <div class="review-section-hd">
         <span class="review-section-title">Customers &amp; lead routing</span>
-        <button class="edit-link" onclick="goToStep(3)">Edit</button>
+        <button class="edit-link" onclick="goToStep(6)">Edit</button>
       </div>
       <div class="review-grid">
         <div class="rv full"><span class="rv-label">Ideal customer</span><span class="rv-val" id="rv-customer">—</span></div>
         <div class="rv"><span class="rv-label">Send leads to</span><span class="rv-val" id="rv-leadtype">—</span></div>
         <div class="rv"><span class="rv-label">Lead destination</span><span class="rv-val" id="rv-leaddest">—</span></div>
         <div class="rv"><span class="rv-label">Response time</span><span class="rv-val" id="rv-response">—</span></div>
+      </div>
+    </div>
+
+    <!-- Plan -->
+    <div class="review-section">
+      <div class="review-section-hd">
+        <span class="review-section-title">Plan</span>
+        <button class="edit-link" onclick="goToStep(7)">Edit</button>
+      </div>
+      <div class="review-grid">
+        <div class="rv"><span class="rv-label">Selected plan</span><span class="rv-val" id="rv-plan">Base — $100/mo</span></div>
+      </div>
+    </div>
+
+    <!-- Account -->
+    <div class="review-section">
+      <div class="review-section-hd">
+        <span class="review-section-title">Account</span>
+        <button class="edit-link" onclick="goToStep(8)">Edit</button>
+      </div>
+      <div class="review-grid">
+        <div class="rv"><span class="rv-label">Email</span><span class="rv-val" id="rv-email">—</span></div>
+        <div class="rv"><span class="rv-label">Name</span><span class="rv-val" id="rv-acctname">—</span></div>
       </div>
     </div>
 
@@ -636,7 +943,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
   </div>
 
   <div class="nav-row">
-    <button class="btn btn-ghost" onclick="goBack(4)">← Back</button>
+    <button class="btn btn-ghost" onclick="goBack(9)">← Back</button>
     <button class="btn btn-primary" id="publish-btn" onclick="submitProfile()">
       <span class="btn-label">Publish My Profile</span>
       <div class="spinner"></div>
@@ -682,11 +989,16 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
 </div>
 
 <script>
+// ── Constants ──────────────────────────────────────────────────────────────
+const TOTAL_STEPS = 9;
+const DRAFT_KEY = 'advocate_onboarding_draft';
+
 // ── State ───────────────────────────────────────────────────────────────────
 const state = {
   step: 1,
   consultation: true,
   leadType: 'website',
+  plan: 'base',
 };
 
 const INDUSTRY_LABELS = {
@@ -743,25 +1055,34 @@ const LEAD_DEST_ERRORS = {
   email: 'Please enter an email address',
 };
 
+const PLAN_LABELS = {
+  base: 'Base — $100/mo',
+  pro: 'Pro — $250/mo',
+};
+
 const API_BASE = 'https://advocate-production-2887.up.railway.app';
 
 // ── Navigation ──────────────────────────────────────────────────────────────
 function goNext(fromStep) {
   if (!validateStep(fromStep)) return;
+  saveDraft();
   goToStep(fromStep + 1);
 }
 
 function goBack(fromStep) {
+  saveDraft();
   goToStep(fromStep - 1);
 }
 
 function goToStep(n) {
   // Hide current
-  document.getElementById(`step-${state.step}`).style.display = 'none';
+  const cur = document.getElementById(`step-${state.step}`);
+  if (cur) cur.style.display = 'none';
 
   // Update progress dots
-  for (let i = 1; i <= 4; i++) {
+  for (let i = 1; i <= TOTAL_STEPS; i++) {
     const ps = document.getElementById(`ps-${i}`);
+    if (!ps) continue;
     ps.classList.remove('active', 'done');
     if (i < n) ps.classList.add('done');
     else if (i === n) ps.classList.add('active');
@@ -771,10 +1092,10 @@ function goToStep(n) {
 
   // Show target
   const target = document.getElementById(`step-${n}`);
-  target.style.display = 'block';
+  if (target) target.style.display = 'block';
 
-  // Populate review on step 4
-  if (n === 4) populateReview();
+  // Populate review on last step
+  if (n === TOTAL_STEPS) populateReview();
 
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -788,17 +1109,60 @@ function setConsult(val) {
 
 function setLeadType(val) {
   state.leadType = val;
-  document.querySelectorAll('.radio-opt').forEach(el => {
+  document.querySelectorAll('#step-6 .radio-opt').forEach(el => {
     el.classList.toggle('selected', el.dataset.val === val);
   });
   document.getElementById('lead-dest-label').textContent = LEAD_DEST_LABELS[val];
   document.getElementById('biz-lead-dest').placeholder = LEAD_DEST_PLACEHOLDERS[val];
   document.getElementById('lead-dest-error').textContent = LEAD_DEST_ERRORS[val];
-  // Switch input type
   const inp = document.getElementById('biz-lead-dest');
   if (val === 'email') inp.type = 'email';
   else if (val === 'phone') inp.type = 'tel';
   else inp.type = 'url';
+}
+
+function setPlan(val) {
+  state.plan = val;
+  document.querySelectorAll('#step-7 .radio-opt').forEach(el => {
+    el.classList.toggle('selected', el.dataset.val === val);
+  });
+}
+
+// ── Array editors ───────────────────────────────────────────────────────────
+function addQuoteEntry() {
+  const list = document.getElementById('quotes-list');
+  const entry = document.createElement('div');
+  entry.className = 'quote-entry';
+  entry.style.cssText = 'background:var(--bg);border:1px solid var(--border);border-radius:var(--r-lg);padding:16px;margin-bottom:12px;position:relative';
+  entry.innerHTML = `
+    <button onclick="this.parentElement.remove()" style="position:absolute;top:8px;right:8px;background:none;border:none;color:var(--red);cursor:pointer;font-size:1rem;padding:4px">×</button>
+    <div class="field" style="margin-bottom:12px">
+      <label>Quote</label>
+      <textarea class="quote-text" rows="2" placeholder="What did your customer say?"></textarea>
+    </div>
+    <div class="field-row" style="display:flex;gap:12px">
+      <div class="field half" style="flex:1">
+        <label>Name</label>
+        <input type="text" class="quote-name" placeholder="Customer name" />
+      </div>
+      <div class="field half" style="flex:1">
+        <label>Title/Company</label>
+        <input type="text" class="quote-title" placeholder="Title or company" />
+      </div>
+    </div>
+  `;
+  list.appendChild(entry);
+}
+
+function addServiceArea() {
+  const list = document.getElementById('service-areas-list');
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;align-items:center;gap:8px';
+  row.innerHTML = `
+    <input type="text" class="service-area-input" placeholder="e.g. North Dallas, TX" style="flex:1" />
+    <button class="btn btn-ghost" style="padding:6px 10px;color:var(--red);font-size:var(--tx-sm)" onclick="this.parentElement.remove()">×</button>
+  `;
+  list.appendChild(row);
 }
 
 // ── Validation ──────────────────────────────────────────────────────────────
@@ -816,7 +1180,6 @@ function validateStep(step) {
     ok = !setError('f-industry',!v('biz-industry').trim())&& ok;
     ok = !setError('f-city',    !v('biz-city').trim())    && ok;
     ok = !setError('f-state',   !v('biz-state').trim())   && ok;
-    // Website: optional, but if filled must look like a URL
     const web = v('biz-website').trim();
     const webBad = web && !isValidUrl(web);
     ok = !setError('f-website', webBad) && ok;
@@ -827,7 +1190,9 @@ function validateStep(step) {
     ok = !setError('f-pricing',  !v('biz-pricing').trim())  && ok;
   }
 
-  if (step === 3) {
+  // Steps 3,4,5 are optional — no required fields
+
+  if (step === 6) {
     ok = !setError('f-ideal-customer', !v('biz-customer').trim())   && ok;
     const dest = v('biz-lead-dest').trim();
     let destBad = !dest;
@@ -837,6 +1202,13 @@ function validateStep(step) {
     }
     ok = !setError('f-lead-dest',    destBad) && ok;
     ok = !setError('f-response-time', !v('biz-response').trim()) && ok;
+  }
+
+  if (step === 8) {
+    const email = v('acct-email').trim();
+    ok = !setError('f-email', !email || !isValidEmail(email)) && ok;
+    ok = !setError('f-fullname', !v('acct-name').trim()) && ok;
+    ok = !setError('f-password', v('acct-password').length < 8) && ok;
   }
 
   return ok;
@@ -866,6 +1238,123 @@ document.addEventListener('change', e => {
   if (field && field.classList.contains('has-error')) field.classList.remove('has-error');
 }, true);
 
+// ── Draft Save/Resume ───────────────────────────────────────────────────────
+function saveDraft() {
+  try {
+    const draft = {
+      step: state.step,
+      consultation: state.consultation,
+      leadType: state.leadType,
+      plan: state.plan,
+      fields: {},
+      quotes: getQuotes(),
+      serviceAreas: getServiceAreas(),
+      hours: getHours(),
+      savedAt: Date.now(),
+    };
+    // Save all input/select/textarea values
+    const ids = ['biz-name','biz-industry','biz-city','biz-state','biz-website',
+                 'biz-services','biz-pricing','biz-diff','biz-customer',
+                 'biz-lead-dest','biz-response','biz-radius',
+                 'acct-email','acct-name'];
+    ids.forEach(id => { draft.fields[id] = v(id); });
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+  } catch { /* localStorage may be unavailable */ }
+}
+
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return false;
+    const draft = JSON.parse(raw);
+    // Check if draft is less than 7 days old
+    if (Date.now() - draft.savedAt > 7 * 24 * 60 * 60 * 1000) {
+      localStorage.removeItem(DRAFT_KEY);
+      return false;
+    }
+    // Restore field values
+    Object.entries(draft.fields || {}).forEach(([id, val]) => {
+      const el = document.getElementById(id);
+      if (el && val) el.value = val;
+    });
+    // Restore state
+    if (draft.consultation !== undefined) setConsult(draft.consultation);
+    if (draft.leadType) setLeadType(draft.leadType);
+    if (draft.plan) setPlan(draft.plan);
+    // Restore quotes
+    if (draft.quotes && draft.quotes.length > 0) {
+      const list = document.getElementById('quotes-list');
+      const entries = list.querySelectorAll('.quote-entry');
+      draft.quotes.forEach((q, i) => {
+        if (i > 0) addQuoteEntry();
+        const entry = list.querySelectorAll('.quote-entry')[i];
+        if (entry) {
+          const text = entry.querySelector('.quote-text');
+          const name = entry.querySelector('.quote-name');
+          const title = entry.querySelector('.quote-title');
+          if (text) text.value = q.text || '';
+          if (name) name.value = q.name || '';
+          if (title) title.value = q.title || '';
+        }
+      });
+    }
+    // Restore service areas
+    if (draft.serviceAreas && draft.serviceAreas.length > 0) {
+      const list = document.getElementById('service-areas-list');
+      const inputs = list.querySelectorAll('.service-area-input');
+      draft.serviceAreas.forEach((area, i) => {
+        if (i > 0) addServiceArea();
+        const inp = list.querySelectorAll('.service-area-input')[i];
+        if (inp) inp.value = area;
+      });
+    }
+    // Navigate to saved step
+    if (draft.step > 1) goToStep(draft.step);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function clearDraft() {
+  try { localStorage.removeItem(DRAFT_KEY); } catch {}
+}
+
+// ── Data collection helpers ─────────────────────────────────────────────────
+function getQuotes() {
+  const quotes = [];
+  document.querySelectorAll('.quote-entry').forEach(entry => {
+    const text = (entry.querySelector('.quote-text') || {}).value || '';
+    const name = (entry.querySelector('.quote-name') || {}).value || '';
+    const title = (entry.querySelector('.quote-title') || {}).value || '';
+    if (text.trim() || name.trim()) quotes.push({ text, name, title });
+  });
+  return quotes;
+}
+
+function getServiceAreas() {
+  const areas = [];
+  document.querySelectorAll('.service-area-input').forEach(inp => {
+    if (inp.value.trim()) areas.push(inp.value.trim());
+  });
+  return areas;
+}
+
+function getHours() {
+  const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const rows = document.querySelectorAll('.hours-row');
+  const hours = {};
+  rows.forEach((row, i) => {
+    const closed = row.querySelector('.hours-closed');
+    const open = row.querySelector('.hours-open');
+    const close = row.querySelector('.hours-close');
+    hours[days[i]] = closed && closed.checked
+      ? 'Closed'
+      : `${open ? open.value : ''} – ${close ? close.value : ''}`;
+  });
+  return hours;
+}
+
 // ── Review population ───────────────────────────────────────────────────────
 function populateReview() {
   setText('rv-name',     v('biz-name') || '—');
@@ -876,10 +1365,37 @@ function populateReview() {
   setText('rv-pricing',  PRICING_LABELS[v('biz-pricing')] || '—');
   setText('rv-consult',  state.consultation ? 'Yes' : 'No');
   setText('rv-diff',     v('biz-diff') || '—');
+
+  // Quotes
+  const quotes = getQuotes();
+  setText('rv-quotes', quotes.length > 0
+    ? quotes.map(q => `"${q.text}" — ${q.name}${q.title ? ', ' + q.title : ''}`).join(' | ')
+    : 'None added');
+
+  // Coverage
+  const areas = getServiceAreas();
+  setText('rv-areas', areas.length > 0 ? areas.join(', ') : '—');
+  const radius = document.getElementById('biz-radius');
+  setText('rv-radius', radius && radius.value ? radius.options[radius.selectedIndex].text : '—');
+
+  // Hours
+  const hours = getHours();
+  const hoursSummary = Object.entries(hours)
+    .filter(([,v]) => v !== 'Closed')
+    .map(([d,v]) => `${d}: ${v}`)
+    .join(', ') || 'Not set';
+  setText('rv-hours', hoursSummary);
+
+  // Leads
   setText('rv-customer', v('biz-customer') || '—');
   setText('rv-leadtype', LEAD_TYPE_LABELS[state.leadType] || '—');
   setText('rv-leaddest', v('biz-lead-dest') || '—');
   setText('rv-response', RESPONSE_LABELS[v('biz-response')] || '—');
+
+  // Plan & Account
+  setText('rv-plan', PLAN_LABELS[state.plan] || '—');
+  setText('rv-email', v('acct-email') || '—');
+  setText('rv-acctname', v('acct-name') || '—');
 }
 
 function setText(id, val) {
@@ -897,10 +1413,8 @@ function slugify(name) {
 
 // ── Submission ──────────────────────────────────────────────────────────────
 async function submitProfile() {
-  // Confirm checkbox
   if (!document.getElementById('confirm-check').checked) {
     document.getElementById('confirm-check').focus();
-    // Briefly flash the confirm row
     const row = document.querySelector('.confirm-row');
     row.style.borderColor = 'var(--red)';
     setTimeout(() => { row.style.borderColor = ''; }, 1200);
@@ -912,16 +1426,17 @@ async function submitProfile() {
   btn.disabled = true;
   document.getElementById('submit-error').classList.remove('show');
 
-  // Build payload mapped to backend schema
   const name = v('biz-name').trim();
   const city = v('biz-city').trim();
   const state_val = v('biz-state').trim().toUpperCase();
   const leadDest = v('biz-lead-dest').trim();
 
-  // Derive referral_url from lead type
   let referralUrl = leadDest;
   if (state.leadType === 'phone') referralUrl = `tel:${leadDest}`;
   if (state.leadType === 'email') referralUrl = `mailto:${leadDest}`;
+
+  const serviceAreas = getServiceAreas();
+  if (serviceAreas.length === 0) serviceAreas.push(`${city}, ${state_val}`);
 
   const payload = {
     business_id: slugify(name),
@@ -930,7 +1445,7 @@ async function submitProfile() {
     location: {
       city,
       state: state_val,
-      service_areas: [`${city}, ${state_val}`],
+      service_areas: serviceAreas,
     },
     contact: {
       website:     state.leadType === 'website' ? leadDest : (v('biz-website').trim() || ''),
@@ -952,7 +1467,14 @@ async function submitProfile() {
     ideal_customer: v('biz-customer').trim(),
     response_time: RESPONSE_LABELS[v('biz-response')] || '',
     availability: RESPONSE_LABELS[v('biz-response')] || '',
-    onboarded_via: 'advocatemcp_wizard',
+    quotes: getQuotes(),
+    hours: getHours(),
+    plan: state.plan,
+    account: {
+      email: v('acct-email').trim(),
+      full_name: v('acct-name').trim(),
+    },
+    onboarded_via: 'advocatemcp_wizard_v2',
   };
 
   try {
@@ -962,8 +1484,8 @@ async function submitProfile() {
       body: JSON.stringify(payload),
     });
 
-    // 409 = already exists — treat as success (idempotent)
     if (res.ok || res.status === 409) {
+      clearDraft();
       showSuccess();
       return;
     }
@@ -977,8 +1499,7 @@ async function submitProfile() {
 }
 
 function showSuccess() {
-  // Hide all steps and progress
-  for (let i = 1; i <= 4; i++) {
+  for (let i = 1; i <= TOTAL_STEPS; i++) {
     const el = document.getElementById(`step-${i}`);
     if (el) el.style.display = 'none';
   }
@@ -991,34 +1512,44 @@ function showSuccess() {
 }
 
 function startOver() {
-  // Reset all fields
+  clearDraft();
   ['biz-name','biz-city','biz-state','biz-website','biz-services',
-   'biz-diff','biz-customer','biz-lead-dest'].forEach(id => {
+   'biz-diff','biz-customer','biz-lead-dest','acct-email','acct-name','acct-password'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
-  ['biz-industry','biz-pricing','biz-response'].forEach(id => {
+  ['biz-industry','biz-pricing','biz-response','biz-radius'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.selectedIndex = 0;
   });
   setConsult(true);
   setLeadType('website');
+  setPlan('base');
   document.getElementById('confirm-check').checked = false;
 
-  // Hide success, show step 1
   document.getElementById('screen-success').style.display = 'none';
   document.getElementById('screen-success').classList.remove('active');
   document.getElementById('progress-bar').style.display = 'block';
 
   state.step = 1;
-  for (let i = 1; i <= 4; i++) {
+  for (let i = 1; i <= TOTAL_STEPS; i++) {
     const ps = document.getElementById(`ps-${i}`);
-    ps.classList.remove('active', 'done');
-    if (i === 1) ps.classList.add('active');
+    if (ps) { ps.classList.remove('active', 'done'); if (i === 1) ps.classList.add('active'); }
     const el = document.getElementById(`step-${i}`);
     if (el) el.style.display = i === 1 ? 'block' : 'none';
   }
   window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ── Draft resume on load ────────────────────────────────────────────────────
+const hasDraft = loadDraft();
+if (hasDraft) {
+  // Show a subtle banner that we restored their draft
+  const banner = document.createElement('div');
+  banner.style.cssText = 'position:fixed;top:12px;right:12px;padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);font-size:var(--tx-xs);color:var(--muted);z-index:100;display:flex;align-items:center;gap:8px;box-shadow:0 4px 12px rgba(0,0,0,.3)';
+  banner.innerHTML = '✓ Draft restored <button onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;padding:0 0 0 4px">×</button>';
+  document.body.appendChild(banner);
+  setTimeout(() => { if (banner.parentElement) banner.remove(); }, 4000);
 }
 </script>
 </body>
