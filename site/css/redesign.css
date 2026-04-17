@@ -462,81 +462,6 @@ body > * { position: relative; z-index: 1; }
   pointer-events: none;
 }
 
-/* ── 15. Network constellation centerpiece ──────────────────── */
-.rd-network {
-  position: relative;
-  min-height: 90vh;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  isolation: isolate;
-  padding: 80px 0;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-}
-.rd-network::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background:
-    radial-gradient(ellipse 55% 55% at 50% 50%, rgba(92,21,50,.25) 0%, transparent 65%),
-    radial-gradient(ellipse 100% 100% at 50% 50%, rgba(0,0,0,0.4) 0%, transparent 80%);
-}
-.rd-network-canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 0;
-  opacity: 0;
-  transition: opacity .6s ease;
-}
-.rd-network-canvas.rd-ready { opacity: 1; }
-.rd-network-overlay {
-  position: relative;
-  z-index: 2;
-  text-align: center;
-  max-width: 620px;
-  padding: 0 40px;
-  pointer-events: none;
-}
-.rd-network-overlay .s-label {
-  font-size: var(--tx-xs);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .09em;
-  color: var(--accent);
-  margin-bottom: 14px;
-}
-.rd-network-overlay h2 {
-  font-family: var(--font-serif);
-  font-size: var(--h2);
-  line-height: 1.1;
-  letter-spacing: -.025em;
-  color: var(--text);
-}
-.rd-network-overlay h2 em {
-  font-style: italic;
-  color: var(--accent);
-}
-/* Static SVG fallback visible when the WebGL scene never initializes */
-.rd-network-fallback {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-.rd-network-fallback svg {
-  width: min(760px, 90%);
-  height: auto;
-  opacity: 0.9;
-}
-.rd-has-webgl .rd-network-fallback { display: none; }
-
 /* ── 16. Dashboard restyle (shared across dashboard.html + #page-dashboard) ── */
 .db-side {
   background: var(--glass-bg) !important;
@@ -626,7 +551,6 @@ body > * { position: relative; z-index: 1; }
     gap: 40px !important;
     padding: 80px 20px !important;
   }
-  .rd-network { min-height: 70vh; }
 }
 
 /* ── 18. prefers-reduced-motion + mobile WebGL gate ─────────── */
@@ -640,10 +564,8 @@ body > * { position: relative; z-index: 1; }
   }
   .ln-hero::after,
   .ln-final-cta::before,
-  .rd-hero-canvas,
-  .rd-network-canvas { display: none !important; }
+  .rd-hero-canvas { display: none !important; }
 }
 @media (max-width: 899px) {
-  .rd-hero-canvas,
-  .rd-network-canvas { display: none !important; }
+  .rd-hero-canvas { display: none !important; }
 }
