@@ -139,11 +139,16 @@ analyticsRouter.get(
 /**
  * GET /analytics
  *
- * Global feed — last 50 crawler hits across all businesses.
- * No auth required (query text and business name are non-sensitive).
+ * Global feed — last N crawler hits across all businesses.
+ * Admin-only via `requireApiKey`.
+ * Optional `?limit=N` query param (default 50, capped at 500).
  */
-analyticsRouter.get("/analytics", requireApiKey, (_req: Request, res: Response) => {
+analyticsRouter.get("/analytics", requireApiKey, (req: Request, res: Response) => {
   const db = getDb();
+
+  const rawLimit = Number(req.query.limit);
+  const limit =
+    Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(Math.floor(rawLimit), 500) : 50;
 
   const hits = db
     .prepare(
@@ -153,9 +158,9 @@ analyticsRouter.get("/analytics", requireApiKey, (_req: Request, res: Response) 
        FROM queries q
        LEFT JOIN businesses b ON b.slug = q.business_slug
        ORDER BY q.timestamp DESC
-       LIMIT 50`
+       LIMIT ?`
     )
-    .all() as Array<{
+    .all(limit) as Array<{
       id: number;
       business_slug: string;
       business_name: string | null;
