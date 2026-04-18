@@ -29,12 +29,47 @@ describe("POST /audit/run", () => {
 
   const baseBody = { domain: "https://acme.example", category: "plumber", location: "Boise, ID" };
 
-  it("returns 503 when PERPLEXITY_API_KEY is unset (fails closed)", async () => {
+  it("returns 503 when NEITHER provider key is set (fails closed)", async () => {
     delete process.env.PERPLEXITY_API_KEY;
+    delete process.env.OPENAI_API_KEY;
     const { createTestApp } = await import("../testApp.js");
     const res = await request(createTestApp()).post("/audit/run").send(baseBody);
     expect(res.status).toBe(503);
-    expect(res.body.reason).toBe("perplexity_not_configured");
+    expect(res.body.reason).toBe("no_provider_configured");
+  });
+
+  it("falls back to OpenAI when only OPENAI_API_KEY is set", async () => {
+    delete process.env.PERPLEXITY_API_KEY;
+    process.env.OPENAI_API_KEY = "sk-test";
+    const openai = await import("../lib/openai.js");
+    const spy = vi.spyOn(openai, "openaiSearch").mockResolvedValue({
+      citations: ["https://acme.example"],
+      answerText: "Acme",
+      costUsd: 0.03,
+    });
+
+    const { createTestApp } = await import("../testApp.js");
+    const res = await request(createTestApp()).post("/audit/run").send(baseBody);
+    expect(res.status).toBe(200);
+    expect(res.body.audit.cited_count).toBe(res.body.audit.total_queries);
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it("prefers Perplexity when both provider keys are set (cheaper path)", async () => {
+    process.env.PERPLEXITY_API_KEY = "pplx-test";
+    process.env.OPENAI_API_KEY = "sk-test";
+    const perplexity = await import("../lib/perplexity.js");
+    const openai = await import("../lib/openai.js");
+    const ppxSpy = vi.spyOn(perplexity, "perplexitySearch").mockResolvedValue({
+      citations: ["https://acme.example"], answerText: "", costUsd: 0.005,
+    });
+    const oaiSpy = vi.spyOn(openai, "openaiSearch");
+
+    const { createTestApp } = await import("../testApp.js");
+    const res = await request(createTestApp()).post("/audit/run").send(baseBody);
+    expect(res.status).toBe(200);
+    expect(ppxSpy).toHaveBeenCalled();
+    expect(oaiSpy).not.toHaveBeenCalled();
   });
 
   it("runs 5 Perplexity queries and marks citations correctly when domain appears", async () => {
