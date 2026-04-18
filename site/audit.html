@@ -145,8 +145,27 @@
     }
     .cta-card h3{font-family:var(--font-serif);font-weight:400;font-size:clamp(1.5rem,2.5vw,1.875rem);line-height:1.2;margin-bottom:12px}
     .cta-card p{font-size:var(--tx-sm);opacity:.92;margin-bottom:24px;max-width:460px;margin-left:auto;margin-right:auto;line-height:1.6}
-    .cta-card .btn{background:#fff;color:var(--accent);border-color:#fff;padding:12px 24px;font-size:var(--tx-sm);font-weight:600}
+    .cta-card .btn{background:#fff;color:var(--accent);border-color:#fff;padding:12px 24px;font-size:var(--tx-sm);font-weight:600;margin:4px}
     .cta-card .btn:hover{background:rgba(255,255,255,.92)}
+    .cta-card .btn-secondary{background:rgba(255,255,255,.08);color:#fff;border-color:rgba(255,255,255,.3)}
+    .cta-card .btn-secondary:hover{background:rgba(255,255,255,.18)}
+
+    /* ── Email capture (post-results) + Share section ──────────── */
+    .followup{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:24px 28px;margin-bottom:24px}
+    .followup h4{font-size:var(--tx-sm);font-weight:600;color:var(--text);margin-bottom:8px;letter-spacing:0}
+    .followup p{font-size:var(--tx-xs);color:var(--muted);margin-bottom:16px;line-height:1.6}
+    .followup-row{display:flex;gap:8px;flex-wrap:wrap}
+    .followup-row input{flex:1;min-width:180px;padding:11px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md);font-family:inherit;font-size:var(--tx-sm);color:var(--text)}
+    .followup-row input:focus{outline:none;border-color:var(--accent-bright);box-shadow:0 0 0 3px var(--accent-ring)}
+    .followup-row button{padding:11px 18px;font-size:var(--tx-sm)}
+    .followup-msg{margin-top:10px;font-size:var(--tx-xs);min-height:1em}
+    .followup-msg.ok{color:#3fb950}
+    .followup-msg.err{color:#f85149}
+
+    .share{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:18px 24px;margin-bottom:24px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+    .share-label{font-size:var(--tx-xs);color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+    .share-url{flex:1;min-width:200px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md);font-family:var(--font-mono);font-size:var(--tx-xs);color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .share-btn{padding:8px 14px;font-size:var(--tx-xs)}
 
     footer{text-align:center;padding:32px 24px;font-size:var(--tx-xs);color:var(--muted);border-top:1px solid var(--border);margin-top:48px}
     footer a{color:var(--muted);text-decoration:underline;text-underline-offset:2px}
@@ -229,6 +248,22 @@
       <h3 id="cta-title">Make AI cite you accurately</h3>
       <p id="cta-body">Advocate gives every AI crawler a structured, citation-ready answer about your business — so next time someone asks, they get your real pitch instead of scraping your HTML.</p>
       <a class="btn" href="/onboarding" id="cta-link">Claim your agent →</a>
+    </div>
+
+    <div class="share" id="share-row">
+      <span class="share-label">Share this report</span>
+      <input type="text" id="share-url" class="share-url" readonly />
+      <button type="button" class="btn btn-ghost share-btn" id="share-copy">Copy link</button>
+    </div>
+
+    <div class="followup" id="followup-card">
+      <h4>Get a free monthly re-audit</h4>
+      <p>We'll re-run this audit once a month and email you the result. See whether your AI visibility is improving — or whether competitors are pulling further ahead.</p>
+      <form class="followup-row" id="followup-form">
+        <input type="email" id="followup-email" placeholder="you@yourbusiness.com" required maxlength="254" />
+        <button type="submit" class="btn btn-primary" id="followup-submit">Email me monthly</button>
+      </form>
+      <div class="followup-msg" id="followup-msg"></div>
     </div>
   </div>
 

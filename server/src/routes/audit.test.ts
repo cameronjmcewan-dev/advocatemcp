@@ -256,8 +256,109 @@ describe("GET /audit/:id", () => {
     expect(res.body.audit.domain).toBe("acme.example");
     expect(res.body.audit.queries).toHaveLength(1);
   });
+});
 
-  it("returns 404 for an unknown id", async () => {
+describe("POST /audit/:id/follow-up — lead capture", () => {
+  const tmp = path.join(os.tmpdir(), `audit-followup-${Date.now()}.db`);
+  beforeEach(async () => {
+    process.env.DATABASE_PATH = tmp;
+    process.env.PERPLEXITY_API_KEY = "pplx-test";
+    process.env.AUDIT_IP_SALT = "test-salt";
+    const { _resetDbForTests } = await import("../db.js");
+    _resetDbForTests();
+    for (const suffix of ["", "-wal", "-shm"]) fs.rmSync(tmp + suffix, { force: true });
+    const { getDb } = await import("../db.js");
+    getDb();
+  });
+  afterAll(() => {
+    for (const suffix of ["", "-wal", "-shm"]) fs.rmSync(tmp + suffix, { force: true });
+    delete process.env.DATABASE_PATH;
+    delete process.env.PERPLEXITY_API_KEY;
+    delete process.env.AUDIT_IP_SALT;
+  });
+
+  async function seedAudit(id: string): Promise<void> {
+    const { getDb } = await import("../db.js");
+    getDb().prepare(
+      `INSERT INTO public_audits (id, domain, category, ip_hash, created_at,
+        cost_usd, queries_json, cited_count, total_queries)
+        VALUES (?, 'acme.example', 'plumber', 'h', ?, 0.025, '[]', 0, 3)`,
+    ).run(id, new Date().toISOString());
+  }
+
+  it("captures an email and persists to audit_followups", async () => {
+    await seedAudit("aud1");
+    const { createTestApp } = await import("../testApp.js");
+    const res = await request(createTestApp())
+      .post("/audit/aud1/follow-up")
+      .send({ email: "lead@example.com" });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, audit_id: "aud1", email: "lead@example.com", created: true });
+
+    const { getDb } = await import("../db.js");
+    const row = getDb().prepare("SELECT email FROM audit_followups WHERE audit_id='aud1'").get() as { email: string };
+    expect(row.email).toBe("lead@example.com");
+  });
+
+  it("is idempotent — same email same audit returns created=false on second call", async () => {
+    await seedAudit("aud2");
+    const { createTestApp } = await import("../testApp.js");
+    const app = createTestApp();
+    const r1 = await request(app).post("/audit/aud2/follow-up").send({ email: "x@y.co" });
+    const r2 = await request(app).post("/audit/aud2/follow-up").send({ email: "x@y.co" });
+    expect(r1.body.created).toBe(true);
+    expect(r2.body.created).toBe(false);
+  });
+
+  it("normalizes email to lowercase + trim", async () => {
+    await seedAudit("aud3");
+    const { createTestApp } = await import("../testApp.js");
+    const res = await request(createTestApp())
+      .post("/audit/aud3/follow-up")
+      .send({ email: "  Owner@ACME.Co  " });
+    expect(res.status).toBe(200);
+    expect(res.body.email).toBe("owner@acme.co");
+  });
+
+  it("rejects invalid email shapes", async () => {
+    await seedAudit("aud4");
+    const { createTestApp } = await import("../testApp.js");
+    const app = createTestApp();
+    expect((await request(app).post("/audit/aud4/follow-up").send({})).status).toBe(400);
+    expect((await request(app).post("/audit/aud4/follow-up").send({ email: "nope" })).status).toBe(400);
+    expect((await request(app).post("/audit/aud4/follow-up").send({ email: "a".repeat(250) + "@b.co" })).status).toBe(400);
+  });
+
+  it("returns 404 if audit_id doesn't exist", async () => {
+    const { createTestApp } = await import("../testApp.js");
+    const res = await request(createTestApp())
+      .post("/audit/nonexistent/follow-up")
+      .send({ email: "x@y.co" });
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe("audit_not_found");
+  });
+
+  it("rate-limits an IP at the configured cap (10/day)", async () => {
+    await seedAudit("aud5");
+    const { createTestApp } = await import("../testApp.js");
+    const app = createTestApp();
+    const ip = "203.0.113.99";
+    for (let i = 0; i < 10; i++) {
+      const r = await request(app)
+        .post("/audit/aud5/follow-up")
+        .set("x-forwarded-for", ip)
+        .send({ email: `user${i}@example.com` });
+      expect(r.status).toBe(200);
+    }
+    const blocked = await request(app)
+      .post("/audit/aud5/follow-up")
+      .set("x-forwarded-for", ip)
+      .send({ email: "spam@example.com" });
+    expect(blocked.status).toBe(429);
+    expect(blocked.body.error).toBe("ip_rate_limited");
+  });
+
+  it("returns 404 for GET /audit/:id when id is unknown", async () => {
     const { createTestApp } = await import("../testApp.js");
     const res = await request(createTestApp()).get("/audit/nope");
     expect(res.status).toBe(404);

@@ -79,6 +79,13 @@ auditRouter.options("/audit/:id", (_req, res) => {
   res.setHeader("Access-Control-Max-Age",       "600");
   res.status(204).end();
 });
+auditRouter.options("/audit/:id/follow-up", (_req, res) => {
+  res.setHeader("Access-Control-Allow-Origin",  "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Max-Age",       "600");
+  res.status(204).end();
+});
 
 const PER_IP_DAILY_CAP  = 3;
 const DAILY_BUDGET_USD  = 5;
@@ -227,32 +234,48 @@ auditRouter.post("/audit/run", async (req: Request, res: Response) => {
     queries.push(`best ${category}`);
   }
 
-  let totalCost = 0;
-  const results: AuditQueryResult[] = [];
-  let errorMsg: string | null = null;
-
-  for (const q of queries) {
+  // Fan all queries out in parallel — Perplexity calls are independent
+  // and rate-limited at the provider, not at our end. Sequential awaiting
+  // turned the audit into a 15–25 second user-facing wait; Promise.all
+  // brings it down to roughly the slowest single call (~5–7s). Errors
+  // are caught per-query so one upstream failure doesn't poison the
+  // batch.
+  const queryResults = await Promise.all(queries.map(async (q): Promise<{
+    result:  AuditQueryResult;
+    cost:    number;
+    error?:  string;
+  }> => {
     try {
       const r = await provider.search(q);
-      totalCost += r.costUsd;
       const cited = r.citations.findIndex((c) => isCitationOfTenant(c, domain));
-      results.push({
-        query:          q,
-        citations:      r.citations,
-        cited:          cited >= 0,
-        cited_rank:     cited >= 0 ? cited + 1 : null,
-        answer_excerpt: (r.answerText ?? "").slice(0, 240),
-      });
+      return {
+        cost: r.costUsd,
+        result: {
+          query:          q,
+          citations:      r.citations,
+          cited:          cited >= 0,
+          cited_rank:     cited >= 0 ? cited + 1 : null,
+          answer_excerpt: (r.answerText ?? "").slice(0, 240),
+        },
+      };
     } catch (err) {
-      errorMsg = err instanceof Error ? err.message : String(err);
-      // Don't abort the batch — record the failure for this query and
-      // continue so the audit reflects partial results.
-      results.push({
-        query: q, citations: [], cited: false, cited_rank: null,
-        answer_excerpt: `[error: ${errorMsg.slice(0, 220)}]`,
-      });
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        cost: 0,
+        error: msg,
+        result: {
+          query: q, citations: [], cited: false, cited_rank: null,
+          answer_excerpt: `[error: ${msg.slice(0, 220)}]`,
+        },
+      };
     }
-  }
+  }));
+
+  const results: AuditQueryResult[] = queryResults.map((r) => r.result);
+  const totalCost: number            = queryResults.reduce((sum, r) => sum + r.cost, 0);
+  // Surface the first per-query error string for the audit row's `error`
+  // column so the operator can see what broke without joining queries_json.
+  const errorMsg: string | null      = queryResults.find((r) => r.error)?.error ?? null;
 
   const citedCount = results.filter((r) => r.cited).length;
   const auditId = crypto.randomBytes(8).toString("hex");
@@ -315,3 +338,58 @@ function serializeAudit(row: StoredAudit) {
     queries,
   };
 }
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const FOLLOWUP_PER_IP_PER_DAY = 10;
+
+/**
+ * POST /audit/:id/follow-up
+ *
+ * Lead capture attached to an audit. The visitor opts in to a future
+ * monthly re-audit by submitting their email at the bottom of the
+ * results card. Stored in `audit_followups`. Idempotent: same audit +
+ * same email = 200 with no new row, so reloading the page doesn't
+ * inflate the count.
+ *
+ * Anti-abuse: a per-IP/day cap on follow-up writes prevents one bad
+ * actor from filling the table. Uses the same hashed-IP scheme as
+ * the audit endpoint.
+ */
+auditRouter.post("/audit/:id/follow-up", (req: Request, res: Response) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+
+  const auditId = req.params.id;
+  const raw     = req.body?.email;
+  const email   = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  if (!email || email.length > 254 || !EMAIL_RE.test(email)) {
+    res.status(400).json({ error: "invalid_email" });
+    return;
+  }
+
+  const db = getDb();
+  const audit = db.prepare("SELECT id FROM public_audits WHERE id = ?").get(auditId) as { id: string } | undefined;
+  if (!audit) {
+    res.status(404).json({ error: "audit_not_found" });
+    return;
+  }
+
+  const ip = clientIp(req);
+  const ipHash = ip ? hashIp(ip) : "";
+  if (ipHash) {
+    const dayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const { count } = db
+      .prepare(`SELECT COUNT(*) AS count FROM audit_followups WHERE ip_hash = ? AND created_at > ?`)
+      .get(ipHash, dayAgo) as { count: number };
+    if (count >= FOLLOWUP_PER_IP_PER_DAY) {
+      res.status(429).json({ error: "ip_rate_limited", limit: FOLLOWUP_PER_IP_PER_DAY });
+      return;
+    }
+  }
+
+  const info = db.prepare(
+    `INSERT OR IGNORE INTO audit_followups (audit_id, email, ip_hash, created_at)
+     VALUES (?, ?, ?, ?)`,
+  ).run(auditId, email, ipHash, new Date().toISOString());
+
+  res.json({ ok: true, audit_id: auditId, email, created: info.changes > 0 });
+});

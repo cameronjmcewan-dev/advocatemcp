@@ -2,6 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import { agentsRouter } from "./agents.js";
 import { adminDigestRouter } from "./digest.js";
 import { tenantsRouter } from "./tenants.js";
+import { adminAuditsRouter } from "./audits.js";
 
 /**
  * Bearer-token auth gate for /admin/* — keyed on ADMIN_API_KEY env var.
@@ -27,3 +28,4 @@ export const adminRouter = Router();
 adminRouter.use("/admin", requireAdmin, agentsRouter);
 adminRouter.use("/admin", requireAdmin, adminDigestRouter);
 adminRouter.use("/admin", requireAdmin, tenantsRouter);
+adminRouter.use("/admin", requireAdmin, adminAuditsRouter);

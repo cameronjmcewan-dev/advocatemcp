@@ -1,0 +1,14 @@
+# Cloudflare Pages routing rules.
+#
+# /r/:id  →  /r.html?id=:id   (server-side rewrite, NOT a redirect — URL bar
+#                              stays at /r/<hash>, but Pages serves r.html)
+#
+# Status 200 = rewrite/proxy semantics; status 301/302/308 would visibly
+# redirect and break shareable links. The `:splat` token captures whatever
+# is in the wildcard segment.
+#
+# Used by site/r.html (the read-only audit results page) so users can share
+# advocatemcp.com/r/abc123 without seeing the .html or query-string in
+# their browser.
+
+/r/*  /r.html?id=:splat  200
