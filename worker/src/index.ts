@@ -33,13 +33,32 @@ export type { Env };
 
 // ── AI crawler User-Agent detection ────────────────────────────────────────
 
+// Keep this list in lockstep with `server/src/prompts/index.ts::CANONICALS`.
+//
+// Two classes of crawler live here on purpose:
+//
+//   1. Batch indexers (*-Bot, *-Extended) — crawl on their own schedule,
+//      build the AI's training corpus and search index.
+//
+//   2. Real-time user agents (*-User) — fetch WHEN a user asks the AI a
+//      live question whose answer benefits from a current page read. These
+//      are the ones that actually deliver AdvocateMCP's value during a
+//      live conversation, because the structured agent response is what
+//      the user sees in the answer panel. Missing a *-User agent from
+//      this list means our worker serves scraped HTML to Perplexity/
+//      ChatGPT when they're answering a live query — the exact failure
+//      mode observed on WCC's domain before adding Perplexity-User.
 const AI_CRAWLERS = [
   "PerplexityBot",
+  "Perplexity-User",
   "GPTBot",
+  "ChatGPT-User",
   "OAI-SearchBot",
   "ClaudeBot",
   "Google-Extended",
   "Googlebot",
+  "GoogleOther",
+  "Applebot-Extended",
   "anthropic-ai",
   "cohere-ai",
   "meta-externalagent",

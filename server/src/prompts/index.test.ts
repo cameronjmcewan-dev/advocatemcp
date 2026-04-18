@@ -63,11 +63,20 @@ describe("getBotPromptBlock dispatch", () => {
     expect(b.name).toBe("perplexity");
   });
 
+  it("dispatches Perplexity-User to perplexity module (real-time live-query agent)", () => {
+    expect(getBotPromptBlock("Perplexity-User").name).toBe("perplexity");
+    expect(getBotPromptBlock("Mozilla/5.0 Perplexity-User/1.0").name).toBe("perplexity");
+  });
+
   it("dispatches GPTBot to openai module", () => {
     expect(getBotPromptBlock("GPTBot").name).toBe("openai");
   });
   it("dispatches OAI-SearchBot to openai module", () => {
     expect(getBotPromptBlock("OAI-SearchBot").name).toBe("openai");
+  });
+  it("dispatches ChatGPT-User to openai module (real-time live-query agent)", () => {
+    expect(getBotPromptBlock("ChatGPT-User").name).toBe("openai");
+    expect(getBotPromptBlock("Mozilla/5.0 ChatGPT-User/1.0").name).toBe("openai");
   });
 
   it("dispatches ClaudeBot to claude module", () => {
@@ -80,7 +89,13 @@ describe("getBotPromptBlock dispatch", () => {
   it("dispatches Google-Extended to google module", () => {
     expect(getBotPromptBlock("Google-Extended").name).toBe("google");
   });
+  it("dispatches GoogleOther to google module", () => {
+    expect(getBotPromptBlock("GoogleOther").name).toBe("google");
+  });
 
+  it("dispatches Applebot-Extended to training module (Apple Intelligence)", () => {
+    expect(getBotPromptBlock("Applebot-Extended").name).toBe("training");
+  });
   it("dispatches anthropic-ai to training module", () => {
     expect(getBotPromptBlock("anthropic-ai").name).toBe("training");
   });
@@ -89,5 +104,11 @@ describe("getBotPromptBlock dispatch", () => {
   });
   it("dispatches meta-externalagent to training module", () => {
     expect(getBotPromptBlock("meta-externalagent").name).toBe("training");
+  });
+
+  it("does not collide: ChatGPT-User must NOT resolve via GPTBot substring", () => {
+    // "chatgpt-user" does not contain "gptbot" — but guard the behavior.
+    const b = getBotPromptBlock("Mozilla/5.0 ChatGPT-User/1.0");
+    expect(b.name).toBe("openai");
   });
 });
