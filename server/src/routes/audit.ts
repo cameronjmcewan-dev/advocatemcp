@@ -43,7 +43,7 @@ import { generateAutoQueries } from "../jobs/competitorRadar.js";
  */
 interface AuditProvider {
   name:   "perplexity" | "openai";
-  search: (q: string) => Promise<{ citations: string[]; costUsd: number }>;
+  search: (q: string) => Promise<{ citations: string[]; costUsd: number; answerText: string }>;
 }
 
 function selectAuditProvider(): AuditProvider | null {
@@ -102,6 +102,10 @@ interface AuditQueryResult {
   citations: string[];
   cited: boolean;
   cited_rank: number | null;
+  /** First 240 chars of the provider's answer — diagnostic surface so
+   *  a zero-citations audit can be debugged by reading what the model
+   *  actually said. Not used by the audit.js UI. */
+  answer_excerpt: string;
 }
 
 interface StoredAudit {
@@ -233,16 +237,20 @@ auditRouter.post("/audit/run", async (req: Request, res: Response) => {
       totalCost += r.costUsd;
       const cited = r.citations.findIndex((c) => isCitationOfTenant(c, domain));
       results.push({
-        query:      q,
-        citations:  r.citations,
-        cited:      cited >= 0,
-        cited_rank: cited >= 0 ? cited + 1 : null,
+        query:          q,
+        citations:      r.citations,
+        cited:          cited >= 0,
+        cited_rank:     cited >= 0 ? cited + 1 : null,
+        answer_excerpt: (r.answerText ?? "").slice(0, 240),
       });
     } catch (err) {
       errorMsg = err instanceof Error ? err.message : String(err);
       // Don't abort the batch — record the failure for this query and
       // continue so the audit reflects partial results.
-      results.push({ query: q, citations: [], cited: false, cited_rank: null });
+      results.push({
+        query: q, citations: [], cited: false, cited_rank: null,
+        answer_excerpt: `[error: ${errorMsg.slice(0, 220)}]`,
+      });
     }
   }
 

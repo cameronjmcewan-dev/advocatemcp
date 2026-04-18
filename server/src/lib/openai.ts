@@ -11,7 +11,11 @@
  * per-token/per-search granularity we can read off the response.
  */
 const OPENAI_URL       = "https://api.openai.com/v1/responses";
-const OPENAI_MODEL     = "gpt-4.1-mini";
+// `gpt-4o-mini` is the cheapest model with documented web_search_preview
+// support in the Responses API. Swapped from gpt-4.1-mini which may not
+// invoke the tool for every query (observed: audit returned 0 citations
+// across 3 queries where Perplexity on the same UI query returned many).
+const OPENAI_MODEL     = "gpt-4o-mini";
 const FLAT_COST_USD    = 0.03;
 
 export interface OpenAiResult {
@@ -51,7 +55,12 @@ export async function openaiSearch(query: string): Promise<OpenAiResult> {
     body: JSON.stringify({
       model: OPENAI_MODEL,
       input: query,
-      tools: [{ type: "web_search" }],
+      // `web_search_preview` is the GA tool name in the Responses API
+      // as of April 2026 (kept the "preview" suffix even after GA —
+      // common source of confusion vs `web_search`). Using the wrong
+      // name silently disables the search and the model answers from
+      // parametric knowledge only, with NO url_citation annotations.
+      tools: [{ type: "web_search_preview" }],
     }),
   });
 
