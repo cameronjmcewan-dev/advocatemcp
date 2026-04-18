@@ -127,6 +127,11 @@ export const OnboardingPayloadSchema = z.object({
   // Step 8 — lead routing
   lead_routing_json: LeadRoutingSchema.optional(),
 
+  // Digest recipient (P5 weekly radar digest). Optional: legacy tenants
+  // registered before migration 016 will have NULL; the digest job skips
+  // tenants with no email on file rather than crashing.
+  email: z.string().email().optional(),
+
   // Plan tier (Session 4: gates competitor-radar to 'pro' tenants).
   // Optional on the wire — server defaults to 'base' if omitted so legacy
   // callers (CLI, manual onboard scripts) continue to work without change.
