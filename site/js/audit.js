@@ -139,9 +139,23 @@
       var citations = (q.citations || []).slice(0, 5).map(escapeHtml);
       var cites = citations.length === 0
         ? '<em>No citations returned for this query.</em>'
-        : '<strong>Sources Perplexity cited:</strong> ' + citations.join(", ");
+        : '<strong>Sources AI cited:</strong> ' + citations.join(", ");
       return '<div class="query">' + head + '<div class="citations">' + cites + '</div></div>';
     }).join("");
+
+    // Thread audit inputs into the Claim-your-agent CTA so onboarding
+    // can pre-fill the business name (derived from domain), website,
+    // industry (fuzzy-mapped from category), and city/state (parsed from
+    // location). from_audit=1 is the sentinel the onboarding script
+    // checks for — bare /onboarding.html keeps the empty-form behavior.
+    var cta = document.getElementById("cta-link");
+    if (cta) {
+      var params = new URLSearchParams({ from_audit: "1" });
+      if (audit.domain)   params.set("domain",   audit.domain);
+      if (audit.category) params.set("category", audit.category);
+      if (audit.location) params.set("location", audit.location);
+      cta.href = "/onboarding.html?" + params.toString();
+    }
 
     results.classList.add("show");
   }

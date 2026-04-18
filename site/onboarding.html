@@ -2216,6 +2216,97 @@ if (hasDraft) {
   setTimeout(() => { if (banner.parentElement) banner.remove(); }, 4000);
 }
 
+// ── Prefill from audit (?from_audit=1&domain=...&category=...&location=...) ──
+// Threaded in by site/js/audit.js when the user clicks "Claim your agent"
+// after running the free GEO audit. Overwrites draft values — a fresh
+// audit click represents the most recent explicit intent, and anything
+// the user typed before is easier to restore than to re-enter.
+(() => {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('from_audit') !== '1') return;
+
+  const domain   = (params.get('domain')   || '').trim();
+  const category = (params.get('category') || '').trim();
+  const location = (params.get('location') || '').trim();
+
+  // Website: accept bare domains or full URLs; canonicalize to https://.
+  if (domain) {
+    const website = /^https?:\/\//i.test(domain) ? domain : 'https://' + domain;
+    const webInput = document.getElementById('biz-website');
+    if (webInput) { webInput.value = website; webInput.dispatchEvent(new Event('input', { bubbles: true })); }
+
+    // Business name: best-guess from the left-most domain label, title-cased.
+    // "workmancopyco.com" → "Workmancopyco". User can correct — we prefer
+    // "wrong but obvious" over "empty and intimidating".
+    const bare = domain.replace(/^https?:\/\//i, '').replace(/^www\./i, '').split('/')[0];
+    const firstLabel = bare.split('.')[0] || '';
+    if (firstLabel) {
+      const nice = firstLabel.replace(/[-_]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      const nameInput = document.getElementById('biz-name');
+      if (nameInput && !nameInput.value) {
+        nameInput.value = nice;
+        nameInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }
+  }
+
+  // Industry: fuzzy-match the free-text category into the dropdown enum.
+  // Values must match the <option value> strings in the biz-industry select.
+  if (category) {
+    const lower = category.toLowerCase();
+    let match = 'other';
+    if      (/(property\s*manag|propman)/.test(lower))                          match = 'property_management';
+    else if (/(law\b|legal\b|attorney|litigation)/.test(lower))                 match = 'legal';
+    else if (/(medical|doctor|dentist|clinic|health|hospital|chiro|physical)/.test(lower)) match = 'medical';
+    else if (/(plumb|hvac|electric|home service|roof|landscap|cleaning|pest|handyman|remodel)/.test(lower)) match = 'home_services';
+    else if (/(real\s*estate|realtor|broker|residential|multifamily|commercial\s*real)/.test(lower)) match = 'real_estate';
+    else if (/(financial|cpa|accountant|wealth|advisor|tax\b|bookkeep)/.test(lower)) match = 'financial_services';
+    else if (/(ecommerce|e-commerce|dtc|shopify|klaviyo|retail|consumer brand)/.test(lower)) match = 'ecommerce';
+
+    const indEl = document.getElementById('biz-industry');
+    if (indEl) {
+      indEl.value = match;
+      // Trigger change so downstream listeners (Credentials-pip visibility,
+      // state mirroring, etc.) update in sync.
+      indEl.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
+
+  // Location: split "City, ST" or "City, State". Anything else lands in
+  // the city field and the user corrects the state manually.
+  if (location) {
+    const parts = location.split(',').map(s => s.trim()).filter(Boolean);
+    const cityEl  = document.getElementById('biz-city');
+    const stateEl = document.getElementById('biz-state');
+    if (cityEl && parts[0]) {
+      cityEl.value = parts[0];
+      cityEl.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (stateEl && parts[1]) {
+      const st = parts[1];
+      const code = /^[A-Za-z]{2}$/.test(st) ? st.toUpperCase() : st.slice(0, 2).toUpperCase();
+      stateEl.value = code;
+      stateEl.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
+
+  // Friendly banner in the same style as the draft-restore one, top-right.
+  const auditBanner = document.createElement('div');
+  auditBanner.style.cssText = 'position:fixed;top:' + (hasDraft ? '56px' : '12px') + ';right:12px;padding:10px 16px;background:var(--accent-dim);border:1px solid var(--border-accent);border-radius:var(--r-md);font-size:var(--tx-xs);color:var(--text);z-index:100;display:flex;align-items:center;gap:8px;box-shadow:0 4px 12px rgba(0,0,0,.3)';
+  auditBanner.innerHTML = '✓ Pre-filled from your audit <button onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;padding:0 0 0 4px">×</button>';
+  document.body.appendChild(auditBanner);
+  setTimeout(() => { if (auditBanner.parentElement) auditBanner.remove(); }, 5000);
+
+  // Persist so draft resume next session retains the prefilled values.
+  try { if (typeof saveDraft === 'function') saveDraft(); } catch (_) {}
+
+  // Strip the ?from_audit=1 params from the URL so refreshes don't
+  // re-trigger and the address bar stays clean.
+  if (window.history && window.history.replaceState) {
+    window.history.replaceState(window.history.state, '', window.location.pathname);
+  }
+})();
+
 // ── Debug harness — ?debug=1 logs the payload builder output to console ─────
 if (window.location.search.includes('debug=1')) {
   window.__buildOnboardPayload = buildOnboardPayload;
