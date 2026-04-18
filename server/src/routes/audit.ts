@@ -146,27 +146,37 @@ function parseInput(body: unknown): { domain: string; category: string; location
 }
 
 /**
- * POST /audit/run
+ * Core audit-runner. Used by the public POST /audit/run endpoint and
+ * the admin batch endpoint. Handles cache lookup, rate limit, budget
+ * cap, query fan-out, and persistence — returns either an audit
+ * payload or a structured error.
+ *
+ * `skipIpRateLimit` is for admin operator paths (batch endpoint) — the
+ * per-IP cap is anti-abuse for the public form, not for authenticated
+ * operators running outreach. Daily budget cap STILL applies even for
+ * admin so a runaway batch can't drain the API budget.
  */
-auditRouter.post("/audit/run", async (req: Request, res: Response) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+export interface RunAuditOptions {
+  domain:           string;
+  category:         string;
+  location:         string | null;
+  ipHash:           string;
+  skipIpRateLimit?: boolean;
+}
 
+export type RunAuditResult =
+  | { ok: true;  cached: boolean; audit: ReturnType<typeof serializeAudit> & { id: string } }
+  | { ok: false; status: number; error: string; meta?: Record<string, unknown> };
+
+export async function runAudit(opts: RunAuditOptions): Promise<RunAuditResult> {
   const provider = selectAuditProvider();
   if (!provider) {
-    res.status(503).json({ error: "audit_unavailable", reason: "no_provider_configured" });
-    return;
+    return { ok: false, status: 503, error: "audit_unavailable", meta: { reason: "no_provider_configured" } };
   }
 
-  const parsed = parseInput(req.body);
-  if ("error" in parsed) {
-    res.status(400).json({ error: parsed.error });
-    return;
-  }
-  const { domain, category, location } = parsed;
-
+  const { domain, category, location, ipHash } = opts;
+  const skipIpRateLimit = opts.skipIpRateLimit === true;
   const db = getDb();
-  const ip = clientIp(req);
-  const ipHash = ip ? hashIp(ip) : "";
 
   // 1. Cache check. Same (domain, category, location) within the TTL
   //    returns the prior audit unchanged.
@@ -183,12 +193,11 @@ auditRouter.post("/audit/run", async (req: Request, res: Response) => {
     )
     .get(domain, category, location, location, cacheCutoff) as StoredAudit | undefined;
   if (cached) {
-    res.json({ cached: true, audit: serializeAudit(cached) });
-    return;
+    return { ok: true, cached: true, audit: serializeAudit(cached) };
   }
 
-  // 2. Per-IP rate limit.
-  if (ipHash) {
+  // 2. Per-IP rate limit (skipped for admin operator paths).
+  if (ipHash && !skipIpRateLimit) {
     const { count } = db
       .prepare(
         `SELECT COUNT(*) AS count FROM public_audits
@@ -196,16 +205,14 @@ auditRouter.post("/audit/run", async (req: Request, res: Response) => {
       )
       .get(ipHash, cacheCutoff) as { count: number };
     if (count >= PER_IP_DAILY_CAP) {
-      res.status(429).json({
-        error:               "ip_rate_limited",
-        limit:               PER_IP_DAILY_CAP,
-        retry_after_seconds: 24 * 3600,
-      });
-      return;
+      return {
+        ok: false, status: 429, error: "ip_rate_limited",
+        meta: { limit: PER_IP_DAILY_CAP, retry_after_seconds: 24 * 3600 },
+      };
     }
   }
 
-  // 3. Daily global budget cap.
+  // 3. Daily global budget cap (always enforced — admin too).
   const todayStart = new Date();
   todayStart.setUTCHours(0, 0, 0, 0);
   const { spent } = db
@@ -215,11 +222,7 @@ auditRouter.post("/audit/run", async (req: Request, res: Response) => {
     )
     .get(todayStart.toISOString()) as { spent: number };
   if (spent >= DAILY_BUDGET_USD) {
-    res.status(503).json({
-      error:      "daily_budget_exhausted",
-      try_again: "tomorrow",
-    });
-    return;
+    return { ok: false, status: 503, error: "daily_budget_exhausted", meta: { try_again: "tomorrow" } };
   }
 
   // 4. Generate and run queries.
@@ -229,17 +232,9 @@ auditRouter.post("/audit/run", async (req: Request, res: Response) => {
     services: [],
   }).slice(0, 5);
   if (queries.length === 0) {
-    // generateAutoQueries returns [] when location is blank. Fall back to a
-    // category-only query so the audit still runs, even if weaker.
     queries.push(`best ${category}`);
   }
 
-  // Fan all queries out in parallel — Perplexity calls are independent
-  // and rate-limited at the provider, not at our end. Sequential awaiting
-  // turned the audit into a 15–25 second user-facing wait; Promise.all
-  // brings it down to roughly the slowest single call (~5–7s). Errors
-  // are caught per-query so one upstream failure doesn't poison the
-  // batch.
   const queryResults = await Promise.all(queries.map(async (q): Promise<{
     result:  AuditQueryResult;
     cost:    number;
@@ -261,8 +256,7 @@ auditRouter.post("/audit/run", async (req: Request, res: Response) => {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return {
-        cost: 0,
-        error: msg,
+        cost: 0, error: msg,
         result: {
           query: q, citations: [], cited: false, cited_rank: null,
           answer_excerpt: `[error: ${msg.slice(0, 220)}]`,
@@ -273,12 +267,10 @@ auditRouter.post("/audit/run", async (req: Request, res: Response) => {
 
   const results: AuditQueryResult[] = queryResults.map((r) => r.result);
   const totalCost: number            = queryResults.reduce((sum, r) => sum + r.cost, 0);
-  // Surface the first per-query error string for the audit row's `error`
-  // column so the operator can see what broke without joining queries_json.
   const errorMsg: string | null      = queryResults.find((r) => r.error)?.error ?? null;
-
   const citedCount = results.filter((r) => r.cited).length;
   const auditId = crypto.randomBytes(8).toString("hex");
+  const createdAt = new Date().toISOString();
 
   db.prepare(
     `INSERT INTO public_audits
@@ -286,23 +278,53 @@ auditRouter.post("/audit/run", async (req: Request, res: Response) => {
         queries_json, cited_count, total_queries, error)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
-    auditId, domain, category, location, ipHash, new Date().toISOString(),
+    auditId, domain, category, location, ipHash, createdAt,
     totalCost, JSON.stringify(results), citedCount, results.length, errorMsg,
   );
 
-  res.json({
-    cached: false,
+  return {
+    ok: true, cached: false,
     audit: {
       id:            auditId,
       domain,
       category,
       location,
-      created_at:    new Date().toISOString(),
+      created_at:    createdAt,
       cited_count:   citedCount,
       total_queries: results.length,
       queries:       results,
     },
+  };
+}
+
+/**
+ * POST /audit/run
+ */
+auditRouter.post("/audit/run", async (req: Request, res: Response) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+
+  const parsed = parseInput(req.body);
+  if ("error" in parsed) {
+    res.status(400).json({ error: parsed.error });
+    return;
+  }
+
+  const ip = clientIp(req);
+  const ipHash = ip ? hashIp(ip) : "";
+
+  const result = await runAudit({
+    domain:   parsed.domain,
+    category: parsed.category,
+    location: parsed.location,
+    ipHash,
   });
+
+  if (!result.ok) {
+    res.status(result.status).json({ error: result.error, ...(result.meta ?? {}) });
+    return;
+  }
+
+  res.json({ cached: result.cached, audit: result.audit });
 });
 
 /**
