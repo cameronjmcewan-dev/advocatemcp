@@ -4,6 +4,7 @@ import { createTestApp } from "./testApp.js";
 import { getDb } from "./db.js";
 import { startReputationRollupSchedule } from "./jobs/reputationRollup.js";
 import { pollAll } from "./jobs/competitorRadar.js";
+import { startWeeklyDigestSchedule } from "./jobs/weeklyDigest.js";
 
 if (!process.env.ANTHROPIC_API_KEY) {
   console.error("❌ ANTHROPIC_API_KEY is not set. Copy .env.example to .env and add your key.");
@@ -61,6 +62,10 @@ if (process.env.PERPLEXITY_API_KEY && cron.validate(CRON_SCHEDULE)) {
 } else {
   console.warn("[radar] cron NOT scheduled — missing PERPLEXITY_API_KEY or invalid POLL_SCHEDULE_CRON");
 }
+
+// P5: weekly Competitor Radar digest. Mondays 14:00 UTC by default.
+// Gated on RESEND_API_KEY so dev/test deploys without the key stay silent.
+startWeeklyDigestSchedule();
 
 app.listen(PORT, () => {
   console.log(`

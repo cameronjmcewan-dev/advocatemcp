@@ -1,17 +1,20 @@
 /**
  * Competitor Radar cron handler + pure helpers.
  *
- * This file is the single entry point for P3 polling. The cron-scheduled
- * `pollAll()` will be added in a later task. For now it exports two pure
- * helpers used by seeding and the fan-out loop.
+ * This file is the single entry point for P3 polling. v1.1 extends the
+ * Perplexity-only fan-out to a provider registry (Perplexity + OpenAI)
+ * with independent per-provider daily budget caps and deterministic
+ * sentiment-descriptor extraction on cited answers.
  */
 
 import { getDb } from "../db.js";
 import pLimit from "p-limit";
 import { perplexitySearch } from "../lib/perplexity.js";
+import { openaiSearch }     from "../lib/openai.js";
 import { canonicalDomain, isCitationOfTenant } from "../lib/domainMatch.js";
 import { sendBudgetAlert } from "../lib/alert.js";
-import { TokenBucket } from "../lib/tokenBucket.js";
+import { TokenBucket }     from "../lib/tokenBucket.js";
+import { extractSentiment } from "../lib/sentiment.js";
 
 export interface ProfileForSeeding {
   category: string;
@@ -94,11 +97,69 @@ export function seedBasketIfEmpty(slug: string): void {
   seed(slug);
 }
 
-const BOT          = "perplexity";
-const CONCURRENCY  = 4;
-const RATE_INTERVAL_MS = 1000;
+// --- Provider registry -------------------------------------------------------
 
-interface TenantRow { slug: string; website: string | null }
+type ProviderName = "perplexity" | "openai";
+
+interface ProviderConfig {
+  name:          ProviderName;
+  apiKeyEnv:     string;
+  budgetEnvVars: string[];   // first env var set wins; later entries are back-compat fallbacks
+  defaultBudget: number;     // USD/day
+}
+
+const PROVIDERS: readonly ProviderConfig[] = [
+  {
+    name:          "perplexity",
+    apiKeyEnv:     "PERPLEXITY_API_KEY",
+    budgetEnvVars: ["PERPLEXITY_DAILY_BUDGET_USD", "COMPETITOR_POLL_DAILY_BUDGET_USD"],
+    defaultBudget: 10,
+  },
+  {
+    name:          "openai",
+    apiKeyEnv:     "OPENAI_API_KEY",
+    budgetEnvVars: ["OPENAI_DAILY_BUDGET_USD"],
+    defaultBudget: 10,
+  },
+];
+
+function providerBudget(p: ProviderConfig): number {
+  for (const ev of p.budgetEnvVars) {
+    const raw = process.env[ev];
+    if (raw === undefined) continue;
+    const n = Number(raw);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return p.defaultBudget;
+}
+
+/**
+ * Direct dispatch so each call goes through the imported module binding,
+ * which vitest's `vi.spyOn(perplexity, "perplexitySearch")` pattern can
+ * intercept. Wrapping the calls in closures captured at module-load time
+ * would break that spy path.
+ */
+async function callProvider(
+  name: ProviderName, q: string,
+): Promise<{ citations: string[]; answerText: string; costUsd: number }> {
+  if (name === "perplexity") return perplexitySearch(q);
+  if (name === "openai")     return openaiSearch(q);
+  throw new Error(`unknown provider: ${name}`);
+}
+
+// --- Cron entry point --------------------------------------------------------
+
+const CONCURRENCY      = 4;
+function rateIntervalMs(): number {
+  const raw = process.env.RADAR_RATE_INTERVAL_MS;
+  if (raw !== undefined) {
+    const n = Number(raw);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return 1000;
+}
+
+interface TenantRow { slug: string; website: string | null; name: string }
 interface BasketRow { id: number; query: string }
 
 function todayStartIso(): string {
@@ -107,10 +168,40 @@ function todayStartIso(): string {
   return d.toISOString();
 }
 
-function budgetCapUsd(): number {
-  const raw = process.env.COMPETITOR_POLL_DAILY_BUDGET_USD;
-  const n = raw ? Number(raw) : 10;
-  return Number.isFinite(n) && n > 0 ? n : 10;
+/**
+ * Decide which providers can poll today: must have API key set AND be under
+ * daily budget cap. Emits a single alert per provider/day on budget breach.
+ */
+function selectEnabledProviders(db: ReturnType<typeof getDb>): ProviderName[] {
+  const since = todayStartIso();
+  const rows = db
+    .prepare(
+      `SELECT bot, COALESCE(SUM(cost_usd), 0) AS spent
+         FROM competitor_polls
+        WHERE polled_at >= ?
+        GROUP BY bot`,
+    )
+    .all(since) as { bot: string; spent: number }[];
+  const spentByBot = new Map(rows.map((r) => [r.bot, r.spent]));
+
+  const enabled: ProviderName[] = [];
+  for (const p of PROVIDERS) {
+    if (!process.env[p.apiKeyEnv]) continue;
+    const cap   = providerBudget(p);
+    const spent = spentByBot.get(p.name) ?? 0;
+    if (spent >= cap) {
+      console.warn(`[radar] provider_cap_hit bot=${p.name} spent=$${spent.toFixed(2)} cap=$${cap}`);
+      // Alert is best-effort. A failure to email should never block polling
+      // on the other provider.
+      void sendBudgetAlert(
+        `[radar] daily budget cap hit (${p.name}, $${cap})`,
+        `Today's ${p.name} spend: $${spent.toFixed(2)}. Polling paused for ${p.name}.`,
+      ).catch(() => { /* non-fatal */ });
+      continue;
+    }
+    enabled.push(p.name);
+  }
+  return enabled;
 }
 
 /**
@@ -119,28 +210,18 @@ function budgetCapUsd(): number {
 export async function pollAll(): Promise<void> {
   const db = getDb();
 
-  // 1. Budget gate.
-  const cap = budgetCapUsd();
-  const { spent } = db
-    .prepare(`SELECT COALESCE(SUM(cost_usd), 0) AS spent FROM competitor_polls WHERE polled_at >= ?`)
-    .get(todayStartIso()) as { spent: number };
-  if (spent >= cap) {
-    console.warn(`[radar] budget_cap_hit spent=$${spent.toFixed(2)} cap=$${cap}`);
-    await sendBudgetAlert(
-      `[radar] daily budget cap hit ($${cap})`,
-      `Today's Perplexity spend: $${spent.toFixed(2)}. Polling skipped.`,
-    );
+  const providers = selectEnabledProviders(db);
+  if (providers.length === 0) {
+    console.warn(`[radar] no_providers_enabled`);
     return;
   }
 
-  // 2. Load Pro tenants.
   const tenants = db
-    .prepare(`SELECT slug, website FROM businesses WHERE plan='pro' AND api_key <> 'pending'`)
+    .prepare(`SELECT slug, website, name FROM businesses WHERE plan='pro' AND api_key <> 'pending'`)
     .all() as TenantRow[];
 
-  // 3. Seed + poll each tenant with bounded concurrency.
   const limit  = pLimit(CONCURRENCY);
-  const bucket = new TokenBucket({ intervalMs: RATE_INTERVAL_MS });
+  const bucket = new TokenBucket({ intervalMs: rateIntervalMs() });
 
   let totalPolls = 0, totalCitations = 0, totalErrors = 0, totalCost = 0;
 
@@ -154,8 +235,9 @@ export async function pollAll(): Promise<void> {
     const pollInsert = db.prepare(
       `INSERT INTO competitor_polls
          (slug, query_basket_id, bot, phrasing, phrasing_variant, polled_at,
-          our_domain_cited, our_cited_rank, citation_count, cost_usd, error)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          our_domain_cited, our_cited_rank, citation_count, cost_usd, error,
+          sentiment_descriptors)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     const citInsert = db.prepare(
       `INSERT INTO competitor_citations (poll_id, rank, url, domain, title) VALUES (?, ?, ?, ?, ?)`
@@ -166,38 +248,57 @@ export async function pollAll(): Promise<void> {
 
     for (const row of basket) {
       for (const [variantIdx, phrasing] of phrasingVariants(row.query).entries()) {
-        await bucket.acquire();
+        for (const bot of providers) {
+          await bucket.acquire();
 
-        let citations: string[] = [];
-        let errorMsg: string | null = null;
-        let costUsd = 0;
-        try {
-          const r = await perplexitySearch(phrasing);
-          citations = r.citations;
-          costUsd   = r.costUsd;
-        } catch (err) {
-          errorMsg = err instanceof Error ? err.message : String(err);
-          totalErrors++;
+          let citations:  string[] = [];
+          let answerText: string   = "";
+          let errorMsg:   string | null = null;
+          let costUsd               = 0;
+          try {
+            const r = await callProvider(bot, phrasing);
+            citations  = r.citations;
+            answerText = r.answerText;
+            costUsd    = r.costUsd;
+          } catch (err) {
+            errorMsg = err instanceof Error ? err.message : String(err);
+            totalErrors++;
+          }
+
+          const cited      = citations.findIndex((c) => isCitationOfTenant(c, t.website));
+          const citedRank  = cited >= 0 ? cited + 1 : null;
+
+          // Sentiment descriptors only for cited polls — nothing tenant-
+          // specific to extract when they're not mentioned. Empty arrays
+          // are stored as NULL to match the migration comment and keep the
+          // "non-empty means extraction ran" semantic.
+          let descriptorsJson: string | null = null;
+          if (citedRank !== null && answerText && t.name) {
+            const descriptors = extractSentiment(answerText, t.name);
+            if (descriptors.length > 0) descriptorsJson = JSON.stringify(descriptors);
+          }
+
+          const info = pollInsert.run(
+            t.slug, row.id, bot, phrasing, variantIdx, new Date().toISOString(),
+            citedRank !== null ? 1 : 0, citedRank, citations.length, costUsd, errorMsg,
+            descriptorsJson,
+          );
+          const pollId = Number(info.lastInsertRowid);
+
+          if (citations.length > 0) {
+            insertCitations(pollId, citations.map((url, i) => ({ rank: i + 1, url })));
+            totalCitations += citations.length;
+          }
+
+          totalPolls++;
+          totalCost += costUsd;
         }
-
-        const cited      = citations.findIndex((c) => isCitationOfTenant(c, t.website));
-        const citedRank  = cited >= 0 ? cited + 1 : null;
-        const info = pollInsert.run(
-          t.slug, row.id, BOT, phrasing, variantIdx, new Date().toISOString(),
-          citedRank !== null ? 1 : 0, citedRank, citations.length, costUsd, errorMsg,
-        );
-        const pollId = Number(info.lastInsertRowid);
-
-        if (citations.length > 0) {
-          insertCitations(pollId, citations.map((url, i) => ({ rank: i + 1, url })));
-          totalCitations += citations.length;
-        }
-
-        totalPolls++;
-        totalCost += costUsd;
       }
     }
   })));
 
-  console.log(`[radar] run_complete tenants=${tenants.length} polls=${totalPolls} citations=${totalCitations} errors=${totalErrors} cost=$${totalCost.toFixed(4)}`);
+  console.log(
+    `[radar] run_complete tenants=${tenants.length} providers=${providers.join(",")} ` +
+    `polls=${totalPolls} citations=${totalCitations} errors=${totalErrors} cost=$${totalCost.toFixed(4)}`,
+  );
 }

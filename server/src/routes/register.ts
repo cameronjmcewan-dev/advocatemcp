@@ -65,8 +65,8 @@ registerRouter.post("/register", requireApiKey, (req: Request, res: Response) =>
           hours_json, services_json_v2, pricing_json_v2, credentials_json,
           ratings_json, differentiators_text, customer_quotes_json,
           guarantee_text, case_stories_json, lead_routing_json,
-          plan)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          plan, email)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       slug,
       p.name,
@@ -104,6 +104,7 @@ registerRouter.post("/register", requireApiKey, (req: Request, res: Response) =>
       // 'base' is the default at the column level too — we pass the literal
       // here only so an explicit forwarding from the wizard takes effect.
       p.plan ?? "base",
+      p.email ?? null,
     );
 
     const base = getApiBaseUrl();

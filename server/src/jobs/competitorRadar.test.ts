@@ -172,6 +172,15 @@ describe("pollAll", () => {
   beforeEach(async () => {
     process.env.DATABASE_PATH = tmp;
     process.env.COMPETITOR_POLL_DAILY_BUDGET_USD = "10";
+    // Ensure Perplexity provider passes the API-key gate; individual tests
+    // opt OpenAI in by also setting OPENAI_API_KEY.
+    process.env.PERPLEXITY_API_KEY = "pplx-test";
+    // Disable the rate-limit sleep in tests so multi-provider fan-out
+    // finishes well inside the default vitest timeout.
+    process.env.RADAR_RATE_INTERVAL_MS = "1";
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.PERPLEXITY_DAILY_BUDGET_USD;
+    delete process.env.OPENAI_DAILY_BUDGET_USD;
     const { _resetDbForTests } = await import("../db.js");
     _resetDbForTests();
     // Wipe the DB file so each test starts with a clean slate.
@@ -185,6 +194,11 @@ describe("pollAll", () => {
     for (const suffix of ["", "-wal", "-shm"]) fs.rmSync(tmp + suffix, { force: true });
     delete process.env.DATABASE_PATH;
     delete process.env.COMPETITOR_POLL_DAILY_BUDGET_USD;
+    delete process.env.PERPLEXITY_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.PERPLEXITY_DAILY_BUDGET_USD;
+    delete process.env.OPENAI_DAILY_BUDGET_USD;
+    delete process.env.RADAR_RATE_INTERVAL_MS;
     vi.restoreAllMocks();
   });
 
@@ -211,6 +225,7 @@ describe("pollAll", () => {
         "https://other3.com",
         "https://other4.com",
       ],
+      answerText: "T1 is reliable and affordable.",
       costUsd: 0.005,
     });
 
@@ -218,11 +233,17 @@ describe("pollAll", () => {
 
     const polls = db.prepare("SELECT * FROM competitor_polls WHERE slug='t1'").all() as Array<{
       our_domain_cited: number; our_cited_rank: number | null; citation_count: number;
+      bot: string; sentiment_descriptors: string | null;
     }>;
     expect(polls).toHaveLength(3);
     expect(polls.every((p) => p.our_domain_cited === 1)).toBe(true);
     expect(polls.every((p) => p.our_cited_rank === 3)).toBe(true);
     expect(polls.every((p) => p.citation_count === 5)).toBe(true);
+    // With only PERPLEXITY_API_KEY set, every row should be 'perplexity'.
+    expect(polls.every((p) => p.bot === "perplexity")).toBe(true);
+    // Sentiment extracted from answerText mentioning the tenant name "T1".
+    expect(polls.every((p) => p.sentiment_descriptors !== null)).toBe(true);
+    expect(JSON.parse(polls[0]!.sentiment_descriptors!)).toEqual(["affordable", "reliable"]);
 
     const citations = db.prepare("SELECT COUNT(*) AS c FROM competitor_citations").get() as { c: number };
     expect(citations.c).toBe(15);
@@ -276,7 +297,7 @@ describe("pollAll", () => {
     vi.spyOn(perplexity, "perplexitySearch").mockImplementation(async () => {
       call++;
       if (call === 2) throw new Error("500 api");
-      return { citations: ["https://t3.com"], costUsd: 0.005 };
+      return { citations: ["https://t3.com"], answerText: "", costUsd: 0.005 };
     });
 
     await pollAll();
@@ -289,5 +310,138 @@ describe("pollAll", () => {
     expect(polls[1]!.citation_count).toBe(0);
     expect(polls[0]!.error).toBeNull();
     expect(polls[2]!.error).toBeNull();
+  });
+
+  it("fans out to both providers when both API keys are set (6 rows = 3 variants × 2 bots)", async () => {
+    process.env.OPENAI_API_KEY = "sk-test";
+    const { getDb } = await import("../db.js");
+    const { pollAll } = await import("./competitorRadar.js");
+    const perplexity = await import("../lib/perplexity.js");
+    const openai     = await import("../lib/openai.js");
+
+    const db = getDb();
+    db.prepare(`INSERT INTO businesses
+      (slug, name, description, services, api_key, category, location, website, star_rating, review_count, plan)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pro')`).run(
+        "t4", "T4", "d", "[]", "k4", "plumber", "Boise, ID", "https://t4.com", 4.5, 10
+      );
+    db.prepare(`INSERT INTO competitor_query_baskets (slug, query, source, enabled, created_at)
+      VALUES ('t4', 'q', 'tenant', 1, datetime('now'))`).run();
+
+    vi.spyOn(perplexity, "perplexitySearch").mockResolvedValue({
+      citations: ["https://t4.com"], answerText: "T4 is reliable.", costUsd: 0.005,
+    });
+    vi.spyOn(openai, "openaiSearch").mockResolvedValue({
+      citations: ["https://t4.com"], answerText: "T4 is professional.", costUsd: 0.03,
+    });
+
+    await pollAll();
+
+    const rows = db.prepare(
+      "SELECT bot, sentiment_descriptors FROM competitor_polls WHERE slug='t4' ORDER BY id"
+    ).all() as Array<{ bot: string; sentiment_descriptors: string | null }>;
+    expect(rows).toHaveLength(6);
+    const byBot = rows.reduce<Record<string, number>>((acc, r) => {
+      acc[r.bot] = (acc[r.bot] ?? 0) + 1; return acc;
+    }, {});
+    expect(byBot).toEqual({ perplexity: 3, openai: 3 });
+    // Perplexity rows should carry 'reliable', OpenAI rows 'professional'.
+    const ppxDesc = rows.filter((r) => r.bot === "perplexity").map((r) => JSON.parse(r.sentiment_descriptors!));
+    const oaiDesc = rows.filter((r) => r.bot === "openai").map((r) => JSON.parse(r.sentiment_descriptors!));
+    expect(ppxDesc.every((d) => d.includes("reliable"))).toBe(true);
+    expect(oaiDesc.every((d) => d.includes("professional"))).toBe(true);
+  });
+
+  it("per-provider budget cap: OpenAI paused while Perplexity keeps polling", async () => {
+    process.env.OPENAI_API_KEY = "sk-test";
+    process.env.OPENAI_DAILY_BUDGET_USD = "1.0";
+    const { getDb } = await import("../db.js");
+    const { pollAll } = await import("./competitorRadar.js");
+    const perplexity = await import("../lib/perplexity.js");
+    const openai     = await import("../lib/openai.js");
+    const alert      = await import("../lib/alert.js");
+
+    const db = getDb();
+    db.prepare(`INSERT INTO businesses
+      (slug, name, description, services, api_key, category, location, website, star_rating, review_count, plan)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pro')`).run(
+        "t5", "T5", "d", "[]", "k5", "plumber", "Boise, ID", "https://t5.com", 4.5, 10
+      );
+    db.prepare(`INSERT INTO competitor_query_baskets (slug, query, source, enabled, created_at)
+      VALUES ('t5', 'q', 'tenant', 1, datetime('now'))`).run();
+    // Pre-seed OpenAI spend above its $1 cap. Perplexity's unlimited-default $10 still has room.
+    db.prepare(`INSERT INTO competitor_polls
+      (slug, query_basket_id, bot, phrasing, phrasing_variant, polled_at, our_domain_cited, citation_count, cost_usd)
+      VALUES ('t5', 1, 'openai', 'x', 0, ?, 0, 0, 1.50)`).run(new Date().toISOString());
+
+    const ppxSpy  = vi.spyOn(perplexity, "perplexitySearch").mockResolvedValue({
+      citations: ["https://t5.com"], answerText: "", costUsd: 0.005,
+    });
+    const oaiSpy  = vi.spyOn(openai, "openaiSearch");
+    const alertSpy = vi.spyOn(alert, "sendBudgetAlert").mockResolvedValue();
+
+    await pollAll();
+
+    expect(ppxSpy).toHaveBeenCalled();        // Perplexity still runs.
+    expect(oaiSpy).not.toHaveBeenCalled();    // OpenAI paused for the day.
+    expect(alertSpy).toHaveBeenCalledOnce();  // One alert for the OpenAI cap hit.
+    // The pre-seeded OpenAI row plus 3 perplexity rows = 4 total.
+    const { c } = db.prepare("SELECT COUNT(*) AS c FROM competitor_polls WHERE slug='t5'").get() as { c: number };
+    expect(c).toBe(4);
+  });
+
+  it("writes NULL sentiment_descriptors when the tenant is not cited", async () => {
+    const { getDb } = await import("../db.js");
+    const { pollAll } = await import("./competitorRadar.js");
+    const perplexity = await import("../lib/perplexity.js");
+
+    const db = getDb();
+    db.prepare(`INSERT INTO businesses
+      (slug, name, description, services, api_key, category, location, website, star_rating, review_count, plan)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pro')`).run(
+        "t6", "T6", "d", "[]", "k6", "plumber", "Boise, ID", "https://t6.com", 4.5, 10
+      );
+    db.prepare(`INSERT INTO competitor_query_baskets (slug, query, source, enabled, created_at)
+      VALUES ('t6', 'q', 'tenant', 1, datetime('now'))`).run();
+
+    // No tenant-matching citation → our_domain_cited=0 → sentiment must be NULL
+    // even though the answer text mentions descriptors.
+    vi.spyOn(perplexity, "perplexitySearch").mockResolvedValue({
+      citations: ["https://other.com"],
+      answerText: "T6 is reliable and fast.",  // deliberately rich text
+      costUsd: 0.005,
+    });
+
+    await pollAll();
+
+    const rows = db.prepare(
+      "SELECT our_domain_cited, sentiment_descriptors FROM competitor_polls WHERE slug='t6'"
+    ).all() as Array<{ our_domain_cited: number; sentiment_descriptors: string | null }>;
+    expect(rows.every((r) => r.our_domain_cited === 0)).toBe(true);
+    expect(rows.every((r) => r.sentiment_descriptors === null)).toBe(true);
+  });
+
+  it("returns early when no provider API keys are configured", async () => {
+    delete process.env.PERPLEXITY_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    const { getDb } = await import("../db.js");
+    const { pollAll } = await import("./competitorRadar.js");
+    const perplexity = await import("../lib/perplexity.js");
+
+    const db = getDb();
+    db.prepare(`INSERT INTO businesses
+      (slug, name, description, services, api_key, category, location, website, star_rating, review_count, plan)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pro')`).run(
+        "t7", "T7", "d", "[]", "k7", "plumber", "Boise, ID", "https://t7.com", 4.5, 10
+      );
+    db.prepare(`INSERT INTO competitor_query_baskets (slug, query, source, enabled, created_at)
+      VALUES ('t7', 'q', 'tenant', 1, datetime('now'))`).run();
+
+    const ppxSpy = vi.spyOn(perplexity, "perplexitySearch");
+    await pollAll();
+
+    expect(ppxSpy).not.toHaveBeenCalled();
+    const { c } = db.prepare("SELECT COUNT(*) AS c FROM competitor_polls").get() as { c: number };
+    expect(c).toBe(0);
   });
 });

@@ -21,8 +21,28 @@ function daysAgoIso(days: number): string {
   return d.toISOString();
 }
 
+const KNOWN_BOTS = new Set(["perplexity", "openai"]);
+/** Accept ?bot=perplexity|openai; any other value (including "all") → null (no filter). */
+function parseBot(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const v = raw.toLowerCase().trim();
+  return KNOWN_BOTS.has(v) ? v : null;
+}
+
 /**
- * GET /api/competitor-radar/:slug/summary?days=30
+ * GET /api/competitor-radar/:slug/summary?days=30&bot=perplexity
+ *
+ * Response shape:
+ *   {
+ *     range_days, total_polls, cited_count, citation_rate, avg_cited_rank,
+ *     top_competitor_domains[], last_polled_at,
+ *     by_bot:            [{bot, total, cited, citation_rate, avg_rank}],
+ *     top_descriptors:   [{descriptor, count}],
+ *     bot:               "perplexity" | "openai" | null  // echo of ?bot filter
+ *   }
+ *
+ * Top-level counts are filtered by ?bot when provided; `by_bot` always
+ * breaks down every provider the tenant has polled against in the window.
  */
 competitorRadarRouter.get(
   "/api/competitor-radar/:slug/summary",
@@ -30,6 +50,7 @@ competitorRadarRouter.get(
   (req: Request, res: Response) => {
     const { slug } = req.params;
     const days = parseDays(req.query.days, 30);
+    const bot  = parseBot(req.query.bot);
     const since = daysAgoIso(days);
     const db = getDb();
 
@@ -38,6 +59,13 @@ competitorRadarRouter.get(
     if (!biz) { res.status(404).json({ error: "not_found" }); return; }
     const ownDomain = canonicalDomain(biz.website ?? "");
 
+    // Build WHERE + bind values once; reuse across the aggregate queries so
+    // the ?bot filter is applied consistently. `whereBotCp` is the
+    // table-qualified variant used inside the top-competitor-domains JOIN.
+    const whereBot     = bot ? " AND bot=?"    : "";
+    const whereBotCp   = bot ? " AND cp.bot=?" : "";
+    const bindBot      = bot ? [bot] as const  : [] as const;
+
     const polls = db.prepare(
       `SELECT
          COUNT(*) AS total,
@@ -45,8 +73,8 @@ competitorRadarRouter.get(
          AVG(CASE WHEN our_domain_cited=1 THEN our_cited_rank END) AS avg_rank,
          MAX(polled_at) AS last_polled_at
        FROM competitor_polls
-       WHERE slug=? AND polled_at>=?`
-    ).get(slug, since) as {
+       WHERE slug=? AND polled_at>=?${whereBot}`
+    ).get(slug, since, ...bindBot) as {
       total: number; cited: number | null; avg_rank: number | null; last_polled_at: string | null;
     };
 
@@ -54,11 +82,53 @@ competitorRadarRouter.get(
       `SELECT cc.domain, COUNT(*) AS cited_count
          FROM competitor_citations cc
          JOIN competitor_polls cp ON cp.id = cc.poll_id
-        WHERE cp.slug=? AND cp.polled_at>=? AND cp.our_domain_cited=0 AND cc.domain <> ?
+        WHERE cp.slug=? AND cp.polled_at>=? AND cp.our_domain_cited=0 AND cc.domain <> ?${whereBotCp}
         GROUP BY cc.domain
         ORDER BY cited_count DESC
         LIMIT 5`
-    ).all(slug, since, ownDomain) as { domain: string; cited_count: number }[];
+    ).all(slug, since, ownDomain, ...bindBot) as { domain: string; cited_count: number }[];
+
+    // Per-provider breakdown. Ignores ?bot — the whole point is to compare.
+    const byBotRows = db.prepare(
+      `SELECT
+         bot,
+         COUNT(*) AS total,
+         SUM(CASE WHEN our_domain_cited=1 THEN 1 ELSE 0 END) AS cited,
+         AVG(CASE WHEN our_domain_cited=1 THEN our_cited_rank END) AS avg_rank
+       FROM competitor_polls
+       WHERE slug=? AND polled_at>=?
+       GROUP BY bot
+       ORDER BY bot ASC`
+    ).all(slug, since) as { bot: string; total: number; cited: number | null; avg_rank: number | null }[];
+    const by_bot = byBotRows.map((r) => ({
+      bot:           r.bot,
+      total:         r.total,
+      cited:         r.cited ?? 0,
+      citation_rate: r.total > 0 ? (r.cited ?? 0) / r.total : 0,
+      avg_rank:      r.avg_rank,
+    }));
+
+    // Top sentiment descriptors across cited polls in the window. Decoded
+    // in JS rather than with SQLite JSON1 to keep the build free of the
+    // optional json1 dependency, which isn't guaranteed on every build.
+    const descriptorRows = db.prepare(
+      `SELECT sentiment_descriptors FROM competitor_polls
+        WHERE slug=? AND polled_at>=? AND our_domain_cited=1 AND sentiment_descriptors IS NOT NULL${whereBot}`
+    ).all(slug, since, ...bindBot) as { sentiment_descriptors: string }[];
+    const descCounts = new Map<string, number>();
+    for (const r of descriptorRows) {
+      let arr: unknown;
+      try { arr = JSON.parse(r.sentiment_descriptors); } catch { continue; }
+      if (!Array.isArray(arr)) continue;
+      for (const d of arr) {
+        if (typeof d !== "string") continue;
+        descCounts.set(d, (descCounts.get(d) ?? 0) + 1);
+      }
+    }
+    const top_descriptors = [...descCounts.entries()]
+      .map(([descriptor, count]) => ({ descriptor, count }))
+      .sort((a, b) => (b.count - a.count) || a.descriptor.localeCompare(b.descriptor))
+      .slice(0, 10);
 
     res.json({
       range_days: days,
@@ -68,12 +138,15 @@ competitorRadarRouter.get(
       avg_cited_rank: polls.avg_rank,
       top_competitor_domains: top,
       last_polled_at: polls.last_polled_at,
+      by_bot,
+      top_descriptors,
+      bot,
     });
   },
 );
 
 /**
- * GET /api/competitor-radar/:slug/losses?days=7&limit=50
+ * GET /api/competitor-radar/:slug/losses?days=7&limit=50&bot=openai
  */
 competitorRadarRouter.get(
   "/api/competitor-radar/:slug/losses",
@@ -82,17 +155,21 @@ competitorRadarRouter.get(
     const { slug } = req.params;
     const days  = parseDays(req.query.days, 7);
     const limit = parseLimit(req.query.limit, 50, 200);
+    const bot   = parseBot(req.query.bot);
     const since = daysAgoIso(days);
     const db = getDb();
 
+    const whereBot = bot ? " AND bot=?" : "";
+    const bindBot  = bot ? [bot] as const : [] as const;
+
     const polls = db.prepare(
-      `SELECT id, polled_at, phrasing, phrasing_variant
+      `SELECT id, polled_at, phrasing, phrasing_variant, bot
          FROM competitor_polls
-        WHERE slug=? AND polled_at>=? AND our_domain_cited=0
+        WHERE slug=? AND polled_at>=? AND our_domain_cited=0${whereBot}
         ORDER BY polled_at DESC
         LIMIT ?`
-    ).all(slug, since, limit) as {
-      id: number; polled_at: string; phrasing: string; phrasing_variant: number;
+    ).all(slug, since, ...bindBot, limit) as {
+      id: number; polled_at: string; phrasing: string; phrasing_variant: number; bot: string;
     }[];
 
     const citationStmt = db.prepare(
@@ -105,10 +182,11 @@ competitorRadarRouter.get(
       polled_at: p.polled_at,
       phrasing:  p.phrasing,
       variant:   p.phrasing_variant,
+      bot:       p.bot,
       top_citations: citationStmt.all(p.id),
     }));
 
-    res.json({ range_days: days, losses });
+    res.json({ range_days: days, bot, losses });
   },
 );
 

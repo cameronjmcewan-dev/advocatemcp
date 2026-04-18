@@ -738,6 +738,10 @@ export async function registerBusinessOnRailway(
     differentiator: typeof profile.differentiator === "string"
       ? profile.differentiator
       : (typeof differentiators[0] === "string" ? differentiators[0] : undefined),
+    // P5 radar digest recipient — forwarded so Railway's businesses.email
+    // gets populated at registration. If absent, Railway defaults the column
+    // to NULL and the digest job silently skips the tenant.
+    email: tenant.email || undefined,
   };
 
   // Forward 9-step wizard JSON blobs — only when present so undefined keys

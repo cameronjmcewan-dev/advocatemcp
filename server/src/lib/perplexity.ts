@@ -1,6 +1,7 @@
 /**
  * Minimal Perplexity chat/completions client.
- * Returns the native `citations[]` array plus an estimated USD cost.
+ * Returns the native `citations[]` array, the model's answer text (for
+ * downstream sentiment extraction), plus an estimated USD cost.
  *
  * Cost model (v1): flat $0.005/call. Revisit if Perplexity publishes per-token pricing.
  */
@@ -9,8 +10,14 @@ const PERPLEXITY_MODEL = "sonar";
 const FLAT_COST_USD    = 0.005;
 
 export interface PerplexityResult {
-  citations: string[];
-  costUsd: number;
+  citations:  string[];
+  answerText: string;
+  costUsd:    number;
+}
+
+interface PerplexityBody {
+  citations?: unknown;
+  choices?:   Array<{ message?: { content?: unknown } }>;
 }
 
 export async function perplexitySearch(query: string): Promise<PerplexityResult> {
@@ -36,14 +43,16 @@ export async function perplexitySearch(query: string): Promise<PerplexityResult>
   }
 
   const rawBody = await res.text();
-  let json: { citations?: unknown };
+  let json: PerplexityBody;
   try {
-    json = JSON.parse(rawBody) as { citations?: unknown };
+    json = JSON.parse(rawBody) as PerplexityBody;
   } catch {
     throw new Error(`perplexity json parse failed (status ${res.status}): ${rawBody.slice(0, 200)}`);
   }
   const citations = Array.isArray(json.citations)
     ? json.citations.filter((c): c is string => typeof c === "string")
     : [];
-  return { citations, costUsd: FLAT_COST_USD };
+  const firstContent = json.choices?.[0]?.message?.content;
+  const answerText = typeof firstContent === "string" ? firstContent : "";
+  return { citations, answerText, costUsd: FLAT_COST_USD };
 }
