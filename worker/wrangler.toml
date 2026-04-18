@@ -39,9 +39,16 @@ class_name = "McpRateLimiterDO"
 # First-time registration of the DO class. If additional DO classes land
 # later, append a new [[migrations]] stanza with a monotonically-increasing
 # `tag` — don't mutate this one.
+#
+# `new_sqlite_classes` (not `new_classes`) is required for the Cloudflare
+# free plan — DOs without SQLite storage were free-plan-restricted
+# starting 2026. Our limiter doesn't actually use the SQLite API (counters
+# live in per-instance memory), but declaring the class as SQLite-capable
+# is what unlocks the free-plan deploy. No code change needed — the class
+# definition and runtime behavior are identical.
 [[migrations]]
-tag         = "v1-mcp-rate-limiter"
-new_classes = ["McpRateLimiterDO"]
+tag                = "v1-mcp-rate-limiter"
+new_sqlite_classes = ["McpRateLimiterDO"]
 
 # ── Environment Variables ───────────────────────────────────────────────────
 [vars]
