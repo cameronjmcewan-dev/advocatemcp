@@ -29,8 +29,32 @@ import type { Request, Response } from "express";
 import crypto from "crypto";
 import { getDb } from "../db.js";
 import { perplexitySearch } from "../lib/perplexity.js";
+import { openaiSearch }     from "../lib/openai.js";
 import { canonicalDomain, isCitationOfTenant } from "../lib/domainMatch.js";
 import { generateAutoQueries } from "../jobs/competitorRadar.js";
+
+/**
+ * Audit provider abstraction. Perplexity first (~$0.005/call), OpenAI
+ * fallback (~$0.03/call, 6× more expensive) when only the OpenAI key
+ * is configured. Both return `citations[]` + `costUsd` so the caller
+ * is provider-agnostic.
+ *
+ * Fails closed: if NEITHER key is set, the endpoint refuses the audit.
+ */
+interface AuditProvider {
+  name:   "perplexity" | "openai";
+  search: (q: string) => Promise<{ citations: string[]; costUsd: number }>;
+}
+
+function selectAuditProvider(): AuditProvider | null {
+  if (process.env.PERPLEXITY_API_KEY) {
+    return { name: "perplexity", search: perplexitySearch };
+  }
+  if (process.env.OPENAI_API_KEY) {
+    return { name: "openai", search: openaiSearch };
+  }
+  return null;
+}
 
 export const auditRouter = Router();
 
@@ -116,8 +140,9 @@ function parseInput(body: unknown): { domain: string; category: string; location
 auditRouter.post("/audit/run", async (req: Request, res: Response) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
 
-  if (!process.env.PERPLEXITY_API_KEY) {
-    res.status(503).json({ error: "audit_unavailable", reason: "perplexity_not_configured" });
+  const provider = selectAuditProvider();
+  if (!provider) {
+    res.status(503).json({ error: "audit_unavailable", reason: "no_provider_configured" });
     return;
   }
 
@@ -204,7 +229,7 @@ auditRouter.post("/audit/run", async (req: Request, res: Response) => {
 
   for (const q of queries) {
     try {
-      const r = await perplexitySearch(q);
+      const r = await provider.search(q);
       totalCost += r.costUsd;
       const cited = r.citations.findIndex((c) => isCitationOfTenant(c, domain));
       results.push({
