@@ -110,6 +110,51 @@
   // currently inlines its own copy; if we ever consolidate, this works.
   window.__advocateAuditLeaderboard = { buildLeaderboard: buildLeaderboard, renderLeaderboard: renderLeaderboard };
 
+  // ── URL-param prefill — frictionless cold-outreach landing ─────────────
+  // Cameron sends a prospect:
+  //   advocatemcp.com/audit?domain=acme.com&category=plumber&location=Boise,TX
+  // Fields auto-populate on load. Add ?auto=1 and the audit fires
+  // immediately (no click required) — for the truly hot pitch:
+  //   advocatemcp.com/audit?domain=acme.com&category=plumber&location=Boise,TX&auto=1
+  // Strips the params from the URL bar after consuming so a refresh
+  // doesn't re-trigger an audit and the URL stays clean for sharing.
+  (function prefillFromUrl() {
+    var params;
+    try { params = new URLSearchParams(window.location.search); } catch (_) { return; }
+    var d = (params.get("domain")   || "").trim();
+    var c = (params.get("category") || "").trim();
+    var l = (params.get("location") || "").trim();
+    var auto = params.get("auto") === "1";
+    if (!d && !c && !l && !auto) return;
+
+    var domainEl   = document.getElementById("domain");
+    var categoryEl = document.getElementById("category");
+    var locationEl = document.getElementById("location");
+
+    if (d && domainEl) {
+      domainEl.value = /^https?:\/\//i.test(d) ? d : "https://" + d;
+    }
+    if (c && categoryEl) categoryEl.value = c;
+    if (l && locationEl) locationEl.value = l;
+
+    // Strip params from the URL bar so refresh doesn't re-fire an audit
+    // and the page stays bookmark-friendly.
+    if (window.history && window.history.replaceState) {
+      try {
+        window.history.replaceState(window.history.state, "", window.location.pathname);
+      } catch (_) { /* ignore */ }
+    }
+
+    // Auto-fire the audit if requested AND we have at least domain + category.
+    // Wait one tick so all listeners are attached.
+    if (auto && d && c) {
+      setTimeout(function () {
+        if (form.requestSubmit) form.requestSubmit();
+        else form.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+      }, 30);
+    }
+  })();
+
   form.addEventListener("submit", function (e) {
     e.preventDefault();
     clearError();

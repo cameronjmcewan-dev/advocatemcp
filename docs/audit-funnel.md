@@ -90,6 +90,8 @@ Take each `share_url` and craft a personalized email. Template:
 >
 > Here's the full report: {share_url}
 >
+> Or run a fresh one on yourself: {prefill_url}
+>
 > The agencies AI cited instead: {top_3_competitors}
 >
 > Advocate fixes this — gives every AI a structured, citation-ready
@@ -98,6 +100,27 @@ Take each `share_url` and craft a personalized email. Template:
 > Worth a 10-min call?
 
 The leaderboard on the `/r/:id` page shows the named competitors AI cited in their stead — that's the most powerful single line in the email.
+
+#### Prefilled audit URLs (zero-friction "audit yourself" links)
+
+The `/audit` page accepts URL parameters that pre-fill the form, so
+prospects clicking the link don't have to retype anything:
+
+```
+https://advocatemcp.com/audit?domain=acme.com&category=DTC%20email%20marketing%20agency&location=Austin%2C%20TX
+```
+
+Add `&auto=1` to **immediately fire the audit on page load** — no click
+required. Highest-conversion pitch is to send the auto-run URL for any
+prospect where you're confident the audit will return a low score:
+
+```
+https://advocatemcp.com/audit?domain=acme.com&category=DTC%20email%20marketing%20agency&location=Austin%2C%20TX&auto=1
+```
+
+The page strips the query params from the URL bar after consuming them
+so a prospect who reloads doesn't burn a fresh audit run, and a screenshot
+of the result stays clean for sharing.
 
 ### 4. Pull leads from the dashboard endpoint
 
@@ -153,13 +176,14 @@ To rotate the IP-rate-limit state (e.g. test from your own browser without burni
 When a prospect lands on `advocatemcp.com/r/:id` and clicks **"Run my audit"**, they're sent to the live `/audit` page where they enter their own info. After running, the **"Claim your agent"** CTA pre-fills `/onboarding` with their domain, category, location, and a best-guess business name (see `from_audit=1` flow in `site/onboarding.html`).
 
 The friction-minimized signup path is:
-1. Cold email with `/r/:id` of THEIR audit
-2. Click → see the report
-3. "Run mine" → audit form pre-fills with their domain (TODO: support a `?domain=` param on `/audit`)
-4. Run audit → get tailored CTA → click "Claim your agent" → onboarding pre-filled
-5. 9-step wizard → agent live
+1. Cold email with a prefilled `/audit?domain=...&category=...&location=...&auto=1` URL
+2. Page loads → audit fires automatically → prospect sees their score in ~7s
+3. Click "Claim your agent" → onboarding pre-filled with the same data via `?from_audit=1`
+4. 9-step wizard → agent live
 
-Each step shaves friction. The biggest single drop-off is likely (3) — the prospect re-typing their domain. Adding `?domain=` URL prefilling on `/audit` is a v1.1 enhancement.
+Three clicks total from prospect's inbox to signed-up customer. Every URL
+in this chain self-cleans (params stripped via `history.replaceState`) so
+refreshes don't re-trigger and the address bar stays bookmark-friendly.
 
 ---
 
