@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { buildToken, type TokenPayload } from "./tracked-url.js";
+import { buildToken, verifyToken, type TokenPayload } from "./tracked-url.js";
 
 // ── Reference test vector ────────────────────────────────────────────────────
 
@@ -78,5 +78,76 @@ describe("buildToken", () => {
     expect(buildToken(KNOWN_PAYLOAD, KNOWN_KEY)).not.toBe(
       buildToken(p2, KNOWN_KEY)
     );
+  });
+});
+
+describe("verifyToken", () => {
+  it("round-trips: a token built with buildToken verifies with the same key", () => {
+    const freshPayload: TokenPayload = {
+      ...KNOWN_PAYLOAD,
+      ts: Math.floor(Date.now() / 1000),
+    };
+    const token = buildToken(freshPayload, KNOWN_KEY);
+    const decoded = verifyToken(token, KNOWN_KEY);
+    expect(decoded).toEqual(freshPayload);
+  });
+
+  it("accepts the reference test vector (cross-environment parity)", () => {
+    // KNOWN_PAYLOAD has ts=1744000000 which is older than 90 days relative to
+    // 2026-04-18; verify by bumping ts forward to a fresh time but keeping the
+    // rest identical, to confirm the signature-verification logic works on
+    // the canonical shape.
+    const fresh = { ...KNOWN_PAYLOAD, ts: Math.floor(Date.now() / 1000) };
+    const token = buildToken(fresh, KNOWN_KEY);
+    expect(verifyToken(token, KNOWN_KEY)).toEqual(fresh);
+  });
+
+  it("preserves the optional aid claim when present", () => {
+    const payloadWithAid: TokenPayload = {
+      ...KNOWN_PAYLOAD,
+      ts: Math.floor(Date.now() / 1000),
+      aid: "claude-desktop",
+    };
+    const decoded = verifyToken(buildToken(payloadWithAid, KNOWN_KEY), KNOWN_KEY);
+    expect(decoded.aid).toBe("claude-desktop");
+  });
+
+  it("throws 'malformed' on a token missing the signature segment", () => {
+    expect(() => verifyToken("abc", KNOWN_KEY)).toThrow("malformed");
+    expect(() => verifyToken("abc.", KNOWN_KEY)).toThrow("malformed");
+    expect(() => verifyToken(".sig", KNOWN_KEY)).toThrow("malformed");
+  });
+
+  it("throws 'bad_signature' when the signature is tampered", () => {
+    const fresh = { ...KNOWN_PAYLOAD, ts: Math.floor(Date.now() / 1000) };
+    const token = buildToken(fresh, KNOWN_KEY);
+    const dot = token.lastIndexOf(".");
+    const tampered = token.slice(0, dot + 1) + "AAAAAAAAAAAAAAAAAAAAAA";
+    expect(() => verifyToken(tampered, KNOWN_KEY)).toThrow("bad_signature");
+  });
+
+  it("throws 'bad_signature' when verified with the wrong key", () => {
+    const fresh = { ...KNOWN_PAYLOAD, ts: Math.floor(Date.now() / 1000) };
+    const token = buildToken(fresh, KNOWN_KEY);
+    expect(() => verifyToken(token, "wrong-key")).toThrow("bad_signature");
+  });
+
+  it("throws 'expired' when ts is older than 90 days", () => {
+    const stale = {
+      ...KNOWN_PAYLOAD,
+      ts: Math.floor(Date.now() / 1000) - (91 * 24 * 3600),
+    };
+    const token = buildToken(stale, KNOWN_KEY);
+    expect(() => verifyToken(token, KNOWN_KEY)).toThrow("expired");
+  });
+
+  it("throws 'malformed' when a required field has the wrong type", async () => {
+    // Hand-craft a payload with a non-number query_id, then sign with KNOWN_KEY.
+    const bad = { dest: "x", ref: "y", slug: "z", query_id: "nope", ts: Math.floor(Date.now() / 1000) };
+    const encoded = Buffer.from(JSON.stringify(bad)).toString("base64url");
+    const crypto = await import("node:crypto");
+    const sig = crypto.createHmac("sha256", KNOWN_KEY).update(encoded).digest().toString("base64url");
+    const token = `${encoded}.${sig}`;
+    expect(() => verifyToken(token, KNOWN_KEY)).toThrow("malformed");
   });
 });

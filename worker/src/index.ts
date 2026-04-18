@@ -20,6 +20,14 @@ import { verifyToken, base64urlToBytes } from "./lib/tracked-url";
 import { buildSignedClickBody } from "./lib/clickBody";
 import { getTenant } from "./routes/onboard";
 import { proxyToOrigin, WORKER_HOSTNAMES } from "./lib/proxy";
+import { appendQuery } from "./lib/appendQuery";
+import { mcpRateLimiter } from "./lib/mcpRateLimit";
+import { checkMcpRateLimit, McpRateLimiterDO } from "./lib/mcpRateLimitDO";
+
+// Durable Object class export — wrangler requires this to be a top-level
+// export on the Worker entry module so the runtime can register the class
+// for the `MCP_RATE_LIMITER` binding declared in wrangler.toml.
+export { McpRateLimiterDO };
 
 export type { Env };
 
@@ -230,7 +238,17 @@ export default {
             );
             console.log(JSON.stringify({ metric: "track_signed_click", slug: payload.slug, query_id: payload.query_id, ts: payload.ts }));
           }
-          return Response.redirect(payload.dest, 302);
+          // Session 5: forward the token on the redirect target as `amcp_t`
+          // so the customer's landing-page script can read it, POST to
+          // `/r/:token/decode` on the Railway API, and personalize based on
+          // intent/ref. Namespaced (`amcp_t`, not `t`) to avoid collisions
+          // with whatever query-string params the customer's own site uses.
+          // Only human redirects carry the token — AI-crawler redirects skip
+          // it because crawlers don't run the client script anyway.
+          const redirectTarget = isAiCrawler(userAgent)
+            ? payload.dest
+            : appendQuery(payload.dest, "amcp_t", tokenParam);
+          return Response.redirect(redirectTarget, 302);
         } catch (err) {
           // err is TokenError ("malformed" | "bad_signature" | "expired")
           // User still gets a redirect; no click is logged for bad tokens.
@@ -265,8 +283,50 @@ export default {
     // Must be checked before crawler/slug logic so "/mcp" is never treated
     // as a business slug.
     if (url.pathname === "/mcp" || url.pathname.startsWith("/mcp/")) {
+      // Session 3: per-IP rate limit before proxying.
+      //
+      // Primary: Durable Object (global coherence across every CF edge).
+      // Fallback: in-memory isolate-local limiter, used when the DO is
+      // unreachable (DO outage, missing binding in dev, transient error).
+      // The fallback is imperfect — an attacker hitting multiple edges
+      // during a DO outage could multiply their limit — but it beats
+      // serving `/mcp` with zero rate limiting.
+      const ip = (
+        request.headers.get("cf-connecting-ip") ??
+        request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+        ""
+      );
+      let decision = await checkMcpRateLimit(env, ip);
+      let rateLimitSource: "do" | "isolate_fallback" = "do";
+      if (!decision) {
+        decision = mcpRateLimiter.check(ip);
+        rateLimitSource = "isolate_fallback";
+        console.log(JSON.stringify({ metric: "mcp_rate_limit_do_unreachable" }));
+      }
+      if (!decision.allowed) {
+        console.log(JSON.stringify({
+          metric: "mcp_rate_limited", ip_len: ip.length, path: url.pathname,
+          limit: decision.limit, retry_after_s: decision.retryAfter,
+          source: rateLimitSource,
+        }));
+        return new Response(JSON.stringify({
+          error: "rate_limited",
+          limit: decision.limit,
+          retry_after_seconds: decision.retryAfter,
+        }), {
+          status: 429,
+          headers: {
+            "Content-Type": "application/json",
+            "Retry-After":  String(decision.retryAfter),
+            "X-RateLimit-Limit":     String(decision.limit),
+            "X-RateLimit-Remaining": "0",
+          },
+        });
+      }
+
       const base = apiBase(env);
       const target = `${base}${url.pathname}${url.search}`;
+      const startedAt = Date.now();
       try {
         const resp = await fetch(target, {
           method: request.method,
@@ -276,11 +336,24 @@ export default {
           },
           body: request.method !== "GET" && request.method !== "HEAD" ? request.body : undefined,
         });
+        // Session 3 structured log: one line per /mcp proxy outcome so we
+        // can observe directory-driven traffic shape + error rate. Does NOT
+        // log tool name / payload — that's on the Railway side via
+        // agent_requests (Session 11).
+        console.log(JSON.stringify({
+          metric: "mcp_proxy", path: url.pathname, method: request.method,
+          status: resp.status, latency_ms: Date.now() - startedAt,
+          remaining: decision.remaining, source: rateLimitSource,
+        }));
         return new Response(resp.body, {
           status: resp.status,
           headers: resp.headers,
         });
       } catch (err) {
+        console.log(JSON.stringify({
+          metric: "mcp_proxy_error", path: url.pathname, method: request.method,
+          latency_ms: Date.now() - startedAt, error: String(err).slice(0, 200),
+        }));
         return jsonError(502, "Platform MCP endpoint unreachable.", { target, error: String(err) });
       }
     }

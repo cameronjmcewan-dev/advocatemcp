@@ -11,6 +11,7 @@ import { a2aRouter } from "./routes/a2a.js";
 import { adminRouter } from "./routes/admin/index.js";
 import { competitorRadarRouter } from "./routes/competitorRadar.js";
 import { digestRouter } from "./routes/digest.js";
+import { decodeRouter } from "./routes/decode.js";
 import { rateLimitMiddleware } from "./middleware/rateLimit.js";
 import { requestIdMiddleware } from "./lib/requestId.js";
 
@@ -37,6 +38,18 @@ export function createTestApp(): express.Express {
     next();
   });
 
+  // Rate limit + requestId run before every route (including the Session 5
+  // decode endpoint below — we want the decode endpoint rate-limited too).
+  app.use(rateLimitMiddleware);
+  app.use(requestIdMiddleware);
+
+  // Session 5 — `GET /r/:token/decode` is intentionally public + cross-origin.
+  // It's called from customer-owned third-party domains (e.g.
+  // workmancopyco.com) so it MUST bypass the worker-only origin whitelist in
+  // the global `cors()` middleware below. The router sets permissive ACAO
+  // headers itself and exposes only non-sensitive fields.
+  app.use(decodeRouter);
+
   const WORKER_ORIGIN = "https://advocatemcp-worker.advocatecameron.workers.dev";
   app.use(cors({
     origin: (origin, cb) => {
@@ -48,8 +61,6 @@ export function createTestApp(): express.Express {
   }));
 
   app.use(express.json({ limit: "1mb" }));
-  app.use(rateLimitMiddleware);
-  app.use(requestIdMiddleware);
 
   getDb();
 

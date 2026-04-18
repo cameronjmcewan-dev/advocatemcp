@@ -25,6 +25,24 @@ binding       = "DB"
 database_name = "advocatemcp-auth"
 database_id   = "1247938a-cf98-4c66-8588-5c9d71699094"
 
+# ── Durable Objects ─────────────────────────────────────────────────────────
+# Session 3: global per-IP rate limiter for /mcp proxy. A single DO instance
+# (see getMcpRateLimiterStub in worker/src/lib/mcpRateLimitDO.ts — keyed on
+# the literal "mcp-rate-limiter-v1") coordinates counters across every edge
+# so the 60 req/min cap is globally coherent. Fail-open in the caller —
+# mcpRateLimitDO.checkMcpRateLimit returns null on any DO error and the /mcp
+# handler falls back to the in-memory isolate limiter.
+[[durable_objects.bindings]]
+name       = "MCP_RATE_LIMITER"
+class_name = "McpRateLimiterDO"
+
+# First-time registration of the DO class. If additional DO classes land
+# later, append a new [[migrations]] stanza with a monotonically-increasing
+# `tag` — don't mutate this one.
+[[migrations]]
+tag         = "v1-mcp-rate-limiter"
+new_classes = ["McpRateLimiterDO"]
+
 # ── Environment Variables ───────────────────────────────────────────────────
 [vars]
 API_BASE_URL = "https://advocate-production-2887.up.railway.app"

@@ -125,6 +125,58 @@ Lessons and operational guidance:
 **Missing `X-API-Key` on `/track` → `/analytics/:slug/referral-click`.**
 The `/track` click logger in `worker/src/index.ts` at both the signed-token path and the legacy cleartext path POSTs to `${apiBase(env)}/analytics/:slug/referral-click` **without** forwarding `X-API-Key`. This is intentional as of 2026-04-10 and should not be "fixed" without a dedicated review of the `/track` endpoint's auth model. The `/track` endpoint is designed to be invoked by the end-user's browser during a referral-click redirect, not by a trusted server, so it has historically been public-ish on the Railway side. If a future session decides to lock down `/analytics/:slug/referral-click` behind server auth, the worker's `/track` handler will need to be updated at the same time and every currently-issued tracking URL in customer responses will need to be regenerated. Do not touch this without an explicit session scope — the blast radius is every referral click in flight.
 
+## Session 5 — AI Handoff (client-side intent script)
+
+**Shipped 2026-04-18.** Landing pages on customer domains can read an AI-referred visitor's intent + referring crawler + slug without any server-side integration.
+
+### Flow
+
+1. Perplexity / ChatGPT / etc. cites the tenant's agent response. The response contains a `/track?t=<signed-token>` URL.
+2. A human clicks that URL. The worker's `/track` handler verifies the token, logs the click, then **redirects to `${dest}?amcp_t=<token>`** (not bare `dest`) — the token is forwarded on the redirect for human traffic only. AI-crawler redirects skip the token since crawlers don't run JS.
+3. The customer's landing page has included `<script src="https://advocatemcp.com/advocate-context.js">` once. On load the script reads `?amcp_t=` from the URL, GETs `${apiBase}/r/<token>/decode`, and writes the result to `window.advocateContext`.
+4. The script also dispatches a `CustomEvent('advocate:context', { detail })` on `window` and strips the `amcp_t` param from the URL via `history.replaceState`.
+
+### `GET /r/:token/decode` (Railway)
+
+- Verifies the HMAC on `TOKEN_SIGNING_KEY` via `server/src/lib/tracked-url.ts::verifyToken`.
+- Joins `queries.intent` by the token's `query_id`. Returns `intent: null` if the row is missing or unclassified.
+- Returns only `{ intent, ref, slug }`. Never exposes `dest`, `query_id`, `aid`, or any other token claim. CORS: `Access-Control-Allow-Origin: *`. Cache-Control: `private, max-age=60`.
+- Rejections: `400 { error: "invalid_token", reason: "malformed" | "bad_signature" | "expired" }`.
+
+### Script configuration
+
+All optional, via data attributes on the `<script>` tag:
+
+| Attribute | Default | Purpose |
+|---|---|---|
+| `data-api-base` | `https://api.advocatemcp.com` | Override for self-hosters |
+| `data-param-name` | `amcp_t` | URL query-param key the script reads |
+| `data-strip-url` | `true` | Set to `"false"` to leave the token in the URL after decoding |
+
+### Customer integration example
+
+```html
+<script src="https://advocatemcp.com/advocate-context.js"></script>
+<script>
+  window.addEventListener("advocate:context", function (e) {
+    var ctx = e.detail; // { intent, ref, slug }
+    if (ctx.intent === "emergency") {
+      document.querySelector("#hero-cta").textContent = "Call us right now";
+    } else if (ctx.intent === "affordable") {
+      document.querySelector("#hero-cta").textContent = "See our pricing";
+    }
+    document.body.setAttribute("data-ai-ref", ctx.ref);
+  });
+</script>
+```
+
+### Privacy posture
+
+- Token carries no PII — only `{ dest, ref, slug, query_id, ts, aid? }`.
+- Decode response deliberately excludes `dest` and `query_id` so a customer-owned JS context never sees fields that would let it reconstruct the click destination or correlate across tenants.
+- Token is stripped from the URL on first decode so `document.referrer` on subsequent navigations doesn't leak it to third parties.
+- Endpoint is not rate-limited beyond the shared `rateLimitMiddleware` on Railway; revisit if abuse appears.
+
 ## Updating this doc
 
-Update this file at the end of any session that touches `/track`, `click_events`, `tracked-url.ts`, or the `referral-click` endpoint.
+Update this file at the end of any session that touches `/track`, `click_events`, `tracked-url.ts`, `/r/:token/decode`, `advocate-context.js`, or the `referral-click` endpoint.
