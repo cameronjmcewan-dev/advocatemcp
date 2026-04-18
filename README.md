@@ -281,19 +281,25 @@ Submit a PR to add support to your crawler: [github.com/your-org/advocatemcp](ht
 
 The Worker intercepts traffic from any User-Agent containing these strings (case-insensitive):
 
-| Crawler | Company |
-|---|---|
-| `PerplexityBot` | Perplexity AI |
-| `GPTBot` | OpenAI |
-| `OAI-SearchBot` | OpenAI (search) |
-| `ClaudeBot` | Anthropic |
-| `Google-Extended` | Google (AI training opt-out) |
-| `Googlebot` | Google (AI Overviews) |
-| `anthropic-ai` | Anthropic (general) |
-| `cohere-ai` | Cohere |
-| `meta-externalagent` | Meta AI |
+| Crawler | Company | Role |
+|---|---|---|
+| `PerplexityBot` | Perplexity AI | batch indexer |
+| `Perplexity-User` | Perplexity AI | **real-time** fetch during a live user query |
+| `GPTBot` | OpenAI | batch indexer |
+| `ChatGPT-User` | OpenAI | **real-time** fetch when ChatGPT browses for a user |
+| `OAI-SearchBot` | OpenAI (search) | search index |
+| `ClaudeBot` | Anthropic | batch indexer |
+| `Google-Extended` | Google (AI training opt-out) | training signal |
+| `Googlebot` | Google (AI Overviews) | main indexer |
+| `GoogleOther` | Google (Gemini / general AI uses) | flexible crawler |
+| `Applebot-Extended` | Apple Intelligence | training signal |
+| `anthropic-ai` | Anthropic (general) | training signal |
+| `cohere-ai` | Cohere | training signal |
+| `meta-externalagent` | Meta AI | training signal |
 
-Add more by editing `AI_CRAWLERS` in `worker/src/index.ts`.
+Real-time crawlers (`Perplexity-User`, `ChatGPT-User`) are the ones that actually deliver AdvocateMCP's value during a live AI conversation — missing them means the AI serves scraped HTML to the user in the answer panel instead of the structured agent response.
+
+Add more by editing `AI_CRAWLERS` in `worker/src/index.ts` AND the matching `CANONICALS` + switch in `server/src/prompts/index.ts`. The two lists must stay in lockstep.
 
 ---
 
