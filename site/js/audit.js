@@ -113,21 +113,21 @@
     else if (cited < total)    score.classList.add("some");
     else                       score.classList.add("all");
 
-    label.textContent = "Perplexity cited " + escapeHtml(audit.domain) + " in " + cited + " of " + total + " category queries (" + rate + "% citation rate)";
+    label.textContent = "AI cited " + escapeHtml(audit.domain) + " in " + cited + " of " + total + " category queries (" + rate + "% citation rate)";
     detail.textContent = cached
       ? "Cached result from earlier today · 24h cache window"
-      : "Live Perplexity run · " + new Date(audit.created_at).toLocaleString();
+      : "Live AI run · " + new Date(audit.created_at).toLocaleString();
 
     // Tailor the CTA to the audit outcome.
     if (cited === 0) {
-      ctaTitle.textContent = "You're invisible to Perplexity today";
-      ctaBody.textContent = "AI-driven discovery is already shifting how customers find businesses like yours. An AdvocateMCP agent gives every AI a structured, citation-ready answer about you — the difference between scraped guesswork and your real pitch.";
+      ctaTitle.textContent = "You're invisible to AI today";
+      ctaBody.textContent = "AI-driven discovery is already shifting how customers find businesses like yours. An Advocate agent gives every AI a structured, citation-ready answer about you — the difference between scraped guesswork and your real pitch.";
     } else if (cited < total) {
       ctaTitle.textContent = "You're showing up, but not consistently";
-      ctaBody.textContent = "Perplexity cited you on some queries and missed you on others. An AdvocateMCP agent gives every AI the same structured answer about your business, so you stop competing with your own HTML.";
+      ctaBody.textContent = "AI cited you on some queries and missed you on others. An Advocate agent gives every AI the same structured answer about your business, so you stop competing with your own HTML.";
     } else {
       ctaTitle.textContent = "You're cited — now control what AI says about you";
-      ctaBody.textContent = "You're in the answer set. But Perplexity is building the quote from scraped HTML. An AdvocateMCP agent lets you supply the exact structured pitch — the specialty, pricing, credentials, and CTA you want AIs to surface.";
+      ctaBody.textContent = "You're in the answer set. But AI is building the quote from scraped HTML. An Advocate agent lets you supply the exact structured pitch — the specialty, pricing, credentials, and CTA you want AIs to surface.";
     }
 
     queries.innerHTML = (audit.queries || []).map(function (q) {
@@ -160,6 +160,85 @@
       if (audit.category) params.set("category", audit.category);
       if (audit.location) params.set("location", audit.location);
       cta.href = "/onboarding?" + params.toString();
+    }
+
+    // Wire the share-link row. The audit id makes the report shareable
+    // at /r/:id (Pages routes /r/* → /r.html?id=:splat via _redirects).
+    var shareUrlInput = document.getElementById("share-url");
+    if (shareUrlInput && audit.id) {
+      var shareUrl = window.location.origin + "/r/" + audit.id;
+      shareUrlInput.value = shareUrl;
+      var copyBtn = document.getElementById("share-copy");
+      if (copyBtn) {
+        copyBtn.onclick = function () {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(shareUrl).then(function () {
+              copyBtn.textContent = "Copied!";
+              setTimeout(function () { copyBtn.textContent = "Copy link"; }, 2000);
+            }).catch(function () {
+              shareUrlInput.select();
+            });
+          } else {
+            shareUrlInput.select();
+            try { document.execCommand("copy"); copyBtn.textContent = "Copied!"; setTimeout(function () { copyBtn.textContent = "Copy link"; }, 2000); } catch (_) {}
+          }
+        };
+      }
+    }
+
+    // Wire the email-capture follow-up form. POSTs to
+    // /audit/:id/follow-up; the endpoint is rate-limited at 10/IP/day
+    // and idempotent per (audit_id, email).
+    var followupForm   = document.getElementById("followup-form");
+    var followupInput  = document.getElementById("followup-email");
+    var followupSubmit = document.getElementById("followup-submit");
+    var followupMsg    = document.getElementById("followup-msg");
+    if (followupForm && audit.id) {
+      followupForm.onsubmit = function (e) {
+        e.preventDefault();
+        if (!followupMsg || !followupInput || !followupSubmit) return;
+        var email = followupInput.value.trim();
+        if (!email) return;
+        followupMsg.textContent = "";
+        followupMsg.className = "followup-msg";
+        followupSubmit.disabled = true;
+        followupSubmit.textContent = "Saving…";
+
+        fetch(API_BASE + "/audit/" + encodeURIComponent(audit.id) + "/follow-up", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: email }),
+        })
+          .then(function (res) {
+            return res.json().then(function (body) { return { status: res.status, body: body }; });
+          })
+          .then(function (r) {
+            followupSubmit.disabled = false;
+            followupSubmit.textContent = "Email me monthly";
+            if (r.status === 200 && r.body.ok) {
+              followupMsg.textContent = r.body.created
+                ? "✓ You're on the list. We'll re-audit and email you next month."
+                : "✓ Already on the list — you're set.";
+              followupMsg.className = "followup-msg ok";
+              followupInput.value = "";
+            } else if (r.status === 429) {
+              followupMsg.textContent = "Too many submissions from your network today. Try again tomorrow.";
+              followupMsg.className = "followup-msg err";
+            } else if (r.status === 400) {
+              followupMsg.textContent = "That email doesn't look right. Double-check and resubmit.";
+              followupMsg.className = "followup-msg err";
+            } else {
+              followupMsg.textContent = "Something went wrong on our end. Please try again in a minute.";
+              followupMsg.className = "followup-msg err";
+            }
+          })
+          .catch(function () {
+            followupSubmit.disabled = false;
+            followupSubmit.textContent = "Email me monthly";
+            followupMsg.textContent = "Couldn't reach the server. Check your connection and try again.";
+            followupMsg.className = "followup-msg err";
+          });
+      };
     }
 
     results.classList.add("show");

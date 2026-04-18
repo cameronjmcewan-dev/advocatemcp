@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" style="background:#050202">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark light" />
+  <title>AI Visibility Report — Advocate</title>
+  <meta name="description" content="A snapshot of how AI assistants answer category queries about a business." />
+  <meta property="og:title" content="AI Visibility Report — Advocate" />
+  <meta property="og:description" content="See how AI assistants answer category queries about your business — and whether they cite you." />
+  <meta property="og:image" content="https://advocatemcp.com/og-image.png" />
+  <link rel="preconnect" href="https://api.fontshare.com" />
+  <link rel="stylesheet" href="/css/tokens.css" />
+  <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/redesign.css" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html{font-size:16px;-webkit-font-smoothing:antialiased;color-scheme:dark light;background:var(--bg)}
+    body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:var(--tx-base);line-height:1.6;min-height:100vh}
+    a{color:inherit;text-decoration:none}
+    button{font-family:inherit;cursor:pointer;border:none;background:none}
+    img,svg{display:block}
+
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 20px;font-size:var(--tx-sm);font-weight:500;border-radius:var(--r-md);border:1px solid transparent;transition:background .15s,color .15s,border-color .15s;white-space:nowrap;line-height:1}
+    .btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+    .btn-primary:hover{background:var(--accent-bright);border-color:var(--accent-bright)}
+    .btn-ghost{background:transparent;color:var(--text);border-color:var(--border)}
+    .btn-ghost:hover{background:var(--surface-2)}
+    .btn-sm{padding:7px 14px;font-size:var(--tx-xs)}
+
+    .audit-nav{display:flex;align-items:center;justify-content:space-between;padding:20px 40px;border-bottom:1px solid rgba(255,255,255,.06)}
+    [data-theme="light"] .audit-nav{border-bottom-color:var(--border)}
+    .audit-nav .logo{display:flex;align-items:center;gap:10px;font-size:var(--tx-sm);font-weight:600;letter-spacing:-.01em;color:var(--text)}
+    .audit-nav-actions{display:flex;align-items:center;gap:10px}
+    .icon-btn{display:flex;align-items:center;justify-content:center;width:34px;height:34px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--muted);transition:color .15s}
+    .icon-btn:hover{color:var(--text)}
+
+    .wrap{max-width:760px;margin:0 auto;padding:48px 24px 24px}
+    .header{text-align:center;margin-bottom:36px;position:relative;isolation:isolate}
+    .header::before{content:"";position:absolute;inset:-60px -100px;z-index:-1;pointer-events:none;background:radial-gradient(ellipse 60% 70% at 50% 30%, var(--accent-glow-2) 0%, transparent 70%)}
+    .eyebrow{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:999px;background:var(--accent-dim);color:var(--accent-bright);font-size:var(--tx-xs);font-weight:600;letter-spacing:.08em;text-transform:uppercase;margin-bottom:16px;border:1px solid var(--border-accent)}
+    .h1{font-family:var(--font-serif);font-weight:400;font-size:clamp(2rem,3.6vw,2.875rem);line-height:1.1;letter-spacing:-.02em;color:var(--text);margin-bottom:14px}
+    .h1 em{font-style:italic;color:var(--accent-bright)}
+    .sub{font-size:var(--tx-sm);color:var(--muted);max-width:520px;margin:0 auto;line-height:1.6}
+    .sub code{font-family:var(--font-mono);font-size:0.95em;color:var(--text);background:var(--surface-2);padding:2px 6px;border-radius:4px}
+
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:32px;margin-bottom:20px}
+    .score-card{text-align:center;padding:40px 32px}
+    .score-big{font-family:var(--font-serif);font-weight:400;font-size:clamp(4.5rem,9vw,6.5rem);line-height:1;letter-spacing:-.03em}
+    .score-big.zero{color:#f85149}
+    .score-big.some{color:#d29922}
+    .score-big.all{color:#3fb950}
+    .score-label{font-size:var(--tx-md);color:var(--text);margin-top:12px}
+    .score-detail{font-size:var(--tx-xs);color:var(--muted);margin-top:20px;padding-top:20px;border-top:1px solid var(--border)}
+
+    .query-list{padding:0;overflow:hidden}
+    .query-list-head{padding:18px 32px;font-size:var(--tx-xs);color:var(--muted);letter-spacing:.08em;text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border)}
+    .query{padding:18px 32px;border-bottom:1px solid var(--border)}
+    .query:last-child{border-bottom:none}
+    .query-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:8px}
+    .query-text{font-family:var(--font-serif);font-style:italic;font-size:var(--tx-md);color:var(--text);flex:1}
+    .badge{display:inline-flex;align-items:center;padding:4px 12px;border-radius:999px;font-size:var(--tx-xs);font-weight:600;white-space:nowrap;letter-spacing:.04em;text-transform:uppercase}
+    .badge.win{background:rgba(63,185,80,.15);color:#3fb950;border:1px solid rgba(63,185,80,.3)}
+    .badge.loss{background:rgba(210,153,34,.12);color:#d29922;border:1px solid rgba(210,153,34,.3)}
+    .citations{font-size:var(--tx-xs);color:var(--muted);word-break:break-word;line-height:1.6}
+    .citations strong{color:var(--text);font-weight:500}
+
+    .cta-card{background:linear-gradient(135deg, var(--accent) 0%, var(--accent-bright) 100%);color:#fff;padding:36px 32px;border-radius:var(--r-lg);text-align:center;margin-bottom:24px;border:1px solid var(--accent-bright)}
+    .cta-card h3{font-family:var(--font-serif);font-weight:400;font-size:clamp(1.4rem,2.4vw,1.75rem);line-height:1.2;margin-bottom:10px}
+    .cta-card p{font-size:var(--tx-sm);opacity:.92;margin-bottom:22px;max-width:460px;margin-left:auto;margin-right:auto;line-height:1.6}
+    .cta-card .btn{background:#fff;color:var(--accent);border-color:#fff;padding:12px 24px;font-size:var(--tx-sm);font-weight:600;margin:4px}
+    .cta-card .btn:hover{background:rgba(255,255,255,.92)}
+    .cta-card .btn-secondary{background:rgba(255,255,255,.08);color:#fff;border-color:rgba(255,255,255,.3)}
+    .cta-card .btn-secondary:hover{background:rgba(255,255,255,.18)}
+
+    .err{padding:32px;text-align:center;color:var(--muted);font-size:var(--tx-sm)}
+    .skel{background:linear-gradient(90deg,var(--surface) 25%,var(--surface-2) 50%,var(--surface) 75%);background-size:1000px 100%;animation:shimmer 1.5s infinite;border-radius:var(--r-sm);height:280px}
+    @keyframes shimmer{from{background-position:-500px 0}to{background-position:500px 0}}
+
+    footer{text-align:center;padding:32px 24px;font-size:var(--tx-xs);color:var(--muted);border-top:1px solid var(--border);margin-top:40px}
+    footer a{color:var(--muted);text-decoration:underline;text-underline-offset:2px}
+    footer a:hover{color:var(--text)}
+
+    @media (max-width:640px){
+      .audit-nav{padding:16px 20px}
+      .wrap{padding:36px 20px}
+      .card{padding:24px}
+      .query,.query-list-head{padding-left:24px;padding-right:24px}
+      .score-card{padding:32px 24px}
+    }
+  </style>
+</head>
+<body>
+
+<nav class="audit-nav">
+  <a href="/" class="logo">
+    <img src="/icon-192.png" alt="Advocate" width="26" height="26" style="border-radius:5px" />
+    Advocate
+  </a>
+  <div class="audit-nav-actions">
+    <button class="icon-btn" onclick="toggleTheme()" aria-label="Toggle theme">
+      <i data-lucide="sun" id="r-sun"></i>
+      <i data-lucide="moon" id="r-moon" style="display:none"></i>
+    </button>
+    <a href="/audit" class="btn btn-ghost btn-sm">Run yours →</a>
+    <a href="/onboarding" class="btn btn-primary btn-sm">Get Started</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <div class="header">
+    <div class="eyebrow"><i data-lucide="zap" style="width:10px;height:10px"></i> Shared report</div>
+    <h1 class="h1" id="title">Loading <em>report…</em></h1>
+    <p class="sub" id="meta"></p>
+  </div>
+
+  <div id="loading"><div class="card skel"></div></div>
+
+  <div id="error" style="display:none">
+    <div class="card err">
+      <p>This report doesn't exist or has been removed.</p>
+      <p style="margin-top:16px"><a href="/audit" class="btn btn-primary">Run a fresh audit →</a></p>
+    </div>
+  </div>
+
+  <div id="results" style="display:none">
+    <div class="card score-card">
+      <div id="score-big" class="score-big"></div>
+      <div class="score-label" id="score-label"></div>
+      <div class="score-detail" id="score-detail"></div>
+    </div>
+
+    <div class="card query-list">
+      <div class="query-list-head">What AI answered</div>
+      <div id="queries"></div>
+    </div>
+
+    <div class="cta-card">
+      <h3>This was someone else's report. <em>What about yours?</em></h3>
+      <p>Run the same 30-second audit on your business — see if AI cites you for your category.</p>
+      <a class="btn" href="/audit">Run my audit →</a>
+      <a class="btn btn-secondary" href="/onboarding">Skip ahead — get an agent</a>
+    </div>
+  </div>
+
+  <footer>
+    Powered by <a href="/">Advocate</a> · AI citation polling · Reports are public read-only snapshots
+  </footer>
+</div>
+
+<script>
+  // Theme toggle — same key as the rest of the site
+  function toggleTheme(){
+    var html = document.documentElement;
+    var current = html.getAttribute('data-theme');
+    var next = current === 'light' ? 'dark' : 'light';
+    html.setAttribute('data-theme', next);
+    try { localStorage.setItem('amcp_theme', next); } catch(e) {}
+    syncIcons(next);
+  }
+  function syncIcons(t){
+    var sun = document.getElementById('r-sun');
+    var moon = document.getElementById('r-moon');
+    if(!sun||!moon) return;
+    sun.style.display  = t === 'dark' ? 'block' : 'none';
+    moon.style.display = t === 'dark' ? 'none' : 'block';
+  }
+  (function initTheme(){
+    try {
+      var saved = localStorage.getItem('amcp_theme');
+      if (saved === 'light') document.documentElement.setAttribute('data-theme','light');
+    } catch(e) {}
+    syncIcons(document.documentElement.getAttribute('data-theme') || 'dark');
+  })();
+
+  function escapeHtml(s){
+    return String(s == null ? "" : s)
+      .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+  }
+
+  function showError(){
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('results').style.display = 'none';
+    document.getElementById('error').style.display = '';
+    document.getElementById('title').innerHTML = 'Report <em>not found</em>';
+    document.getElementById('meta').textContent = '';
+  }
+
+  function render(audit){
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('error').style.display = 'none';
+    document.getElementById('results').style.display = '';
+
+    var titleEl = document.getElementById('title');
+    titleEl.innerHTML = 'AI sees <em>' + escapeHtml(audit.domain) + '</em>';
+
+    var loc = audit.location ? ' &middot; ' + escapeHtml(audit.location) : '';
+    var when = '';
+    try { when = new Date(audit.created_at).toLocaleDateString(); } catch(e) {}
+    document.getElementById('meta').innerHTML = 'Category: <code>' + escapeHtml(audit.category) + '</code>' + loc + (when ? ' &middot; Run on ' + when : '');
+
+    var cited = audit.cited_count || 0;
+    var total = audit.total_queries || 0;
+    var rate  = total > 0 ? Math.round((cited / total) * 100) : 0;
+    var score = document.getElementById('score-big');
+    score.textContent = cited + ' / ' + total;
+    score.classList.remove('zero','some','all');
+    if (cited === 0)         score.classList.add('zero');
+    else if (cited < total)  score.classList.add('some');
+    else                     score.classList.add('all');
+    document.getElementById('score-label').innerHTML = 'Cited <strong>' + cited + '</strong> of <strong>' + total + '</strong> category queries (' + rate + '% citation rate)';
+    document.getElementById('score-detail').textContent = 'Run on ' + (when || audit.created_at);
+
+    var html = (audit.queries || []).map(function(q){
+      var head = '<div class="query-head">' +
+        '<div class="query-text">"' + escapeHtml(q.query) + '"</div>' +
+        '<span class="badge ' + (q.cited ? 'win' : 'loss') + '">' +
+        (q.cited ? 'cited' : 'not cited') + '</span>' +
+      '</div>';
+      var citations = (q.citations || []).slice(0, 5).map(escapeHtml);
+      var cites = citations.length === 0
+        ? '<em>No citations returned for this query.</em>'
+        : '<strong>Sources AI cited:</strong> ' + citations.join(', ');
+      return '<div class="query">' + head + '<div class="citations">' + cites + '</div></div>';
+    }).join('');
+    document.getElementById('queries').innerHTML = html;
+  }
+
+  (function load(){
+    var params = new URLSearchParams(window.location.search);
+    var id = params.get('id');
+    if (!id) { showError(); return; }
+
+    fetch('https://api.advocatemcp.com/audit/' + encodeURIComponent(id), {
+      method: 'GET', credentials: 'omit', mode: 'cors',
+    })
+      .then(function(res){ if (!res.ok) throw new Error('http_' + res.status); return res.json(); })
+      .then(function(body){ if (!body.audit) throw new Error('no_audit'); render(body.audit); })
+      .catch(function(){ showError(); });
+  })();
+
+  window.addEventListener('DOMContentLoaded', function(){
+    if (window.lucide && window.lucide.createIcons) window.lucide.createIcons();
+  });
+</script>
+</body>
+</html>
