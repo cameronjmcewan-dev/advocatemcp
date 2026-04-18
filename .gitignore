@@ -10,6 +10,11 @@
 **/.env.production
 **/.env.staging
 
+# Vitest creates a .vite cache under node_modules/ at the CWD where it's run.
+# Running vitest from the repo root (e.g. during one-off test invocations)
+# leaves a root-level node_modules/.vite/ — keep it out of the repo.
+node_modules/
+
 server/node_modules/
 server/dist/
 server/*.db
