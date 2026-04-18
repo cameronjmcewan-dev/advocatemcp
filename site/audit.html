@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Visibility Audit — AdvocateMCP</title>
+  <meta name="description" content="Free AI citation audit. See how Perplexity answers your category — and whether it mentions you.">
+  <meta property="og:title" content="Free AI Visibility Audit — AdvocateMCP">
+  <meta property="og:description" content="See how Perplexity answers queries about your category — and whether it mentions you. 30 seconds, free.">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      background: #f9fafb;
+      color: #111827;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    .container { max-width: 720px; margin: 0 auto; padding: 48px 24px; }
+    .hero { text-align: center; margin-bottom: 40px; }
+    .hero h1 { font-size: 36px; font-weight: 700; margin-bottom: 12px; letter-spacing: -0.02em; }
+    .hero p { font-size: 18px; color: #4b5563; max-width: 540px; margin: 0 auto; }
+    .hero .eyebrow {
+      display: inline-block; padding: 4px 12px; border-radius: 999px;
+      background: #0f766e; color: #fff; font-size: 12px; font-weight: 600;
+      letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 16px;
+    }
+
+    form { background: #fff; padding: 28px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 24px; }
+    .field { margin-bottom: 16px; }
+    label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #374151; }
+    .hint { font-size: 12px; color: #6b7280; margin-top: 4px; }
+    input[type="text"], input[type="url"], select {
+      width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 6px;
+      font-size: 15px; font-family: inherit;
+    }
+    input:focus, select:focus { outline: none; border-color: #0f766e; box-shadow: 0 0 0 3px rgba(15,118,110,0.1); }
+
+    button {
+      width: 100%; padding: 14px 24px; border: none; border-radius: 6px;
+      background: #0f766e; color: #fff; font-size: 16px; font-weight: 600;
+      cursor: pointer; transition: background 120ms;
+    }
+    button:hover:not(:disabled) { background: #0d5e58; }
+    button:disabled { background: #9ca3af; cursor: not-allowed; }
+
+    #loading { display: none; text-align: center; padding: 40px; color: #4b5563; }
+    #loading.show { display: block; }
+    .spinner { display: inline-block; width: 32px; height: 32px; border: 3px solid #e5e7eb; border-top-color: #0f766e; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #error { display: none; padding: 16px; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 6px; color: #991b1b; font-size: 14px; margin-bottom: 24px; }
+    #error.show { display: block; }
+
+    #results { display: none; }
+    #results.show { display: block; }
+
+    .score-card { background: #fff; padding: 32px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 24px; text-align: center; }
+    .score-big { font-size: 72px; font-weight: 700; letter-spacing: -0.04em; }
+    .score-big.zero { color: #dc2626; }
+    .score-big.some { color: #d97706; }
+    .score-big.all  { color: #0f766e; }
+    .score-label { font-size: 16px; color: #4b5563; margin-top: 4px; }
+    .score-detail { font-size: 13px; color: #6b7280; margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e7eb; }
+
+    .query-list { background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; margin-bottom: 24px; }
+    .query-list h2 { padding: 20px 24px; font-size: 14px; color: #6b7280; letter-spacing: 0.04em; text-transform: uppercase; font-weight: 600; border-bottom: 1px solid #e5e7eb; }
+    .query { padding: 20px 24px; border-bottom: 1px solid #f3f4f6; }
+    .query:last-child { border-bottom: none; }
+    .query-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; gap: 12px; }
+    .query-text { font-weight: 600; font-size: 15px; flex: 1; }
+    .badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+    .badge.win  { background: #d1fae5; color: #065f46; }
+    .badge.loss { background: #fef3c7; color: #92400e; }
+    .citations { font-size: 13px; color: #6b7280; word-break: break-word; }
+    .citations strong { color: #374151; }
+
+    .cta { background: #0f766e; color: #fff; padding: 32px; border-radius: 12px; text-align: center; }
+    .cta h3 { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+    .cta p { font-size: 15px; opacity: 0.92; margin-bottom: 20px; max-width: 480px; margin-left: auto; margin-right: auto; }
+    .cta a.btn { display: inline-block; padding: 12px 24px; background: #fff; color: #0f766e; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 15px; }
+
+    footer { text-align: center; padding: 24px 0; font-size: 12px; color: #9ca3af; }
+    footer a { color: #6b7280; }
+
+    @media (max-width: 640px) {
+      .hero h1 { font-size: 28px; }
+      .score-big { font-size: 56px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="hero">
+      <div class="eyebrow">Free · 30 seconds</div>
+      <h1>How does AI see your business?</h1>
+      <p>See which Perplexity queries answer your category — and whether it cites you. One-time report, no signup.</p>
+    </div>
+
+    <form id="audit-form">
+      <div class="field">
+        <label for="domain">Your website</label>
+        <input type="url" id="domain" name="domain" placeholder="https://yourbusiness.com" required>
+      </div>
+      <div class="field">
+        <label for="category">Your category</label>
+        <input type="text" id="category" name="category" placeholder="plumber, email marketing agency, law firm…" required maxlength="80">
+        <div class="hint">How a prospect would describe you. Keep it short and natural.</div>
+      </div>
+      <div class="field">
+        <label for="location">Your market (optional)</label>
+        <input type="text" id="location" name="location" placeholder="Austin, TX" maxlength="120">
+        <div class="hint">Skip for global/online businesses. Helpful for local services.</div>
+      </div>
+      <button type="submit" id="submit-btn">Run my audit</button>
+    </form>
+
+    <div id="loading">
+      <div class="spinner"></div>
+      <div>Asking Perplexity about your category… this takes ~20 seconds.</div>
+    </div>
+
+    <div id="error"></div>
+
+    <div id="results">
+      <div class="score-card">
+        <div id="score-big" class="score-big"></div>
+        <div class="score-label" id="score-label"></div>
+        <div class="score-detail" id="score-detail"></div>
+      </div>
+
+      <div class="query-list">
+        <h2>What Perplexity answered</h2>
+        <div id="queries"></div>
+      </div>
+
+      <div class="cta">
+        <h3 id="cta-title">Make AI cite you accurately</h3>
+        <p id="cta-body">AdvocateMCP gives every AI crawler a structured, citation-ready answer about your business — so next time someone asks Perplexity or ChatGPT, they get your real pitch instead of scraping your HTML.</p>
+        <a class="btn" href="/onboarding.html">Claim your agent →</a>
+      </div>
+    </div>
+
+    <footer>
+      <p>Powered by <a href="/">AdvocateMCP</a> · Perplexity polling · 24h cache</p>
+    </footer>
+  </div>
+
+  <script src="/js/audit.js"></script>
+</body>
+</html>
