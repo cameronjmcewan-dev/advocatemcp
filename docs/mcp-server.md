@@ -25,19 +25,26 @@ The central MCP server lives at `POST /mcp` and `GET /mcp` on the Railway Expres
 **Shipped 2026-04-18.**
 
 - **Manifest endpoint** — `/.well-known/mcp.json` (Session 8). Directories that crawl capability manifests get tool schemas, transport, rate limits, auth modes, and the attribution endpoint from a single GET.
-- **Per-IP rate limit** — `worker/src/lib/mcpRateLimit.ts`. Sliding 60-request-per-minute window keyed on `cf-connecting-ip`. Exceeded requests get `429 { error: "rate_limited", retry_after_seconds }` with `Retry-After`, `X-RateLimit-Limit`, and `X-RateLimit-Remaining` response headers. Implementation is in-memory per CF isolate (not globally coherent across edges) — adequate for v1 before directory-driven traffic lands. Upgrade path to a Durable Object is documented inline in the source.
-- **Structured logging** — every `/mcp` proxy emits one JSON line: `{ metric: "mcp_proxy", path, method, status, latency_ms, remaining }`. Rate-limited requests log as `mcp_rate_limited`; proxy errors as `mcp_proxy_error`. Queryable via Cloudflare observability.
+- **Per-IP rate limit** — sliding 60-request-per-minute window keyed on `cf-connecting-ip`.
+  - **Primary:** `worker/src/lib/mcpRateLimitDO.ts` (`McpRateLimiterDO` Durable Object). A single global DO instance (id `mcp-rate-limiter-v1`) coordinates counters across every CF edge so the per-IP cap is globally coherent.
+  - **Fallback:** `worker/src/lib/mcpRateLimit.ts` (in-memory per CF isolate). Kicks in when the DO is unreachable (outage, rollout, missing binding). Imperfect — multi-edge traffic during a DO outage could multiply an attacker's effective limit — but it beats zero enforcement.
+  - Exceeded requests return `429 { error: "rate_limited", retry_after_seconds }` with `Retry-After`, `X-RateLimit-Limit`, and `X-RateLimit-Remaining` response headers.
+- **Structured logging** — every `/mcp` proxy emits one JSON line: `{ metric: "mcp_proxy", path, method, status, latency_ms, remaining, source }` where `source` is `"do"` (DO-backed) or `"isolate_fallback"` (DO miss). Rate-limited requests log as `mcp_rate_limited`; DO outages log as `mcp_rate_limit_do_unreachable`; proxy errors as `mcp_proxy_error`. Queryable via Cloudflare observability.
 - **Railway-side tool logging** — still provided by `agent_requests` (Session 11). `withAgentRequestLog` wraps every tool invocation with latency, outcome, and agent attribution.
 
 ### Tuning the rate limit
 
-Defaults live in `worker/src/lib/mcpRateLimit.ts`:
+Defaults live in `worker/src/lib/mcpRateLimit.ts` (used by both the DO and the in-memory fallback):
 
 - `DEFAULT_LIMIT = 60` requests
 - `DEFAULT_WINDOW_MS = 60_000` — 60 seconds
 - `DEFAULT_MAX_IPS = 10_000` — LRU cap on tracked clients
 
 To raise or lower, edit the constants and redeploy the Worker. A true runtime knob (env var or wrangler.toml `[vars]`) is a follow-up once a real abuse signal argues for it.
+
+### First-time DO deploy
+
+The DO is registered via the `[[migrations]]` stanza in `wrangler.toml` (`tag = "v1-mcp-rate-limiter"`, `new_classes = ["McpRateLimiterDO"]`). The first `wrangler deploy` after this lands creates the DO class on Cloudflare; subsequent deploys reuse it. If additional DO classes are added later, append a new `[[migrations]]` stanza with a monotonically-increasing tag — do not mutate the existing one.
 
 ### Submitting to directories
 

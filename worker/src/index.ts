@@ -22,6 +22,12 @@ import { getTenant } from "./routes/onboard";
 import { proxyToOrigin, WORKER_HOSTNAMES } from "./lib/proxy";
 import { appendQuery } from "./lib/appendQuery";
 import { mcpRateLimiter } from "./lib/mcpRateLimit";
+import { checkMcpRateLimit, McpRateLimiterDO } from "./lib/mcpRateLimitDO";
+
+// Durable Object class export — wrangler requires this to be a top-level
+// export on the Worker entry module so the runtime can register the class
+// for the `MCP_RATE_LIMITER` binding declared in wrangler.toml.
+export { McpRateLimiterDO };
 
 export type { Env };
 
@@ -277,20 +283,31 @@ export default {
     // Must be checked before crawler/slug logic so "/mcp" is never treated
     // as a business slug.
     if (url.pathname === "/mcp" || url.pathname.startsWith("/mcp/")) {
-      // Session 3: per-IP rate limit before proxying. Isolate-local (not
-      // globally coherent across edges) — upgrade to a DO-backed counter
-      // if directory-driven traffic later justifies the complexity. See
-      // worker/src/lib/mcpRateLimit.ts for the upgrade path.
+      // Session 3: per-IP rate limit before proxying.
+      //
+      // Primary: Durable Object (global coherence across every CF edge).
+      // Fallback: in-memory isolate-local limiter, used when the DO is
+      // unreachable (DO outage, missing binding in dev, transient error).
+      // The fallback is imperfect — an attacker hitting multiple edges
+      // during a DO outage could multiply their limit — but it beats
+      // serving `/mcp` with zero rate limiting.
       const ip = (
         request.headers.get("cf-connecting-ip") ??
         request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
         ""
       );
-      const decision = mcpRateLimiter.check(ip);
+      let decision = await checkMcpRateLimit(env, ip);
+      let rateLimitSource: "do" | "isolate_fallback" = "do";
+      if (!decision) {
+        decision = mcpRateLimiter.check(ip);
+        rateLimitSource = "isolate_fallback";
+        console.log(JSON.stringify({ metric: "mcp_rate_limit_do_unreachable" }));
+      }
       if (!decision.allowed) {
         console.log(JSON.stringify({
           metric: "mcp_rate_limited", ip_len: ip.length, path: url.pathname,
           limit: decision.limit, retry_after_s: decision.retryAfter,
+          source: rateLimitSource,
         }));
         return new Response(JSON.stringify({
           error: "rate_limited",
@@ -326,7 +343,7 @@ export default {
         console.log(JSON.stringify({
           metric: "mcp_proxy", path: url.pathname, method: request.method,
           status: resp.status, latency_ms: Date.now() - startedAt,
-          remaining: decision.remaining,
+          remaining: decision.remaining, source: rateLimitSource,
         }));
         return new Response(resp.body, {
           status: resp.status,

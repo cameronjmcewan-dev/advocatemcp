@@ -71,4 +71,14 @@ export interface Env {
    * Set via: `cd worker && npx wrangler secret put RESEND_API_KEY`
    */
   RESEND_API_KEY?: string;
+
+  // ── Rate limiting (Session 3) ───────────────────────────────────────
+  /**
+   * Global per-IP rate limiter for `/mcp` proxy traffic. See
+   * `worker/src/lib/mcpRateLimitDO.ts` for the class + helper, and the
+   * `[[durable_objects.bindings]]` + `[[migrations]]` stanzas in
+   * `wrangler.toml` for the deployment wiring. Absent in dev/test envs
+   * that don't define the binding; callers must fail-open in that case.
+   */
+  MCP_RATE_LIMITER?: DurableObjectNamespace;
 }
