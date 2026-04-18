@@ -985,13 +985,23 @@ body.pro-tier .db-nav-item[data-pro-only]{display:flex}
           <div id="radar-trend"><div class="skeleton" style="height:60px;border-radius:6px"></div></div>
         </div>
 
+        <div class="db-card" style="margin-bottom:20px">
+          <div class="db-card-title">Share of Model <span class="db-card-sub">Citation rate by AI provider</span></div>
+          <div id="radar-by-bot"><div class="skeleton" style="height:80px;border-radius:6px"></div></div>
+        </div>
+
+        <div class="db-card" style="margin-bottom:20px">
+          <div class="db-card-title">How AI describes you <span class="db-card-sub">Descriptors found near your name in cited answers</span></div>
+          <div id="radar-descriptors"><div class="skeleton" style="height:40px;border-radius:6px"></div></div>
+        </div>
+
         <div class="tbl-wrap" style="margin-bottom:20px">
           <div class="tbl-head"><div class="tbl-head-title">Recent polls</div></div>
           <div id="radar-polls"><div class="skeleton" style="height:180px;border-radius:8px"></div></div>
         </div>
 
         <div class="db-card">
-          <div class="db-card-title">Basket manager <span class="db-card-sub">Queries Perplexity polls each week</span></div>
+          <div class="db-card-title">Basket manager <span class="db-card-sub">Queries polled across each AI provider weekly</span></div>
           <form id="radar-basket-form" style="display:flex;gap:8px;margin-bottom:14px">
             <input type="text" class="fi" id="radar-basket-input"
                    placeholder="e.g. best bamboo fly rod maker" maxlength="200" required>

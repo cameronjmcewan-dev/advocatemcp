@@ -161,6 +161,46 @@
     void totals;
   }
 
+  function renderByBot(summary) {
+    var wrap = document.getElementById('radar-by-bot');
+    if (!wrap) return;
+    var rows = (summary && Array.isArray(summary.by_bot)) ? summary.by_bot : [];
+    if (rows.length === 0) {
+      wrap.innerHTML = '<div class="empty-desc" style="font-size:var(--tx-sm);color:var(--muted);padding:8px 0">No polls yet — wait for the next weekly run.</div>';
+      return;
+    }
+    var cells = rows.map(function (r) {
+      var label = r.bot === 'perplexity' ? 'Perplexity' : (r.bot === 'openai' ? 'ChatGPT (OpenAI)' : esc(r.bot));
+      var rate  = typeof r.citation_rate === 'number' ? (r.citation_rate * 100).toFixed(1) + '%' : '—';
+      var rank  = typeof r.avg_rank === 'number' && r.avg_rank ? r.avg_rank.toFixed(1) : '—';
+      return '<div class="kpi-card" style="flex:1">' +
+        '<div class="kpi-label">' + label + '</div>' +
+        '<div class="kpi-val">' + rate + '</div>' +
+        '<div class="kpi-hint">' + r.cited + '/' + r.total + ' polls cited · avg rank ' + rank + '</div>' +
+      '</div>';
+    }).join('');
+    wrap.innerHTML = '<div style="display:flex;gap:12px;flex-wrap:wrap">' + cells + '</div>';
+  }
+
+  function renderDescriptors(summary) {
+    var wrap = document.getElementById('radar-descriptors');
+    if (!wrap) return;
+    var rows = (summary && Array.isArray(summary.top_descriptors)) ? summary.top_descriptors : [];
+    if (rows.length === 0) {
+      wrap.innerHTML = '<div class="empty-desc" style="font-size:var(--tx-sm);color:var(--muted);padding:8px 0">No descriptors extracted yet. Descriptors surface when an AI cites you by name in its answer.</div>';
+      return;
+    }
+    var chips = rows.map(function (r) {
+      return '<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;' +
+        'border:1px solid var(--border);border-radius:999px;font-size:var(--tx-sm);' +
+        'background:var(--bg2)">' +
+        esc(r.descriptor) +
+        '<span style="color:var(--muted);font-size:var(--tx-xs)">' + r.count + '</span>' +
+      '</span>';
+    }).join(' ');
+    wrap.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:8px;padding:4px 0">' + chips + '</div>';
+  }
+
   function renderPolls(polls) {
     var wrap = document.getElementById('radar-polls');
     if (!wrap) return;
@@ -332,6 +372,8 @@
         var weekly = bucketWeekly(allPolls, 6);
         renderKpis(summary, weekly);
         renderTrend(weekly);
+        renderByBot(summary);
+        renderDescriptors(summary);
         renderPolls(polls);
         renderBasket(basket.queries || basket);
         wireBasketHandlers();
