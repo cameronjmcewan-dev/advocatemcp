@@ -377,6 +377,42 @@ export default {
       }
     }
 
+    // ── 2d. api.advocatemcp.com passthrough — proxy everything to Railway ──
+    // The `api.advocatemcp.com` hostname is the public API subdomain. It has
+    // no origin server of its own — every request routes through this worker
+    // and forwards to Railway. Worker-special paths like /mcp already handled
+    // above (rate limit, structured logging) still fire first; this block
+    // catches every OTHER path (/audit/run, /r/:token/decode, /register,
+    // /agents/:slug/query, etc.) and proxies it straight through.
+    //
+    // Without this block, api.advocatemcp.com falls into the bot-detection
+    // KV lookup below, which looks for a tenant slug mapped to the hostname,
+    // finds none, and returns "Non-crawler request" to the caller — the
+    // failure mode observed on POST /audit/run from curl.
+    if (domain === "api.advocatemcp.com") {
+      const base = apiBase(env);
+      const target = `${base}${url.pathname}${url.search}`;
+      try {
+        const resp = await fetch(target, {
+          method: request.method,
+          headers: {
+            ...Object.fromEntries(request.headers),
+            ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}),
+          },
+          body: request.method !== "GET" && request.method !== "HEAD" ? request.body : undefined,
+        });
+        return new Response(resp.body, {
+          status: resp.status,
+          headers: resp.headers,
+        });
+      } catch (err) {
+        console.log(JSON.stringify({
+          metric: "api_proxy_error", path: url.pathname, error: String(err).slice(0, 200),
+        }));
+        return jsonError(502, "Public API unreachable.", { target, error: String(err) });
+      }
+    }
+
     // ── 2c. Platform agent endpoint — POST /agents/:slug/query ────────────
     // Direct proxy of POST /agents/:slug/query on platform hostnames only
     // (customers.advocatemcp.com, *.workers.dev). Fixes Phase 1.5 Bug 1:
