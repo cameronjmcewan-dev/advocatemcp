@@ -36,6 +36,80 @@
       .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
 
+  // Reduce a URL to its canonical bare hostname for leaderboard grouping.
+  // "https://www.example.com/path?utm=x" → "example.com"
+  function bareDomain(urlStr) {
+    if (!urlStr) return "";
+    try {
+      var u = new URL(urlStr);
+      return u.hostname.replace(/^www\./i, "").toLowerCase();
+    } catch (_) {
+      return String(urlStr).replace(/^https?:\/\//i, "").replace(/^www\./i, "").split(/[\/?#]/)[0].toLowerCase();
+    }
+  }
+
+  // Aggregate citation counts across every query → ranked competitor list.
+  // Exclude the tenant's own domain and Google Maps re-search shims (which
+  // OpenAI sometimes returns instead of real domains for local searches).
+  // Returns up to `topN` rows, sorted descending.
+  function buildLeaderboard(audit, topN) {
+    var ownDomain = bareDomain(audit && audit.domain ? audit.domain : "");
+    var counts = Object.create(null);
+    var totalCites = 0;
+    (audit.queries || []).forEach(function (q) {
+      (q.citations || []).forEach(function (c) {
+        var d = bareDomain(c);
+        if (!d) return;
+        if (d === ownDomain) return;
+        // Skip Google Maps "search shim" URLs — the host is just google.com
+        // and they're not a real competitor surface.
+        if (d === "google.com" && /maps\/search\//i.test(c)) return;
+        counts[d] = (counts[d] || 0) + 1;
+        totalCites++;
+      });
+    });
+    var rows = Object.keys(counts).map(function (d) {
+      return { domain: d, count: counts[d] };
+    });
+    rows.sort(function (a, b) { return b.count - a.count || a.domain.localeCompare(b.domain); });
+    return { rows: rows.slice(0, topN || 5), max: rows.length > 0 ? rows[0].count : 0, totalCites: totalCites };
+  }
+
+  // Render the leaderboard into the supplied DOM nodes. Self-contained so
+  // r.html can reuse it via copy/paste — the audit site has no module bundler.
+  function renderLeaderboard(audit, bodyEl, headEl, cardEl) {
+    if (!bodyEl) return;
+    var lb = buildLeaderboard(audit, 5);
+    if (lb.rows.length === 0) {
+      // Hide the whole card on zero — no competitors means either an empty
+      // category response or a 100% citation rate, neither benefits from
+      // the leaderboard.
+      if (cardEl) cardEl.style.display = "none";
+      return;
+    }
+    if (cardEl) cardEl.style.display = "";
+    if (headEl) {
+      var category = audit.category ? ' for <em>' + escapeHtml(audit.category) + '</em>' : '';
+      headEl.innerHTML = "Who's winning" + category;
+    }
+    bodyEl.innerHTML = lb.rows.map(function (r, i) {
+      var rank = i + 1;
+      var pctFill = lb.max > 0 ? (r.count / lb.max) : 0;
+      var podiumClass = rank <= 3 ? " podium" : "";
+      return '<div class="lb-row">' +
+        '<div class="lb-rank' + podiumClass + '">' + rank + '</div>' +
+        '<div class="lb-domain"><a href="https://' + escapeHtml(r.domain) + '" target="_blank" rel="noopener noreferrer nofollow">' + escapeHtml(r.domain) + '</a></div>' +
+        '<div class="lb-meter"><div class="lb-meter-fill" style="transform:scaleX(' + pctFill.toFixed(3) + ')"></div></div>' +
+        '<div class="lb-count"><strong>' + r.count + '</strong> ' + (r.count === 1 ? "cite" : "cites") + '</div>' +
+      '</div>';
+    }).join("");
+  }
+
+  // Expose for r.html (which copies the same logic) — keeps the
+  // implementation in one place if both pages load this script. r.html
+  // currently inlines its own copy; if we ever consolidate, this works.
+  window.__advocateAuditLeaderboard = { buildLeaderboard: buildLeaderboard, renderLeaderboard: renderLeaderboard };
+
   form.addEventListener("submit", function (e) {
     e.preventDefault();
     clearError();
@@ -129,6 +203,13 @@
       ctaTitle.textContent = "You're cited — now control what AI says about you";
       ctaBody.textContent = "You're in the answer set. But AI is building the quote from scraped HTML. An Advocate agent lets you supply the exact structured pitch — the specialty, pricing, credentials, and CTA you want AIs to surface.";
     }
+
+    // Build the competitor leaderboard: aggregate citation counts across
+    // every query, exclude the tenant's own domain, surface the top 5.
+    // This is the most actionable single insight in the audit — "here's
+    // who's winning your category in AI" — and computes entirely from
+    // data already in audit.queries[].citations[].
+    renderLeaderboard(audit, document.getElementById("leaderboard-body"), document.getElementById("leaderboard-head"), document.getElementById("leaderboard-card"));
 
     queries.innerHTML = (audit.queries || []).map(function (q) {
       var head = '<div class="query-head">' +

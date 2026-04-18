@@ -69,6 +69,21 @@
     .citations{font-size:var(--tx-xs);color:var(--muted);word-break:break-word;line-height:1.6}
     .citations strong{color:var(--text);font-weight:500}
 
+    .leaderboard{padding:0;overflow:hidden;margin-bottom:20px}
+    .leaderboard-head{padding:18px 32px;font-size:var(--tx-xs);color:var(--muted);letter-spacing:.08em;text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border)}
+    .leaderboard-head em{font-style:italic;color:var(--accent-bright);font-family:var(--font-serif);text-transform:none;letter-spacing:0;font-size:var(--tx-sm)}
+    .lb-row{display:flex;align-items:center;gap:14px;padding:14px 32px;border-bottom:1px solid var(--border)}
+    .lb-row:last-child{border-bottom:none}
+    .lb-rank{font-family:var(--font-serif);font-style:italic;font-size:var(--tx-md);color:var(--muted);width:24px;flex-shrink:0;text-align:center}
+    .lb-rank.podium{color:var(--accent-bright)}
+    .lb-domain{flex:1;font-size:var(--tx-sm);color:var(--text);font-weight:500;word-break:break-all;min-width:0}
+    .lb-domain a{color:var(--text);text-decoration:none;border-bottom:1px solid transparent;transition:border-color .15s}
+    .lb-domain a:hover{border-bottom-color:var(--accent-bright)}
+    .lb-meter{flex:0 0 110px;height:6px;background:var(--bg);border:1px solid var(--border);border-radius:3px;overflow:hidden;position:relative}
+    .lb-meter-fill{position:absolute;inset:0;background:linear-gradient(90deg,var(--accent),var(--accent-bright));transform-origin:left}
+    .lb-count{flex:0 0 auto;font-size:var(--tx-xs);color:var(--muted);font-variant-numeric:tabular-nums;min-width:80px;text-align:right}
+    .lb-count strong{color:var(--text);font-weight:600}
+
     .cta-card{background:linear-gradient(135deg, var(--accent) 0%, var(--accent-bright) 100%);color:#fff;padding:36px 32px;border-radius:var(--r-lg);text-align:center;margin-bottom:24px;border:1px solid var(--accent-bright)}
     .cta-card h3{font-family:var(--font-serif);font-weight:400;font-size:clamp(1.4rem,2.4vw,1.75rem);line-height:1.2;margin-bottom:10px}
     .cta-card p{font-size:var(--tx-sm);opacity:.92;margin-bottom:22px;max-width:460px;margin-left:auto;margin-right:auto;line-height:1.6}
@@ -134,6 +149,11 @@
       <div class="score-detail" id="score-detail"></div>
     </div>
 
+    <div class="card leaderboard" id="leaderboard-card">
+      <div class="leaderboard-head" id="leaderboard-head">Who's winning the category</div>
+      <div id="leaderboard-body"></div>
+    </div>
+
     <div class="card query-list">
       <div class="query-list-head">What AI answered</div>
       <div id="queries"></div>
@@ -183,6 +203,54 @@
       .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
   }
 
+  // Mirror of the leaderboard helpers in /js/audit.js. Inlined here so the
+  // shareable view is self-contained (r.html doesn't load audit.js).
+  function bareDomain(urlStr){
+    if(!urlStr) return "";
+    try { var u = new URL(urlStr); return u.hostname.replace(/^www\./i,"").toLowerCase(); }
+    catch(_) { return String(urlStr).replace(/^https?:\/\//i,"").replace(/^www\./i,"").split(/[\/?#]/)[0].toLowerCase(); }
+  }
+  function buildLeaderboard(audit, topN){
+    var ownDomain = bareDomain(audit && audit.domain ? audit.domain : "");
+    var counts = Object.create(null);
+    (audit.queries || []).forEach(function(q){
+      (q.citations || []).forEach(function(c){
+        var d = bareDomain(c);
+        if(!d) return;
+        if(d === ownDomain) return;
+        if(d === "google.com" && /maps\/search\//i.test(c)) return;
+        counts[d] = (counts[d] || 0) + 1;
+      });
+    });
+    var rows = Object.keys(counts).map(function(d){ return { domain:d, count:counts[d] }; });
+    rows.sort(function(a,b){ return b.count - a.count || a.domain.localeCompare(b.domain); });
+    return { rows: rows.slice(0, topN || 5), max: rows.length > 0 ? rows[0].count : 0 };
+  }
+  function renderLeaderboard(audit){
+    var bodyEl = document.getElementById("leaderboard-body");
+    var headEl = document.getElementById("leaderboard-head");
+    var cardEl = document.getElementById("leaderboard-card");
+    if (!bodyEl) return;
+    var lb = buildLeaderboard(audit, 5);
+    if (lb.rows.length === 0) { if (cardEl) cardEl.style.display = "none"; return; }
+    if (cardEl) cardEl.style.display = "";
+    if (headEl) {
+      var category = audit.category ? ' for <em>' + escapeHtml(audit.category) + '</em>' : '';
+      headEl.innerHTML = "Who's winning" + category;
+    }
+    bodyEl.innerHTML = lb.rows.map(function(r, i){
+      var rank = i + 1;
+      var pctFill = lb.max > 0 ? (r.count / lb.max) : 0;
+      var podiumClass = rank <= 3 ? " podium" : "";
+      return '<div class="lb-row">' +
+        '<div class="lb-rank' + podiumClass + '">' + rank + '</div>' +
+        '<div class="lb-domain"><a href="https://' + escapeHtml(r.domain) + '" target="_blank" rel="noopener noreferrer nofollow">' + escapeHtml(r.domain) + '</a></div>' +
+        '<div class="lb-meter"><div class="lb-meter-fill" style="transform:scaleX(' + pctFill.toFixed(3) + ')"></div></div>' +
+        '<div class="lb-count"><strong>' + r.count + '</strong> ' + (r.count === 1 ? "cite" : "cites") + '</div>' +
+      '</div>';
+    }).join("");
+  }
+
   function showError(){
     document.getElementById('loading').style.display = 'none';
     document.getElementById('results').style.display = 'none';
@@ -215,6 +283,8 @@
     else                     score.classList.add('all');
     document.getElementById('score-label').innerHTML = 'Cited <strong>' + cited + '</strong> of <strong>' + total + '</strong> category queries (' + rate + '% citation rate)';
     document.getElementById('score-detail').textContent = 'Run on ' + (when || audit.created_at);
+
+    renderLeaderboard(audit);
 
     var html = (audit.queries || []).map(function(q){
       var head = '<div class="query-head">' +

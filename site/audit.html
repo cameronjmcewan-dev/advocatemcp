@@ -167,6 +167,23 @@
     .share-url{flex:1;min-width:200px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md);font-family:var(--font-mono);font-size:var(--tx-xs);color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .share-btn{padding:8px 14px;font-size:var(--tx-xs)}
 
+    /* ── Competitor leaderboard ────────────────────────────────── */
+    .leaderboard{padding:0;overflow:hidden;margin-bottom:20px}
+    .leaderboard-head{padding:18px 32px;font-size:var(--tx-xs);color:var(--muted);letter-spacing:.08em;text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border)}
+    .leaderboard-head em{font-style:italic;color:var(--accent-bright);font-family:var(--font-serif);text-transform:none;letter-spacing:0;font-size:var(--tx-sm)}
+    .lb-row{display:flex;align-items:center;gap:14px;padding:14px 32px;border-bottom:1px solid var(--border)}
+    .lb-row:last-child{border-bottom:none}
+    .lb-rank{font-family:var(--font-serif);font-style:italic;font-size:var(--tx-md);color:var(--muted);width:24px;flex-shrink:0;text-align:center}
+    .lb-rank.podium{color:var(--accent-bright)}
+    .lb-domain{flex:1;font-size:var(--tx-sm);color:var(--text);font-weight:500;word-break:break-all;min-width:0}
+    .lb-domain a{color:var(--text);text-decoration:none;border-bottom:1px solid transparent;transition:border-color .15s}
+    .lb-domain a:hover{border-bottom-color:var(--accent-bright)}
+    .lb-meter{flex:0 0 110px;height:6px;background:var(--bg);border:1px solid var(--border);border-radius:3px;overflow:hidden;position:relative}
+    .lb-meter-fill{position:absolute;inset:0;background:linear-gradient(90deg,var(--accent),var(--accent-bright));transform-origin:left;transition:transform .4s ease}
+    .lb-count{flex:0 0 auto;font-size:var(--tx-xs);color:var(--muted);font-variant-numeric:tabular-nums;min-width:80px;text-align:right}
+    .lb-count strong{color:var(--text);font-weight:600}
+    .lb-empty{padding:24px 32px;font-size:var(--tx-sm);color:var(--muted);font-style:italic;text-align:center}
+
     footer{text-align:center;padding:32px 24px;font-size:var(--tx-xs);color:var(--muted);border-top:1px solid var(--border);margin-top:48px}
     footer a{color:var(--muted);text-decoration:underline;text-underline-offset:2px}
     footer a:hover{color:var(--text)}
@@ -237,6 +254,11 @@
       <div id="score-big" class="score-big"></div>
       <div class="score-label" id="score-label"></div>
       <div class="score-detail" id="score-detail"></div>
+    </div>
+
+    <div class="card leaderboard" id="leaderboard-card">
+      <div class="leaderboard-head" id="leaderboard-head">Who's winning your category</div>
+      <div id="leaderboard-body"></div>
     </div>
 
     <div class="card query-list" style="padding:0;overflow:hidden">
