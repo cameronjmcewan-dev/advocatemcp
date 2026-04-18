@@ -85,6 +85,16 @@ API_BASE_URL = "https://advocate-production-2887.up.railway.app"
 pattern   = "customers.advocatemcp.com/*"
 zone_name = "advocatemcp.com"
 
+# `api.advocatemcp.com` is the public-facing API + MCP hostname advertised
+# in docs, the manifest, and the default api_base for site/advocate-context.js.
+# It's worker-only — no origin server behind it. Requires a proxied DNS
+# record on the zone (CNAME api → customers.advocatemcp.com is the simplest)
+# so CF's edge knows the hostname is ours; the worker then catches every
+# request via this route and handles /mcp, /r/:token/decode, etc.
+[[routes]]
+pattern   = "api.advocatemcp.com/*"
+zone_name = "advocatemcp.com"
+
 # Public-wizard tenants are all subdomains of hosted.advocatemcp.com
 # (see worker/src/routes/stripe.ts line 406 where the synthetic domain
 # gets assigned as `${slug}.hosted.advocatemcp.com`). A wildcard at
