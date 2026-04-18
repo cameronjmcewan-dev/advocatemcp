@@ -147,14 +147,19 @@
     // can pre-fill the business name (derived from domain), website,
     // industry (fuzzy-mapped from category), and city/state (parsed from
     // location). from_audit=1 is the sentinel the onboarding script
-    // checks for — bare /onboarding.html keeps the empty-form behavior.
+    // checks for — bare /onboarding keeps the empty-form behavior.
+    //
+    // URL uses /onboarding (not /onboarding.html) because Pages 308-
+    // redirects the .html form to the clean URL and strips the query
+    // string in the process. Going direct to /onboarding preserves
+    // params. Observed on 2026-04-18; root cause diagnosed by curl -sI.
     var cta = document.getElementById("cta-link");
     if (cta) {
       var params = new URLSearchParams({ from_audit: "1" });
       if (audit.domain)   params.set("domain",   audit.domain);
       if (audit.category) params.set("category", audit.category);
       if (audit.location) params.set("location", audit.location);
-      cta.href = "/onboarding.html?" + params.toString();
+      cta.href = "/onboarding?" + params.toString();
     }
 
     results.classList.add("show");
