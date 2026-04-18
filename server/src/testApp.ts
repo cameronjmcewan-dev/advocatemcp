@@ -12,6 +12,7 @@ import { adminRouter } from "./routes/admin/index.js";
 import { competitorRadarRouter } from "./routes/competitorRadar.js";
 import { digestRouter } from "./routes/digest.js";
 import { decodeRouter } from "./routes/decode.js";
+import { auditRouter } from "./routes/audit.js";
 import { rateLimitMiddleware } from "./middleware/rateLimit.js";
 import { requestIdMiddleware } from "./lib/requestId.js";
 
@@ -50,6 +51,19 @@ export function createTestApp(): express.Express {
   // headers itself and exposes only non-sensitive fields.
   app.use(decodeRouter);
 
+  // Public GEO Audit endpoint. Called from the /audit marketing page on
+  // advocatemcp.com (different origin from api.advocatemcp.com) by anyone,
+  // signed-up or not. Same reasoning as decode: mount before the
+  // worker-only `cors()` middleware and set permissive ACAO inside the
+  // router. Rate-limited + budget-capped inside the handler, not via
+  // rateLimitMiddleware (this needs per-IP-per-day semantics, not
+  // per-minute burst semantics).
+  //
+  // express.json() is below cors() — we need the body parser for POST.
+  // Moving express.json() up.
+  app.use(express.json({ limit: "1mb" }));
+  app.use(auditRouter);
+
   const WORKER_ORIGIN = "https://advocatemcp-worker.advocatecameron.workers.dev";
   app.use(cors({
     origin: (origin, cb) => {
@@ -60,7 +74,8 @@ export function createTestApp(): express.Express {
     allowedHeaders: ["Content-Type", "Authorization", "X-API-Key"],
   }));
 
-  app.use(express.json({ limit: "1mb" }));
+  // express.json() was moved above for the audit router to parse bodies.
+  // Don't re-register it here — duplicate middleware parses bodies twice.
 
   getDb();
 
