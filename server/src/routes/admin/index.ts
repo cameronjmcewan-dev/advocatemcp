@@ -3,6 +3,7 @@ import { agentsRouter } from "./agents.js";
 import { adminDigestRouter } from "./digest.js";
 import { tenantsRouter } from "./tenants.js";
 import { adminAuditsRouter } from "./audits.js";
+import { adminAuditBatchRouter } from "./auditBatch.js";
 
 /**
  * Bearer-token auth gate for /admin/* — keyed on ADMIN_API_KEY env var.
@@ -29,3 +30,4 @@ adminRouter.use("/admin", requireAdmin, agentsRouter);
 adminRouter.use("/admin", requireAdmin, adminDigestRouter);
 adminRouter.use("/admin", requireAdmin, tenantsRouter);
 adminRouter.use("/admin", requireAdmin, adminAuditsRouter);
+adminRouter.use("/admin", requireAdmin, adminAuditBatchRouter);
