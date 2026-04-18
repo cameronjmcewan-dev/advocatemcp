@@ -21,6 +21,7 @@ import { buildSignedClickBody } from "./lib/clickBody";
 import { getTenant } from "./routes/onboard";
 import { proxyToOrigin, WORKER_HOSTNAMES } from "./lib/proxy";
 import { appendQuery } from "./lib/appendQuery";
+import { mcpRateLimiter } from "./lib/mcpRateLimit";
 
 export type { Env };
 
@@ -276,8 +277,39 @@ export default {
     // Must be checked before crawler/slug logic so "/mcp" is never treated
     // as a business slug.
     if (url.pathname === "/mcp" || url.pathname.startsWith("/mcp/")) {
+      // Session 3: per-IP rate limit before proxying. Isolate-local (not
+      // globally coherent across edges) — upgrade to a DO-backed counter
+      // if directory-driven traffic later justifies the complexity. See
+      // worker/src/lib/mcpRateLimit.ts for the upgrade path.
+      const ip = (
+        request.headers.get("cf-connecting-ip") ??
+        request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+        ""
+      );
+      const decision = mcpRateLimiter.check(ip);
+      if (!decision.allowed) {
+        console.log(JSON.stringify({
+          metric: "mcp_rate_limited", ip_len: ip.length, path: url.pathname,
+          limit: decision.limit, retry_after_s: decision.retryAfter,
+        }));
+        return new Response(JSON.stringify({
+          error: "rate_limited",
+          limit: decision.limit,
+          retry_after_seconds: decision.retryAfter,
+        }), {
+          status: 429,
+          headers: {
+            "Content-Type": "application/json",
+            "Retry-After":  String(decision.retryAfter),
+            "X-RateLimit-Limit":     String(decision.limit),
+            "X-RateLimit-Remaining": "0",
+          },
+        });
+      }
+
       const base = apiBase(env);
       const target = `${base}${url.pathname}${url.search}`;
+      const startedAt = Date.now();
       try {
         const resp = await fetch(target, {
           method: request.method,
@@ -287,11 +319,24 @@ export default {
           },
           body: request.method !== "GET" && request.method !== "HEAD" ? request.body : undefined,
         });
+        // Session 3 structured log: one line per /mcp proxy outcome so we
+        // can observe directory-driven traffic shape + error rate. Does NOT
+        // log tool name / payload — that's on the Railway side via
+        // agent_requests (Session 11).
+        console.log(JSON.stringify({
+          metric: "mcp_proxy", path: url.pathname, method: request.method,
+          status: resp.status, latency_ms: Date.now() - startedAt,
+          remaining: decision.remaining,
+        }));
         return new Response(resp.body, {
           status: resp.status,
           headers: resp.headers,
         });
       } catch (err) {
+        console.log(JSON.stringify({
+          metric: "mcp_proxy_error", path: url.pathname, method: request.method,
+          latency_ms: Date.now() - startedAt, error: String(err).slice(0, 200),
+        }));
         return jsonError(502, "Platform MCP endpoint unreachable.", { target, error: String(err) });
       }
     }

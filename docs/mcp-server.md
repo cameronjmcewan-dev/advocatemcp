@@ -20,10 +20,35 @@ The central MCP server lives at `POST /mcp` and `GET /mcp` on the Railway Expres
 
 `/.well-known/ai-agent.json` is served by the Worker on every business domain. It includes `mcp_endpoint` pointing to Railway `/mcp`. This is the discovery surface for AI tools that check for agent endpoints before scraping.
 
-## What is not yet built
+## Session 3 — directory-submission hardening
 
-Session 3 will harden the MCP server for public directory submission: manifest endpoint, per-IP rate limiting via Durable Object, structured logging, and alignment with the latest MCP spec. The current implementation is functional but not submission-ready.
+**Shipped 2026-04-18.**
+
+- **Manifest endpoint** — `/.well-known/mcp.json` (Session 8). Directories that crawl capability manifests get tool schemas, transport, rate limits, auth modes, and the attribution endpoint from a single GET.
+- **Per-IP rate limit** — `worker/src/lib/mcpRateLimit.ts`. Sliding 60-request-per-minute window keyed on `cf-connecting-ip`. Exceeded requests get `429 { error: "rate_limited", retry_after_seconds }` with `Retry-After`, `X-RateLimit-Limit`, and `X-RateLimit-Remaining` response headers. Implementation is in-memory per CF isolate (not globally coherent across edges) — adequate for v1 before directory-driven traffic lands. Upgrade path to a Durable Object is documented inline in the source.
+- **Structured logging** — every `/mcp` proxy emits one JSON line: `{ metric: "mcp_proxy", path, method, status, latency_ms, remaining }`. Rate-limited requests log as `mcp_rate_limited`; proxy errors as `mcp_proxy_error`. Queryable via Cloudflare observability.
+- **Railway-side tool logging** — still provided by `agent_requests` (Session 11). `withAgentRequestLog` wraps every tool invocation with latency, outcome, and agent attribution.
+
+### Tuning the rate limit
+
+Defaults live in `worker/src/lib/mcpRateLimit.ts`:
+
+- `DEFAULT_LIMIT = 60` requests
+- `DEFAULT_WINDOW_MS = 60_000` — 60 seconds
+- `DEFAULT_MAX_IPS = 10_000` — LRU cap on tracked clients
+
+To raise or lower, edit the constants and redeploy the Worker. A true runtime knob (env var or wrangler.toml `[vars]`) is a follow-up once a real abuse signal argues for it.
+
+### Submitting to directories
+
+With the hardening above, the `/mcp` endpoint at `https://api.advocatemcp.com/mcp` is ready for submission to:
+
+- **Smithery** — `https://smithery.ai/` — submit via their web form
+- **PulseMCP** — `https://pulsemcp.com/` — submit via their web form
+- **Anthropic MCP registry** — `https://github.com/modelcontextprotocol/servers` — PR to the community-maintained list
+
+Each submission should reference the manifest at `/.well-known/mcp.json`, the tools listed above, and the rate-limit posture (60 req/min per IP).
 
 ## Updating this doc
 
-Update this file at the end of any session that touches `server/src/routes/mcp.ts` or the `/mcp` proxy in `worker/src/index.ts`.
+Update this file at the end of any session that touches `server/src/routes/mcp.ts`, `worker/src/lib/mcpRateLimit.ts`, or the `/mcp` proxy in `worker/src/index.ts`.
