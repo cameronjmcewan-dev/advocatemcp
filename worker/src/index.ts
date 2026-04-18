@@ -20,6 +20,7 @@ import { verifyToken, base64urlToBytes } from "./lib/tracked-url";
 import { buildSignedClickBody } from "./lib/clickBody";
 import { getTenant } from "./routes/onboard";
 import { proxyToOrigin, WORKER_HOSTNAMES } from "./lib/proxy";
+import { appendQuery } from "./lib/appendQuery";
 
 export type { Env };
 
@@ -230,7 +231,17 @@ export default {
             );
             console.log(JSON.stringify({ metric: "track_signed_click", slug: payload.slug, query_id: payload.query_id, ts: payload.ts }));
           }
-          return Response.redirect(payload.dest, 302);
+          // Session 5: forward the token on the redirect target as `amcp_t`
+          // so the customer's landing-page script can read it, POST to
+          // `/r/:token/decode` on the Railway API, and personalize based on
+          // intent/ref. Namespaced (`amcp_t`, not `t`) to avoid collisions
+          // with whatever query-string params the customer's own site uses.
+          // Only human redirects carry the token — AI-crawler redirects skip
+          // it because crawlers don't run the client script anyway.
+          const redirectTarget = isAiCrawler(userAgent)
+            ? payload.dest
+            : appendQuery(payload.dest, "amcp_t", tokenParam);
+          return Response.redirect(redirectTarget, 302);
         } catch (err) {
           // err is TokenError ("malformed" | "bad_signature" | "expired")
           // User still gets a redirect; no click is logged for bad tokens.

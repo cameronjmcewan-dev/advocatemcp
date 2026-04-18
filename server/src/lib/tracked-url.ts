@@ -64,3 +64,64 @@ export function buildToken(payload: TokenPayload, signingKey: string): string {
   const encodedSig = base64urlEncode(digest);
   return `${encodedPayload}.${encodedSig}`;
 }
+
+/** Token rejection reasons — callers log these as structured metrics. */
+export type TokenError = "malformed" | "bad_signature" | "expired";
+
+const TOKEN_MAX_AGE_SECONDS = 90 * 24 * 3600; // 90 days, mirrors worker/src/lib/tracked-url.ts
+
+function base64urlDecode(s: string): Buffer {
+  const padded = s.replace(/-/g, "+").replace(/_/g, "/");
+  const pad = padded.length % 4 === 0 ? 0 : 4 - (padded.length % 4);
+  return Buffer.from(padded + "=".repeat(pad), "base64");
+}
+
+/**
+ * Verify a signed attribution token.
+ *
+ * Returns the decoded payload on success; throws a `TokenError` string on any
+ * failure. Mirrors the worker-side `verifyToken` in `worker/src/lib/tracked-url.ts`
+ * exactly — the HMAC input is the ASCII bytes of the encoded payload string,
+ * and the 90-day expiry is identical. Used by the `/r/:token/decode` endpoint
+ * so customer sites can read `{ intent, ref, slug }` from an AI-referred
+ * visitor's arrival token (Session 5).
+ */
+export function verifyToken(token: string, signingKey: string): TokenPayload {
+  const dotIdx = token.lastIndexOf(".");
+  if (dotIdx < 1 || dotIdx === token.length - 1) {
+    throw "malformed" satisfies TokenError;
+  }
+  const encodedPayload = token.slice(0, dotIdx);
+  const encodedSig = token.slice(dotIdx + 1);
+
+  const expected = crypto.createHmac("sha256", signingKey).update(encodedPayload).digest();
+  const actual = base64urlDecode(encodedSig);
+  if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) {
+    throw "bad_signature" satisfies TokenError;
+  }
+
+  let payload: TokenPayload;
+  try {
+    payload = JSON.parse(base64urlDecode(encodedPayload).toString("utf8")) as TokenPayload;
+  } catch {
+    throw "malformed" satisfies TokenError;
+  }
+  if (
+    typeof payload.dest !== "string" ||
+    typeof payload.ref !== "string" ||
+    typeof payload.slug !== "string" ||
+    typeof payload.query_id !== "number" ||
+    typeof payload.ts !== "number"
+  ) {
+    throw "malformed" satisfies TokenError;
+  }
+  if (payload.aid !== undefined && typeof payload.aid !== "string") {
+    throw "malformed" satisfies TokenError;
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  if (nowSeconds - payload.ts > TOKEN_MAX_AGE_SECONDS) {
+    throw "expired" satisfies TokenError;
+  }
+  return payload;
+}
