@@ -162,4 +162,60 @@ describe("POST /register", () => {
     expect(res.status).toBe(201);
     expect(res.body.slug).toBe("minimal-biz");
   });
+
+  it("auto-suffixes slugs when the base slug is already taken (sequential insert)", async () => {
+    const payload = {
+      name: "Collision Co",
+      description: "d",
+      category: "plumber",
+      location: "Boise",
+      services: ["x"],
+      star_rating: 0,
+      review_count: 0,
+    };
+
+    // First insert takes "collision-co".
+    const r1 = await request(app)
+      .post("/register")
+      .set("Authorization", "Bearer test-admin-key")
+      .send(payload);
+    expect(r1.status).toBe(201);
+    expect(r1.body.slug).toBe("collision-co");
+
+    // Second insert with the same name must pick "collision-co-1", not 500.
+    const r2 = await request(app)
+      .post("/register")
+      .set("Authorization", "Bearer test-admin-key")
+      .send(payload);
+    expect(r2.status).toBe(201);
+    expect(r2.body.slug).toBe("collision-co-1");
+  });
+
+  it("recovers when a slug is grabbed between pick and INSERT (simulates multi-process race)", async () => {
+    // Pre-populate "race-biz" so the first pick would land there, then INSERT
+    // fails UNIQUE, and the retry picks "race-biz-1".
+    const { getDb } = await import("../db.js");
+    getDb().prepare(
+      `INSERT INTO businesses
+         (slug, name, description, services, api_key, category, location,
+          star_rating, review_count)
+        VALUES ('race-biz', 'Race Biz', 'pre-seeded', '[]', 'preseed-key',
+                'plumber', 'Boise', 0, 0)`,
+    ).run();
+
+    const res = await request(app)
+      .post("/register")
+      .set("Authorization", "Bearer test-admin-key")
+      .send({
+        name: "Race Biz",
+        description: "d",
+        category: "plumber",
+        location: "Boise",
+        services: ["x"],
+        star_rating: 0,
+        review_count: 0,
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.slug).toBe("race-biz-1");
+  });
 });
