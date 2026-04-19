@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { getDb } from "../../db.js";
+import { canonicalDomain } from "../../lib/domainMatch.js";
 
 export const adminAuditsRouter = Router();
 
@@ -128,5 +129,141 @@ adminAuditsRouter.get("/audits", (req: Request, res: Response) => {
     filters:    { cited: cited0 ? 0 : null, has_email: hasEmail || null },
     total:      results.length,
     results,
+  });
+});
+
+/**
+ * GET /admin/audits/analytics
+ *
+ * Aggregate health signals for the audit funnel over the last N days.
+ * Operator dashboard — answer "is the funnel working?" in one request
+ * without eyeballing individual audit rows.
+ *
+ * Query params:
+ *   ?days=N   window (default 30, max 365)
+ *
+ * Response shape:
+ *   {
+ *     range_days,
+ *     total_audits,
+ *     total_cost_usd,
+ *     by_cited_bucket:    { zero, partial, all },
+ *     email_capture_rate,
+ *     total_followup_emails,
+ *     by_day:             [{ date, count, avg_citation_rate }],
+ *     top_categories:     [{ category, count }],
+ *     top_competitor_domains_across_audits: [{ domain, appears_in }],
+ *   }
+ */
+adminAuditsRouter.get("/audits/analytics", (req: Request, res: Response) => {
+  const days  = parseInt32(req.query.days, 30, 365);
+  const since = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString();
+  const db = getDb();
+
+  // Headline counts.
+  const totals = db.prepare(
+    `SELECT
+       COUNT(*) AS total,
+       COALESCE(SUM(cost_usd), 0) AS cost,
+       COALESCE(SUM(CASE WHEN cited_count = 0                         THEN 1 ELSE 0 END), 0) AS zero_bucket,
+       COALESCE(SUM(CASE WHEN cited_count > 0 AND cited_count < total_queries THEN 1 ELSE 0 END), 0) AS partial_bucket,
+       COALESCE(SUM(CASE WHEN cited_count > 0 AND cited_count = total_queries THEN 1 ELSE 0 END), 0) AS all_bucket
+     FROM public_audits
+     WHERE created_at > ?`,
+  ).get(since) as {
+    total: number; cost: number;
+    zero_bucket: number; partial_bucket: number; all_bucket: number;
+  };
+
+  // Email capture rate — audits that have at least one follow-up email.
+  const { captured } = db.prepare(
+    `SELECT COUNT(DISTINCT f.audit_id) AS captured
+       FROM audit_followups f
+       JOIN public_audits a ON a.id = f.audit_id
+      WHERE a.created_at > ? AND f.unsubscribed_at IS NULL`,
+  ).get(since) as { captured: number };
+
+  const { total_emails } = db.prepare(
+    `SELECT COUNT(*) AS total_emails
+       FROM audit_followups f
+       JOIN public_audits a ON a.id = f.audit_id
+      WHERE a.created_at > ? AND f.unsubscribed_at IS NULL`,
+  ).get(since) as { total_emails: number };
+
+  // Daily buckets — useful for a sparkline chart later.
+  const byDayRows = db.prepare(
+    `SELECT substr(created_at, 1, 10) AS date,
+            COUNT(*) AS count,
+            AVG(CASE WHEN total_queries > 0
+                     THEN CAST(cited_count AS REAL) / total_queries
+                     ELSE 0 END) AS avg_citation_rate
+       FROM public_audits
+      WHERE created_at > ?
+      GROUP BY substr(created_at, 1, 10)
+      ORDER BY date ASC`,
+  ).all(since) as { date: string; count: number; avg_citation_rate: number }[];
+
+  // Top categories by audit count.
+  const topCategories = db.prepare(
+    `SELECT category, COUNT(*) AS count FROM public_audits
+      WHERE created_at > ?
+      GROUP BY category
+      ORDER BY count DESC, category ASC
+      LIMIT 10`,
+  ).all(since) as { category: string; count: number }[];
+
+  // Top competitor domains across every audit in the window. Parses
+  // queries_json in JS because SQLite JSON1 isn't guaranteed on every
+  // build — same pattern as the competitor radar summary endpoint.
+  const queriesRows = db.prepare(
+    `SELECT id, domain, queries_json FROM public_audits
+      WHERE created_at > ? AND queries_json IS NOT NULL`,
+  ).all(since) as { id: string; domain: string; queries_json: string }[];
+
+  const competitorCounts = new Map<string, Set<string>>();
+  for (const r of queriesRows) {
+    let parsed: unknown;
+    try { parsed = JSON.parse(r.queries_json); } catch { continue; }
+    if (!Array.isArray(parsed)) continue;
+    const ownDomain = canonicalDomain(r.domain);
+    const auditDomainsSeen = new Set<string>();
+    for (const q of parsed) {
+      if (!q || typeof q !== "object") continue;
+      const citations = (q as { citations?: unknown }).citations;
+      if (!Array.isArray(citations)) continue;
+      for (const c of citations) {
+        if (typeof c !== "string") continue;
+        const dom = canonicalDomain(c);
+        if (!dom || dom === ownDomain) continue;
+        // Skip Google Maps "search shim" URLs — same as the frontend leaderboard.
+        if (dom === "google.com" && /maps\/search\//i.test(c)) continue;
+        auditDomainsSeen.add(dom);
+      }
+    }
+    for (const dom of auditDomainsSeen) {
+      const set = competitorCounts.get(dom) ?? new Set<string>();
+      set.add(r.id);
+      competitorCounts.set(dom, set);
+    }
+  }
+  const topCompetitorDomains = [...competitorCounts.entries()]
+    .map(([domain, auditIds]) => ({ domain, appears_in: auditIds.size }))
+    .sort((a, b) => b.appears_in - a.appears_in || a.domain.localeCompare(b.domain))
+    .slice(0, 10);
+
+  res.json({
+    range_days: days,
+    total_audits: totals.total,
+    total_cost_usd: Number(totals.cost.toFixed(4)),
+    by_cited_bucket: {
+      zero:    totals.zero_bucket,
+      partial: totals.partial_bucket,
+      all:     totals.all_bucket,
+    },
+    email_capture_rate: totals.total > 0 ? captured / totals.total : 0,
+    total_followup_emails: total_emails,
+    by_day: byDayRows,
+    top_categories: topCategories,
+    top_competitor_domains_across_audits: topCompetitorDomains,
   });
 });
