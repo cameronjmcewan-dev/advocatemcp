@@ -201,6 +201,42 @@
     wrap.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:8px;padding:4px 0">' + chips + '</div>';
   }
 
+  function renderAuthority(authority) {
+    var wrap = document.getElementById('radar-authority');
+    if (!wrap) return;
+    var rows = (authority && Array.isArray(authority.authorities)) ? authority.authorities : [];
+    if (rows.length === 0) {
+      wrap.innerHTML = '<div class="empty-desc" style="font-size:var(--tx-sm);color:var(--muted);padding:8px 0">No polls yet &mdash; wait for the next weekly run, then this lists the sites AI reaches for when answering about your category.</div>';
+      return;
+    }
+    var top = rows.slice(0, 12);
+    var tRows = top.map(function (a) {
+      var share = typeof a.share_of_polls === 'number'
+        ? (a.share_of_polls * 100).toFixed(0) + '%'
+        : '—';
+      var bots = Array.isArray(a.by_bot) && a.by_bot.length > 0
+        ? a.by_bot.map(function (b) {
+            var label = b.bot === 'perplexity' ? 'PPX' : (b.bot === 'openai' ? 'GPT' : esc(b.bot));
+            return '<span style="display:inline-block;padding:1px 6px;margin-right:4px;border:1px solid var(--border);border-radius:4px;font-size:var(--tx-xs);color:var(--muted)">' +
+              label + ' ' + b.count + '</span>';
+          }).join('')
+        : '<span style="color:var(--muted);font-size:var(--tx-xs)">—</span>';
+      return '<tr>' +
+        '<td style="font-size:var(--tx-sm);font-family:var(--mono)">' + esc(a.domain) + '</td>' +
+        '<td style="font-size:var(--tx-sm);text-align:right;white-space:nowrap">' + a.polls_cited_in + '</td>' +
+        '<td style="font-size:var(--tx-sm);text-align:right;color:var(--muted);white-space:nowrap">' + share + '</td>' +
+        '<td style="white-space:nowrap">' + bots + '</td>' +
+        '</tr>';
+    }).join('');
+    wrap.innerHTML =
+      '<table style="width:100%"><thead><tr>' +
+        '<th style="text-align:left">Domain</th>' +
+        '<th style="text-align:right">Polls</th>' +
+        '<th style="text-align:right">Share</th>' +
+        '<th style="text-align:left">By provider</th>' +
+      '</tr></thead><tbody>' + tRows + '</tbody></table>';
+  }
+
   function renderPolls(polls) {
     var wrap = document.getElementById('radar-polls');
     if (!wrap) return;
@@ -363,9 +399,10 @@
         return r.json();
       })
       .then(function (data) {
-        var summary = data.summary || {};
-        var basket  = data.basket  || {};
-        var losses  = data.losses  || {};
+        var summary   = data.summary   || {};
+        var basket    = data.basket    || {};
+        var losses    = data.losses    || {};
+        var authority = data.authority || {};
         var polls   = summary.recent_polls || losses.losses || [];
         var allPolls = (summary.recent_polls || []).concat(losses.losses || []);
 
@@ -374,6 +411,7 @@
         renderTrend(weekly);
         renderByBot(summary);
         renderDescriptors(summary);
+        renderAuthority(authority);
         renderPolls(polls);
         renderBasket(basket.queries || basket);
         wireBasketHandlers();

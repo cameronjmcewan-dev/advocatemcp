@@ -105,6 +105,58 @@ describe("GET /api/competitor-radar/:slug/summary + /losses", () => {
     expect(res.body.total_polls).toBe(30);
   });
 
+  it("authority-report aggregates third-party citations across all polls", async () => {
+    const res = await request(app)
+      .get("/api/competitor-radar/t1/authority-report?days=30")
+      .set("X-API-Key", "admin-key");
+    expect(res.status).toBe(200);
+    expect(res.body.total_polls).toBe(30);
+    // The 20 wins all cite tenant.com (excluded), and the 10 losses cite
+    // 3 rotating competitors + yelp at rank 2. Every competitor shows up
+    // in multiple losses; yelp shows up in all 10 losses.
+    const yelp = res.body.authorities.find((a: { domain: string }) => a.domain === "yelp.com");
+    expect(yelp).toBeDefined();
+    expect(yelp.polls_cited_in).toBe(10);
+    expect(yelp.share_of_polls).toBeCloseTo(10 / 30, 3);
+    // Own-domain always excluded.
+    expect(res.body.authorities.find((a: { domain: string }) => a.domain === "tenant.com")).toBeUndefined();
+    // Every returned authority has a non-empty by_bot breakdown.
+    for (const a of res.body.authorities) {
+      expect(Array.isArray(a.by_bot)).toBe(true);
+      expect(a.by_bot.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("authority-report ?limit caps the number of rows returned", async () => {
+    const res = await request(app)
+      .get("/api/competitor-radar/t1/authority-report?days=30&limit=2")
+      .set("X-API-Key", "admin-key");
+    expect(res.status).toBe(200);
+    expect(res.body.authorities).toHaveLength(2);
+  });
+
+  it("authority-report 401s without auth", async () => {
+    const res = await request(app).get("/api/competitor-radar/t1/authority-report");
+    expect(res.status).toBe(401);
+  });
+
+  it("authority-report 404s for unknown slug", async () => {
+    const res = await request(app)
+      .get("/api/competitor-radar/no-such-slug/authority-report")
+      .set("X-API-Key", "admin-key");
+    expect(res.status).toBe(404);
+  });
+
+  it("authority-report ?bot filters the citation universe", async () => {
+    // Seeded data is all bot=perplexity; filtering to openai should yield 0.
+    const res = await request(app)
+      .get("/api/competitor-radar/t1/authority-report?days=30&bot=openai")
+      .set("X-API-Key", "admin-key");
+    expect(res.status).toBe(200);
+    expect(res.body.bot).toBe("openai");
+    expect(res.body.authorities).toHaveLength(0);
+  });
+
   it("rejects a business key used against a foreign slug", async () => {
     // Create a second tenant with a different key to prove isolation.
     const { getDb } = await import("../db.js");

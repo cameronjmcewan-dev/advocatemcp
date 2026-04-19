@@ -921,7 +921,7 @@ async function apiRadar(request: Request, env: Env): Promise<Response> {
 
   const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
   try {
-    const [summaryRes, basketRes, lossesRes] = await Promise.all([
+    const [summaryRes, basketRes, lossesRes, authorityRes] = await Promise.all([
       fetch(`${base}/api/competitor-radar/${biz.slug}/summary`, {
         headers: { Authorization: `Bearer ${biz.api_key}` },
       }),
@@ -931,13 +931,17 @@ async function apiRadar(request: Request, env: Env): Promise<Response> {
       fetch(`${base}/api/competitor-radar/${biz.slug}/losses`, {
         headers: { Authorization: `Bearer ${biz.api_key}` },
       }),
+      fetch(`${base}/api/competitor-radar/${biz.slug}/authority-report`, {
+        headers: { Authorization: `Bearer ${biz.api_key}` },
+      }),
     ]);
 
-    const summary = summaryRes.ok ? await summaryRes.json() : null;
-    const basket  = basketRes.ok  ? await basketRes.json()  : null;
-    const losses  = lossesRes.ok  ? await lossesRes.json()  : null;
+    const summary   = summaryRes.ok   ? await summaryRes.json()   : null;
+    const basket    = basketRes.ok    ? await basketRes.json()    : null;
+    const losses    = lossesRes.ok    ? await lossesRes.json()    : null;
+    const authority = authorityRes.ok ? await authorityRes.json() : null;
 
-    return withCors(jsonOk({ summary, basket, losses }), request, { credentials: true });
+    return withCors(jsonOk({ summary, basket, losses, authority }), request, { credentials: true });
   } catch (err) {
     return withCors(jsonErr(502, `Backend unreachable: ${String(err)}`), request, { credentials: true });
   }
