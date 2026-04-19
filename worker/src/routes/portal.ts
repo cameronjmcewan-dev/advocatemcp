@@ -354,8 +354,20 @@ async function apiMetrics(request: Request, env: Env): Promise<Response> {
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
 
-  const data = await fetchAnalytics(biz, env);
-  return withCors(jsonOk(data ?? { message: "No data available yet", slug: biz.slug }), request, { credentials: true });
+  const analytics = await fetchAnalytics(biz, env);
+  // Augment with tenant-type metadata the dashboard uses to gate UI (e.g.
+  // hide the Domains section for hosted/wizard-signup tenants who don't
+  // configure their own DNS). `is_hosted` is derived from the domain
+  // pattern the wizard assigns, so it stays correct even if we later add
+  // skipDns-like flags on the D1 row.
+  const domain    = biz.domain ?? null;
+  const isHosted  = !!domain && domain.endsWith(".hosted.advocatemcp.com");
+  const data = {
+    ...(analytics ?? { message: "No data available yet", slug: biz.slug }),
+    domain,
+    is_hosted: isHosted,
+  };
+  return withCors(jsonOk(data), request, { credentials: true });
 }
 
 // ── GET /api/client/all-metrics (admin only) ──────────────────────────────

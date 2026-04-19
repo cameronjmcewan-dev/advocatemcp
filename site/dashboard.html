@@ -1202,6 +1202,17 @@ body.pro-tier .db-nav-item[data-pro-only]{display:flex}
         var isPro = (data && data.plan === 'pro') || window.AMCP_ADMIN_MODE === 'all';
         document.body.classList.toggle('pro-tier', Boolean(isPro));
 
+        /* Hide the Domains nav item for hosted (wizard-signup) tenants — their
+         * *.hosted.advocatemcp.com subdomain is managed for them and showing
+         * DNS setup instructions creates confusion. Admins still see it so
+         * they can inspect any tenant's routing. */
+        var isHosted = !!(data && data.is_hosted);
+        var isAdmin  = window.AMCP_ADMIN_MODE === 'all';
+        if (isHosted && !isAdmin) {
+          var domainsNav = document.querySelector('[data-section="domains"]');
+          if (domainsNav) domainsNav.style.display = 'none';
+        }
+
         /* Trigger initial section */
         if (window.AMCP_SECTIONS[currentSection]) {
           window.AMCP_SECTIONS[currentSection]();
