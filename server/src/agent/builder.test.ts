@@ -137,6 +137,40 @@ describe("buildSystemPrompt — new field surfacing", () => {
     );
     expect(p).not.toMatch(/Do NOT invent/);
   });
+
+  it("uses distinct labels for business hours vs 24/7 emergency (no dupe 'Availability:' lines)", () => {
+    const p = buildSystemPrompt(
+      mkBiz({
+        availability: "Mon-Fri 9-5",
+        hours_json: JSON.stringify({ emergency_24_7: true }),
+      }),
+      "general",
+    );
+    // The free-form field still emits an "Availability:" line …
+    expect(p).toMatch(/- Availability: Mon-Fri 9-5/);
+    // … and the 24/7 emergency flag emits its own distinct "Emergency availability:" line,
+    // NOT a second "- Availability:" line that would conflict/overwrite.
+    expect(p).toMatch(/- Emergency availability: 24\/7/);
+    const availLines = p.split("\n").filter((l) => /^- Availability:/.test(l));
+    expect(availLines).toHaveLength(1);
+  });
+
+  it("emergency intent with no availability data emits a neutral 'contact the business' hint (not 'standard hours')", () => {
+    const p = buildSystemPrompt(
+      mkBiz({ availability: null, hours_json: null }),
+      "emergency",
+    );
+    expect(p).not.toMatch(/standard hours/);
+    expect(p).toMatch(/contact the business to confirm availability/);
+  });
+
+  it("emergency intent still surfaces 24/7 when hours_json.emergency_24_7 is set", () => {
+    const p = buildSystemPrompt(
+      mkBiz({ availability: null, hours_json: JSON.stringify({ emergency_24_7: true }) }),
+      "emergency",
+    );
+    expect(p).toMatch(/24\/7 emergency service/);
+  });
 });
 
 describe("buildSystemPrompt — per-bot emphasis", () => {
