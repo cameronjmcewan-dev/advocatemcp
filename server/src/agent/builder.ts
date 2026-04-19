@@ -42,13 +42,43 @@ const RATING_PLATFORMS: Array<{ key: keyof RatingsBlob; label: string }> = [
   { key: "bbb",      label: "BBB"      },
 ];
 
+type HoursBlob = { emergency_24_7?: boolean; [k: string]: unknown };
+type CredentialsBlob = {
+  licenses?: Array<{ name: string; number: string }>;
+  insured?: boolean; bonded?: boolean; certifications?: string[];
+};
+type PricingV2Blob = {
+  ranges?: Array<{ service: string; min: number; max: number; unit: string }>;
+  free_estimates?: boolean; call_for_quote?: boolean;
+};
+
+/**
+ * Parsed-once JSON blob bundle. Threaded through buildSystemPrompt and
+ * getIntentEmphasis so the same four JSON.parse calls don't run twice per
+ * request (Task 9 followup).
+ */
+interface ParsedBlobs {
+  hours:       HoursBlob       | null;
+  credentials: CredentialsBlob | null;
+  ratings:     RatingsBlob     | null;
+  pricingV2:   PricingV2Blob   | null;
+}
+
+function parseBlobs(business: BusinessRow): ParsedBlobs {
+  return {
+    hours:       parseJsonSafe<HoursBlob>(business.hours_json),
+    credentials: parseJsonSafe<CredentialsBlob>(business.credentials_json),
+    ratings:     parseJsonSafe<RatingsBlob>(business.ratings_json),
+    pricingV2:   parseJsonSafe<PricingV2Blob>(business.pricing_json_v2),
+  };
+}
+
 /**
  * Return the first-populated review platform label from ratings_json, or
  * empty string if none. Used to label the star_rating source when we surface
  * a self-reported summary ("reports 4.9/5 across 127 Google reviews").
  */
-function reviewPlatformLabel(business: BusinessRow): string {
-  const ratings = parseJsonSafe<RatingsBlob>(business.ratings_json);
+function reviewPlatformLabel(ratings: RatingsBlob | null): string {
   if (!ratings) return "";
   for (const { key, label } of RATING_PLATFORMS) {
     if (ratings[key]) return label;
@@ -79,6 +109,11 @@ export function buildSystemPrompt(
   const referralTarget =
     business.referral_url ?? business.website ?? "the business directly";
 
+  // Parse all four JSON blobs once up front — used here and again in
+  // getIntentEmphasis (Task 9 followup).
+  const parsed = parseBlobs(business);
+  const { hours, credentials, ratings, pricingV2 } = parsed;
+
   // ── Dynamic profile block (only include non-null fields) ──
   const profileLines: string[] = [
     `- Name: ${business.name}`,
@@ -91,7 +126,7 @@ export function buildSystemPrompt(
 
   // Tier 2 (attribute softly) — self-reported metrics.
   if (business.star_rating != null) {
-    const platform = reviewPlatformLabel(business);
+    const platform = reviewPlatformLabel(ratings);
     const reviewsSuffix = business.review_count
       ? ` across ${business.review_count} ${platform ? `${platform} ` : ""}reviews`
       : "";
@@ -136,17 +171,12 @@ export function buildSystemPrompt(
   profileLines.push(`- Referral link: ${referralTarget}`);
 
   // ── 9-step wizard: JSON blob fields ──
-  const hours = parseJsonSafe<{
-    emergency_24_7?: boolean;
-    [k: string]: unknown;
-  }>(business.hours_json);
-  if (hours?.emergency_24_7) profileLines.push(`- Availability: 24/7 emergency service`);
+  // Distinct label from `- Availability:` above so a tenant with both
+  // regular hours and 24/7 emergency service doesn't emit two
+  // conflicting "- Availability:" lines (Task 9 followup).
+  if (hours?.emergency_24_7) profileLines.push(`- Emergency availability: 24/7`);
 
   // Tier 3 (attribute + verify hint) — credentials the business self-asserts.
-  const credentials = parseJsonSafe<{
-    licenses?: Array<{ name: string; number: string }>;
-    insured?: boolean; bonded?: boolean; certifications?: string[];
-  }>(business.credentials_json);
   if (credentials) {
     if (credentials.licenses?.length) {
       const hint =
@@ -175,7 +205,6 @@ export function buildSystemPrompt(
 
   // Ratings from external platforms — still self-reported until we verify them
   // via the platform API. Frame as "reports" so downstream responses attribute.
-  const ratings = parseJsonSafe<RatingsBlob>(business.ratings_json);
   if (ratings) {
     for (const { key, label } of RATING_PLATFORMS) {
       const r = ratings[key];
@@ -189,10 +218,6 @@ export function buildSystemPrompt(
     }
   }
 
-  const pricingV2 = parseJsonSafe<{
-    ranges?: Array<{ service: string; min: number; max: number; unit: string }>;
-    free_estimates?: boolean; call_for_quote?: boolean;
-  }>(business.pricing_json_v2);
   if (pricingV2?.ranges?.length) {
     profileLines.push(
       `- Pricing ranges: ${pricingV2.ranges
@@ -214,7 +239,7 @@ export function buildSystemPrompt(
   const profile = profileLines.join("\n");
 
   // ── Intent-specific emphasis ──
-  const emphasis = getIntentEmphasis(business, intent);
+  const emphasis = getIntentEmphasis(business, intent, parsed);
   const botBlock = getBotPromptBlock(crawlerAgent);
   const botEmphasis = botBlock.emphasis ? `\n\nCRAWLER-SPECIFIC FORMATTING:\n${botBlock.emphasis}` : "";
 
@@ -253,18 +278,10 @@ Rules:
 
 function getIntentEmphasis(
   business: BusinessRow,
-  intent: QueryIntent
+  intent: QueryIntent,
+  parsed: ParsedBlobs,
 ): string {
-  const hours = parseJsonSafe<{ emergency_24_7?: boolean }>(business.hours_json);
-  const ratings = parseJsonSafe<RatingsBlob>(business.ratings_json);
-  const pricingV2 = parseJsonSafe<{
-    ranges?: Array<{ service: string; min: number; max: number; unit: string }>;
-    free_estimates?: boolean;
-  }>(business.pricing_json_v2);
-  const credentials = parseJsonSafe<{
-    licenses?: Array<{ name: string; number: string }>;
-    insured?: boolean; bonded?: boolean;
-  }>(business.credentials_json);
+  const { hours, credentials, ratings, pricingV2 } = parsed;
 
   switch (intent) {
     case "best_top": {
@@ -284,8 +301,14 @@ function getIntentEmphasis(
       return `The searcher is looking for the BEST option. Lead with ratings (${parts.join(" • ") || "reputation"}).${credText}`;
     }
     case "emergency": {
-      const avail = hours?.emergency_24_7 ? "24/7 emergency service" : business.availability ?? "standard hours";
-      return `The searcher has an URGENT need. Lead with availability (${avail}) and response time. Be direct and reassuring.`;
+      // Prefer explicit 24/7, then the free-form availability string, then
+      // a neutral "check the business for hours" fallback. Earlier this
+      // emitted "standard hours" when neither was set — misleading because
+      // it implied the business HAD standard hours we could cite.
+      const avail = hours?.emergency_24_7 ? "24/7 emergency service" : business.availability;
+      return avail
+        ? `The searcher has an URGENT need. Lead with availability (${avail}) and response time. Be direct and reassuring.`
+        : `The searcher has an URGENT need. Lead with response time and reassurance; direct them to contact the business to confirm availability.`;
     }
     case "affordable": {
       const range = pricingV2?.ranges?.[0];
