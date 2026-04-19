@@ -155,4 +155,203 @@ describe("sendAllDigests", () => {
     const call = sendSpy.mock.calls[0]![0];
     expect(call.html).toMatch(/\/digest\/unsubscribe\/[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/);
   });
+
+  it("schedules a retry on initial failure (Phase F Part 3)", async () => {
+    await seed("flaky");
+    const resend = await import("../lib/resend.js");
+    vi.spyOn(resend, "sendEmail").mockRejectedValueOnce(new Error("resend 503: transient"));
+
+    const { sendAllDigests } = await import("./weeklyDigest.js");
+    const before = new Date("2026-04-20T14:00:00.000Z");
+    await sendAllDigests(before);
+
+    const { getDb } = await import("../db.js");
+    const row = getDb().prepare(
+      "SELECT attempts, last_attempt_at, next_attempt_at, error, sent_at FROM radar_digests WHERE slug='flaky'",
+    ).get() as {
+      attempts: number; last_attempt_at: string | null; next_attempt_at: string | null;
+      error: string | null; sent_at: string | null;
+    };
+    expect(row.attempts).toBe(1);
+    expect(row.last_attempt_at).not.toBeNull();
+    expect(row.next_attempt_at).not.toBeNull();
+    expect(row.error).toContain("resend 503");
+    expect(row.sent_at).toBeNull();
+    // 2-minute backoff from the attempt timestamp.
+    const nextMs = new Date(row.next_attempt_at!).getTime();
+    const lastMs = new Date(row.last_attempt_at!).getTime();
+    expect(nextMs - lastMs).toBe(2 * 60 * 1000);
+  });
+
+  it("success path bumps attempts and clears next_attempt_at", async () => {
+    await seed("happy");
+    const resend = await import("../lib/resend.js");
+    vi.spyOn(resend, "sendEmail").mockResolvedValue({ id: "msg_happy" });
+
+    const { sendAllDigests } = await import("./weeklyDigest.js");
+    await sendAllDigests();
+
+    const { getDb } = await import("../db.js");
+    const row = getDb().prepare(
+      "SELECT attempts, next_attempt_at, sent_at, resend_id FROM radar_digests WHERE slug='happy'",
+    ).get() as { attempts: number; next_attempt_at: string | null; sent_at: string | null; resend_id: string | null };
+    expect(row.attempts).toBe(1);
+    expect(row.sent_at).not.toBeNull();
+    expect(row.next_attempt_at).toBeNull();
+    expect(row.resend_id).toBe("msg_happy");
+  });
+});
+
+describe("retryPendingDigests (Phase F Part 3)", () => {
+  const tmp = path.join(os.tmpdir(), `p5-retry-${Date.now()}.db`);
+
+  beforeEach(async () => {
+    process.env.DATABASE_PATH = tmp;
+    process.env.RESEND_API_KEY = "re_test";
+    process.env.TOKEN_SIGNING_KEY = "test-signing-key";
+    const { _resetDbForTests } = await import("../db.js");
+    _resetDbForTests();
+    for (const suffix of ["", "-wal", "-shm"]) fs.rmSync(tmp + suffix, { force: true });
+    const { getDb } = await import("../db.js");
+    getDb();
+    vi.restoreAllMocks();
+  });
+
+  afterAll(() => {
+    for (const suffix of ["", "-wal", "-shm"]) fs.rmSync(tmp + suffix, { force: true });
+    delete process.env.DATABASE_PATH;
+    delete process.env.RESEND_API_KEY;
+    delete process.env.TOKEN_SIGNING_KEY;
+    vi.restoreAllMocks();
+  });
+
+  async function seedTenantWithPoll(slug: string): Promise<void> {
+    const { getDb } = await import("../db.js");
+    const db = getDb();
+    db.prepare(`INSERT INTO businesses
+      (slug, name, description, services, api_key, category, location, website,
+       star_rating, review_count, plan, email, digest_unsubscribed)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pro', ?, 0)`).run(
+        slug, `${slug} LLC`, "d", "[]", `key-${slug}`, "plumber", "Boise, ID",
+        `https://${slug}.example`, 4.5, 10, `${slug}@example.com`,
+      );
+    const basketId = Number(db.prepare(`INSERT INTO competitor_query_baskets
+      (slug, query, source, enabled, created_at) VALUES (?, ?, 'auto', 1, datetime('now'))`).run(slug, "q").lastInsertRowid);
+    db.prepare(`INSERT INTO competitor_polls
+      (slug, query_basket_id, bot, phrasing, phrasing_variant, polled_at,
+       our_domain_cited, our_cited_rank, citation_count, cost_usd)
+      VALUES (?, ?, 'perplexity', 'q', 0, datetime('now'), 1, 2, 3, 0.005)`).run(slug, basketId);
+  }
+
+  /** Seed a radar_digests row as if it had failed one prior attempt and is now due. */
+  async function seedDuePending(slug: string, attempts: number, nextAttemptAgoMs: number): Promise<void> {
+    await seedTenantWithPoll(slug);
+    const { getDb } = await import("../db.js");
+    const windowStart = "2026-04-13T14:00:00.000Z";
+    const windowEnd   = "2026-04-20T14:00:00.000Z";
+    const nextAt      = new Date(Date.now() - nextAttemptAgoMs).toISOString();
+    const lastAt      = new Date(Date.now() - nextAttemptAgoMs - 60_000).toISOString();
+    getDb().prepare(`INSERT INTO radar_digests
+      (slug, window_start_iso, window_end_iso, sent_at, resend_id, error,
+       attempts, last_attempt_at, next_attempt_at)
+      VALUES (?, ?, ?, NULL, NULL, 'prior error', ?, ?, ?)`)
+      .run(slug, windowStart, windowEnd, attempts, lastAt, nextAt);
+  }
+
+  it("picks up a due row, re-sends, and marks success", async () => {
+    await seedDuePending("due", 1, 5 * 60 * 1000);  // due 5 min ago
+    const resend = await import("../lib/resend.js");
+    const sendSpy = vi.spyOn(resend, "sendEmail").mockResolvedValue({ id: "msg_retry_ok" });
+
+    const { retryPendingDigests } = await import("./weeklyDigest.js");
+    const stats = await retryPendingDigests();
+    expect(stats).toEqual({ considered: 1, sent: 1, skipped: 0, errors: 0, terminal: 0 });
+    expect(sendSpy).toHaveBeenCalledOnce();
+
+    const { getDb } = await import("../db.js");
+    const row = getDb().prepare(
+      "SELECT attempts, sent_at, resend_id, next_attempt_at FROM radar_digests WHERE slug='due'",
+    ).get() as { attempts: number; sent_at: string | null; resend_id: string | null; next_attempt_at: string | null };
+    expect(row.attempts).toBe(2);
+    expect(row.sent_at).not.toBeNull();
+    expect(row.resend_id).toBe("msg_retry_ok");
+    expect(row.next_attempt_at).toBeNull();
+  });
+
+  it("skips a row whose next_attempt_at is in the future", async () => {
+    await seedDuePending("early", 1, -5 * 60 * 1000);  // next_attempt_at is 5 min AHEAD
+    const resend = await import("../lib/resend.js");
+    const sendSpy = vi.spyOn(resend, "sendEmail").mockResolvedValue({ id: "msg_x" });
+
+    const { retryPendingDigests } = await import("./weeklyDigest.js");
+    const stats = await retryPendingDigests();
+    expect(stats.considered).toBe(0);
+    expect(sendSpy).not.toHaveBeenCalled();
+  });
+
+  it("escalates backoff on repeated failures — 2→10→60→360 min", async () => {
+    await seedDuePending("flaky", 1, 60_000);  // due 1 min ago, attempted once
+    const resend = await import("../lib/resend.js");
+    vi.spyOn(resend, "sendEmail").mockRejectedValue(new Error("resend 500"));
+
+    const { retryPendingDigests } = await import("./weeklyDigest.js");
+    await retryPendingDigests();
+
+    const { getDb } = await import("../db.js");
+    const row = getDb().prepare(
+      "SELECT attempts, next_attempt_at, last_attempt_at FROM radar_digests WHERE slug='flaky'",
+    ).get() as { attempts: number; next_attempt_at: string | null; last_attempt_at: string };
+    expect(row.attempts).toBe(2);
+    // After attempt 2 → wait 10 min.
+    const gap = new Date(row.next_attempt_at!).getTime() - new Date(row.last_attempt_at).getTime();
+    expect(gap).toBe(10 * 60 * 1000);
+  });
+
+  it("marks terminal after the 5th attempt fails (next_attempt_at=NULL)", async () => {
+    // Row already has 4 attempts; the retry is the 5th and final.
+    await seedDuePending("doomed", 4, 60_000);
+    const resend = await import("../lib/resend.js");
+    vi.spyOn(resend, "sendEmail").mockRejectedValue(new Error("resend 500"));
+
+    const { retryPendingDigests } = await import("./weeklyDigest.js");
+    const stats = await retryPendingDigests();
+    expect(stats.terminal).toBe(1);
+
+    const { getDb } = await import("../db.js");
+    const row = getDb().prepare(
+      "SELECT attempts, next_attempt_at, sent_at FROM radar_digests WHERE slug='doomed'",
+    ).get() as { attempts: number; next_attempt_at: string | null; sent_at: string | null };
+    expect(row.attempts).toBe(5);
+    expect(row.next_attempt_at).toBeNull();
+    expect(row.sent_at).toBeNull();
+  });
+
+  it("marks terminal with 'no data' when buildDigest returns null at retry time", async () => {
+    // Seed a tenant that has since become unsubscribed — buildDigest will
+    // return null. We seed the row with a digest-pending state first, then
+    // flip the unsubscribe flag to simulate the race.
+    await seedDuePending("unsub-mid-retry", 1, 60_000);
+    const { getDb } = await import("../db.js");
+    getDb().prepare("UPDATE businesses SET digest_unsubscribed=1 WHERE slug='unsub-mid-retry'").run();
+    const resend = await import("../lib/resend.js");
+    const sendSpy = vi.spyOn(resend, "sendEmail").mockResolvedValue({ id: "x" });
+
+    const { retryPendingDigests } = await import("./weeklyDigest.js");
+    const stats = await retryPendingDigests();
+    expect(stats.skipped).toBe(1);
+    expect(stats.terminal).toBe(1);
+    expect(sendSpy).not.toHaveBeenCalled();
+
+    const row = getDb().prepare(
+      "SELECT next_attempt_at, error FROM radar_digests WHERE slug='unsub-mid-retry'",
+    ).get() as { next_attempt_at: string | null; error: string | null };
+    expect(row.next_attempt_at).toBeNull();
+    expect(row.error).toBe("digest_no_data_at_retry");
+  });
+
+  it("considered=0 when no rows are due", async () => {
+    const { retryPendingDigests } = await import("./weeklyDigest.js");
+    const stats = await retryPendingDigests();
+    expect(stats).toEqual({ considered: 0, sent: 0, skipped: 0, errors: 0, terminal: 0 });
+  });
 });
