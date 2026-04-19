@@ -14,6 +14,7 @@ The public **GEO Audit** at [`advocatemcp.com/audit`](https://advocatemcp.com/au
 | `GET /audit/:id` | Public read-only retrieval of a stored audit (used by `/r/:id`). |
 | `POST /audit/:id/follow-up` | Email capture: visitor opts in to a monthly re-audit. Stored in `audit_followups`. |
 | `GET /admin/audits` | **Operator** — list recent audits with filters + captured emails. |
+| `GET /admin/audits/analytics` | **Operator** — aggregated funnel health: totals, by-day trend, top categories, top competitor domains, email capture rate. |
 | `POST /admin/audits/batch` | **Operator** — run audits on up to 5 prospects in one request. |
 
 All `/admin/*` endpoints require `Authorization: Bearer $ADMIN_API_KEY`.
@@ -141,7 +142,18 @@ curl -sS "https://api.advocatemcp.com/admin/audits?days=1" -H "Authorization: Be
 
 # Audits with any captured email (anyone who showed signup intent)
 curl -sS "https://api.advocatemcp.com/admin/audits?has_email=1&days=30" -H "Authorization: Bearer $ADMIN_API_KEY"
+
+# Funnel-health dashboard — one call summary for "is the audit funnel working?"
+curl -sS "https://api.advocatemcp.com/admin/audits/analytics?days=30" \
+  -H "Authorization: Bearer $ADMIN_API_KEY" | python3 -m json.tool
 ```
+
+The analytics endpoint returns headline counts (total audits, cost,
+bucket breakdown of zero/partial/all-cited), email capture rate, a
+per-day trend for sparklines, top categories, and the top 10 competitor
+domains that appeared across every audit in the window — useful for
+market intelligence ("the same 5 firms dominate every DTC-email audit
+we run").
 
 ---
 

@@ -128,3 +128,125 @@ describe("GET /admin/audits", () => {
     expect(ids[2]).toBe("oldest");
   });
 });
+
+describe("GET /admin/audits/analytics", () => {
+  const tmp = path.join(os.tmpdir(), `admin-audits-analytics-${Date.now()}.db`);
+
+  beforeEach(async () => {
+    process.env.DATABASE_PATH = tmp;
+    process.env.ADMIN_API_KEY = "admin-test-key";
+    const { _resetDbForTests } = await import("../../db.js");
+    _resetDbForTests();
+    for (const suffix of ["", "-wal", "-shm"]) fs.rmSync(tmp + suffix, { force: true });
+    const { getDb } = await import("../../db.js");
+    getDb();
+  });
+  afterAll(() => {
+    for (const suffix of ["", "-wal", "-shm"]) fs.rmSync(tmp + suffix, { force: true });
+    delete process.env.DATABASE_PATH;
+    delete process.env.ADMIN_API_KEY;
+  });
+
+  async function seedAuditRich(id: string, opts: Partial<{
+    cited: number; total: number; ageDays: number; category: string;
+    cost: number; domain: string; competitors: string[];
+  }> = {}): Promise<void> {
+    const { getDb } = await import("../../db.js");
+    const t = { cited: 0, total: 3, ageDays: 0, category: "plumber", cost: 0.025, domain: `${id}.example`, competitors: [], ...opts };
+    const created = new Date(Date.now() - t.ageDays * 24 * 3600 * 1000).toISOString();
+    const queries = t.competitors.length > 0
+      ? [{ query: "best plumber", citations: t.competitors.map((d) => `https://${d}/`), cited: false, cited_rank: null }]
+      : [];
+    getDb().prepare(
+      `INSERT INTO public_audits (id, domain, category, ip_hash, created_at, cost_usd,
+        queries_json, cited_count, total_queries)
+       VALUES (?, ?, ?, 'h', ?, ?, ?, ?, ?)`,
+    ).run(id, t.domain, t.category, created, t.cost, JSON.stringify(queries), t.cited, t.total);
+  }
+
+  it("rejects without bearer auth", async () => {
+    const { createTestApp } = await import("../../testApp.js");
+    const res = await request(createTestApp()).get("/admin/audits/analytics");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns headline counts and budget spend", async () => {
+    await seedAuditRich("a1", { cited: 0, total: 3, cost: 0.025 });
+    await seedAuditRich("a2", { cited: 1, total: 3, cost: 0.03 });
+    await seedAuditRich("a3", { cited: 3, total: 3, cost: 0.045 });
+
+    const { createTestApp } = await import("../../testApp.js");
+    const res = await request(createTestApp())
+      .get("/admin/audits/analytics")
+      .set("Authorization", "Bearer admin-test-key");
+
+    expect(res.status).toBe(200);
+    expect(res.body.total_audits).toBe(3);
+    expect(res.body.total_cost_usd).toBeCloseTo(0.1, 4);
+    expect(res.body.by_cited_bucket).toEqual({ zero: 1, partial: 1, all: 1 });
+  });
+
+  it("computes email capture rate + total follow-ups", async () => {
+    await seedAuditRich("has-email", { cited: 0 });
+    await seedAuditRich("no-email", { cited: 0 });
+    const { getDb } = await import("../../db.js");
+    getDb().prepare(
+      `INSERT INTO audit_followups (audit_id, email, ip_hash, created_at) VALUES ('has-email', 'x@y.co', 'h', ?)`,
+    ).run(new Date().toISOString());
+    getDb().prepare(
+      `INSERT INTO audit_followups (audit_id, email, ip_hash, created_at) VALUES ('has-email', 'z@y.co', 'h', ?)`,
+    ).run(new Date().toISOString());
+
+    const { createTestApp } = await import("../../testApp.js");
+    const res = await request(createTestApp())
+      .get("/admin/audits/analytics")
+      .set("Authorization", "Bearer admin-test-key");
+    // 1 of 2 audits captured an email → 0.5 rate. 2 total follow-ups.
+    expect(res.body.email_capture_rate).toBe(0.5);
+    expect(res.body.total_followup_emails).toBe(2);
+  });
+
+  it("groups top categories by count", async () => {
+    await seedAuditRich("p1", { category: "plumber" });
+    await seedAuditRich("p2", { category: "plumber" });
+    await seedAuditRich("p3", { category: "plumber" });
+    await seedAuditRich("l1", { category: "lawyer" });
+    await seedAuditRich("d1", { category: "dentist" });
+
+    const { createTestApp } = await import("../../testApp.js");
+    const res = await request(createTestApp())
+      .get("/admin/audits/analytics")
+      .set("Authorization", "Bearer admin-test-key");
+    expect(res.body.top_categories[0]).toEqual({ category: "plumber", count: 3 });
+    expect(res.body.top_categories).toHaveLength(3);
+  });
+
+  it("aggregates top competitor domains across audits, excluding own-domain and Google Maps shims", async () => {
+    await seedAuditRich("a1", { domain: "acme.com", competitors: ["rival.com", "other.com", "acme.com"] });
+    await seedAuditRich("a2", { domain: "acme.com", competitors: ["rival.com", "google.com/maps/search/x"] });
+    await seedAuditRich("a3", { domain: "different.com", competitors: ["rival.com"] });
+
+    const { createTestApp } = await import("../../testApp.js");
+    const res = await request(createTestApp())
+      .get("/admin/audits/analytics")
+      .set("Authorization", "Bearer admin-test-key");
+    const top = res.body.top_competitor_domains_across_audits;
+    // rival.com appears in 3 audits; other.com in 1; google.com should NOT
+    // appear (only showed up as a maps search shim); acme.com excluded as
+    // own-domain for a1/a2.
+    expect(top[0]).toEqual({ domain: "rival.com", appears_in: 3 });
+    expect(top.find((t: { domain: string }) => t.domain === "google.com")).toBeUndefined();
+    expect(top.find((t: { domain: string }) => t.domain === "acme.com")).toBeUndefined();
+  });
+
+  it("respects ?days window", async () => {
+    await seedAuditRich("recent", { ageDays: 5 });
+    await seedAuditRich("old",    { ageDays: 40 });
+    const { createTestApp } = await import("../../testApp.js");
+    const res = await request(createTestApp())
+      .get("/admin/audits/analytics?days=14")
+      .set("Authorization", "Bearer admin-test-key");
+    expect(res.body.range_days).toBe(14);
+    expect(res.body.total_audits).toBe(1);
+  });
+});
