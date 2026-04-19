@@ -24,20 +24,35 @@ function formatSelfReported(
   return opts.verifyHint ? `${base} (${opts.verifyHint})` : base;
 }
 
+type RatingSource = { rating: number; count: number };
+type RatingsBlob = {
+  google?: RatingSource; yelp?: RatingSource;
+  facebook?: RatingSource; bbb?: RatingSource;
+};
+/**
+ * Known external review platforms tracked by the wizard, in priority order.
+ * Order drives `reviewPlatformLabel`'s first-populated tie-break and the
+ * sequence of per-platform lines emitted into the system prompt. Keep in
+ * sync with `RatingsSchema` (server/src/schemas/business.ts).
+ */
+const RATING_PLATFORMS: Array<{ key: keyof RatingsBlob; label: string }> = [
+  { key: "google",   label: "Google"   },
+  { key: "yelp",     label: "Yelp"     },
+  { key: "facebook", label: "Facebook" },
+  { key: "bbb",      label: "BBB"      },
+];
+
 /**
  * Return the first-populated review platform label from ratings_json, or
  * empty string if none. Used to label the star_rating source when we surface
  * a self-reported summary ("reports 4.9/5 across 127 Google reviews").
  */
 function reviewPlatformLabel(business: BusinessRow): string {
-  const ratings = parseJsonSafe<{
-    google?: unknown; yelp?: unknown; facebook?: unknown; bbb?: unknown;
-  }>(business.ratings_json);
+  const ratings = parseJsonSafe<RatingsBlob>(business.ratings_json);
   if (!ratings) return "";
-  if (ratings.google) return "Google";
-  if (ratings.yelp) return "Yelp";
-  if (ratings.facebook) return "Facebook";
-  if (ratings.bbb) return "BBB";
+  for (const { key, label } of RATING_PLATFORMS) {
+    if (ratings[key]) return label;
+  }
   return "";
 }
 
@@ -160,25 +175,18 @@ export function buildSystemPrompt(
 
   // Ratings from external platforms — still self-reported until we verify them
   // via the platform API. Frame as "reports" so downstream responses attribute.
-  const ratings = parseJsonSafe<{
-    google?: { rating: number; count: number };
-    yelp?: { rating: number; count: number };
-  }>(business.ratings_json);
-  if (ratings?.google) {
-    profileLines.push(
-      formatSelfReported(
-        "Google rating",
-        `${ratings.google.rating}/5 across ${ratings.google.count} reviews`,
-      ),
-    );
-  }
-  if (ratings?.yelp) {
-    profileLines.push(
-      formatSelfReported(
-        "Yelp rating",
-        `${ratings.yelp.rating}/5 across ${ratings.yelp.count} reviews`,
-      ),
-    );
+  const ratings = parseJsonSafe<RatingsBlob>(business.ratings_json);
+  if (ratings) {
+    for (const { key, label } of RATING_PLATFORMS) {
+      const r = ratings[key];
+      if (!r) continue;
+      profileLines.push(
+        formatSelfReported(
+          `${label} rating`,
+          `${r.rating}/5 across ${r.count} reviews`,
+        ),
+      );
+    }
   }
 
   const pricingV2 = parseJsonSafe<{
@@ -248,10 +256,7 @@ function getIntentEmphasis(
   intent: QueryIntent
 ): string {
   const hours = parseJsonSafe<{ emergency_24_7?: boolean }>(business.hours_json);
-  const ratings = parseJsonSafe<{
-    google?: { rating: number; count: number };
-    yelp?: { rating: number; count: number };
-  }>(business.ratings_json);
+  const ratings = parseJsonSafe<RatingsBlob>(business.ratings_json);
   const pricingV2 = parseJsonSafe<{
     ranges?: Array<{ service: string; min: number; max: number; unit: string }>;
     free_estimates?: boolean;
@@ -264,8 +269,12 @@ function getIntentEmphasis(
   switch (intent) {
     case "best_top": {
       const parts: string[] = [];
-      if (ratings?.google) parts.push(`Google ${ratings.google.rating}/5 (${ratings.google.count} reviews)`);
-      if (ratings?.yelp) parts.push(`Yelp ${ratings.yelp.rating}/5 (${ratings.yelp.count} reviews)`);
+      if (ratings) {
+        for (const { key, label } of RATING_PLATFORMS) {
+          const r = ratings[key];
+          if (r) parts.push(`${label} ${r.rating}/5 (${r.count} reviews)`);
+        }
+      }
       if (!parts.length && business.star_rating != null) {
         parts.push(`${business.star_rating}/5 rating${business.review_count ? ` (${business.review_count} reviews)` : ""}`);
       }
@@ -290,12 +299,15 @@ function getIntentEmphasis(
     }
     case "specific_service":
       return "The searcher is asking about a specific service. Lead with details about that service, then broaden to related capabilities.";
-    case "brand_direct":
+    case "brand_direct": {
+      const hasAnyRating = business.star_rating != null ||
+        (!!ratings && RATING_PLATFORMS.some(({ key }) => !!ratings[key]));
       return `The searcher asked about this business by name. Give a complete profile overview — they already know who they're looking for.${
-        business.star_rating == null && !ratings?.google && !ratings?.yelp
-          ? " IMPORTANT: No rating or review data exists for this business. Do NOT invent, estimate, or imply any star rating, review count, reputation score, or phrases like 'well-regarded' or 'strong reputation'. Only describe what is in the business profile."
-          : ""
+        hasAnyRating
+          ? ""
+          : " IMPORTANT: No rating or review data exists for this business. Do NOT invent, estimate, or imply any star rating, review count, reputation score, or phrases like 'well-regarded' or 'strong reputation'. Only describe what is in the business profile."
       }`;
+    }
     case "general":
     default:
       return "";

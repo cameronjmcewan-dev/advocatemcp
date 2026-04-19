@@ -43,6 +43,52 @@ describe("buildSystemPrompt — new field surfacing", () => {
     expect(p).toMatch(/Yelp.*4\.7/);
   });
 
+  it("surfaces Facebook and BBB ratings in the profile block", () => {
+    const p = buildSystemPrompt(
+      mkBiz({ ratings_json: JSON.stringify({
+        facebook: { rating: 4.6, count: 88  },
+        bbb:      { rating: 4.9, count: 42 },
+      })}),
+      "general",
+    );
+    expect(p).toMatch(/Facebook rating.*4\.6\/5 across 88 reviews/);
+    expect(p).toMatch(/BBB rating.*4\.9\/5 across 42 reviews/);
+  });
+
+  it("includes Facebook and BBB in best_top emphasis when present", () => {
+    const p = buildSystemPrompt(
+      mkBiz({ ratings_json: JSON.stringify({
+        facebook: { rating: 4.6, count: 88 },
+        bbb:      { rating: 4.9, count: 42 },
+      })}),
+      "best_top",
+    );
+    expect(p).toMatch(/Facebook 4\.6\/5 \(88 reviews\)/);
+    expect(p).toMatch(/BBB 4\.9\/5 \(42 reviews\)/);
+  });
+
+  it("brand_direct suppresses anti-hallucination clause for Facebook-only ratings", () => {
+    const p = buildSystemPrompt(
+      mkBiz({
+        star_rating: null,
+        ratings_json: JSON.stringify({ facebook: { rating: 4.7, count: 55 } }),
+      }),
+      "brand_direct",
+    );
+    expect(p).not.toMatch(/Do NOT invent/);
+  });
+
+  it("brand_direct suppresses anti-hallucination clause for BBB-only ratings", () => {
+    const p = buildSystemPrompt(
+      mkBiz({
+        star_rating: null,
+        ratings_json: JSON.stringify({ bbb: { rating: 5.0, count: 30 } }),
+      }),
+      "brand_direct",
+    );
+    expect(p).not.toMatch(/Do NOT invent/);
+  });
+
   it("includes pricing ranges when intent=affordable and pricing_json_v2 has ranges", () => {
     const p = buildSystemPrompt(
       mkBiz({ pricing_json_v2: JSON.stringify({
