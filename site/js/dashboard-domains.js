@@ -263,6 +263,30 @@
     var adminCard = document.getElementById('admin-domain-actions');
     if (adminCard && isAdmin) adminCard.style.display = '';
 
+    // Hosted (wizard-signup) tenants have *.hosted.advocatemcp.com managed
+    // for them — no DNS to configure. If a non-admin somehow lands on this
+    // section (direct URL, anchor click before the nav hide applied), show a
+    // short message instead of fetching CF hostname status they can't act on.
+    var isHosted = !!(window.AMCP_DATA && window.AMCP_DATA.is_hosted);
+    if (isHosted && !isAdmin) {
+      var hdr = document.getElementById('domain-header');
+      if (hdr) {
+        hdr.innerHTML =
+          '<div style="font-size:var(--tx-md);font-weight:600;margin-bottom:6px">Hosted subdomain</div>' +
+          '<div style="font-size:var(--tx-sm);color:var(--muted)">' +
+            'Your agent lives at <span style="font-family:var(--font-mono)">' +
+            esc((window.AMCP_DATA && window.AMCP_DATA.domain) || '') +
+            '</span>. DNS is managed for you — nothing to configure here.' +
+          '</div>';
+      }
+      // Hide the cards below the header so the section stays compact.
+      ['status-pills-wrap', 'dns-records-wrap', 'test-bot-wrap'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+      });
+      return;
+    }
+
     var slug = currentSlug();
     var path = '/api/client/domain-info' + (slug ? '?slug=' + encodeURIComponent(slug) : '');
 
