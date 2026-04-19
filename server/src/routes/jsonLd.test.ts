@@ -11,7 +11,7 @@ import os from "os";
 import path from "path";
 
 describe("GET /agents/:slug/json-ld.json", () => {
-  const tmp = path.join(os.tmpdir(), `json-ld-route-${Date.now()}.db`);
+  const tmp = path.join(os.tmpdir(), `json-ld-router-${Date.now()}.db`);
   let app: express.Express;
 
   beforeAll(async () => {
@@ -35,10 +35,10 @@ describe("GET /agents/:slug/json-ld.json", () => {
        star_rating, review_count)
       VALUES ('bare', 'Bare Biz', 'minimal', '[]', 'k-bare', 'plumber', 'Boise', 0, 0)`).run();
 
-    const { agentRouter } = await import("./agent.js");
+    const { jsonLdRouter } = await import("./jsonLd.js");
     app = express();
     app.use(express.json());
-    app.use(agentRouter);
+    app.use(jsonLdRouter);
   });
 
   afterAll(async () => {

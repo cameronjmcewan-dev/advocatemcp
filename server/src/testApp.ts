@@ -13,6 +13,7 @@ import { competitorRadarRouter } from "./routes/competitorRadar.js";
 import { digestRouter } from "./routes/digest.js";
 import { decodeRouter } from "./routes/decode.js";
 import { auditRouter } from "./routes/audit.js";
+import { jsonLdRouter } from "./routes/jsonLd.js";
 import { rateLimitMiddleware } from "./middleware/rateLimit.js";
 import { requestIdMiddleware } from "./lib/requestId.js";
 
@@ -63,6 +64,11 @@ export function createTestApp(): express.Express {
   // Moving express.json() up.
   app.use(express.json({ limit: "1mb" }));
   app.use(auditRouter);
+
+  // Schema.org JSON-LD — same public + any-origin rule as decode/audit.
+  // Must be before the worker-only cors() below so Google's crawler and
+  // the dashboard (on a different origin) can both fetch.
+  app.use(jsonLdRouter);
 
   const WORKER_ORIGIN = "https://advocatemcp-worker.advocatecameron.workers.dev";
   app.use(cors({

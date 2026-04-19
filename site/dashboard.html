@@ -579,6 +579,9 @@ body.pro-tier .db-nav-item[data-pro-only]{display:flex}
     <div class="db-nav-item" data-section="radar" data-pro-only>
       <i data-lucide="radar"></i><span>Radar</span>
     </div>
+    <div class="db-nav-item" data-section="surfaces">
+      <i data-lucide="layers"></i><span>AI Surfaces</span>
+    </div>
     <div class="db-nav-item" data-section="domains">
       <i data-lucide="globe"></i><span>Domains</span>
     </div>
@@ -1017,6 +1020,31 @@ body.pro-tier .db-nav-item[data-pro-only]{display:flex}
       </div>
     </section>
 
+    <!-- ── AI Surfaces (where your agent is listed across the AI ecosystem) ── -->
+    <section id="sec-surfaces" class="db-sec">
+      <p class="db-sec-title">AI Surfaces</p>
+      <p class="db-sec-sub">Every AI platform your agent is syndicated onto &mdash; one profile, many destinations.</p>
+
+      <div class="error-banner" id="surfaces-error"></div>
+
+      <div class="db-card" style="margin-bottom:20px">
+        <div class="db-card-title">Live surfaces <span class="db-card-sub">Where an AI assistant can find you right now</span></div>
+        <div id="surfaces-table"><div class="skeleton" style="height:180px;border-radius:6px"></div></div>
+      </div>
+
+      <div class="db-card" style="margin-bottom:20px">
+        <div class="db-card-title">Install your AI snippet <span class="db-card-sub">One-line schema.org block for Google SGE &amp; Bing Copilot</span></div>
+        <p style="font-size:var(--tx-sm);color:var(--muted);margin-bottom:10px">
+          Paste this block into the <code style="font-family:var(--font-mono)">&lt;head&gt;</code> section of your website. It tells Google and Bing&rsquo;s AI answers what your business is, so they can cite you correctly. Re-copy if you update your Advocate profile.
+        </p>
+        <div style="position:relative">
+          <pre id="surfaces-snippet" style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:12px;overflow-x:auto;font-size:var(--tx-xs);font-family:var(--font-mono);margin:0"><code>Loading...</code></pre>
+          <button type="button" id="surfaces-copy" class="btn-sm btn-primary-sm" style="position:absolute;top:8px;right:8px">Copy</button>
+        </div>
+        <div id="surfaces-copy-status" style="font-size:var(--tx-xs);color:var(--muted);margin-top:6px;height:14px"></div>
+      </div>
+    </section>
+
     <!-- ── Domains (real CF hostname + Worker Route status) ── -->
     <section id="sec-domains" class="db-sec">
       <p class="db-sec-title">Domains</p>
@@ -1086,6 +1114,7 @@ body.pro-tier .db-nav-item[data-pro-only]{display:flex}
 <script src="/js/dashboard-settings.js"></script>
 <script src="/js/dashboard-activity.js"></script>
 <script src="/js/dashboard-radar.js"></script>
+<script src="/js/dashboard-surfaces.js"></script>
 <script src="/js/dashboard-domains.js"></script>
 <script src="/js/dashboard-admin.js"></script>
 <script>
@@ -1102,6 +1131,7 @@ body.pro-tier .db-nav-item[data-pro-only]{display:flex}
     'settings':          'Settings',
     'activity':          'Activity',
     'radar':             'Competitor Radar',
+    'surfaces':          'AI Surfaces',
     'domains':           'Domains',
   };
 
