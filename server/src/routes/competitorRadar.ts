@@ -146,6 +146,109 @@ competitorRadarRouter.get(
 );
 
 /**
+ * GET /api/competitor-radar/:slug/authority-report?days=30&bot=&limit=20
+ *
+ * "Who does AI consider authoritative in this tenant's category?" —
+ * aggregates every citation across every poll the tenant has run in the
+ * window, counts how many polls each third-party domain appears in, and
+ * breaks each down by which AI provider cited it.
+ *
+ * Unlike the summary's `top_competitor_domains` (which filters to polls
+ * where the tenant was NOT cited — sector rivals only), this report
+ * includes all polls, so the universe is "every source AI reached for
+ * when asked about your category," including directories and review
+ * sites (Yelp, Angi, Martindale, BBB, etc.). That's the actionable set
+ * for off-site authority work.
+ *
+ * Response shape:
+ *   {
+ *     range_days, bot,
+ *     total_polls, domains_seen,
+ *     authorities: [
+ *       { domain, polls_cited_in, share_of_polls,
+ *         by_bot: [{bot, count}] }
+ *     ]
+ *   }
+ */
+competitorRadarRouter.get(
+  "/api/competitor-radar/:slug/authority-report",
+  requireSlugOrAdminKey,
+  (req: Request, res: Response) => {
+    const { slug } = req.params;
+    const days  = parseDays(req.query.days, 30);
+    const bot   = parseBot(req.query.bot);
+    const limit = parseLimit(req.query.limit, 20, 100);
+    const since = daysAgoIso(days);
+    const db = getDb();
+
+    const biz = db.prepare("SELECT website FROM businesses WHERE slug=?")
+      .get(slug) as { website: string | null } | undefined;
+    if (!biz) { res.status(404).json({ error: "not_found" }); return; }
+    const ownDomain = canonicalDomain(biz.website ?? "");
+
+    const whereBot = bot ? " AND cp.bot=?" : "";
+    const bindBot  = bot ? [bot] as const : [] as const;
+
+    const { total_polls } = db.prepare(
+      `SELECT COUNT(*) AS total_polls FROM competitor_polls cp
+        WHERE cp.slug=? AND cp.polled_at>=?${whereBot}`
+    ).get(slug, since, ...bindBot) as { total_polls: number };
+
+    // DISTINCT poll_id per (domain, bot) — a single poll that cites the
+    // same domain three times should count once. GROUP BY domain gives the
+    // global rank; the second pass pulls the bot breakdown.
+    const domainRows = db.prepare(
+      `SELECT cc.domain, COUNT(DISTINCT cc.poll_id) AS polls_cited_in
+         FROM competitor_citations cc
+         JOIN competitor_polls cp ON cp.id = cc.poll_id
+        WHERE cp.slug=? AND cp.polled_at>=? AND cc.domain <> ? AND cc.domain <> ''${whereBot}
+        GROUP BY cc.domain
+        ORDER BY polls_cited_in DESC, cc.domain ASC
+        LIMIT ?`
+    ).all(slug, since, ownDomain, ...bindBot, limit) as {
+      domain: string; polls_cited_in: number;
+    }[];
+
+    // Per-bot breakdown for the surfaced domains only — bounded by `limit`
+    // so the query stays fast even when the citation set is large.
+    let byBotByDomain = new Map<string, { bot: string; count: number }[]>();
+    if (domainRows.length > 0) {
+      const placeholders = domainRows.map(() => "?").join(",");
+      const botRows = db.prepare(
+        `SELECT cc.domain, cp.bot, COUNT(DISTINCT cc.poll_id) AS count
+           FROM competitor_citations cc
+           JOIN competitor_polls cp ON cp.id = cc.poll_id
+          WHERE cp.slug=? AND cp.polled_at>=? AND cc.domain IN (${placeholders})${whereBot}
+          GROUP BY cc.domain, cp.bot
+          ORDER BY cc.domain ASC, cp.bot ASC`
+      ).all(slug, since, ...domainRows.map((d) => d.domain), ...bindBot) as {
+        domain: string; bot: string; count: number;
+      }[];
+      for (const r of botRows) {
+        const list = byBotByDomain.get(r.domain) ?? [];
+        list.push({ bot: r.bot, count: r.count });
+        byBotByDomain.set(r.domain, list);
+      }
+    }
+
+    const authorities = domainRows.map((r) => ({
+      domain:         r.domain,
+      polls_cited_in: r.polls_cited_in,
+      share_of_polls: total_polls > 0 ? r.polls_cited_in / total_polls : 0,
+      by_bot:         byBotByDomain.get(r.domain) ?? [],
+    }));
+
+    res.json({
+      range_days:   days,
+      bot,
+      total_polls,
+      domains_seen: authorities.length,
+      authorities,
+    });
+  },
+);
+
+/**
  * GET /api/competitor-radar/:slug/losses?days=7&limit=50&bot=openai
  */
 competitorRadarRouter.get(
