@@ -36,6 +36,7 @@ import {
   handlePublicOnboardPreflight,
   handleStripeWebhook,
   handleSessionStatus,
+  handleRetryRailwayRegistration,
 } from "./stripe";
 import { handleSaveDraft, handleLoadDraft } from "./onboardDraft";
 
@@ -72,6 +73,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/admin/domains/activate"              && method === "POST") return handleActivateDomain(request, env);
   if (pathname === "/admin/domains/saas-fallback-origin"  && method === "POST") return handleSetFallbackOrigin(request, env);
   if (pathname === "/admin/domains/ensure-worker-route"   && method === "POST") return handleEnsureWorkerRoute(request, env);
+  if (pathname === "/admin/onboard/retry-railway"         && method === "POST") return handleRetryRailwayRegistration(request, env);
   if (pathname === "/status"                   && method === "GET")  return statusPage(request, env);
   if (pathname === "/onboard"                  && method === "GET")  return handleOnboardPage(request, env);
 

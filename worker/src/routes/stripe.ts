@@ -32,6 +32,7 @@ import {
   setActivationTokenIfMissing,
   updateActivationStatus,
   updateBusinessApiKey,
+  getBusinessBySlug,
 } from "../portalDb";
 
 // ── CORS helper for the public wizard endpoint ───────────────────────────────
@@ -1316,5 +1317,101 @@ export async function handleSessionStatus(
     dns: tenant.status === "paid_pending_dns" || tenant.status === "free_pending_dns"
       ? buildDnsInstructions(tenant)
       : undefined,
+  });
+}
+
+// ── POST /admin/onboard/retry-railway ────────────────────────────────────
+// Operator recovery path. When the Stripe webhook succeeded (Stripe IDs
+// are in D1, tenant record exists in KV) but `registerBusinessOnRailway`
+// silently failed — network blip, zod rejection, Railway down — the
+// tenant's D1 `api_key` is stuck as the placeholder set by the wizard
+// and the agent doesn't exist on the Railway side. Previously the only
+// fix was a manual SQL session. This endpoint replays the Railway call
+// using the tenant profile already in KV and, on success, updates the
+// D1 api_key the same way the webhook would have.
+//
+// Body: { slug: string }
+// Auth: X-Admin-Secret or Bearer ADMIN_SECRET (requireAdmin accepts both).
+
+export async function handleRetryRailwayRegistration(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  if (!requireAdmin(request, env)) {
+    return jsonErr(401, "unauthorized", "Authentication required");
+  }
+
+  let slug: string;
+  try {
+    const body = await request.json<{ slug?: string }>();
+    if (typeof body.slug !== "string" || !body.slug.trim()) {
+      return jsonErr(400, "bad_request", "Missing required field: slug");
+    }
+    slug = body.slug.trim();
+  } catch {
+    return jsonErr(400, "bad_request", "Invalid JSON body");
+  }
+
+  const biz = await getBusinessBySlug(env.DB, slug);
+  if (!biz) return jsonErr(404, "not_found", `No D1 business row for slug=${slug}`);
+
+  const domain = biz.domain ?? "";
+  if (!domain) {
+    return jsonErr(
+      422,
+      "missing_domain",
+      `D1 business row for slug=${slug} has no domain; cannot locate KV tenant record`,
+    );
+  }
+
+  const tenant = await getTenant(env, domain);
+  if (!tenant) {
+    return jsonErr(404, "tenant_not_found", `No KV tenant record for domain=${domain}`);
+  }
+  if (!tenant.profile) {
+    return jsonErr(
+      422,
+      "missing_profile",
+      "Tenant KV record has no wizard profile; re-register manually with a full payload",
+    );
+  }
+
+  // Bail out early if Railway credentials aren't configured — same guard the
+  // Stripe webhook uses so the caller gets an honest 5xx rather than a
+  // spurious registration that can't actually succeed.
+  if (!env.API_BASE_URL || !env.API_KEY) {
+    return jsonErr(
+      500,
+      "railway_not_configured",
+      !env.API_BASE_URL ? "API_BASE_URL not set" : "API_KEY not set",
+    );
+  }
+
+  const regResult = await registerBusinessOnRailway(env, tenant);
+  if (!regResult.ok) {
+    console.warn(JSON.stringify({
+      onboarding: true,
+      event: "admin_retry_railway_failed",
+      slug,
+      domain,
+      error: regResult.error,
+    }));
+    return jsonErr(502, "railway_register_failed", regResult.error);
+  }
+
+  await updateBusinessApiKey(env.DB, slug, regResult.api_key);
+  console.log(JSON.stringify({
+    onboarding: true,
+    event: "admin_retry_railway_success",
+    slug,
+    domain,
+    api_key_length: regResult.api_key.length,
+  }));
+
+  return jsonOk({
+    ok: true,
+    slug,
+    domain,
+    action: "railway_registered_and_d1_api_key_updated",
   });
 }
