@@ -707,8 +707,194 @@
   }
 
   /* ── Product tour ───────────────────────────────────────────────────────── */
+  /*
+   * Five stops, each attached to a sidebar nav item. Highlights the target
+   * with .amcp-tour-target and parks a floating card beside it with a short
+   * pitch. Next/Skip controls + ESC exit.
+   *
+   * Radar is Pro-only; if the nav item is hidden we skip that stop rather
+   * than dangle a card over empty space.
+   */
+  var TOUR_STOPS = [
+    {
+      selector: '[data-section="overview"]',
+      section:  'overview',
+      step:     'Step 1 of 5',
+      title:    'Overview',
+      copy:     'Your 30-day snapshot — AI requests, referral clicks, bot activity. This is the first thing to check each week.',
+    },
+    {
+      selector: '[data-section="ai-requests"]',
+      section:  'ai-requests',
+      step:     'Step 2 of 5',
+      title:    'AI Requests',
+      copy:     'Every question an AI assistant asked about your business, grouped by crawler and intent. Great for discovering what customers are really asking.',
+    },
+    {
+      selector: '[data-section="radar"]',
+      section:  'radar',
+      step:     'Step 3 of 5',
+      title:    'Competitor Radar',
+      copy:     'Weekly polls against Perplexity + OpenAI. See your Share of Model — when an AI recommends someone in your category, how often is it you?',
+      skipIf: function () {
+        var el = document.querySelector('[data-section="radar"]');
+        return !el || el.offsetParent === null;
+      },
+    },
+    {
+      selector: '[data-section="getting-started"]',
+      section:  'getting-started',
+      step:     'Step 4 of 5',
+      title:    'Get Started',
+      copy:     'Come back here any time to finish setup. Progress saves automatically and the checklist adapts as you go.',
+    },
+    {
+      selector: '[data-section="settings"]',
+      section:  'settings',
+      step:     'Step 5 of 5',
+      title:    'Settings',
+      copy:     'Your profile shapes every answer your agent returns. Update hours, services, pricing, and credentials here to tune the tone.',
+    },
+  ];
+
+  var _tourIdx        = 0;
+  var _tourBackdrop   = null;
+  var _tourCard       = null;
+  var _tourTargetEl   = null;
+  var _tourKeyHandler = null;
+
   function startTour() {
-    // Will be filled in step 5
+    _tourIdx = 0;
+    if (!_tourBackdrop) _tourBackdrop = _buildTourBackdrop();
+    if (!_tourCard)     _tourCard     = _buildTourCard();
+    if (!document.body.contains(_tourBackdrop)) document.body.appendChild(_tourBackdrop);
+    if (!document.body.contains(_tourCard))     document.body.appendChild(_tourCard);
+    _tourBackdrop.classList.add('show');
+    _tourCard.classList.add('show');
+    _tourKeyHandler = function (ev) {
+      if (ev.key === 'Escape') { _endTour(false); ev.preventDefault(); }
+    };
+    document.addEventListener('keydown', _tourKeyHandler);
+    _gotoTourStop(0);
+  }
+
+  function _buildTourBackdrop() {
+    var b = document.createElement('div');
+    b.className = 'amcp-tour-backdrop';
+    b.addEventListener('click', function () { _endTour(false); });
+    return b;
+  }
+
+  function _buildTourCard() {
+    var c = document.createElement('div');
+    c.className = 'amcp-tour-card';
+    c.setAttribute('role', 'dialog');
+    c.setAttribute('aria-label', 'Dashboard tour');
+    c.innerHTML =
+      '<div class="amcp-tour-step" id="amcp-tour-step">Step 1 of 5</div>' +
+      '<div class="amcp-tour-title" id="amcp-tour-title">Overview</div>' +
+      '<div class="amcp-tour-copy" id="amcp-tour-copy"></div>' +
+      '<div class="amcp-tour-controls">' +
+        '<button id="amcp-tour-skip" class="amcp-welcome-btn amcp-welcome-btn-ghost">Skip</button>' +
+        '<button id="amcp-tour-next" class="amcp-welcome-btn amcp-welcome-btn-primary">Next</button>' +
+      '</div>';
+    c.querySelector('#amcp-tour-skip').addEventListener('click', function () { _endTour(false); });
+    c.querySelector('#amcp-tour-next').addEventListener('click', function () {
+      var next = _tourIdx + 1;
+      while (next < TOUR_STOPS.length && TOUR_STOPS[next].skipIf && TOUR_STOPS[next].skipIf()) next++;
+      if (next >= TOUR_STOPS.length) { _endTour(true); return; }
+      _gotoTourStop(next);
+    });
+    return c;
+  }
+
+  function _gotoTourStop(idx) {
+    // Clear previous target highlight
+    if (_tourTargetEl) _tourTargetEl.classList.remove('amcp-tour-target');
+
+    var stop = TOUR_STOPS[idx];
+    if (!stop) return;
+
+    // Skip hidden stops (e.g. Radar for non-Pro)
+    if (stop.skipIf && stop.skipIf()) {
+      var next = idx + 1;
+      while (next < TOUR_STOPS.length && TOUR_STOPS[next].skipIf && TOUR_STOPS[next].skipIf()) next++;
+      if (next >= TOUR_STOPS.length) { _endTour(true); return; }
+      _gotoTourStop(next);
+      return;
+    }
+
+    _tourIdx = idx;
+
+    // Drive the section switch so the target content is rendered behind the card
+    if (stop.section && window.AMCP_SECTIONS && window.AMCP_SECTIONS[stop.section]) {
+      var navItem = document.querySelector('[data-section="' + stop.section + '"]');
+      if (navItem) navItem.click();
+    }
+
+    // Highlight target
+    var target = document.querySelector(stop.selector);
+    _tourTargetEl = target;
+    if (target) target.classList.add('amcp-tour-target');
+
+    // Populate card copy
+    var stepEl  = document.getElementById('amcp-tour-step');
+    var titleEl = document.getElementById('amcp-tour-title');
+    var copyEl  = document.getElementById('amcp-tour-copy');
+    var nextBtn = document.getElementById('amcp-tour-next');
+    if (stepEl)  stepEl.textContent  = stop.step;
+    if (titleEl) titleEl.textContent = stop.title;
+    if (copyEl)  copyEl.textContent  = stop.copy;
+    if (nextBtn) nextBtn.textContent = idx === TOUR_STOPS.length - 1 ? 'Finish' : 'Next';
+
+    _positionTourCard(target);
+  }
+
+  function _positionTourCard(target) {
+    if (!_tourCard) return;
+    if (!target) {
+      // Fallback: center the card
+      _tourCard.style.top  = '50%';
+      _tourCard.style.left = '50%';
+      _tourCard.style.transform = 'translate(-50%, -50%)';
+      return;
+    }
+    _tourCard.style.transform = '';
+    var rect = target.getBoundingClientRect();
+    var cardWidth  = _tourCard.offsetWidth  || 320;
+    var cardHeight = _tourCard.offsetHeight || 160;
+    var gap = 14;
+
+    // Prefer placing the card to the right of the sidebar item
+    var left = rect.right + gap;
+    var top  = rect.top + (rect.height / 2) - (cardHeight / 2);
+
+    // If card would overflow right edge, place below instead
+    if (left + cardWidth + 8 > window.innerWidth) {
+      left = Math.max(8, rect.left);
+      top  = rect.bottom + gap;
+    }
+    // Clamp vertically
+    top  = Math.max(8, Math.min(top, window.innerHeight - cardHeight - 8));
+    left = Math.max(8, Math.min(left, window.innerWidth - cardWidth - 8));
+
+    _tourCard.style.top  = Math.round(top)  + 'px';
+    _tourCard.style.left = Math.round(left) + 'px';
+  }
+
+  function _endTour(completed) {
+    if (_tourTargetEl) _tourTargetEl.classList.remove('amcp-tour-target');
+    _tourTargetEl = null;
+    if (_tourBackdrop) _tourBackdrop.classList.remove('show');
+    if (_tourCard)     _tourCard.classList.remove('show');
+    if (_tourKeyHandler) {
+      document.removeEventListener('keydown', _tourKeyHandler);
+      _tourKeyHandler = null;
+    }
+    if (completed) {
+      markStep('tour.completed_at', new Date().toISOString());
+      markStep('checklist.took_tour').then(function () { _refreshChecklist(); });
+    }
   }
 
   /* ── Section renderer (registered as AMCP_SECTIONS['getting-started']) ─── */
