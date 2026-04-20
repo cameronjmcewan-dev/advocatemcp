@@ -239,10 +239,7 @@
   }
 
   function _scenesHTML() {
-    return _scene1() +
-      '<div class="amcp-welcome-scene"><div class="amcp-scene-placeholder">Scene 2 — coming next</div></div>' +
-      '<div class="amcp-welcome-scene"><div class="amcp-scene-placeholder">Scene 3 — coming next</div></div>' +
-      '<div class="amcp-welcome-scene"><div class="amcp-scene-placeholder">Scene 4 — coming next</div></div>';
+    return _scene1() + _scene2() + _scene3() + _scene4();
   }
 
   /* Scene 1: "You built an agent."
@@ -303,6 +300,209 @@
 
       /* dashed connector line bubble-tail → roof */
       '<line x1="420" y1="196" x2="370" y2="190" stroke="#5c1532" stroke-width="1" stroke-dasharray="3 3" opacity=".4"/>' +
+
+      '</svg>' +
+    '</div>';
+  }
+
+  /* Scene 2: "AI assistants ask about your business."
+   * Three abstract AI marks (ChatGPT swirl, Claude asterisk, Perplexity atom)
+   * flow into a central Advocate shield via dashed animated arrows. */
+  function _scene2() {
+    return '<div class="amcp-welcome-scene">' +
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" style="width:100%;height:100%;display:block" aria-hidden="true">' +
+      '<defs><style>' +
+        '@keyframes s2-flow{to{stroke-dashoffset:-20}}' +
+        '@keyframes s2-in{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}' +
+        '@keyframes s2-pop{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:scale(1)}}' +
+        '.s2-m1{animation:s2-in .4s ease .1s both;transform-origin:100px 90px}' +
+        '.s2-m2{animation:s2-in .4s ease .25s both;transform-origin:100px 180px}' +
+        '.s2-m3{animation:s2-in .4s ease .4s both;transform-origin:100px 270px}' +
+        '.s2-arrow{stroke-dasharray:6 4;animation:s2-flow 1.2s linear infinite}' +
+        '.s2-a1{animation:s2-in .4s ease .55s both,s2-flow 1.2s linear .55s infinite}' +
+        '.s2-a2{animation:s2-in .4s ease .7s both,s2-flow 1.2s linear .7s infinite}' +
+        '.s2-a3{animation:s2-in .4s ease .85s both,s2-flow 1.2s linear .85s infinite}' +
+        '.s2-shield{animation:s2-pop .45s ease 1.0s both;transform-origin:500px 180px}' +
+      '</style></defs>' +
+
+      '<rect width="640" height="360" style="fill:var(--surface-2,#140a0c)"/>' +
+
+      /* Mark 1: ChatGPT-like swirl */
+      '<g class="s2-m1" transform="translate(100,90)">' +
+        '<circle r="30" style="fill:var(--surface,#0d0507);stroke:var(--accent-bright,#5c1532)" stroke-width="1.5"/>' +
+        '<path d="M-14,-4 Q-4,-16 10,-8 Q18,4 4,14 Q-12,13 -13,1" fill="none" stroke="#a39a97" stroke-width="2" stroke-linecap="round"/>' +
+        '<circle r="2.5" fill="#a39a97"/>' +
+        '<text y="48" text-anchor="middle" font-size="10" fill="var(--muted,#8a7c78)" font-family="\'General Sans\',system-ui,sans-serif">ChatGPT</text>' +
+      '</g>' +
+
+      /* Mark 2: Claude asterisk */
+      '<g class="s2-m2" transform="translate(100,180)">' +
+        '<circle r="30" style="fill:var(--surface,#0d0507);stroke:var(--accent-bright,#5c1532)" stroke-width="1.5"/>' +
+        '<g stroke="#d97757" stroke-width="2.5" stroke-linecap="round">' +
+          '<line x1="0" y1="-14" x2="0" y2="14"/>' +
+          '<line x1="-14" y1="0" x2="14" y2="0"/>' +
+          '<line x1="-10" y1="-10" x2="10" y2="10"/>' +
+          '<line x1="-10" y1="10" x2="10" y2="-10"/>' +
+        '</g>' +
+        '<text y="48" text-anchor="middle" font-size="10" fill="var(--muted,#8a7c78)" font-family="\'General Sans\',system-ui,sans-serif">Claude</text>' +
+      '</g>' +
+
+      /* Mark 3: Perplexity atom */
+      '<g class="s2-m3" transform="translate(100,270)">' +
+        '<circle r="30" style="fill:var(--surface,#0d0507);stroke:var(--accent-bright,#5c1532)" stroke-width="1.5"/>' +
+        '<ellipse rx="18" ry="7" fill="none" stroke="#20b2ab" stroke-width="1.5"/>' +
+        '<ellipse rx="18" ry="7" fill="none" stroke="#20b2ab" stroke-width="1.5" transform="rotate(60)"/>' +
+        '<ellipse rx="18" ry="7" fill="none" stroke="#20b2ab" stroke-width="1.5" transform="rotate(120)"/>' +
+        '<circle r="4" fill="#20b2ab"/>' +
+        '<text y="48" text-anchor="middle" font-size="10" fill="var(--muted,#8a7c78)" font-family="\'General Sans\',system-ui,sans-serif">Perplexity</text>' +
+      '</g>' +
+
+      /* Flowing dashed arrows */
+      '<path class="s2-arrow s2-a1" d="M135,90 Q300,90 468,160" fill="none" stroke="#5c1532" stroke-width="2"/>' +
+      '<path class="s2-arrow s2-a2" d="M135,180 Q300,180 468,180" fill="none" stroke="#5c1532" stroke-width="2"/>' +
+      '<path class="s2-arrow s2-a3" d="M135,270 Q300,270 468,200" fill="none" stroke="#5c1532" stroke-width="2"/>' +
+
+      /* Central Advocate shield */
+      '<g class="s2-shield" transform="translate(500,180)">' +
+        '<circle r="52" style="fill:var(--accent-glow,rgba(92,21,50,.35))" opacity=".4"/>' +
+        '<path d="M-32,-34 L32,-34 L32,6 Q32,24 0,36 Q-32,24 -32,6 Z" style="fill:var(--accent,#3d0a22);stroke:var(--accent-bright,#5c1532)" stroke-width="1.5"/>' +
+        '<text y="8" text-anchor="middle" font-size="30" font-weight="700" fill="#e8e3e0" font-family="\'General Sans\',system-ui,sans-serif">A</text>' +
+        '<text y="58" text-anchor="middle" font-size="10" font-weight="600" fill="#5c1532" letter-spacing="1.2" font-family="\'General Sans\',system-ui,sans-serif">ADVOCATE</text>' +
+      '</g>' +
+
+      '</svg>' +
+    '</div>';
+  }
+
+  /* Scene 3: "Three steps to go live."
+   * Vertical stepper — three circles pop, checkmarks draw, connector line
+   * draws in. Labels stagger in beside each step. */
+  function _scene3() {
+    return '<div class="amcp-welcome-scene">' +
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" style="width:100%;height:100%;display:block" aria-hidden="true">' +
+      '<defs><style>' +
+        '@keyframes s3-pop{from{opacity:0;transform:scale(.4)}to{opacity:1;transform:scale(1)}}' +
+        '@keyframes s3-draw{to{stroke-dashoffset:0}}' +
+        '@keyframes s3-appear{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}' +
+        '.s3-c1{animation:s3-pop .4s ease .2s both;transform-origin:200px 90px}' +
+        '.s3-c2{animation:s3-pop .4s ease 1.0s both;transform-origin:200px 180px}' +
+        '.s3-c3{animation:s3-pop .4s ease 1.8s both;transform-origin:200px 270px}' +
+        '.s3-k{stroke-dasharray:40;stroke-dashoffset:40}' +
+        '.s3-k1{animation:s3-draw .35s ease .55s both}' +
+        '.s3-k2{animation:s3-draw .35s ease 1.35s both}' +
+        '.s3-k3{animation:s3-draw .35s ease 2.15s both}' +
+        '.s3-l1{animation:s3-appear .35s ease .35s both}' +
+        '.s3-l2{animation:s3-appear .35s ease 1.15s both}' +
+        '.s3-l3{animation:s3-appear .35s ease 1.95s both}' +
+        '.s3-line{stroke-dasharray:180;stroke-dashoffset:180;animation:s3-draw 1.5s ease .3s both}' +
+      '</style></defs>' +
+
+      '<rect width="640" height="360" style="fill:var(--surface-2,#140a0c)"/>' +
+
+      /* Vertical connector line between circles */
+      '<line class="s3-line" x1="200" y1="112" x2="200" y2="248" style="stroke:var(--accent-bright,#5c1532)" stroke-width="2" stroke-linecap="round"/>' +
+
+      /* Step 1 */
+      '<g class="s3-c1">' +
+        '<circle cx="200" cy="90" r="22" style="fill:var(--accent,#3d0a22);stroke:var(--accent-bright,#5c1532)" stroke-width="2"/>' +
+        '<path class="s3-k s3-k1" d="M189,90 L197,98 L212,83" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '</g>' +
+      '<g class="s3-l1">' +
+        '<text x="240" y="86" font-size="17" font-weight="600" fill="var(--text,#e8e3e0)" font-family="\'General Sans\',system-ui,sans-serif">DNS wired up</text>' +
+        '<text x="240" y="106" font-size="12" fill="var(--muted,#8a7c78)" font-family="\'General Sans\',system-ui,sans-serif">Your domain points to Advocate</text>' +
+      '</g>' +
+
+      /* Step 2 */
+      '<g class="s3-c2">' +
+        '<circle cx="200" cy="180" r="22" style="fill:var(--accent,#3d0a22);stroke:var(--accent-bright,#5c1532)" stroke-width="2"/>' +
+        '<path class="s3-k s3-k2" d="M189,180 L197,188 L212,173" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '</g>' +
+      '<g class="s3-l2">' +
+        '<text x="240" y="176" font-size="17" font-weight="600" fill="var(--text,#e8e3e0)" font-family="\'General Sans\',system-ui,sans-serif">Agent answers bots</text>' +
+        '<text x="240" y="196" font-size="12" fill="var(--muted,#8a7c78)" font-family="\'General Sans\',system-ui,sans-serif">Crawlers get canonical answers from you</text>' +
+      '</g>' +
+
+      /* Step 3 */
+      '<g class="s3-c3">' +
+        '<circle cx="200" cy="270" r="22" style="fill:var(--accent,#3d0a22);stroke:var(--accent-bright,#5c1532)" stroke-width="2"/>' +
+        '<path class="s3-k s3-k3" d="M189,270 L197,278 L212,263" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '</g>' +
+      '<g class="s3-l3">' +
+        '<text x="240" y="266" font-size="17" font-weight="600" fill="var(--text,#e8e3e0)" font-family="\'General Sans\',system-ui,sans-serif">You see activity</text>' +
+        '<text x="240" y="286" font-size="12" fill="var(--muted,#8a7c78)" font-family="\'General Sans\',system-ui,sans-serif">Bot hits, queries, and referrals in your dashboard</text>' +
+      '</g>' +
+
+      '</svg>' +
+    '</div>';
+  }
+
+  /* Scene 4: "Your dashboard, explained."
+   * Miniature wireframe — sidebar + topbar + KPI cards + chart — with three
+   * dotted callouts pointing at Overview nav, KPI cards, and trend chart. */
+  function _scene4() {
+    return '<div class="amcp-welcome-scene">' +
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" style="width:100%;height:100%;display:block" aria-hidden="true">' +
+      '<defs><style>' +
+        '@keyframes s4-in{from{opacity:0}to{opacity:1}}' +
+        '.s4-mock{animation:s4-in .4s ease .1s both}' +
+        '.s4-cb1{animation:s4-in .35s ease .7s both}' +
+        '.s4-cb2{animation:s4-in .35s ease 1.3s both}' +
+        '.s4-cb3{animation:s4-in .35s ease 1.9s both}' +
+      '</style></defs>' +
+
+      '<rect width="640" height="360" style="fill:var(--surface-2,#140a0c)"/>' +
+
+      /* Dashboard mock */
+      '<g class="s4-mock">' +
+        /* outer frame */
+        '<rect x="250" y="60" width="350" height="240" rx="6" style="fill:var(--surface,#0d0507);stroke:var(--border,#2a1418)" stroke-width="1.5"/>' +
+        /* sidebar */
+        '<rect x="250" y="60" width="80" height="240" style="fill:var(--bg,#050202);stroke:var(--border,#2a1418)" stroke-width="1"/>' +
+        '<rect x="260" y="72" width="60" height="10" rx="2" style="fill:var(--accent-bright,#5c1532)"/>' +
+        /* sidebar nav: first item highlighted */
+        '<rect x="258" y="100" width="64" height="14" rx="3" style="fill:var(--accent,#3d0a22)"/>' +
+        '<rect x="258" y="122" width="64" height="14" rx="3" style="fill:var(--border,#2a1418)" opacity=".5"/>' +
+        '<rect x="258" y="144" width="64" height="14" rx="3" style="fill:var(--border,#2a1418)" opacity=".5"/>' +
+        '<rect x="258" y="166" width="64" height="14" rx="3" style="fill:var(--border,#2a1418)" opacity=".5"/>' +
+        '<rect x="258" y="188" width="64" height="14" rx="3" style="fill:var(--border,#2a1418)" opacity=".5"/>' +
+        /* topbar */
+        '<rect x="330" y="60" width="270" height="26" style="fill:var(--bg,#050202);stroke:var(--border,#2a1418)" stroke-width="1"/>' +
+        '<rect x="342" y="69" width="50" height="8" rx="2" style="fill:var(--muted,#8a7c78)" opacity=".5"/>' +
+        /* KPI cards */
+        '<rect x="345" y="100" width="75" height="60" rx="4" style="fill:var(--surface-2,#140a0c);stroke:var(--border,#2a1418)" stroke-width="1"/>' +
+        '<rect x="353" y="108" width="36" height="5" rx="2" style="fill:var(--muted,#8a7c78)" opacity=".6"/>' +
+        '<rect x="353" y="124" width="40" height="16" rx="2" style="fill:var(--accent-bright,#5c1532)"/>' +
+        '<rect x="430" y="100" width="75" height="60" rx="4" style="fill:var(--surface-2,#140a0c);stroke:var(--border,#2a1418)" stroke-width="1"/>' +
+        '<rect x="438" y="108" width="36" height="5" rx="2" style="fill:var(--muted,#8a7c78)" opacity=".6"/>' +
+        '<rect x="438" y="124" width="40" height="16" rx="2" style="fill:var(--accent-bright,#5c1532)"/>' +
+        '<rect x="515" y="100" width="75" height="60" rx="4" style="fill:var(--surface-2,#140a0c);stroke:var(--border,#2a1418)" stroke-width="1"/>' +
+        '<rect x="523" y="108" width="36" height="5" rx="2" style="fill:var(--muted,#8a7c78)" opacity=".6"/>' +
+        '<rect x="523" y="124" width="40" height="16" rx="2" style="fill:var(--accent-bright,#5c1532)"/>' +
+        /* chart placeholder */
+        '<rect x="345" y="175" width="245" height="115" rx="4" style="fill:var(--surface-2,#140a0c);stroke:var(--border,#2a1418)" stroke-width="1"/>' +
+        '<path d="M355,270 L390,248 L420,258 L450,228 L480,240 L515,208 L555,222 L585,192" fill="none" style="stroke:var(--accent-bright,#5c1532)" stroke-width="1.5"/>' +
+      '</g>' +
+
+      /* Callout 1: Overview nav item */
+      '<g class="s4-cb1">' +
+        '<line x1="246" y1="107" x2="210" y2="107" style="stroke:var(--muted,#8a7c78)" stroke-width="1" stroke-dasharray="3 3"/>' +
+        '<text x="205" y="102" text-anchor="end" font-size="12" font-weight="600" fill="var(--text,#e8e3e0)" font-family="\'General Sans\',system-ui,sans-serif">Overview</text>' +
+        '<text x="205" y="116" text-anchor="end" font-size="10" fill="var(--muted,#8a7c78)" font-family="\'General Sans\',system-ui,sans-serif">KPIs at a glance</text>' +
+      '</g>' +
+
+      /* Callout 2: KPI cards */
+      '<g class="s4-cb2">' +
+        '<line x1="430" y1="96" x2="430" y2="52" style="stroke:var(--muted,#8a7c78)" stroke-width="1" stroke-dasharray="3 3"/>' +
+        '<text x="430" y="42" text-anchor="middle" font-size="12" font-weight="600" fill="var(--text,#e8e3e0)" font-family="\'General Sans\',system-ui,sans-serif">AI Requests</text>' +
+        '<text x="430" y="28" text-anchor="middle" font-size="10" fill="var(--muted,#8a7c78)" font-family="\'General Sans\',system-ui,sans-serif">30-day trends</text>' +
+      '</g>' +
+
+      /* Callout 3: chart */
+      '<g class="s4-cb3">' +
+        '<line x1="465" y1="294" x2="465" y2="325" style="stroke:var(--muted,#8a7c78)" stroke-width="1" stroke-dasharray="3 3"/>' +
+        '<text x="465" y="340" text-anchor="middle" font-size="12" font-weight="600" fill="var(--text,#e8e3e0)" font-family="\'General Sans\',system-ui,sans-serif">Bots + Referrals</text>' +
+        '<text x="465" y="354" text-anchor="middle" font-size="10" fill="var(--muted,#8a7c78)" font-family="\'General Sans\',system-ui,sans-serif">Who asked, who clicked</text>' +
+      '</g>' +
 
       '</svg>' +
     '</div>';
