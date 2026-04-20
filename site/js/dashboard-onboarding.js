@@ -295,276 +295,344 @@
     return _scene1() + _scene2() + _scene3() + _scene4();
   }
 
-  /* Scene 1: "You built an agent."
-   * Storefront silhouette + pulsing Advocate speech bubble.
-   * All colors via CSS vars with hex fallbacks for SVG attribute context. */
+  /* Scene 1 — "You built an agent."
+   *
+   * A single hero composition: the Advocate mark, large and centered, with
+   * concentric ripple circles expanding outward. No cartoon storefront.
+   * Subtle radial glow behind the mark. Feels like a product launch still.
+   *
+   * Shared design language across scenes:
+   *   - One accent color (burgundy). No oranges, teals, greys.
+   *   - Radial gradient background: glow at center, fading to surface.
+   *   - Cubic-bezier(0.22, 1, 0.36, 1) for entries (out-quint — smooth
+   *     deceleration, no bounce).
+   *   - Drop shadows via feGaussianBlur + feOffset instead of fake offset
+   *     rectangles.
+   */
   function _scene1() {
     return '<div class="amcp-welcome-scene active">' +
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" style="width:100%;height:100%;display:block" aria-hidden="true">' +
-      '<defs><style>' +
-        '@keyframes s1-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}' +
-        '@keyframes s1-appear{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}' +
-        '.s1-bubble{animation:s1-appear .5s ease .1s both}' +
-        '.s1-shield{animation:s1-pulse 2.2s ease-in-out infinite;transform-origin:488px 114px}' +
-      '</style></defs>' +
+      '<defs>' +
+        '<radialGradient id="s1-bg" cx="50%" cy="50%" r="55%">' +
+          '<stop offset="0%"  stop-color="#3d0a22" stop-opacity=".55"/>' +
+          '<stop offset="60%" stop-color="#140a0c" stop-opacity=".3"/>' +
+          '<stop offset="100%" stop-color="#050202" stop-opacity="0"/>' +
+        '</radialGradient>' +
+        '<linearGradient id="s1-shield" x1="0" y1="0" x2="0" y2="1">' +
+          '<stop offset="0%"  stop-color="#5c1532"/>' +
+          '<stop offset="100%" stop-color="#3d0a22"/>' +
+        '</linearGradient>' +
+        '<filter id="s1-shadow" x="-30%" y="-30%" width="160%" height="160%">' +
+          '<feGaussianBlur in="SourceAlpha" stdDeviation="6"/>' +
+          '<feOffset dx="0" dy="8" result="o"/>' +
+          '<feComponentTransfer><feFuncA type="linear" slope=".45"/></feComponentTransfer>' +
+          '<feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>' +
+        '</filter>' +
+        '<style>' +
+          '@keyframes s1-rise{from{opacity:0;transform:translateY(12px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}' +
+          '@keyframes s1-ripple{0%{opacity:.7;transform:scale(.4)}100%{opacity:0;transform:scale(2.4)}}' +
+          '@keyframes s1-line{from{stroke-dashoffset:160}to{stroke-dashoffset:0}}' +
+          '@keyframes s1-fade{from{opacity:0}to{opacity:1}}' +
+          '.s1-mark{animation:s1-rise .9s cubic-bezier(.22,1,.36,1) .15s both;transform-origin:center;transform-box:fill-box}' +
+          '.s1-r1{animation:s1-ripple 2.6s cubic-bezier(.4,0,.2,1) .4s infinite;transform-origin:center;transform-box:fill-box}' +
+          '.s1-r2{animation:s1-ripple 2.6s cubic-bezier(.4,0,.2,1) 1.25s infinite;transform-origin:center;transform-box:fill-box}' +
+          '.s1-lbl{animation:s1-rise .7s cubic-bezier(.22,1,.36,1) .55s both;transform-origin:center;transform-box:fill-box}' +
+          '.s1-rule{stroke-dasharray:160;stroke-dashoffset:160;animation:s1-line 1s cubic-bezier(.22,1,.36,1) .75s both}' +
+          '.s1-caption{animation:s1-fade .6s ease .95s both}' +
+        '</style>' +
+      '</defs>' +
 
-      /* bg */
-      '<rect width="640" height="360" style="fill:var(--surface-2,#140a0c)"/>' +
-      /* subtle grid */
-      '<line x1="0" y1="180" x2="640" y2="180" stroke="#2a1418" stroke-width=".5"/>' +
-      '<line x1="320" y1="0" x2="320" y2="360" stroke="#2a1418" stroke-width=".5"/>' +
+      '<rect width="640" height="360" fill="#050202"/>' +
+      '<rect width="640" height="360" fill="url(#s1-bg)"/>' +
 
-      /* storefront body */
-      '<rect x="150" y="196" width="240" height="140" rx="3" style="fill:var(--surface,#0d0507);stroke:var(--border,#2a1418)" stroke-width="1.5"/>' +
-      /* roof */
-      '<polygon points="133,198 270,118 407,198" style="fill:var(--accent,#3d0a22)"/>' +
-      '<line x1="133" y1="198" x2="407" y2="198" stroke="#5c1532" stroke-width="2"/>' +
-      /* left window */
-      '<rect x="165" y="216" width="68" height="46" rx="3" style="fill:var(--accent-dim,rgba(61,10,34,.18));stroke:var(--border,#2a1418)" stroke-width="1"/>' +
-      '<rect x="168" y="219" width="22" height="10" rx="1" fill="#5c1532" opacity=".3"/>' +
-      /* right window */
-      '<rect x="307" y="216" width="68" height="46" rx="3" style="fill:var(--accent-dim,rgba(61,10,34,.18));stroke:var(--border,#2a1418)" stroke-width="1"/>' +
-      '<rect x="310" y="219" width="22" height="10" rx="1" fill="#5c1532" opacity=".3"/>' +
-      /* door */
-      '<rect x="237" y="264" width="66" height="72" rx="3" style="fill:var(--accent,#3d0a22);stroke:var(--accent-bright,#5c1532)" stroke-width="1"/>' +
-      '<circle cx="296" cy="302" r="3" fill="#e8e3e0" opacity=".55"/>' +
-      /* steps */
-      '<rect x="226" y="335" width="88" height="5" rx="2" style="fill:var(--border,#2a1418)"/>' +
-      '<rect x="215" y="338" width="110" height="3" rx="2" style="fill:var(--border,#2a1418)" opacity=".5"/>' +
+      /* Ripples */
+      '<circle class="s1-r1" cx="320" cy="180" r="54" fill="none" stroke="#5c1532" stroke-width="1" stroke-opacity=".35"/>' +
+      '<circle class="s1-r2" cx="320" cy="180" r="54" fill="none" stroke="#5c1532" stroke-width="1" stroke-opacity=".35"/>' +
 
-      /* speech bubble group */
-      '<g class="s1-bubble">' +
-        /* shadow */
-        '<rect x="415" y="85" width="158" height="94" rx="14" fill="#000" opacity=".22" transform="translate(2,3)"/>' +
-        /* body */
-        '<rect x="415" y="85" width="158" height="94" rx="14" style="fill:var(--surface,#0d0507);stroke:var(--accent-bright,#5c1532)" stroke-width="1.5"/>' +
-        /* tail: a down-left pointing triangle */
-        '<path d="M436,179 L420,200 L458,179" style="fill:var(--surface,#0d0507);stroke:var(--accent-bright,#5c1532)" stroke-width="1.5" stroke-linejoin="round"/>' +
-        /* cover the bubble bottom border in the tail gap */
-        '<rect x="421" y="175" width="46" height="8" style="fill:var(--surface,#0d0507)"/>' +
-        /* shield */
-        '<g class="s1-shield">' +
-          '<path d="M466,94 L510,94 L510,121 Q510,133 488,139 Q466,133 466,121 Z" style="fill:var(--accent,#3d0a22);stroke:var(--accent-bright,#5c1532)" stroke-width="1.5"/>' +
-          '<text x="488" y="121" text-anchor="middle" dominant-baseline="middle" font-size="21" font-weight="700" fill="#e8e3e0" font-family="\'General Sans\',system-ui,sans-serif">A</text>' +
-        '</g>' +
-        /* "ADVOCATE" label */
-        '<text x="488" y="155" text-anchor="middle" font-size="9.5" font-weight="600" fill="#5c1532" font-family="\'General Sans\',system-ui,sans-serif" letter-spacing="1.2">ADVOCATE</text>' +
+      /* Hero mark */
+      '<g class="s1-mark" filter="url(#s1-shadow)">' +
+        /* shield silhouette */
+        '<path d="M260,120 L380,120 L380,204 Q380,230 320,256 Q260,230 260,204 Z" fill="url(#s1-shield)"/>' +
+        '<path d="M260,120 L380,120 L380,204 Q380,230 320,256 Q260,230 260,204 Z" fill="none" stroke="#7a1c40" stroke-width="1"/>' +
+        /* serif A */
+        '<text x="320" y="200" text-anchor="middle" font-size="74" font-weight="400" fill="#f5ebed" font-family="\'Instrument Serif\',Georgia,serif">A</text>' +
       '</g>' +
 
-      /* dashed connector line bubble-tail → roof */
-      '<line x1="420" y1="196" x2="370" y2="190" stroke="#5c1532" stroke-width="1" stroke-dasharray="3 3" opacity=".4"/>' +
+      /* Horizontal rule under mark */
+      '<line class="s1-rule" x1="240" y1="286" x2="400" y2="286" stroke="#5c1532" stroke-width="1" stroke-opacity=".7"/>' +
+
+      /* Caption */
+      '<g class="s1-caption">' +
+        '<text x="320" y="308" text-anchor="middle" font-size="11" font-weight="600" fill="#5c1532" letter-spacing="3" font-family="\'General Sans\',system-ui,sans-serif">ADVOCATE</text>' +
+        '<text x="320" y="330" text-anchor="middle" font-size="12" fill="#8a7c78" font-family="\'General Sans\',system-ui,sans-serif">Your AI-facing agent, live.</text>' +
+      '</g>' +
 
       '</svg>' +
     '</div>';
   }
 
-  /* Scene 2: "AI assistants ask about your business."
-   * Three abstract AI marks (ChatGPT swirl, Claude asterisk, Perplexity atom)
-   * flow into a central Advocate shield via dashed animated arrows. */
+  /* Scene 2 — "AI assistants ask about your business."
+   *
+   * Left column: three name pills (just a coloured dot + service name). The
+   * hand-drawn swirl/asterisk/atom marks are gone — the pills read instantly
+   * as "AI platforms" without pretending to be real brand logos.
+   *
+   * Right: the Advocate shield again (same lockup as scene 1, smaller).
+   *
+   * Between them: three soft, solid-stroke Bézier curves with a gradient
+   * that fades darker → brighter toward the shield. No dashed animation.
+   * Each curve draws in with stroke-dashoffset after its pill settles.
+   */
   function _scene2() {
     return '<div class="amcp-welcome-scene">' +
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" style="width:100%;height:100%;display:block" aria-hidden="true">' +
-      '<defs><style>' +
-        '@keyframes s2-flow{to{stroke-dashoffset:-20}}' +
-        '@keyframes s2-in{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}' +
-        '@keyframes s2-pop{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:scale(1)}}' +
-        '.s2-m1{animation:s2-in .4s ease .1s both}' +
-        '.s2-m2{animation:s2-in .4s ease .25s both}' +
-        '.s2-m3{animation:s2-in .4s ease .4s both}' +
-        '.s2-arrow{stroke-dasharray:6 4;animation:s2-flow 1.2s linear infinite}' +
-        '.s2-a1{animation:s2-in .4s ease .55s both,s2-flow 1.2s linear .55s infinite}' +
-        '.s2-a2{animation:s2-in .4s ease .7s both,s2-flow 1.2s linear .7s infinite}' +
-        '.s2-a3{animation:s2-in .4s ease .85s both,s2-flow 1.2s linear .85s infinite}' +
-        '.s2-shield{animation:s2-pop .45s ease 1.0s both;transform-origin:center}' +
-      '</style></defs>' +
+      '<defs>' +
+        '<radialGradient id="s2-bg" cx="75%" cy="50%" r="55%">' +
+          '<stop offset="0%"  stop-color="#3d0a22" stop-opacity=".45"/>' +
+          '<stop offset="70%" stop-color="#140a0c" stop-opacity=".2"/>' +
+          '<stop offset="100%" stop-color="#050202" stop-opacity="0"/>' +
+        '</radialGradient>' +
+        '<linearGradient id="s2-wire" x1="0" y1="0" x2="1" y2="0">' +
+          '<stop offset="0%"  stop-color="#2a0811" stop-opacity=".2"/>' +
+          '<stop offset="100%" stop-color="#7a1c40" stop-opacity=".9"/>' +
+        '</linearGradient>' +
+        '<linearGradient id="s2-shield" x1="0" y1="0" x2="0" y2="1">' +
+          '<stop offset="0%"  stop-color="#5c1532"/>' +
+          '<stop offset="100%" stop-color="#3d0a22"/>' +
+        '</linearGradient>' +
+        '<filter id="s2-shadow" x="-30%" y="-30%" width="160%" height="160%">' +
+          '<feGaussianBlur in="SourceAlpha" stdDeviation="5"/>' +
+          '<feOffset dx="0" dy="6"/>' +
+          '<feComponentTransfer><feFuncA type="linear" slope=".4"/></feComponentTransfer>' +
+          '<feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>' +
+        '</filter>' +
+        '<style>' +
+          '@keyframes s2-pill{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:translateX(0)}}' +
+          '@keyframes s2-draw{to{stroke-dashoffset:0}}' +
+          '@keyframes s2-shield-in{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}' +
+          '.s2-p{animation:s2-pill .65s cubic-bezier(.22,1,.36,1) both}' +
+          '.s2-p1{animation-delay:.1s}' +
+          '.s2-p2{animation-delay:.22s}' +
+          '.s2-p3{animation-delay:.34s}' +
+          '.s2-wire{stroke-dasharray:320;stroke-dashoffset:320;animation:s2-draw .8s cubic-bezier(.22,1,.36,1) both}' +
+          '.s2-w1{animation-delay:.5s}' +
+          '.s2-w2{animation-delay:.62s}' +
+          '.s2-w3{animation-delay:.74s}' +
+          '.s2-shield-grp{animation:s2-shield-in .7s cubic-bezier(.22,1,.36,1) .9s both;transform-origin:center;transform-box:fill-box}' +
+        '</style>' +
+      '</defs>' +
 
-      '<rect width="640" height="360" style="fill:var(--surface-2,#140a0c)"/>' +
+      '<rect width="640" height="360" fill="#050202"/>' +
+      '<rect width="640" height="360" fill="url(#s2-bg)"/>' +
 
-      /* Mark 1: ChatGPT-like swirl. Outer g positions, inner g animates
-       * (CSS transform on an SVG element clobbers the `transform` attribute,
-       * so we separate the two). */
-      '<g transform="translate(100,90)">' +
-        '<g class="s2-m1">' +
-          '<circle r="30" style="fill:var(--surface,#0d0507);stroke:var(--accent-bright,#5c1532)" stroke-width="1.5"/>' +
-          '<path d="M-14,-4 Q-4,-16 10,-8 Q18,4 4,14 Q-12,13 -13,1" fill="none" stroke="#a39a97" stroke-width="2" stroke-linecap="round"/>' +
-          '<circle r="2.5" fill="#a39a97"/>' +
-          '<text y="48" text-anchor="middle" font-size="10" fill="var(--muted,#8a7c78)" font-family="\'General Sans\',system-ui,sans-serif">ChatGPT</text>' +
+      /* Three name pills — dot + label */
+      '<g transform="translate(60,96)">' +
+        '<g class="s2-p s2-p1">' +
+          '<rect x="0" y="0" width="178" height="42" rx="21" fill="#140a0c" stroke="#2a1418" stroke-width="1"/>' +
+          '<circle cx="22" cy="21" r="5" fill="#5c1532"/>' +
+          '<text x="40" y="26" font-size="14" font-weight="500" fill="#e8e3e0" font-family="\'General Sans\',system-ui,sans-serif">ChatGPT</text>' +
+        '</g>' +
+      '</g>' +
+      '<g transform="translate(60,158)">' +
+        '<g class="s2-p s2-p2">' +
+          '<rect x="0" y="0" width="178" height="42" rx="21" fill="#140a0c" stroke="#2a1418" stroke-width="1"/>' +
+          '<circle cx="22" cy="21" r="5" fill="#5c1532"/>' +
+          '<text x="40" y="26" font-size="14" font-weight="500" fill="#e8e3e0" font-family="\'General Sans\',system-ui,sans-serif">Claude</text>' +
+        '</g>' +
+      '</g>' +
+      '<g transform="translate(60,220)">' +
+        '<g class="s2-p s2-p3">' +
+          '<rect x="0" y="0" width="178" height="42" rx="21" fill="#140a0c" stroke="#2a1418" stroke-width="1"/>' +
+          '<circle cx="22" cy="21" r="5" fill="#5c1532"/>' +
+          '<text x="40" y="26" font-size="14" font-weight="500" fill="#e8e3e0" font-family="\'General Sans\',system-ui,sans-serif">Perplexity</text>' +
         '</g>' +
       '</g>' +
 
-      /* Mark 2: Claude asterisk */
-      '<g transform="translate(100,180)">' +
-        '<g class="s2-m2">' +
-          '<circle r="30" style="fill:var(--surface,#0d0507);stroke:var(--accent-bright,#5c1532)" stroke-width="1.5"/>' +
-          '<g stroke="#d97757" stroke-width="2.5" stroke-linecap="round">' +
-            '<line x1="0" y1="-14" x2="0" y2="14"/>' +
-            '<line x1="-14" y1="0" x2="14" y2="0"/>' +
-            '<line x1="-10" y1="-10" x2="10" y2="10"/>' +
-            '<line x1="-10" y1="10" x2="10" y2="-10"/>' +
-          '</g>' +
-          '<text y="48" text-anchor="middle" font-size="10" fill="var(--muted,#8a7c78)" font-family="\'General Sans\',system-ui,sans-serif">Claude</text>' +
-        '</g>' +
-      '</g>' +
+      /* Connecting curves — solid stroke with gradient */
+      '<path class="s2-wire s2-w1" d="M238,117 C 340,117 380,168 478,180" fill="none" stroke="url(#s2-wire)" stroke-width="1.5"/>' +
+      '<path class="s2-wire s2-w2" d="M238,179 C 340,179 380,180 478,180" fill="none" stroke="url(#s2-wire)" stroke-width="1.5"/>' +
+      '<path class="s2-wire s2-w3" d="M238,241 C 340,241 380,192 478,180" fill="none" stroke="url(#s2-wire)" stroke-width="1.5"/>' +
 
-      /* Mark 3: Perplexity atom */
-      '<g transform="translate(100,270)">' +
-        '<g class="s2-m3">' +
-          '<circle r="30" style="fill:var(--surface,#0d0507);stroke:var(--accent-bright,#5c1532)" stroke-width="1.5"/>' +
-          '<ellipse rx="18" ry="7" fill="none" stroke="#20b2ab" stroke-width="1.5"/>' +
-          '<ellipse rx="18" ry="7" fill="none" stroke="#20b2ab" stroke-width="1.5" transform="rotate(60)"/>' +
-          '<ellipse rx="18" ry="7" fill="none" stroke="#20b2ab" stroke-width="1.5" transform="rotate(120)"/>' +
-          '<circle r="4" fill="#20b2ab"/>' +
-          '<text y="48" text-anchor="middle" font-size="10" fill="var(--muted,#8a7c78)" font-family="\'General Sans\',system-ui,sans-serif">Perplexity</text>' +
+      /* Advocate mark */
+      '<g class="s2-shield-grp" transform="translate(478,120)">' +
+        '<g filter="url(#s2-shadow)">' +
+          '<path d="M0,0 L120,0 L120,86 Q120,114 60,138 Q0,114 0,86 Z" fill="url(#s2-shield)"/>' +
+          '<path d="M0,0 L120,0 L120,86 Q120,114 60,138 Q0,114 0,86 Z" fill="none" stroke="#7a1c40" stroke-width="1"/>' +
+          '<text x="60" y="82" text-anchor="middle" font-size="54" font-weight="400" fill="#f5ebed" font-family="\'Instrument Serif\',Georgia,serif">A</text>' +
         '</g>' +
-      '</g>' +
-
-      /* Flowing dashed arrows */
-      '<path class="s2-arrow s2-a1" d="M135,90 Q300,90 468,160" fill="none" stroke="#5c1532" stroke-width="2"/>' +
-      '<path class="s2-arrow s2-a2" d="M135,180 Q300,180 468,180" fill="none" stroke="#5c1532" stroke-width="2"/>' +
-      '<path class="s2-arrow s2-a3" d="M135,270 Q300,270 468,200" fill="none" stroke="#5c1532" stroke-width="2"/>' +
-
-      /* Central Advocate shield — same nesting pattern */
-      '<g transform="translate(500,180)">' +
-        '<g class="s2-shield">' +
-          '<circle r="52" style="fill:var(--accent-glow,rgba(92,21,50,.35))" opacity=".4"/>' +
-          '<path d="M-32,-34 L32,-34 L32,6 Q32,24 0,36 Q-32,24 -32,6 Z" style="fill:var(--accent,#3d0a22);stroke:var(--accent-bright,#5c1532)" stroke-width="1.5"/>' +
-          '<text y="8" text-anchor="middle" font-size="30" font-weight="700" fill="#e8e3e0" font-family="\'General Sans\',system-ui,sans-serif">A</text>' +
-          '<text y="58" text-anchor="middle" font-size="10" font-weight="600" fill="#5c1532" letter-spacing="1.2" font-family="\'General Sans\',system-ui,sans-serif">ADVOCATE</text>' +
-        '</g>' +
+        '<text x="60" y="168" text-anchor="middle" font-size="10" font-weight="600" fill="#5c1532" letter-spacing="3" font-family="\'General Sans\',system-ui,sans-serif">ADVOCATE</text>' +
       '</g>' +
 
       '</svg>' +
     '</div>';
   }
 
-  /* Scene 3: "Three steps to go live."
-   * Vertical stepper — three circles pop, checkmarks draw, connector line
-   * draws in. Labels stagger in beside each step. */
+  /* Scene 3 — "Three steps to go live."
+   *
+   * Three horizontal cards, side by side. Each card: a large serif number
+   * (01 / 02 / 03), a thin divider, a bold title, a short description.
+   * Cards cascade in from below with a smooth deceleration; no pop, no
+   * bounce. Checkmarks were too juvenile — the numbers carry the order.
+   */
   function _scene3() {
     return '<div class="amcp-welcome-scene">' +
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" style="width:100%;height:100%;display:block" aria-hidden="true">' +
-      '<defs><style>' +
-        '@keyframes s3-pop{from{opacity:0;transform:scale(.4)}to{opacity:1;transform:scale(1)}}' +
-        '@keyframes s3-draw{to{stroke-dashoffset:0}}' +
-        '@keyframes s3-appear{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}' +
-        '.s3-c1{animation:s3-pop .4s ease .2s both;transform-origin:200px 90px}' +
-        '.s3-c2{animation:s3-pop .4s ease 1.0s both;transform-origin:200px 180px}' +
-        '.s3-c3{animation:s3-pop .4s ease 1.8s both;transform-origin:200px 270px}' +
-        '.s3-k{stroke-dasharray:40;stroke-dashoffset:40}' +
-        '.s3-k1{animation:s3-draw .35s ease .55s both}' +
-        '.s3-k2{animation:s3-draw .35s ease 1.35s both}' +
-        '.s3-k3{animation:s3-draw .35s ease 2.15s both}' +
-        '.s3-l1{animation:s3-appear .35s ease .35s both}' +
-        '.s3-l2{animation:s3-appear .35s ease 1.15s both}' +
-        '.s3-l3{animation:s3-appear .35s ease 1.95s both}' +
-        '.s3-line{stroke-dasharray:180;stroke-dashoffset:180;animation:s3-draw 1.5s ease .3s both}' +
-      '</style></defs>' +
+      '<defs>' +
+        '<radialGradient id="s3-bg" cx="50%" cy="50%" r="60%">' +
+          '<stop offset="0%"  stop-color="#3d0a22" stop-opacity=".35"/>' +
+          '<stop offset="80%" stop-color="#140a0c" stop-opacity=".15"/>' +
+          '<stop offset="100%" stop-color="#050202" stop-opacity="0"/>' +
+        '</radialGradient>' +
+        '<linearGradient id="s3-card" x1="0" y1="0" x2="0" y2="1">' +
+          '<stop offset="0%"  stop-color="#170c10"/>' +
+          '<stop offset="100%" stop-color="#0d0507"/>' +
+        '</linearGradient>' +
+        '<filter id="s3-shadow" x="-20%" y="-20%" width="140%" height="140%">' +
+          '<feGaussianBlur in="SourceAlpha" stdDeviation="4"/>' +
+          '<feOffset dx="0" dy="4"/>' +
+          '<feComponentTransfer><feFuncA type="linear" slope=".35"/></feComponentTransfer>' +
+          '<feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>' +
+        '</filter>' +
+        '<style>' +
+          '@keyframes s3-rise{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:translateY(0)}}' +
+          '.s3-card{animation:s3-rise .8s cubic-bezier(.22,1,.36,1) both;transform-origin:center;transform-box:fill-box}' +
+          '.s3-c1{animation-delay:.12s}' +
+          '.s3-c2{animation-delay:.28s}' +
+          '.s3-c3{animation-delay:.44s}' +
+        '</style>' +
+      '</defs>' +
 
-      '<rect width="640" height="360" style="fill:var(--surface-2,#140a0c)"/>' +
+      '<rect width="640" height="360" fill="#050202"/>' +
+      '<rect width="640" height="360" fill="url(#s3-bg)"/>' +
 
-      /* Vertical connector line between circles */
-      '<line class="s3-line" x1="200" y1="112" x2="200" y2="248" style="stroke:var(--accent-bright,#5c1532)" stroke-width="2" stroke-linecap="round"/>' +
-
-      /* Step 1 */
-      '<g class="s3-c1">' +
-        '<circle cx="200" cy="90" r="22" style="fill:var(--accent,#3d0a22);stroke:var(--accent-bright,#5c1532)" stroke-width="2"/>' +
-        '<path class="s3-k s3-k1" d="M189,90 L197,98 L212,83" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>' +
-      '</g>' +
-      '<g class="s3-l1">' +
-        '<text x="240" y="86" font-size="17" font-weight="600" fill="var(--text,#e8e3e0)" font-family="\'General Sans\',system-ui,sans-serif">DNS wired up</text>' +
-        '<text x="240" y="106" font-size="12" fill="var(--muted,#8a7c78)" font-family="\'General Sans\',system-ui,sans-serif">Your domain points to Advocate</text>' +
-      '</g>' +
-
-      /* Step 2 */
-      '<g class="s3-c2">' +
-        '<circle cx="200" cy="180" r="22" style="fill:var(--accent,#3d0a22);stroke:var(--accent-bright,#5c1532)" stroke-width="2"/>' +
-        '<path class="s3-k s3-k2" d="M189,180 L197,188 L212,173" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>' +
-      '</g>' +
-      '<g class="s3-l2">' +
-        '<text x="240" y="176" font-size="17" font-weight="600" fill="var(--text,#e8e3e0)" font-family="\'General Sans\',system-ui,sans-serif">Agent answers bots</text>' +
-        '<text x="240" y="196" font-size="12" fill="var(--muted,#8a7c78)" font-family="\'General Sans\',system-ui,sans-serif">Crawlers get canonical answers from you</text>' +
+      /* Card 1 */
+      '<g class="s3-card s3-c1" transform="translate(52,76)" filter="url(#s3-shadow)">' +
+        '<rect x="0" y="0" width="168" height="208" rx="10" fill="url(#s3-card)" stroke="#2a1418" stroke-width="1"/>' +
+        '<text x="20" y="70" font-size="44" font-weight="400" fill="#5c1532" font-family="\'Instrument Serif\',Georgia,serif">01</text>' +
+        '<line x1="20" y1="92" x2="60" y2="92" stroke="#5c1532" stroke-width="1"/>' +
+        '<text x="20" y="128" font-size="16" font-weight="600" fill="#e8e3e0" font-family="\'General Sans\',system-ui,sans-serif">Wire up DNS</text>' +
+        '<text x="20" y="158" font-size="12" fill="#8a7c78" font-family="\'General Sans\',system-ui,sans-serif"><tspan x="20" dy="0">Point your domain at</tspan><tspan x="20" dy="16">Advocate. One CNAME.</tspan></text>' +
       '</g>' +
 
-      /* Step 3 */
-      '<g class="s3-c3">' +
-        '<circle cx="200" cy="270" r="22" style="fill:var(--accent,#3d0a22);stroke:var(--accent-bright,#5c1532)" stroke-width="2"/>' +
-        '<path class="s3-k s3-k3" d="M189,270 L197,278 L212,263" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>' +
+      /* Card 2 */
+      '<g class="s3-card s3-c2" transform="translate(236,76)" filter="url(#s3-shadow)">' +
+        '<rect x="0" y="0" width="168" height="208" rx="10" fill="url(#s3-card)" stroke="#2a1418" stroke-width="1"/>' +
+        '<text x="20" y="70" font-size="44" font-weight="400" fill="#5c1532" font-family="\'Instrument Serif\',Georgia,serif">02</text>' +
+        '<line x1="20" y1="92" x2="60" y2="92" stroke="#5c1532" stroke-width="1"/>' +
+        '<text x="20" y="128" font-size="16" font-weight="600" fill="#e8e3e0" font-family="\'General Sans\',system-ui,sans-serif">Agent responds</text>' +
+        '<text x="20" y="158" font-size="12" fill="#8a7c78" font-family="\'General Sans\',system-ui,sans-serif"><tspan x="20" dy="0">Crawlers get canonical</tspan><tspan x="20" dy="16">answers — from you.</tspan></text>' +
       '</g>' +
-      '<g class="s3-l3">' +
-        '<text x="240" y="266" font-size="17" font-weight="600" fill="var(--text,#e8e3e0)" font-family="\'General Sans\',system-ui,sans-serif">You see activity</text>' +
-        '<text x="240" y="286" font-size="12" fill="var(--muted,#8a7c78)" font-family="\'General Sans\',system-ui,sans-serif">Bot hits, queries, and referrals in your dashboard</text>' +
+
+      /* Card 3 */
+      '<g class="s3-card s3-c3" transform="translate(420,76)" filter="url(#s3-shadow)">' +
+        '<rect x="0" y="0" width="168" height="208" rx="10" fill="url(#s3-card)" stroke="#2a1418" stroke-width="1"/>' +
+        '<text x="20" y="70" font-size="44" font-weight="400" fill="#5c1532" font-family="\'Instrument Serif\',Georgia,serif">03</text>' +
+        '<line x1="20" y1="92" x2="60" y2="92" stroke="#5c1532" stroke-width="1"/>' +
+        '<text x="20" y="128" font-size="16" font-weight="600" fill="#e8e3e0" font-family="\'General Sans\',system-ui,sans-serif">Traffic arrives</text>' +
+        '<text x="20" y="158" font-size="12" fill="#8a7c78" font-family="\'General Sans\',system-ui,sans-serif"><tspan x="20" dy="0">Watch bot hits + AI</tspan><tspan x="20" dy="16">referrals in the dashboard.</tspan></text>' +
       '</g>' +
 
       '</svg>' +
     '</div>';
   }
 
-  /* Scene 4: "Your dashboard, explained."
-   * Miniature wireframe — sidebar + topbar + KPI cards + chart — with three
-   * dotted callouts pointing at Overview nav, KPI cards, and trend chart. */
+  /* Scene 4 — "Your dashboard, explained."
+   *
+   * A single refined browser mock, centered, with real drop shadow via SVG
+   * filter. Two labels (not three) — fewer is cleaner. Label lines are thin
+   * solid strokes, not busy dashes. Chart line is a smooth spline.
+   */
   function _scene4() {
     return '<div class="amcp-welcome-scene">' +
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" style="width:100%;height:100%;display:block" aria-hidden="true">' +
-      '<defs><style>' +
-        '@keyframes s4-in{from{opacity:0}to{opacity:1}}' +
-        '.s4-mock{animation:s4-in .4s ease .1s both}' +
-        '.s4-cb1{animation:s4-in .35s ease .7s both}' +
-        '.s4-cb2{animation:s4-in .35s ease 1.3s both}' +
-        '.s4-cb3{animation:s4-in .35s ease 1.9s both}' +
-      '</style></defs>' +
+      '<defs>' +
+        '<radialGradient id="s4-bg" cx="50%" cy="50%" r="60%">' +
+          '<stop offset="0%"  stop-color="#3d0a22" stop-opacity=".3"/>' +
+          '<stop offset="80%" stop-color="#140a0c" stop-opacity=".15"/>' +
+          '<stop offset="100%" stop-color="#050202" stop-opacity="0"/>' +
+        '</radialGradient>' +
+        '<linearGradient id="s4-win" x1="0" y1="0" x2="0" y2="1">' +
+          '<stop offset="0%"  stop-color="#170c10"/>' +
+          '<stop offset="100%" stop-color="#0d0507"/>' +
+        '</linearGradient>' +
+        '<linearGradient id="s4-spark" x1="0" y1="0" x2="1" y2="0">' +
+          '<stop offset="0%"  stop-color="#3d0a22"/>' +
+          '<stop offset="100%" stop-color="#7a1c40"/>' +
+        '</linearGradient>' +
+        '<filter id="s4-shadow" x="-15%" y="-15%" width="130%" height="130%">' +
+          '<feGaussianBlur in="SourceAlpha" stdDeviation="8"/>' +
+          '<feOffset dx="0" dy="12"/>' +
+          '<feComponentTransfer><feFuncA type="linear" slope=".5"/></feComponentTransfer>' +
+          '<feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>' +
+        '</filter>' +
+        '<style>' +
+          '@keyframes s4-rise{from{opacity:0;transform:translateY(16px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}' +
+          '@keyframes s4-fade{from{opacity:0}to{opacity:1}}' +
+          '@keyframes s4-draw{to{stroke-dashoffset:0}}' +
+          '.s4-win{animation:s4-rise .9s cubic-bezier(.22,1,.36,1) .1s both;transform-origin:center;transform-box:fill-box}' +
+          '.s4-spark{stroke-dasharray:360;stroke-dashoffset:360;animation:s4-draw 1.4s cubic-bezier(.22,1,.36,1) .7s both}' +
+          '.s4-lbl{animation:s4-fade .5s ease both}' +
+          '.s4-lbl-line{stroke-dasharray:80;stroke-dashoffset:80;animation:s4-draw .55s cubic-bezier(.22,1,.36,1) both}' +
+          '.s4-lbl1,.s4-lbl1-line{animation-delay:1s}' +
+          '.s4-lbl2,.s4-lbl2-line{animation-delay:1.4s}' +
+        '</style>' +
+      '</defs>' +
 
-      '<rect width="640" height="360" style="fill:var(--surface-2,#140a0c)"/>' +
+      '<rect width="640" height="360" fill="#050202"/>' +
+      '<rect width="640" height="360" fill="url(#s4-bg)"/>' +
 
-      /* Dashboard mock */
-      '<g class="s4-mock">' +
-        /* outer frame */
-        '<rect x="250" y="60" width="350" height="240" rx="6" style="fill:var(--surface,#0d0507);stroke:var(--border,#2a1418)" stroke-width="1.5"/>' +
+      /* Browser window */
+      '<g class="s4-win" filter="url(#s4-shadow)">' +
+        /* body */
+        '<rect x="130" y="60" width="380" height="240" rx="10" fill="url(#s4-win)" stroke="#2a1418" stroke-width="1"/>' +
+        /* chrome */
+        '<rect x="130" y="60" width="380" height="28" rx="10" fill="#0a0405"/>' +
+        '<rect x="130" y="80" width="380" height="8" fill="#0a0405"/>' +
+        '<circle cx="146" cy="74" r="3.5" fill="#2a1418"/>' +
+        '<circle cx="158" cy="74" r="3.5" fill="#2a1418"/>' +
+        '<circle cx="170" cy="74" r="3.5" fill="#2a1418"/>' +
         /* sidebar */
-        '<rect x="250" y="60" width="80" height="240" style="fill:var(--bg,#050202);stroke:var(--border,#2a1418)" stroke-width="1"/>' +
-        '<rect x="260" y="72" width="60" height="10" rx="2" style="fill:var(--accent-bright,#5c1532)"/>' +
-        /* sidebar nav: first item highlighted */
-        '<rect x="258" y="100" width="64" height="14" rx="3" style="fill:var(--accent,#3d0a22)"/>' +
-        '<rect x="258" y="122" width="64" height="14" rx="3" style="fill:var(--border,#2a1418)" opacity=".5"/>' +
-        '<rect x="258" y="144" width="64" height="14" rx="3" style="fill:var(--border,#2a1418)" opacity=".5"/>' +
-        '<rect x="258" y="166" width="64" height="14" rx="3" style="fill:var(--border,#2a1418)" opacity=".5"/>' +
-        '<rect x="258" y="188" width="64" height="14" rx="3" style="fill:var(--border,#2a1418)" opacity=".5"/>' +
-        /* topbar */
-        '<rect x="330" y="60" width="270" height="26" style="fill:var(--bg,#050202);stroke:var(--border,#2a1418)" stroke-width="1"/>' +
-        '<rect x="342" y="69" width="50" height="8" rx="2" style="fill:var(--muted,#8a7c78)" opacity=".5"/>' +
+        '<rect x="130" y="88" width="92" height="212" fill="#080305" stroke="#2a1418" stroke-width=".5"/>' +
+        '<rect x="144" y="104" width="64" height="8" rx="2" fill="#5c1532"/>' +
+        '<rect x="142" y="126" width="68" height="14" rx="3" fill="#2a0811" stroke="#3d0a22" stroke-width=".5"/>' +
+        '<rect x="148" y="150" width="44" height="6" rx="2" fill="#2a1418"/>' +
+        '<rect x="148" y="168" width="52" height="6" rx="2" fill="#2a1418"/>' +
+        '<rect x="148" y="186" width="36" height="6" rx="2" fill="#2a1418"/>' +
+        '<rect x="148" y="204" width="48" height="6" rx="2" fill="#2a1418"/>' +
         /* KPI cards */
-        '<rect x="345" y="100" width="75" height="60" rx="4" style="fill:var(--surface-2,#140a0c);stroke:var(--border,#2a1418)" stroke-width="1"/>' +
-        '<rect x="353" y="108" width="36" height="5" rx="2" style="fill:var(--muted,#8a7c78)" opacity=".6"/>' +
-        '<rect x="353" y="124" width="40" height="16" rx="2" style="fill:var(--accent-bright,#5c1532)"/>' +
-        '<rect x="430" y="100" width="75" height="60" rx="4" style="fill:var(--surface-2,#140a0c);stroke:var(--border,#2a1418)" stroke-width="1"/>' +
-        '<rect x="438" y="108" width="36" height="5" rx="2" style="fill:var(--muted,#8a7c78)" opacity=".6"/>' +
-        '<rect x="438" y="124" width="40" height="16" rx="2" style="fill:var(--accent-bright,#5c1532)"/>' +
-        '<rect x="515" y="100" width="75" height="60" rx="4" style="fill:var(--surface-2,#140a0c);stroke:var(--border,#2a1418)" stroke-width="1"/>' +
-        '<rect x="523" y="108" width="36" height="5" rx="2" style="fill:var(--muted,#8a7c78)" opacity=".6"/>' +
-        '<rect x="523" y="124" width="40" height="16" rx="2" style="fill:var(--accent-bright,#5c1532)"/>' +
-        /* chart placeholder */
-        '<rect x="345" y="175" width="245" height="115" rx="4" style="fill:var(--surface-2,#140a0c);stroke:var(--border,#2a1418)" stroke-width="1"/>' +
-        '<path d="M355,270 L390,248 L420,258 L450,228 L480,240 L515,208 L555,222 L585,192" fill="none" style="stroke:var(--accent-bright,#5c1532)" stroke-width="1.5"/>' +
+        '<rect x="240" y="110" width="78" height="54" rx="4" fill="#0d0507" stroke="#2a1418" stroke-width=".5"/>' +
+        '<rect x="250" y="118" width="32" height="4" rx="1.5" fill="#8a7c78" opacity=".45"/>' +
+        '<text x="250" y="152" font-size="18" font-weight="600" fill="#f5ebed" font-family="\'Instrument Serif\',Georgia,serif">1.4k</text>' +
+        '<rect x="330" y="110" width="78" height="54" rx="4" fill="#0d0507" stroke="#2a1418" stroke-width=".5"/>' +
+        '<rect x="340" y="118" width="32" height="4" rx="1.5" fill="#8a7c78" opacity=".45"/>' +
+        '<text x="340" y="152" font-size="18" font-weight="600" fill="#f5ebed" font-family="\'Instrument Serif\',Georgia,serif">92</text>' +
+        '<rect x="420" y="110" width="78" height="54" rx="4" fill="#0d0507" stroke="#2a1418" stroke-width=".5"/>' +
+        '<rect x="430" y="118" width="32" height="4" rx="1.5" fill="#8a7c78" opacity=".45"/>' +
+        '<text x="430" y="152" font-size="18" font-weight="600" fill="#f5ebed" font-family="\'Instrument Serif\',Georgia,serif">37</text>' +
+        /* chart area */
+        '<rect x="240" y="180" width="258" height="104" rx="4" fill="#0a0405" stroke="#2a1418" stroke-width=".5"/>' +
+        /* grid */
+        '<line x1="240" y1="232" x2="498" y2="232" stroke="#2a1418" stroke-width=".5"/>' +
+        /* spark line (drawn) */
+        '<path class="s4-spark" d="M252,264 C 280,258 294,248 320,240 C 346,232 360,226 384,216 C 408,206 422,204 448,200 C 472,196 482,190 494,188" fill="none" stroke="url(#s4-spark)" stroke-width="1.5" stroke-linecap="round"/>' +
       '</g>' +
 
-      /* Callout 1: Overview nav item */
-      '<g class="s4-cb1">' +
-        '<line x1="246" y1="107" x2="210" y2="107" style="stroke:var(--muted,#8a7c78)" stroke-width="1" stroke-dasharray="3 3"/>' +
-        '<text x="205" y="102" text-anchor="end" font-size="12" font-weight="600" fill="var(--text,#e8e3e0)" font-family="\'General Sans\',system-ui,sans-serif">Overview</text>' +
-        '<text x="205" y="116" text-anchor="end" font-size="10" fill="var(--muted,#8a7c78)" font-family="\'General Sans\',system-ui,sans-serif">KPIs at a glance</text>' +
+      /* Label 1: top-right pointing to KPI card */
+      '<g>' +
+        '<line class="s4-lbl-line s4-lbl1-line" x1="460" y1="136" x2="560" y2="92" stroke="#5c1532" stroke-width="1"/>' +
+        '<g class="s4-lbl s4-lbl1">' +
+          '<text x="560" y="80" font-size="11" font-weight="600" fill="#e8e3e0" font-family="\'General Sans\',system-ui,sans-serif">Live KPIs</text>' +
+          '<text x="560" y="96" font-size="10" fill="#8a7c78" font-family="\'General Sans\',system-ui,sans-serif">AI requests, referrals</text>' +
+        '</g>' +
       '</g>' +
 
-      /* Callout 2: KPI cards */
-      '<g class="s4-cb2">' +
-        '<line x1="430" y1="96" x2="430" y2="52" style="stroke:var(--muted,#8a7c78)" stroke-width="1" stroke-dasharray="3 3"/>' +
-        '<text x="430" y="42" text-anchor="middle" font-size="12" font-weight="600" fill="var(--text,#e8e3e0)" font-family="\'General Sans\',system-ui,sans-serif">AI Requests</text>' +
-        '<text x="430" y="28" text-anchor="middle" font-size="10" fill="var(--muted,#8a7c78)" font-family="\'General Sans\',system-ui,sans-serif">30-day trends</text>' +
-      '</g>' +
-
-      /* Callout 3: chart */
-      '<g class="s4-cb3">' +
-        '<line x1="465" y1="294" x2="465" y2="325" style="stroke:var(--muted,#8a7c78)" stroke-width="1" stroke-dasharray="3 3"/>' +
-        '<text x="465" y="340" text-anchor="middle" font-size="12" font-weight="600" fill="var(--text,#e8e3e0)" font-family="\'General Sans\',system-ui,sans-serif">Bots + Referrals</text>' +
-        '<text x="465" y="354" text-anchor="middle" font-size="10" fill="var(--muted,#8a7c78)" font-family="\'General Sans\',system-ui,sans-serif">Who asked, who clicked</text>' +
+      /* Label 2: bottom pointing to chart */
+      '<g>' +
+        '<line class="s4-lbl-line s4-lbl2-line" x1="300" y1="250" x2="210" y2="316" stroke="#5c1532" stroke-width="1"/>' +
+        '<g class="s4-lbl s4-lbl2">' +
+          '<text x="210" y="332" font-size="11" font-weight="600" fill="#e8e3e0" font-family="\'General Sans\',system-ui,sans-serif">30-day trend</text>' +
+          '<text x="210" y="348" font-size="10" fill="#8a7c78" font-family="\'General Sans\',system-ui,sans-serif">Who asked, who clicked</text>' +
+        '</g>' +
       '</g>' +
 
       '</svg>' +
