@@ -188,7 +188,37 @@
     });
   }
 
-  /* ── Stage 2: instructions (filled in step 3) ───────────────────────────── */
+  /* ── Stage 2: instructions ──────────────────────────────────────────────── */
+  var CNAME_TARGET = 'customers.advocatemcp.com';
+
+  /* Per-provider navigation steps. Rendered as an ordered list above the
+   * records. <strong> allowed (trusted template, no user data). */
+  var PROVIDER_STEPS = {
+    godaddy: [
+      'Sign in and go to <strong>My Products</strong>.',
+      'Find your domain, then click <strong>DNS</strong>.',
+      'Scroll to <strong>Records</strong> and click <strong>Add New Record</strong>.',
+      'Set Type to <strong>CNAME</strong> and paste the values below.',
+    ],
+    namecheap: [
+      'Sign in and open the <strong>Domain List</strong>.',
+      'Click <strong>Manage</strong> next to your domain.',
+      'Select the <strong>Advanced DNS</strong> tab.',
+      'Click <strong>Add New Record</strong>, choose CNAME, then paste the values below.',
+    ],
+    cloudflare: [
+      'Open your domain in the Cloudflare dashboard.',
+      'In the sidebar: <strong>DNS</strong> → <strong>Records</strong>.',
+      'Click <strong>Add record</strong> and choose <strong>CNAME</strong>.',
+      'Paste the values below. Set proxy status to <strong>DNS only</strong> (grey cloud).',
+    ],
+    other: [
+      'Log in to your DNS provider.',
+      'Find the <strong>DNS</strong> or <strong>Records</strong> settings for your domain.',
+      'Add a <strong>CNAME</strong> record using the values below.',
+    ],
+  };
+
   function _providerName(id) {
     for (var i = 0; i < PROVIDERS.length; i++) {
       if (PROVIDERS[i].id === id) return PROVIDERS[i].name;
@@ -196,14 +226,94 @@
     return id || '';
   }
 
+  /* Generic DNS records table mock — shown above the real instructions as
+   * a visual anchor ("this is what the UI you're looking for looks like").
+   * Provider-agnostic on purpose: most DNS dashboards share this layout. */
+  function _schematicSVG() {
+    return (
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 180" style="width:100%;height:auto;max-width:360px;display:block;margin:0 auto 18px" aria-hidden="true">' +
+        '<rect x="4" y="4" width="352" height="172" rx="8" style="fill:var(--surface);stroke:var(--border)" stroke-width="1.5"/>' +
+        '<rect x="4" y="4" width="352" height="24" rx="8" style="fill:var(--bg)"/>' +
+        '<circle cx="18" cy="16" r="3" style="fill:var(--muted)" opacity=".4"/>' +
+        '<circle cx="28" cy="16" r="3" style="fill:var(--muted)" opacity=".4"/>' +
+        '<circle cx="38" cy="16" r="3" style="fill:var(--muted)" opacity=".4"/>' +
+        /* tabs */
+        '<rect x="16" y="36" width="52" height="16" rx="3" style="fill:var(--accent)"/>' +
+        '<text x="42" y="47" text-anchor="middle" font-size="9" fill="#fff" font-family="\'General Sans\',system-ui,sans-serif">DNS</text>' +
+        '<rect x="74" y="36" width="52" height="16" rx="3" style="fill:var(--surface-2)" opacity=".65"/>' +
+        '<rect x="132" y="36" width="52" height="16" rx="3" style="fill:var(--surface-2)" opacity=".65"/>' +
+        /* add button */
+        '<rect x="296" y="36" width="50" height="16" rx="3" style="fill:var(--accent-bright)"/>' +
+        '<text x="321" y="47" text-anchor="middle" font-size="9" fill="#fff" font-family="\'General Sans\',system-ui,sans-serif">+ Add</text>' +
+        /* table header */
+        '<rect x="16" y="60" width="330" height="14" rx="2" style="fill:var(--surface-2)"/>' +
+        '<text x="26" y="70" font-size="8" fill="var(--muted)" font-family="\'General Sans\',system-ui,sans-serif" font-weight="600" letter-spacing=".7">TYPE</text>' +
+        '<text x="78" y="70" font-size="8" fill="var(--muted)" font-family="\'General Sans\',system-ui,sans-serif" font-weight="600" letter-spacing=".7">NAME</text>' +
+        '<text x="186" y="70" font-size="8" fill="var(--muted)" font-family="\'General Sans\',system-ui,sans-serif" font-weight="600" letter-spacing=".7">VALUE</text>' +
+        '<text x="316" y="70" font-size="8" fill="var(--muted)" font-family="\'General Sans\',system-ui,sans-serif" font-weight="600" letter-spacing=".7">TTL</text>' +
+        /* highlighted CNAME row */
+        '<rect x="16" y="82" width="330" height="22" rx="2" style="fill:var(--accent-dim);stroke:var(--accent-ring)" stroke-width="1.5"/>' +
+        '<text x="26" y="97" font-size="10" fill="var(--accent-bright)" font-family="\'SF Mono\',monospace" font-weight="700">CNAME</text>' +
+        '<text x="78" y="97" font-size="10" fill="var(--text)" font-family="\'SF Mono\',monospace">www</text>' +
+        '<text x="186" y="97" font-size="10" fill="var(--text)" font-family="\'SF Mono\',monospace">' + CNAME_TARGET + '</text>' +
+        '<text x="316" y="97" font-size="10" fill="var(--text)" font-family="\'SF Mono\',monospace">Auto</text>' +
+        /* placeholder rows */
+        '<line x1="26" y1="120" x2="68" y2="120" stroke="var(--border)" stroke-width="4" opacity=".7"/>' +
+        '<line x1="78" y1="120" x2="150" y2="120" stroke="var(--border)" stroke-width="4" opacity=".7"/>' +
+        '<line x1="186" y1="120" x2="268" y2="120" stroke="var(--border)" stroke-width="4" opacity=".7"/>' +
+        '<line x1="316" y1="120" x2="340" y2="120" stroke="var(--border)" stroke-width="4" opacity=".7"/>' +
+        '<line x1="26" y1="140" x2="58" y2="140" stroke="var(--border)" stroke-width="4" opacity=".4"/>' +
+        '<line x1="78" y1="140" x2="130" y2="140" stroke="var(--border)" stroke-width="4" opacity=".4"/>' +
+        '<line x1="186" y1="140" x2="250" y2="140" stroke="var(--border)" stroke-width="4" opacity=".4"/>' +
+        '<line x1="316" y1="140" x2="340" y2="140" stroke="var(--border)" stroke-width="4" opacity=".4"/>' +
+      '</svg>'
+    );
+  }
+
+  function _recordHTML(type, name, value, copyValue) {
+    return (
+      '<div class="amcp-dns-record">' +
+        '<div class="amcp-dns-record-kvs">' +
+          '<div class="amcp-dns-record-kv">' +
+            '<div class="amcp-dns-record-label">Type</div>' +
+            '<div class="amcp-dns-record-val">' + escHtml(type) + '</div>' +
+          '</div>' +
+          '<div class="amcp-dns-record-kv" style="min-width:140px">' +
+            '<div class="amcp-dns-record-label">Name</div>' +
+            '<div class="amcp-dns-record-val" title="' + escHtml(name) + '">' + escHtml(name) + '</div>' +
+          '</div>' +
+          '<div class="amcp-dns-record-kv" style="min-width:180px;flex:1">' +
+            '<div class="amcp-dns-record-label">Value</div>' +
+            '<div class="amcp-dns-record-val" title="' + escHtml(value) + '">' + escHtml(value) + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<button type="button" class="amcp-dns-copy-btn" data-copy="' + escHtml(copyValue) + '">Copy</button>' +
+      '</div>'
+    );
+  }
+
   function _renderInstructions() {
+    var steps  = (PROVIDER_STEPS[_provider] || PROVIDER_STEPS.other).map(function (s) {
+      return '<li>' + s + '</li>';
+    }).join('');
+    var domain = currentDomain();
+    var cnameName = domain || 'www.yourdomain.com';
+
     return (
       '<div class="amcp-dns-step">' +
-        '<div class="amcp-dns-step-title">Instructions for ' + escHtml(_providerName(_provider)) + '</div>' +
+        '<div class="amcp-dns-step-title">Add a CNAME record in ' + escHtml(_providerName(_provider)) + '</div>' +
         '<div class="amcp-dns-step-copy">' +
-          'Provider diagram + copyable records rendered in step 3.' +
+          'This CNAME routes AI crawler traffic for <strong>' + escHtml(domain || 'your domain') + '</strong> through Advocate.' +
         '</div>' +
-        '<div style="margin-top:18px;display:flex;gap:10px">' +
+        _schematicSVG() +
+        '<ol style="font-size:var(--tx-sm);color:var(--text);line-height:1.6;padding-left:20px;margin:0 0 18px">' + steps + '</ol>' +
+        '<div id="amcp-dns-records">' +
+          _recordHTML('CNAME', cnameName, CNAME_TARGET, CNAME_TARGET) +
+          '<div id="amcp-dns-txt-slot" style="color:var(--muted);font-size:var(--tx-xs);padding:4px 2px">' +
+            'Loading TXT record\u2026' +
+          '</div>' +
+        '</div>' +
+        '<div style="margin-top:18px;display:flex;gap:10px;justify-content:flex-end">' +
           '<button id="amcp-dns-back" class="amcp-welcome-btn amcp-welcome-btn-ghost">Change provider</button>' +
           '<button id="amcp-dns-verify" class="amcp-welcome-btn amcp-welcome-btn-primary">Verify DNS</button>' +
         '</div>' +
@@ -220,6 +330,78 @@
     });
     var verify = document.getElementById('amcp-dns-verify');
     if (verify) verify.addEventListener('click', function () { _transition(STAGE_VERIFY); });
+
+    var records = document.getElementById('amcp-dns-records');
+    if (records) {
+      records.addEventListener('click', function (ev) {
+        var btn = ev.target.closest('.amcp-dns-copy-btn');
+        if (!btn) return;
+        var text = btn.dataset.copy || '';
+        if (text) copyToClipboard(text, btn);
+      });
+    }
+
+    _loadTxtRecord();
+  }
+
+  /* Fetch /api/client/domain-info and, if cf_hostname.ownership_verification
+   * is present, swap the TXT placeholder for a real record card. Silent on
+   * failure — the CNAME alone is enough to get started. */
+  function _loadTxtRecord() {
+    var slug = currentSlug();
+    if (!slug || !window.AMCP || typeof window.AMCP.authedFetch !== 'function') return;
+    window.AMCP.authedFetch('/api/client/domain-info?slug=' + encodeURIComponent(slug))
+      .then(function (r) { return r.json(); })
+      .then(function (info) {
+        var slot = document.getElementById('amcp-dns-txt-slot');
+        if (!slot) return;
+        var ov = info && info.cf_hostname && info.cf_hostname.ownership_verification;
+        if (ov && ov.name && ov.value) {
+          slot.outerHTML = _recordHTML('TXT', ov.name, ov.value, ov.value);
+        } else {
+          slot.textContent = 'The TXT ownership record will appear here once the CNAME has propagated. You can skip this for now.';
+        }
+      })
+      .catch(function () {
+        var slot = document.getElementById('amcp-dns-txt-slot');
+        if (slot) slot.textContent = 'Could not load TXT record. The CNAME alone will still work \u2014 you can re-check later.';
+      });
+  }
+
+  /* ── Clipboard helper ───────────────────────────────────────────────────── */
+  function copyToClipboard(text, btn) {
+    var done = function () {
+      if (!btn) return;
+      var original = btn.dataset.orig || btn.textContent;
+      btn.dataset.orig = original;
+      btn.classList.add('copied');
+      btn.textContent = 'Copied';
+      setTimeout(function () {
+        btn.classList.remove('copied');
+        btn.textContent = original;
+      }, 1600);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () {
+        _fallbackCopy(text);
+        done();
+      });
+      return;
+    }
+    _fallbackCopy(text);
+    done();
+  }
+
+  function _fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    ta.style.pointerEvents = 'none';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (_) { /* no-op */ }
+    document.body.removeChild(ta);
   }
 
   /* ── Stage 3: verification (filled in step 4) ───────────────────────────── */
