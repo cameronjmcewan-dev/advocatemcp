@@ -1,0 +1,503 @@
+/* ═════════════════════════════════════════════════════════════════
+   Advocate — Onboarding (welcome + checklist + DNS wizard + tour)
+   Loaded after redesign.css on the dashboard only. All rules scoped
+   under dedicated class names so they can't bleed into other sections.
+   All colors use tokens from /css/tokens.css.
+   ═════════════════════════════════════════════════════════════════ */
+
+/* ─── Welcome overlay ────────────────────────────────────────── */
+.amcp-welcome-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 800;
+  background: rgba(5, 2, 2, 0.85);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+.amcp-welcome-overlay.show {
+  display: flex;
+  opacity: 1;
+}
+[data-theme="light"] .amcp-welcome-overlay {
+  background: rgba(250, 248, 247, 0.92);
+}
+
+.amcp-welcome-card {
+  width: 100%;
+  max-width: 640px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+.amcp-welcome-stage {
+  position: relative;
+  background: var(--surface-2);
+  aspect-ratio: 16 / 9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.amcp-welcome-stage > svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.amcp-welcome-scene {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+}
+.amcp-welcome-scene.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.amcp-welcome-body {
+  padding: 28px 32px 20px;
+}
+.amcp-welcome-eyebrow {
+  font-size: var(--tx-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-bright);
+  margin-bottom: 10px;
+}
+.amcp-welcome-title {
+  font-family: var(--font-serif);
+  font-size: clamp(1.5rem, 2.2vw, 1.875rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+.amcp-welcome-copy {
+  font-size: var(--tx-sm);
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.amcp-welcome-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 32px 24px;
+  border-top: 1px solid var(--border);
+}
+.amcp-welcome-dots {
+  display: flex;
+  gap: 6px;
+}
+.amcp-welcome-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border);
+  transition: background 0.18s ease, width 0.18s ease;
+}
+.amcp-welcome-dot.active {
+  background: var(--accent-bright);
+  width: 22px;
+}
+.amcp-welcome-btns {
+  display: flex;
+  gap: 10px;
+}
+.amcp-welcome-btn {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: var(--tx-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  font-family: inherit;
+}
+.amcp-welcome-btn:hover {
+  background: var(--surface-2);
+}
+.amcp-welcome-btn-primary {
+  border-color: var(--accent-bright);
+  background: var(--accent);
+  color: #fff;
+}
+.amcp-welcome-btn-primary:hover {
+  background: var(--accent-bright);
+}
+.amcp-welcome-btn-ghost {
+  border-color: transparent;
+  color: var(--muted);
+}
+.amcp-welcome-btn-ghost:hover {
+  color: var(--text);
+  background: transparent;
+}
+
+/* ─── Get Started checklist section ────────────────────────────── */
+.amcp-onb-intro {
+  padding: 20px 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.amcp-onb-intro-mark {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-ring);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-bright);
+}
+.amcp-onb-intro-mark svg { width: 20px; height: 20px; }
+.amcp-onb-intro-title {
+  font-size: var(--tx-md);
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.amcp-onb-intro-copy {
+  font-size: var(--tx-sm);
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.amcp-onb-progress {
+  height: 6px;
+  background: var(--surface-2);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+.amcp-onb-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-bright));
+  width: 0;
+  transition: width 0.4s ease;
+}
+
+.amcp-onb-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.amcp-onb-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+.amcp-onb-item:hover:not(.done) {
+  border-color: var(--accent-ring);
+  background: var(--surface-2);
+}
+.amcp-onb-item.done {
+  opacity: 0.65;
+  cursor: default;
+}
+.amcp-onb-check {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.amcp-onb-item.done .amcp-onb-check {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.amcp-onb-check svg { width: 14px; height: 14px; }
+
+.amcp-onb-text { flex: 1; min-width: 0; }
+.amcp-onb-title {
+  font-size: var(--tx-base);
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.amcp-onb-desc {
+  font-size: var(--tx-xs);
+  color: var(--muted);
+  line-height: 1.4;
+}
+.amcp-onb-chevron {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.amcp-onb-item.done .amcp-onb-chevron { display: none; }
+
+/* ─── DNS wizard ────────────────────────────────────────────────── */
+.amcp-dns-step { padding: 4px 0 12px; }
+.amcp-dns-step-title {
+  font-size: var(--tx-md);
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.amcp-dns-step-copy {
+  font-size: var(--tx-sm);
+  color: var(--muted);
+  line-height: 1.55;
+  margin-bottom: 18px;
+}
+
+.amcp-dns-providers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.amcp-dns-provider {
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: var(--tx-sm);
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+  font-family: inherit;
+}
+.amcp-dns-provider:hover {
+  border-color: var(--accent-ring);
+  background: var(--surface-2);
+}
+
+.amcp-dns-record {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  font-family: var(--font-mono);
+  font-size: var(--tx-xs);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.amcp-dns-record-kvs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  min-width: 0;
+  flex: 1;
+}
+.amcp-dns-record-kv { display: flex; flex-direction: column; min-width: 0; }
+.amcp-dns-record-label {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+.amcp-dns-record-val {
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.amcp-dns-copy-btn {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: var(--tx-xs);
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 500;
+  transition: background 0.15s, border-color 0.15s;
+}
+.amcp-dns-copy-btn:hover {
+  background: var(--accent-dim);
+  border-color: var(--accent-ring);
+}
+.amcp-dns-copy-btn.copied {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.amcp-dns-lights {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+.amcp-dns-light {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: var(--tx-sm);
+}
+.amcp-dns-light-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--border);
+  flex-shrink: 0;
+  transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+.amcp-dns-light.waiting .amcp-dns-light-dot {
+  background: #c08a30;
+  animation: amcpDnsPulse 1.4s ease-in-out infinite;
+}
+.amcp-dns-light.ok .amcp-dns-light-dot {
+  background: #3e9a5a;
+  box-shadow: 0 0 0 4px rgba(62, 154, 90, 0.15);
+}
+.amcp-dns-light.err .amcp-dns-light-dot {
+  background: #b84242;
+}
+@keyframes amcpDnsPulse {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 1; }
+}
+.amcp-dns-light-label { color: var(--text); flex: 1; }
+.amcp-dns-light-hint {
+  font-size: var(--tx-xs);
+  color: var(--muted);
+}
+
+.amcp-dns-success {
+  padding: 20px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-ring);
+  border-radius: 10px;
+  text-align: center;
+}
+.amcp-dns-success-title {
+  font-family: var(--font-serif);
+  font-size: 1.4rem;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.amcp-dns-success-copy {
+  font-size: var(--tx-sm);
+  color: var(--muted);
+}
+
+/* ─── Product tour ────────────────────────────────────────────── */
+.amcp-tour-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 700;
+  background: rgba(5, 2, 2, 0.55);
+  display: none;
+  pointer-events: auto;
+}
+.amcp-tour-backdrop.show { display: block; }
+[data-theme="light"] .amcp-tour-backdrop {
+  background: rgba(10, 5, 5, 0.35);
+}
+
+.amcp-tour-card {
+  position: fixed;
+  z-index: 701;
+  max-width: 320px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  display: none;
+}
+.amcp-tour-card.show { display: block; }
+.amcp-tour-step {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.amcp-tour-title {
+  font-size: var(--tx-md);
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+.amcp-tour-copy {
+  font-size: var(--tx-sm);
+  color: var(--muted);
+  line-height: 1.5;
+  margin-bottom: 14px;
+}
+.amcp-tour-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* Focus ring for the element being described. Applied to the nav item via
+   inline box-shadow in JS; class here for the lift. */
+.amcp-tour-target {
+  position: relative;
+  z-index: 702;
+  box-shadow: 0 0 0 2px var(--accent-bright), 0 0 0 6px rgba(92, 21, 50, 0.25);
+  border-radius: 4px;
+}
+
+/* ─── Mobile fallback banner ──────────────────────────────────── */
+.amcp-mobile-note {
+  padding: 12px 14px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-ring);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: var(--tx-xs);
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 720px) {
+  .amcp-welcome-card { max-width: 95vw; }
+  .amcp-welcome-body { padding: 20px 20px 14px; }
+  .amcp-welcome-controls { padding: 14px 20px 18px; }
+  .amcp-dns-providers { grid-template-columns: 1fr; }
+}
+
