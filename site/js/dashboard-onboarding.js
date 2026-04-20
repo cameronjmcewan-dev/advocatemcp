@@ -88,6 +88,29 @@
   var SLIDE_DURATION = 6000;
   var SLIDE_COUNT    = 4;
 
+  var SLIDES = [
+    {
+      eyebrow: 'Welcome to Advocate',
+      title:   'You built an agent.',
+      copy:    'Every AI assistant that asks about your business gets a direct, accurate answer — straight from you.',
+    },
+    {
+      eyebrow: 'What Advocate does',
+      title:   'AI assistants ask about your business.',
+      copy:    'ChatGPT, Claude, Perplexity — they crawl the web for answers. Advocate intercepts them before they guess.',
+    },
+    {
+      eyebrow: 'The setup',
+      title:   'Three steps to go live.',
+      copy:    'Wire up DNS, preview your agent\'s answer, then watch real bot traffic appear in your dashboard.',
+    },
+    {
+      eyebrow: 'You\'re almost set',
+      title:   'Explore your dashboard.',
+      copy:    'Overview, AI Requests, Competitor Radar — your Get Started checklist walks you through each one.',
+    },
+  ];
+
   function openWelcome() {
     _slideIdx = (_state && _state.welcome && _state.welcome.current_slide) || 0;
     if (!_overlayEl) _overlayEl = _buildOverlay();
@@ -116,13 +139,21 @@
     _overlayEl.querySelectorAll('.amcp-welcome-scene').forEach(function (el, i) {
       el.classList.toggle('active', i === _slideIdx);
     });
-    var dots = _overlayEl.querySelectorAll('.amcp-welcome-dot');
-    dots.forEach(function (d, i) { d.classList.toggle('active', i === _slideIdx); });
-    var btnBack = _overlayEl.querySelector('.amcp-welcome-btn-back');
-    var btnNext = _overlayEl.querySelector('.amcp-welcome-btn-next');
+    _overlayEl.querySelectorAll('.amcp-welcome-dot').forEach(function (d, i) {
+      d.classList.toggle('active', i === _slideIdx);
+    });
+    var btnBack = document.getElementById('amcp-wb-back');
+    var btnNext = document.getElementById('amcp-wb-next');
     if (btnBack) btnBack.disabled = _slideIdx === 0;
-    if (btnNext) {
-      btnNext.textContent = _slideIdx === SLIDE_COUNT - 1 ? "Let's go" : 'Next →';
+    if (btnNext) btnNext.textContent = _slideIdx === SLIDE_COUNT - 1 ? "Let's go →" : 'Next →';
+    var slide = SLIDES[_slideIdx];
+    if (slide) {
+      var eyebrow = _overlayEl.querySelector('.amcp-welcome-eyebrow');
+      var title   = _overlayEl.querySelector('.amcp-welcome-title');
+      var copy    = _overlayEl.querySelector('.amcp-welcome-copy');
+      if (eyebrow) eyebrow.textContent = slide.eyebrow;
+      if (title)   title.textContent   = slide.title;
+      if (copy)    copy.textContent    = slide.copy;
     }
   }
 
@@ -151,7 +182,7 @@
 
     el.innerHTML = _overlayInnerHTML();
 
-    el.querySelector('.amcp-welcome-btn-next').addEventListener('click', function () {
+    document.getElementById('amcp-wb-next').addEventListener('click', function () {
       _stopSlideTimer();
       if (_slideIdx < SLIDE_COUNT - 1) {
         _showSlide(_slideIdx + 1);
@@ -161,12 +192,12 @@
         openChecklistSection();
       }
     });
-    el.querySelector('.amcp-welcome-btn-back').addEventListener('click', function () {
+    document.getElementById('amcp-wb-back').addEventListener('click', function () {
       _stopSlideTimer();
       _showSlide(_slideIdx - 1);
       _startSlideTimer();
     });
-    el.querySelector('.amcp-welcome-btn-skip').addEventListener('click', function () {
+    document.getElementById('amcp-wb-skip').addEventListener('click', function () {
       _closeWelcome(false);
     });
 
@@ -180,35 +211,101 @@
     return el;
   }
 
-  /* Returns the overlay's inner HTML — scenes injected here in step 2. */
   function _overlayInnerHTML() {
+    var s = SLIDES[0];
+    var dots = [0,1,2,3].map(function (i) {
+      return '<span class="amcp-welcome-dot' + (i === 0 ? ' active' : '') + '"></span>';
+    }).join('');
     return (
       '<div class="amcp-welcome-card">' +
         '<div class="amcp-welcome-stage">' +
           _scenesHTML() +
         '</div>' +
-        '<div class="amcp-welcome-footer">' +
-          '<button class="amcp-welcome-btn-back" disabled>← Back</button>' +
-          '<div class="amcp-welcome-dots">' +
-            [0,1,2,3].map(function (i) {
-              return '<span class="amcp-welcome-dot' + (i === 0 ? ' active' : '') + '"></span>';
-            }).join('') +
-          '</div>' +
-          '<button class="amcp-welcome-btn-next">Next →</button>' +
+        '<div class="amcp-welcome-body">' +
+          '<div class="amcp-welcome-eyebrow">' + s.eyebrow + '</div>' +
+          '<div class="amcp-welcome-title">'   + s.title   + '</div>' +
+          '<div class="amcp-welcome-copy">'    + s.copy    + '</div>' +
         '</div>' +
-        '<button class="amcp-welcome-btn-skip" aria-label="Skip intro">Skip</button>' +
+        '<div class="amcp-welcome-controls">' +
+          '<button id="amcp-wb-skip" class="amcp-welcome-btn amcp-welcome-btn-ghost">Skip</button>' +
+          '<div class="amcp-welcome-dots">' + dots + '</div>' +
+          '<div class="amcp-welcome-btns">' +
+            '<button id="amcp-wb-back" class="amcp-welcome-btn" disabled>← Back</button>' +
+            '<button id="amcp-wb-next" class="amcp-welcome-btn amcp-welcome-btn-primary">Next →</button>' +
+          '</div>' +
+        '</div>' +
       '</div>'
     );
   }
 
-  /* Placeholder — replaced in step 2. */
   function _scenesHTML() {
-    return (
-      '<div class="amcp-welcome-scene active"><div class="amcp-scene-placeholder">Scene 1</div></div>' +
-      '<div class="amcp-welcome-scene"><div class="amcp-scene-placeholder">Scene 2</div></div>' +
-      '<div class="amcp-welcome-scene"><div class="amcp-scene-placeholder">Scene 3</div></div>' +
-      '<div class="amcp-welcome-scene"><div class="amcp-scene-placeholder">Scene 4</div></div>'
-    );
+    return _scene1() +
+      '<div class="amcp-welcome-scene"><div class="amcp-scene-placeholder">Scene 2 — coming next</div></div>' +
+      '<div class="amcp-welcome-scene"><div class="amcp-scene-placeholder">Scene 3 — coming next</div></div>' +
+      '<div class="amcp-welcome-scene"><div class="amcp-scene-placeholder">Scene 4 — coming next</div></div>';
+  }
+
+  /* Scene 1: "You built an agent."
+   * Storefront silhouette + pulsing Advocate speech bubble.
+   * All colors via CSS vars with hex fallbacks for SVG attribute context. */
+  function _scene1() {
+    return '<div class="amcp-welcome-scene active">' +
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" style="width:100%;height:100%;display:block" aria-hidden="true">' +
+      '<defs><style>' +
+        '@keyframes s1-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}' +
+        '@keyframes s1-appear{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}' +
+        '.s1-bubble{animation:s1-appear .5s ease .1s both}' +
+        '.s1-shield{animation:s1-pulse 2.2s ease-in-out infinite;transform-origin:488px 114px}' +
+      '</style></defs>' +
+
+      /* bg */
+      '<rect width="640" height="360" style="fill:var(--surface-2,#140a0c)"/>' +
+      /* subtle grid */
+      '<line x1="0" y1="180" x2="640" y2="180" stroke="#2a1418" stroke-width=".5"/>' +
+      '<line x1="320" y1="0" x2="320" y2="360" stroke="#2a1418" stroke-width=".5"/>' +
+
+      /* storefront body */
+      '<rect x="150" y="196" width="240" height="140" rx="3" style="fill:var(--surface,#0d0507);stroke:var(--border,#2a1418)" stroke-width="1.5"/>' +
+      /* roof */
+      '<polygon points="133,198 270,118 407,198" style="fill:var(--accent,#3d0a22)"/>' +
+      '<line x1="133" y1="198" x2="407" y2="198" stroke="#5c1532" stroke-width="2"/>' +
+      /* left window */
+      '<rect x="165" y="216" width="68" height="46" rx="3" style="fill:var(--accent-dim,rgba(61,10,34,.18));stroke:var(--border,#2a1418)" stroke-width="1"/>' +
+      '<rect x="168" y="219" width="22" height="10" rx="1" fill="#5c1532" opacity=".3"/>' +
+      /* right window */
+      '<rect x="307" y="216" width="68" height="46" rx="3" style="fill:var(--accent-dim,rgba(61,10,34,.18));stroke:var(--border,#2a1418)" stroke-width="1"/>' +
+      '<rect x="310" y="219" width="22" height="10" rx="1" fill="#5c1532" opacity=".3"/>' +
+      /* door */
+      '<rect x="237" y="264" width="66" height="72" rx="3" style="fill:var(--accent,#3d0a22);stroke:var(--accent-bright,#5c1532)" stroke-width="1"/>' +
+      '<circle cx="296" cy="302" r="3" fill="#e8e3e0" opacity=".55"/>' +
+      /* steps */
+      '<rect x="226" y="335" width="88" height="5" rx="2" style="fill:var(--border,#2a1418)"/>' +
+      '<rect x="215" y="338" width="110" height="3" rx="2" style="fill:var(--border,#2a1418)" opacity=".5"/>' +
+
+      /* speech bubble group */
+      '<g class="s1-bubble">' +
+        /* shadow */
+        '<rect x="415" y="85" width="158" height="94" rx="14" fill="#000" opacity=".22" transform="translate(2,3)"/>' +
+        /* body */
+        '<rect x="415" y="85" width="158" height="94" rx="14" style="fill:var(--surface,#0d0507);stroke:var(--accent-bright,#5c1532)" stroke-width="1.5"/>' +
+        /* tail: a down-left pointing triangle */
+        '<path d="M436,179 L420,200 L458,179" style="fill:var(--surface,#0d0507);stroke:var(--accent-bright,#5c1532)" stroke-width="1.5" stroke-linejoin="round"/>' +
+        /* cover the bubble bottom border in the tail gap */
+        '<rect x="421" y="175" width="46" height="8" style="fill:var(--surface,#0d0507)"/>' +
+        /* shield */
+        '<g class="s1-shield">' +
+          '<path d="M466,94 L510,94 L510,121 Q510,133 488,139 Q466,133 466,121 Z" style="fill:var(--accent,#3d0a22);stroke:var(--accent-bright,#5c1532)" stroke-width="1.5"/>' +
+          '<text x="488" y="121" text-anchor="middle" dominant-baseline="middle" font-size="21" font-weight="700" fill="#e8e3e0" font-family="\'General Sans\',system-ui,sans-serif">A</text>' +
+        '</g>' +
+        /* "ADVOCATE" label */
+        '<text x="488" y="155" text-anchor="middle" font-size="9.5" font-weight="600" fill="#5c1532" font-family="\'General Sans\',system-ui,sans-serif" letter-spacing="1.2">ADVOCATE</text>' +
+      '</g>' +
+
+      /* dashed connector line bubble-tail → roof */
+      '<line x1="420" y1="196" x2="370" y2="190" stroke="#5c1532" stroke-width="1" stroke-dasharray="3 3" opacity=".4"/>' +
+
+      '</svg>' +
+    '</div>';
   }
 
   /* ── Checklist section ──────────────────────────────────────────────────── */

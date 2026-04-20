@@ -64,6 +64,15 @@
   opacity: 1;
   pointer-events: auto;
 }
+.amcp-scene-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: var(--tx-sm);
+  color: var(--muted);
+  font-style: italic;
+}
 
 .amcp-welcome-body {
   padding: 28px 32px 20px;
