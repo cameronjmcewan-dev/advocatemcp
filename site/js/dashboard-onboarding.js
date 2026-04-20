@@ -1,15 +1,38 @@
 /* Onboarding — welcome overlay, Get Started checklist, product tour.
  *
+ * Public API (window.AMCP_ONBOARDING):
+ *   loadState(snapshot)   — call from the dashboard boot handler after
+ *                           AMCP_DATA is populated. Caches the snapshot
+ *                           for subsequent getState() / isFirstLogin()
+ *                           calls. Accepts null (admins, missing data).
+ *   isFirstLogin()        — true iff state is present and the welcome
+ *                           flow has not been completed yet. The boot
+ *                           handler AND's this with user.role !== 'admin'
+ *                           to decide whether to auto-open the overlay.
+ *   openWelcome()         — show the 4-slide welcome overlay (also
+ *                           callable from a "Restart welcome" link).
+ *   openChecklistSection() — programmatically switch to the getting-
+ *                           started section (used by welcome → finish).
+ *   startTour()           — begin the 5-stop dashboard tour.
+ *   restart()             — alias for startTour(); intended for a
+ *                           "Restart tour" footer link.
+ *   markStep(key, value?) — POST /api/client/onboarding/step. Used
+ *                           internally but also exposed for integrations
+ *                           that want to tick arbitrary keys.
+ *   getState()            — returns the cached OnboardingState blob
+ *                           or null.
+ *
  * Registers:
- *   window.AMCP_ONBOARDING  — openWelcome(), openChecklistSection(),
- *                             startTour(), markStep(), getState()
- *   window.AMCP_SECTIONS['getting-started'] — renders the checklist section
+ *   window.AMCP_SECTIONS['getting-started'] — renders the checklist
+ *                           section when the sidebar nav item is clicked.
  *
  * Depends on:
  *   window.AMCP.authedFetch  (dashboard-auth.js)
  *   window.AMCP_UI.openDrawer / toast  (dashboard-ui.js)
  *   window.AMCP_DATA         — populated by metrics fetch in dashboard shell
  *   window.AMCP_SECTIONS     — section registry in dashboard.html
+ *   window.AMCP_DNS_WIZARD   — optional; enables the dns_configured
+ *                           checklist action (dashboard-dns-wizard.js)
  */
 (function () {
   'use strict';
@@ -33,6 +56,32 @@
 
   function getState() {
     return _state;
+  }
+
+  /* Is the welcome flow unfinished? Used by the boot handler to decide
+   * whether to auto-open the overlay on first dashboard load.
+   *
+   * Returns false when:
+   *   - state is null (admin impersonation, or server returned no snapshot)
+   *   - state.welcome.completed_at is set (user already saw the intro)
+   * Returns true otherwise.
+   *
+   * The boot handler must additionally gate on user.role !== 'admin' so
+   * admins viewing an un-onboarded tenant don't trigger writes on the
+   * tenant's behalf. (Server-side apiMarkOnboardingStep also no-ops for
+   * admins, but skipping the UI is cleaner.)
+   */
+  function isFirstLogin() {
+    if (!_state) return false;
+    var w = _state.welcome;
+    if (!w) return true;
+    return !w.completed_at;
+  }
+
+  /* "Restart tour" alias — same as startTour(). Named so that a footer
+   * link reads naturally ("Restart tour" → AMCP_ONBOARDING.restart()). */
+  function restart() {
+    startTour();
   }
 
   /* ── API helpers ────────────────────────────────────────────────────────── */
@@ -912,9 +961,11 @@
 
   window.AMCP_ONBOARDING = {
     loadState:            loadState,
+    isFirstLogin:         isFirstLogin,
     openWelcome:          openWelcome,
     openChecklistSection: openChecklistSection,
     startTour:            startTour,
+    restart:              restart,
     markStep:             markStep,
     getState:             getState,
   };
