@@ -234,7 +234,8 @@
 
     el.innerHTML = _overlayInnerHTML();
 
-    document.getElementById('amcp-wb-next').addEventListener('click', function () {
+    // The overlay isn't in the document yet, so scope queries to `el`.
+    el.querySelector('#amcp-wb-next').addEventListener('click', function () {
       _stopSlideTimer();
       if (_slideIdx < SLIDE_COUNT - 1) {
         _showSlide(_slideIdx + 1);
@@ -244,12 +245,12 @@
         openChecklistSection();
       }
     });
-    document.getElementById('amcp-wb-back').addEventListener('click', function () {
+    el.querySelector('#amcp-wb-back').addEventListener('click', function () {
       _stopSlideTimer();
       _showSlide(_slideIdx - 1);
       _startSlideTimer();
     });
-    document.getElementById('amcp-wb-skip').addEventListener('click', function () {
+    el.querySelector('#amcp-wb-skip').addEventListener('click', function () {
       _closeWelcome(false);
     });
 
