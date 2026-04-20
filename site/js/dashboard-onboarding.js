@@ -127,7 +127,10 @@
     if (_overlayEl) _overlayEl.classList.remove('show');
     _stopSlideTimer();
     if (markComplete || _slideIdx >= SLIDE_COUNT - 1) {
-      markStep('welcome.completed');
+      markStep('welcome.completed_at', new Date().toISOString());
+      markStep('checklist.watched_welcome').then(function () {
+        _refreshChecklist();
+      });
     } else {
       markStep('welcome.current_slide', _slideIdx);
     }
@@ -511,14 +514,196 @@
   /* ── Checklist section ──────────────────────────────────────────────────── */
   var _checklistRendered = false;
 
+  function escHtml(s) {
+    if (s == null) return '';
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  var CHECKLIST_DEFS = {
+    watched_welcome: {
+      title: 'Watch the welcome',
+      desc:  'A quick 4-slide intro to what Advocate does.',
+    },
+    dns_configured: {
+      title: 'Wire up your DNS',
+      desc:  'Point your domain at Advocate so AI crawlers reach your agent.',
+    },
+    previewed_voice: {
+      title: 'Preview your agent\u2019s voice',
+      desc:  'See how your agent might answer a real AI question.',
+    },
+    took_tour: {
+      title: 'Take the dashboard tour',
+      desc:  'A 5-stop walkthrough of every section.',
+    },
+    simulated_bot_hit: {
+      title: 'Trigger a simulated bot hit',
+      desc:  'We\u2019ll pretend to be PerplexityBot and ping your agent.',
+    },
+    first_real_bot_hit: {
+      title: 'See your first real bot hit',
+      desc:  'Once DNS is wired up, real AI crawlers will start arriving.',
+    },
+  };
+
   function openChecklistSection() {
-    // Drive nav to the getting-started section
     var item = document.querySelector('[data-section="getting-started"]');
     if (item) item.click();
   }
 
   function _renderChecklist() {
-    // Will be filled in step 4
+    var sec = document.getElementById('sec-getting-started');
+    if (!sec) return;
+    sec.innerHTML = _sectionShellHTML();
+    var list = document.getElementById('amcp-onb-list');
+    if (list) {
+      list.addEventListener('click', function (ev) {
+        var item = ev.target.closest('.amcp-onb-item');
+        if (!item || item.classList.contains('done')) return;
+        var key = item.dataset.key;
+        if (key) _runChecklistAction(key);
+      });
+    }
+    _refreshChecklist();
+  }
+
+  function _sectionShellHTML() {
+    var name = (window.AMCP_DATA && window.AMCP_DATA.business_name) || 'your business';
+    return (
+      '<p class="db-sec-title">Get Started</p>' +
+      '<p class="db-sec-sub">Finish these steps to go live with Advocate</p>' +
+      '<div class="amcp-onb-intro">' +
+        '<div class="amcp-onb-intro-mark"><i data-lucide="sparkles"></i></div>' +
+        '<div>' +
+          '<div class="amcp-onb-intro-title">Welcome, ' + escHtml(name) + '</div>' +
+          '<div class="amcp-onb-intro-copy">Most customers are live in under 10 minutes. Pick up where you left off — progress saves automatically.</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="amcp-onb-progress"><div class="amcp-onb-progress-fill" id="amcp-onb-progress-fill"></div></div>' +
+      '<div class="amcp-onb-list" id="amcp-onb-list"></div>'
+    );
+  }
+
+  function _refreshChecklist() {
+    var list = document.getElementById('amcp-onb-list');
+    if (!list) return;
+    var keys  = checklistKeys();
+    var done  = doneCount();
+    var total = keys.length;
+    var fill  = document.getElementById('amcp-onb-progress-fill');
+    if (fill) fill.style.width = (total > 0 ? Math.round((done / total) * 100) : 0) + '%';
+    list.innerHTML = keys.map(function (k) {
+      var def    = CHECKLIST_DEFS[k] || { title: k, desc: '' };
+      var isDone = isStepDone(k);
+      return (
+        '<div class="amcp-onb-item' + (isDone ? ' done' : '') + '" data-key="' + escHtml(k) + '">' +
+          '<div class="amcp-onb-check"><i data-lucide="check"></i></div>' +
+          '<div class="amcp-onb-text">' +
+            '<div class="amcp-onb-title">' + escHtml(def.title) + '</div>' +
+            '<div class="amcp-onb-desc">'  + escHtml(def.desc)  + '</div>' +
+          '</div>' +
+          '<div class="amcp-onb-chevron"><i data-lucide="chevron-right"></i></div>' +
+        '</div>'
+      );
+    }).join('');
+    if (window.lucide && typeof window.lucide.createIcons === 'function') {
+      window.lucide.createIcons();
+    }
+  }
+
+  function _runChecklistAction(key) {
+    switch (key) {
+      case 'watched_welcome':
+        openWelcome();
+        break;
+      case 'dns_configured':
+        if (window.AMCP_DNS_WIZARD && typeof window.AMCP_DNS_WIZARD.open === 'function') {
+          window.AMCP_DNS_WIZARD.open();
+        } else {
+          window.AMCP_UI && window.AMCP_UI.toast && window.AMCP_UI.toast('DNS wizard not available — reload the page.', 'error');
+        }
+        break;
+      case 'previewed_voice':
+        _openVoicePreview();
+        break;
+      case 'took_tour':
+        startTour();
+        break;
+      case 'simulated_bot_hit':
+        _triggerSimulatedHit();
+        break;
+      case 'first_real_bot_hit':
+        _checkRealBotHit();
+        break;
+    }
+  }
+
+  /* Mock voice preview — pulls business_name out of AMCP_DATA and shows a
+   * representative sample answer in the drawer. No API call; this is a tour
+   * stop, not a live render. Marking it complete unblocks the checklist. */
+  function _openVoicePreview() {
+    var name   = (window.AMCP_DATA && window.AMCP_DATA.business_name) || 'your business';
+    var sample =
+      'Sure — ' + name + ' is a local business you can reach directly. ' +
+      'They\u2019re open most weekdays and handle inquiries through their booking page. ' +
+      'For pricing, hours, or to schedule, tap through to their site.';
+    var html =
+      '<div class="amcp-dns-step">' +
+        '<p class="amcp-dns-step-copy">' +
+          'Here\u2019s roughly what your agent returns when ChatGPT or Perplexity asks about your business. ' +
+          'Your profile data (hours, services, pricing, credentials) shapes the tone — tune it in Settings.' +
+        '</p>' +
+        '<div style="padding:16px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;line-height:1.55;font-size:var(--tx-sm);color:var(--text)">' +
+          '<span style="font-size:var(--tx-xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-bright)">Sample answer</span><br/><br/>' +
+          escHtml(sample) +
+        '</div>' +
+        '<p style="margin-top:18px;font-size:var(--tx-xs);color:var(--muted)">' +
+          'To see the live agent, open any AI assistant and ask about your business by name.' +
+        '</p>' +
+      '</div>';
+    if (window.AMCP_UI && window.AMCP_UI.openDrawer) {
+      window.AMCP_UI.openDrawer('Agent voice preview', html);
+    }
+    markStep('checklist.previewed_voice').then(function () {
+      _refreshChecklist();
+    });
+  }
+
+  function _triggerSimulatedHit() {
+    var slug = currentSlug();
+    if (!slug) return;
+    if (window.AMCP_UI) window.AMCP_UI.toast('Simulating a bot hit\u2026', 'info');
+    window.AMCP.authedFetch('/api/client/domain-test?slug=' + encodeURIComponent(slug))
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (res && (res.ok || res.status === 200)) {
+          if (window.AMCP_UI) window.AMCP_UI.toast('Simulated hit successful', 'success');
+          markStep('checklist.simulated_bot_hit').then(function () { _refreshChecklist(); });
+        } else {
+          if (window.AMCP_UI) window.AMCP_UI.toast('Simulation failed. Check domain setup.', 'error');
+        }
+      })
+      .catch(function () {
+        if (window.AMCP_UI) window.AMCP_UI.toast('Simulation failed.', 'error');
+      });
+  }
+
+  function _checkRealBotHit() {
+    var slug = currentSlug();
+    if (!slug) return;
+    window.AMCP.authedFetch('/api/client/domain-info?slug=' + encodeURIComponent(slug))
+      .then(function (r) { return r.json(); })
+      .then(function (info) {
+        if (info && info.last_bot_hit) {
+          markStep('checklist.first_real_bot_hit').then(function () { _refreshChecklist(); });
+          if (window.AMCP_UI) window.AMCP_UI.toast('Bot hit detected!', 'success');
+        } else {
+          if (window.AMCP_UI) window.AMCP_UI.toast('No bot hits yet \u2014 real crawlers arrive within ~24h of DNS going live.', 'info');
+        }
+      })
+      .catch(function () { /* non-fatal */ });
   }
 
   /* ── Product tour ───────────────────────────────────────────────────────── */
@@ -533,10 +718,6 @@
     if (_checklistRendered) { _refreshChecklist(); return; }
     _checklistRendered = true;
     _renderChecklist();
-  }
-
-  function _refreshChecklist() {
-    // Re-render just the item states without rebuilding the full section
   }
 
   /* ── Bootstrap ─────────────────────────────────────────────────────────── */
