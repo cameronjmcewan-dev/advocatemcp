@@ -368,46 +368,54 @@
         '@keyframes s2-flow{to{stroke-dashoffset:-20}}' +
         '@keyframes s2-in{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}' +
         '@keyframes s2-pop{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:scale(1)}}' +
-        '.s2-m1{animation:s2-in .4s ease .1s both;transform-origin:100px 90px}' +
-        '.s2-m2{animation:s2-in .4s ease .25s both;transform-origin:100px 180px}' +
-        '.s2-m3{animation:s2-in .4s ease .4s both;transform-origin:100px 270px}' +
+        '.s2-m1{animation:s2-in .4s ease .1s both}' +
+        '.s2-m2{animation:s2-in .4s ease .25s both}' +
+        '.s2-m3{animation:s2-in .4s ease .4s both}' +
         '.s2-arrow{stroke-dasharray:6 4;animation:s2-flow 1.2s linear infinite}' +
         '.s2-a1{animation:s2-in .4s ease .55s both,s2-flow 1.2s linear .55s infinite}' +
         '.s2-a2{animation:s2-in .4s ease .7s both,s2-flow 1.2s linear .7s infinite}' +
         '.s2-a3{animation:s2-in .4s ease .85s both,s2-flow 1.2s linear .85s infinite}' +
-        '.s2-shield{animation:s2-pop .45s ease 1.0s both;transform-origin:500px 180px}' +
+        '.s2-shield{animation:s2-pop .45s ease 1.0s both;transform-origin:center}' +
       '</style></defs>' +
 
       '<rect width="640" height="360" style="fill:var(--surface-2,#140a0c)"/>' +
 
-      /* Mark 1: ChatGPT-like swirl */
-      '<g class="s2-m1" transform="translate(100,90)">' +
-        '<circle r="30" style="fill:var(--surface,#0d0507);stroke:var(--accent-bright,#5c1532)" stroke-width="1.5"/>' +
-        '<path d="M-14,-4 Q-4,-16 10,-8 Q18,4 4,14 Q-12,13 -13,1" fill="none" stroke="#a39a97" stroke-width="2" stroke-linecap="round"/>' +
-        '<circle r="2.5" fill="#a39a97"/>' +
-        '<text y="48" text-anchor="middle" font-size="10" fill="var(--muted,#8a7c78)" font-family="\'General Sans\',system-ui,sans-serif">ChatGPT</text>' +
+      /* Mark 1: ChatGPT-like swirl. Outer g positions, inner g animates
+       * (CSS transform on an SVG element clobbers the `transform` attribute,
+       * so we separate the two). */
+      '<g transform="translate(100,90)">' +
+        '<g class="s2-m1">' +
+          '<circle r="30" style="fill:var(--surface,#0d0507);stroke:var(--accent-bright,#5c1532)" stroke-width="1.5"/>' +
+          '<path d="M-14,-4 Q-4,-16 10,-8 Q18,4 4,14 Q-12,13 -13,1" fill="none" stroke="#a39a97" stroke-width="2" stroke-linecap="round"/>' +
+          '<circle r="2.5" fill="#a39a97"/>' +
+          '<text y="48" text-anchor="middle" font-size="10" fill="var(--muted,#8a7c78)" font-family="\'General Sans\',system-ui,sans-serif">ChatGPT</text>' +
+        '</g>' +
       '</g>' +
 
       /* Mark 2: Claude asterisk */
-      '<g class="s2-m2" transform="translate(100,180)">' +
-        '<circle r="30" style="fill:var(--surface,#0d0507);stroke:var(--accent-bright,#5c1532)" stroke-width="1.5"/>' +
-        '<g stroke="#d97757" stroke-width="2.5" stroke-linecap="round">' +
-          '<line x1="0" y1="-14" x2="0" y2="14"/>' +
-          '<line x1="-14" y1="0" x2="14" y2="0"/>' +
-          '<line x1="-10" y1="-10" x2="10" y2="10"/>' +
-          '<line x1="-10" y1="10" x2="10" y2="-10"/>' +
+      '<g transform="translate(100,180)">' +
+        '<g class="s2-m2">' +
+          '<circle r="30" style="fill:var(--surface,#0d0507);stroke:var(--accent-bright,#5c1532)" stroke-width="1.5"/>' +
+          '<g stroke="#d97757" stroke-width="2.5" stroke-linecap="round">' +
+            '<line x1="0" y1="-14" x2="0" y2="14"/>' +
+            '<line x1="-14" y1="0" x2="14" y2="0"/>' +
+            '<line x1="-10" y1="-10" x2="10" y2="10"/>' +
+            '<line x1="-10" y1="10" x2="10" y2="-10"/>' +
+          '</g>' +
+          '<text y="48" text-anchor="middle" font-size="10" fill="var(--muted,#8a7c78)" font-family="\'General Sans\',system-ui,sans-serif">Claude</text>' +
         '</g>' +
-        '<text y="48" text-anchor="middle" font-size="10" fill="var(--muted,#8a7c78)" font-family="\'General Sans\',system-ui,sans-serif">Claude</text>' +
       '</g>' +
 
       /* Mark 3: Perplexity atom */
-      '<g class="s2-m3" transform="translate(100,270)">' +
-        '<circle r="30" style="fill:var(--surface,#0d0507);stroke:var(--accent-bright,#5c1532)" stroke-width="1.5"/>' +
-        '<ellipse rx="18" ry="7" fill="none" stroke="#20b2ab" stroke-width="1.5"/>' +
-        '<ellipse rx="18" ry="7" fill="none" stroke="#20b2ab" stroke-width="1.5" transform="rotate(60)"/>' +
-        '<ellipse rx="18" ry="7" fill="none" stroke="#20b2ab" stroke-width="1.5" transform="rotate(120)"/>' +
-        '<circle r="4" fill="#20b2ab"/>' +
-        '<text y="48" text-anchor="middle" font-size="10" fill="var(--muted,#8a7c78)" font-family="\'General Sans\',system-ui,sans-serif">Perplexity</text>' +
+      '<g transform="translate(100,270)">' +
+        '<g class="s2-m3">' +
+          '<circle r="30" style="fill:var(--surface,#0d0507);stroke:var(--accent-bright,#5c1532)" stroke-width="1.5"/>' +
+          '<ellipse rx="18" ry="7" fill="none" stroke="#20b2ab" stroke-width="1.5"/>' +
+          '<ellipse rx="18" ry="7" fill="none" stroke="#20b2ab" stroke-width="1.5" transform="rotate(60)"/>' +
+          '<ellipse rx="18" ry="7" fill="none" stroke="#20b2ab" stroke-width="1.5" transform="rotate(120)"/>' +
+          '<circle r="4" fill="#20b2ab"/>' +
+          '<text y="48" text-anchor="middle" font-size="10" fill="var(--muted,#8a7c78)" font-family="\'General Sans\',system-ui,sans-serif">Perplexity</text>' +
+        '</g>' +
       '</g>' +
 
       /* Flowing dashed arrows */
@@ -415,12 +423,14 @@
       '<path class="s2-arrow s2-a2" d="M135,180 Q300,180 468,180" fill="none" stroke="#5c1532" stroke-width="2"/>' +
       '<path class="s2-arrow s2-a3" d="M135,270 Q300,270 468,200" fill="none" stroke="#5c1532" stroke-width="2"/>' +
 
-      /* Central Advocate shield */
-      '<g class="s2-shield" transform="translate(500,180)">' +
-        '<circle r="52" style="fill:var(--accent-glow,rgba(92,21,50,.35))" opacity=".4"/>' +
-        '<path d="M-32,-34 L32,-34 L32,6 Q32,24 0,36 Q-32,24 -32,6 Z" style="fill:var(--accent,#3d0a22);stroke:var(--accent-bright,#5c1532)" stroke-width="1.5"/>' +
-        '<text y="8" text-anchor="middle" font-size="30" font-weight="700" fill="#e8e3e0" font-family="\'General Sans\',system-ui,sans-serif">A</text>' +
-        '<text y="58" text-anchor="middle" font-size="10" font-weight="600" fill="#5c1532" letter-spacing="1.2" font-family="\'General Sans\',system-ui,sans-serif">ADVOCATE</text>' +
+      /* Central Advocate shield — same nesting pattern */
+      '<g transform="translate(500,180)">' +
+        '<g class="s2-shield">' +
+          '<circle r="52" style="fill:var(--accent-glow,rgba(92,21,50,.35))" opacity=".4"/>' +
+          '<path d="M-32,-34 L32,-34 L32,6 Q32,24 0,36 Q-32,24 -32,6 Z" style="fill:var(--accent,#3d0a22);stroke:var(--accent-bright,#5c1532)" stroke-width="1.5"/>' +
+          '<text y="8" text-anchor="middle" font-size="30" font-weight="700" fill="#e8e3e0" font-family="\'General Sans\',system-ui,sans-serif">A</text>' +
+          '<text y="58" text-anchor="middle" font-size="10" font-weight="600" fill="#5c1532" letter-spacing="1.2" font-family="\'General Sans\',system-ui,sans-serif">ADVOCATE</text>' +
+        '</g>' +
       '</g>' +
 
       '</svg>' +
