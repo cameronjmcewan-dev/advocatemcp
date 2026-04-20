@@ -120,30 +120,86 @@
     _bindStageHandlers();
   }
 
-  /* ── Stage 1: provider picker (filled in step 2) ────────────────────────── */
+  /* ── Stage 1: provider picker ───────────────────────────────────────────── */
+  /*
+   * Four cards in a 2×2 grid. The known providers (GoDaddy, Namecheap,
+   * Cloudflare) carry a "where to find it" hint so users don't waste
+   * time hunting. "Other" routes to a generic-instructions path that
+   * covers anyone not on the short-list.
+   */
+  var PROVIDERS = [
+    {
+      id:    'godaddy',
+      name:  'GoDaddy',
+      hint:  'My Products → Domain → DNS tab',
+    },
+    {
+      id:    'namecheap',
+      name:  'Namecheap',
+      hint:  'Domain List → Manage → Advanced DNS',
+    },
+    {
+      id:    'cloudflare',
+      name:  'Cloudflare',
+      hint:  'Dashboard → Domain → DNS → Records',
+    },
+    {
+      id:    'other',
+      name:  'Other / not sure',
+      hint:  'Generic CNAME + TXT instructions',
+    },
+  ];
+
   function _renderPicker() {
+    var domain = currentDomain() || '(your domain)';
+    var cards = PROVIDERS.map(function (p) {
+      return (
+        '<button type="button" class="amcp-dns-provider" data-provider="' + escHtml(p.id) + '">' +
+          '<div style="font-weight:600;font-size:var(--tx-base);margin-bottom:3px">' + escHtml(p.name) + '</div>' +
+          '<div style="font-size:var(--tx-xs);color:var(--muted);line-height:1.4">' + escHtml(p.hint) + '</div>' +
+        '</button>'
+      );
+    }).join('');
     return (
       '<div class="amcp-dns-step">' +
-        '<div class="amcp-dns-step-title">Pick your DNS provider</div>' +
+        '<div class="amcp-dns-step-title">Where is ' + escHtml(domain) + ' registered?</div>' +
         '<div class="amcp-dns-step-copy">' +
-          'We\u2019ll show provider-specific instructions and live status while the records propagate.' +
+          'Pick your DNS provider and we\u2019ll show step-by-step instructions with copyable record values.' +
         '</div>' +
-        '<div class="amcp-dns-providers" id="amcp-dns-picker-grid">' +
-          '<em style="color:var(--muted);font-size:var(--tx-sm)">Provider cards rendered in step 2.</em>' +
+        '<div class="amcp-dns-providers" id="amcp-dns-picker-grid">' + cards + '</div>' +
+        '<div style="margin-top:16px;font-size:var(--tx-xs);color:var(--muted)">' +
+          'Your choice is remembered locally \u2014 next time you open this wizard, we\u2019ll jump straight to instructions.' +
         '</div>' +
       '</div>'
     );
   }
 
   function _bindPicker() {
-    // Click delegation for provider cards — filled in step 2.
+    var grid = document.getElementById('amcp-dns-picker-grid');
+    if (!grid) return;
+    grid.addEventListener('click', function (ev) {
+      var card = ev.target.closest('.amcp-dns-provider');
+      if (!card) return;
+      var id = card.dataset.provider;
+      if (!id) return;
+      _provider = id;
+      saveProvider(id);
+      _transition(STAGE_INSTRUCTIONS);
+    });
   }
 
   /* ── Stage 2: instructions (filled in step 3) ───────────────────────────── */
+  function _providerName(id) {
+    for (var i = 0; i < PROVIDERS.length; i++) {
+      if (PROVIDERS[i].id === id) return PROVIDERS[i].name;
+    }
+    return id || '';
+  }
+
   function _renderInstructions() {
     return (
       '<div class="amcp-dns-step">' +
-        '<div class="amcp-dns-step-title">Instructions for <span style="text-transform:capitalize">' + escHtml(_provider || '') + '</span></div>' +
+        '<div class="amcp-dns-step-title">Instructions for ' + escHtml(_providerName(_provider)) + '</div>' +
         '<div class="amcp-dns-step-copy">' +
           'Provider diagram + copyable records rendered in step 3.' +
         '</div>' +
@@ -157,7 +213,11 @@
 
   function _bindInstructions() {
     var back = document.getElementById('amcp-dns-back');
-    if (back) back.addEventListener('click', function () { _transition(STAGE_PICKER); });
+    if (back) back.addEventListener('click', function () {
+      try { localStorage.removeItem(LOCAL_STORAGE_KEY); } catch (_) { /* no-op */ }
+      _provider = null;
+      _transition(STAGE_PICKER);
+    });
     var verify = document.getElementById('amcp-dns-verify');
     if (verify) verify.addEventListener('click', function () { _transition(STAGE_VERIFY); });
   }
