@@ -1,28 +1,23 @@
-// Client portal: login, logout, dashboard, and protected JSON API.
-// All HTML is server-rendered — no client-side framework required.
+// Client portal: protected JSON API + /status page.
+// Customer-facing HTML (login, dashboard, onboarding, activation) lives at
+// advocatemcp.com; this file redirects the legacy worker URLs to those pages.
 
 import type { Env } from "../types";
+import { generateSalt, hashPassword } from "../auth";
 import {
-  generateSalt, hashPassword, verifyPassword,
-  getSessionToken, sessionCookieHeader, clearSessionCookieHeader,
-} from "../auth";
-import {
-  getUserByEmail, createUser, updateUserPassword, createSession, getSessionByToken,
-  deleteSession, getUserBusinesses, getAllBusinesses, getActiveBusinesses, getBusinessBySlug, createBusiness,
-  grantAccess, checkRateLimit, recordLoginAttempt, updateBusinessApiKey,
+  getUserByEmail, createUser, updateUserPassword,
+  getUserBusinesses, getAllBusinesses, getActiveBusinesses, getBusinessBySlug, createBusiness,
+  grantAccess, updateBusinessApiKey,
   getOnboardingState, markOnboardingStep, touchFirstDashboardIfNull,
   type OnboardingSnapshot, type OnboardingState,
 } from "../portalDb";
-import type { Business, User, SessionWithUser } from "../portalDb";
-import { buildDashboard, type AnalyticsData } from "./dashboard";
+import type { Business } from "../portalDb";
 import { handleActivateDomain, handleDomainStatus, handleDomainRaw, handleSetFallbackOrigin, handleEnsureWorkerRoute, cfRequest } from "./domains";
 import {
   handleOnboard, handleOnboardStatus, handleOnboardList,
   handleVerifyDomain, handleVerifyAll, handleDisableTenant,
   getTenant,
 } from "./onboard";
-import { handleOnboardPage } from "./onboardPage";
-import { handleActivatePage } from "./activatePage";
 import { handleActivate, handleActivateHosted, handleActivationToken, handleGetActivation, handleResendActivation } from "./activate";
 import {
   getSessionFromRequest,
@@ -42,18 +37,47 @@ import {
 } from "./stripe";
 import { handleSaveDraft, handleLoadDraft } from "./onboardDraft";
 
+// Analytics payload returned by the Railway /analytics/:slug endpoint.
+// Shared by every /api/client/* handler that proxies through fetchAnalytics.
+// Previously exported from ./dashboard; inlined here during Phase E when
+// that file was deleted along with the worker-rendered dashboard HTML.
+export interface AnalyticsData {
+  slug: string;
+  total_queries: number;
+  referral_clicks: number;
+  referral_clicks_last_30_days: number;
+  queries_by_crawler: Record<string, number>;
+  queries_by_intent: Record<string, number>;
+  top_queries: string[];
+  queries_last_30_days: Array<{ date: string; count: number }>;
+  activity_by_dow_hour: Array<{ dow: number; hour: number; count: number }>;
+  recent_queries: Array<{
+    id: number;
+    crawler_agent: string | null;
+    query_text: string;
+    response_text: string;
+    referral_clicked: number;
+    timestamp: string;
+    intent?: string | null;
+  }>;
+}
+
 // ── Public route dispatcher ────────────────────────────────────────────────
 // Returns a Response if this is a portal path, or null to fall through to
 // the existing AI-crawler logic.
 
 export async function handlePortal(request: Request, env: Env): Promise<Response | null> {
-  const { pathname } = new URL(request.url);
+  const url = new URL(request.url);
+  const { pathname } = url;
   const method = request.method;
 
-  if (pathname === "/login"               && method === "GET")  return Response.redirect("https://advocatemcp.com/login.html", 301);
-  if (pathname === "/auth/login"          && method === "POST") return authLogin(request, env);
-  if (pathname === "/auth/logout"         && method === "POST") return authLogout(request, env);
-  if (pathname === "/dashboard"           && method === "GET")  return Response.redirect("https://advocatemcp.com/dashboard.html", 301);
+  // ── Phase E: legacy worker HTML now lives at advocatemcp.com ───────────
+  // Permanent redirects preserve any query string (notably ?t= for /activate
+  // and ?error= for /login). See docs/rearchitecture-plan-2026-04-10.md §8E.
+  if (pathname === "/login"     && method === "GET") return Response.redirect(`https://advocatemcp.com/login.html${url.search}`, 301);
+  if (pathname === "/dashboard" && method === "GET") return Response.redirect(`https://advocatemcp.com/dashboard.html${url.search}`, 301);
+  if (pathname === "/onboard"   && method === "GET") return Response.redirect(`https://advocatemcp.com/onboarding.html${url.search}`, 301);
+  if (pathname === "/activate"  && method === "GET") return Response.redirect(`https://advocatemcp.com/activate.html${url.search}`, 301);
   if (pathname === "/api/client/me"       && method === "GET")  return apiMe(request, env);
   if (pathname === "/api/client/metrics"  && method === "GET")  return apiMetrics(request, env);
   if (pathname === "/api/client/activity"   && method === "GET")  return apiActivity(request, env);
@@ -79,12 +103,10 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/admin/domains/ensure-worker-route"   && method === "POST") return handleEnsureWorkerRoute(request, env);
   if (pathname === "/admin/onboard/retry-railway"         && method === "POST") return handleRetryRailwayRegistration(request, env);
   if (pathname === "/status"                   && method === "GET")  return statusPage(request, env);
-  if (pathname === "/onboard"                  && method === "GET")  return handleOnboardPage(request, env);
 
   // ── Phase 3 self-serve activation (post-payment, token-gated) ──────────
-  // Separate flow from the existing /onboard wizard. See feat(worker):
-  // phase 3 spine commit for the full design rationale.
-  if (pathname === "/activate"                 && method === "GET")  return handleActivatePage(request, env);
+  // /activate GET redirects to advocatemcp.com/activate.html (see Phase E
+  // block above); the POST API lives here.
   if (pathname === "/api/activate"             && method === "OPTIONS") return handleCorsPreflight(request);
   if (pathname === "/api/activate"             && method === "POST")    return handleActivate(request, env);
   if (pathname === "/api/activate/hosted"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
@@ -193,146 +215,6 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   }
 
   return null;
-}
-
-// ── Session helper ─────────────────────────────────────────────────────────
-
-/**
- * Legacy session helper — intentionally preserved from pre-Phase-C as a
- * single-use wrapper for `loginPage` below. All other auth checks in this
- * file (dashboard, apiMe, apiMetrics, apiActivity, apiRotateKey) go through
- * `getSessionFromRequest` from `./authApi`, which supports both the new
- * Phase C Bearer access token path and the legacy amcp_session cookie.
- *
- * This helper exists solely because `loginPage` was explicitly excluded
- * from modification in the Phase C Commit 5 scope, and updating its one
- * call site would have counted as a modification. Delete this helper
- * alongside `loginPage` itself during Phase E when the legacy admin HTML
- * pages are deprecated per `docs/rearchitecture-plan-2026-04-10.md`
- * Section 8 Phase E.
- *
- * See commit `48c5978` (Phase C Commit 4) for the introduction of
- * `getSessionFromRequest` and the rationale for the unified auth flow.
- */
-async function requireSession(request: Request, env: Env): Promise<SessionWithUser | null> {
-  const token = getSessionToken(request);
-  if (!token) return null;
-  return getSessionByToken(env.DB, token);
-}
-
-// ── GET /login ─────────────────────────────────────────────────────────────
-
-async function loginPage(request: Request, env: Env): Promise<Response> {
-  const session = await requireSession(request, env);
-  if (session) return redirect("/dashboard");
-
-  const error = new URL(request.url).searchParams.get("error");
-  const msgs: Record<string, string> = {
-    invalid:      "Invalid email or password.",
-    rate_limited: "Too many login attempts. Please wait 15 minutes.",
-    expired:      "Your session has expired. Please sign in again.",
-  };
-  return html(loginHtml(msgs[error ?? ""] ?? null));
-}
-
-// ── POST /auth/login ───────────────────────────────────────────────────────
-
-async function authLogin(request: Request, env: Env): Promise<Response> {
-  const ct = request.headers.get("Content-Type") ?? "";
-  let email = "", password = "";
-
-  if (ct.includes("application/json")) {
-    const body = await request.json().catch(() => ({})) as Record<string, unknown>;
-    email    = String(body.email ?? "");
-    password = String(body.password ?? "");
-  } else {
-    const form = await request.formData().catch(() => new FormData());
-    email    = String(form.get("email") ?? "");
-    password = String(form.get("password") ?? "");
-  }
-
-  if (!email || !password) return redirect("/login?error=invalid");
-
-  const identifier = email.toLowerCase().trim();
-
-  const allowed = await checkRateLimit(env.DB, identifier);
-  if (!allowed) return redirect("/login?error=rate_limited");
-
-  const user = await getUserByEmail(env.DB, email);
-  if (!user) {
-    await recordLoginAttempt(env.DB, identifier);
-    return redirect("/login?error=invalid");
-  }
-
-  const ok = await verifyPassword(password, user.salt, user.password_hash);
-  if (!ok) {
-    await recordLoginAttempt(env.DB, identifier);
-    return redirect("/login?error=invalid");
-  }
-
-  const { token } = await createSession(env.DB, user.id);
-  return new Response(null, {
-    status: 302,
-    headers: { Location: "/dashboard", "Set-Cookie": sessionCookieHeader(token) },
-  });
-}
-
-// ── POST /auth/logout ──────────────────────────────────────────────────────
-
-async function authLogout(request: Request, env: Env): Promise<Response> {
-  const token = getSessionToken(request);
-  if (token) await deleteSession(env.DB, token);
-  return new Response(null, {
-    status: 302,
-    headers: { Location: "/login", "Set-Cookie": clearSessionCookieHeader() },
-  });
-}
-
-// ── GET /dashboard ─────────────────────────────────────────────────────────
-
-async function dashboard(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return redirect("/login?error=expired");
-
-  const businesses = ctx.role === "admin"
-    ? await getActiveBusinesses(env.DB)
-    : await getUserBusinesses(env.DB, ctx.user_id);
-
-  // Dashboard gating: redirect non-admin users whose tenant isn't active yet
-  if (ctx.role !== "admin" && businesses.length > 0) {
-    const biz = businesses[0];
-    if (biz.domain) {
-      const tenant = await getTenant(env, biz.domain);
-      if (tenant) {
-        const gatedStatuses = ["pending_payment", "paid_pending_dns", "free_pending_dns", "pending_verification"];
-        if (gatedStatuses.includes(tenant.status)) {
-          return redirect("/onboard");
-        }
-      }
-    }
-  }
-
-  const slug = new URL(request.url).searchParams.get("slug");
-  const selected = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
-  const analytics = selected ? await fetchAnalytics(selected, env) : null;
-
-  // Synthesize a minimal User object for buildDashboard. buildDashboard
-  // (see worker/src/routes/dashboard.ts) only reads user.full_name and
-  // user.email from this parameter — verified via grep during Phase C
-  // Commit 5 implementation. The other User fields (password_hash, salt,
-  // created_at, updated_at) are provided as empty strings to satisfy the
-  // User interface without doing an extra getUserById D1 query.
-  const userForDashboard: User = {
-    id:            ctx.user_id,
-    email:         ctx.email,
-    password_hash: "",
-    salt:          "",
-    full_name:     ctx.full_name,
-    role:          ctx.role,
-    created_at:    "",
-    updated_at:    "",
-  };
-  return html(buildDashboard(userForDashboard, businesses, selected, analytics));
 }
 
 // ── GET /api/client/me ─────────────────────────────────────────────────────
@@ -1752,10 +1634,6 @@ async function fetchAnalytics(biz: Business, env: Env): Promise<AnalyticsData | 
 
 // ── Response helpers ───────────────────────────────────────────────────────
 
-function redirect(loc: string): Response {
-  return new Response(null, { status: 302, headers: { Location: loc } });
-}
-
 function html(body: string): Response {
   return new Response(body, { headers: { "Content-Type": "text/html; charset=utf-8" } });
 }
@@ -1787,59 +1665,5 @@ function fmtDate(iso: string): string {
       month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
     });
   } catch { return iso; }
-}
-
-// ── Login page HTML ────────────────────────────────────────────────────────
-
-function loginHtml(errorMsg: string | null): string {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Sign in — AdvocateMCP</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-h1,h2,h3,h4,h5,h6{font-family:'Poppins',sans-serif}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;background:#f4f5f7;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem}
-.card{background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.08),0 4px 24px rgba(0,0,0,.07);padding:2.5rem 2rem;width:100%;max-width:400px}
-.logo{display:flex;align-items:center;gap:.5rem;margin-bottom:2rem}
-.logo-icon{width:30px;height:30px;background:#111;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.875rem}
-.logo-name{font-size:.9375rem;font-weight:600;color:#111}
-.logo-name span{color:#9ca3af;font-weight:400}
-h1{font-size:1.1875rem;font-weight:600;color:#111;margin-bottom:.25rem}
-.sub{font-size:.8125rem;color:#6b7280;margin-bottom:1.75rem}
-.err{background:#fef2f2;border:1px solid #fecaca;border-radius:6px;color:#dc2626;font-size:.8125rem;padding:.625rem .875rem;margin-bottom:1rem}
-label{display:block;font-size:.8125rem;font-weight:500;color:#374151;margin-bottom:.375rem}
-input{width:100%;border:1px solid #d1d5db;border-radius:6px;padding:.625rem .75rem;font-size:.875rem;color:#111;outline:none;margin-bottom:1rem;transition:border-color .15s}
-input:focus{border-color:#111;box-shadow:0 0 0 3px rgba(17,17,17,.06)}
-button{width:100%;background:#111;color:#fff;border:none;border-radius:6px;padding:.6875rem 1rem;font-size:.875rem;font-weight:500;cursor:pointer;transition:background .15s}
-button:hover{background:#333}
-.note{font-size:.75rem;color:#9ca3af;text-align:center;margin-top:1.5rem}
-</style>
-</head>
-<body>
-<div class="card">
-  <div class="logo">
-    <div class="logo-icon">A</div>
-    <div class="logo-name">Advocate<span>MCP</span></div>
-  </div>
-  <h1>Client Portal</h1>
-  <p class="sub">Sign in to view your AI referral analytics.</p>
-  ${errorMsg ? `<div class="err">${esc(errorMsg)}</div>` : ""}
-  <form method="POST" action="/auth/login">
-    <label for="email">Email address</label>
-    <input type="email" id="email" name="email" required autocomplete="email" placeholder="you@example.com">
-    <label for="password">Password</label>
-    <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="••••••••">
-    <button type="submit">Sign in</button>
-  </form>
-  <p class="note">Need access? Contact AdvocateMCP support.</p>
-</div>
-</body>
-</html>`;
 }
 

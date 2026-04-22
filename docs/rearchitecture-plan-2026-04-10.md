@@ -720,6 +720,10 @@ Six phases, A through F. Phase A is this planning document (already complete). E
 
 ### Phase E — Deprecation and cleanup of worker HTML
 
+**Status: SHIPPED 2026-04-22** on branch `claude/review-plan-files-ETcdf`. Net diff: 44 insertions, 2590 deletions across four files (`worker/src/routes/portal.ts`, `dashboard.ts`, `onboardPage.ts`, `activatePage.ts`). `sharedLayout.ts` preserved because `demo.ts` still imports it. `RESERVED` set in `worker/src/index.ts` left intact as defense-in-depth per the plan's own allowance. 175/175 worker tests pass; `tsc --noEmit` clean.
+
+`/login`, `/dashboard`, `/onboard`, `/activate` GETs now 301 to their `advocatemcp.com/*.html` counterparts, preserving the query string so `?t=<token>` on activation and `?error=*` on login flow through. The legacy cookie-form endpoints `/auth/login` and `/auth/logout` POST are removed (the Phase C `/api/auth/login` Bearer flow replaced them). `buildDashboard`, `loginPage`, `dashboard`, `loginHtml`, `authLogin`, `authLogout`, `requireSession`, and the unused `redirect()` helper are all gone. `AnalyticsData` was inlined into `portal.ts` since it's still consumed by six `/api/client/*` handlers.
+
 **Scope**: once Phase D is verified working in production, delete the worker's customer-facing HTML handlers. Redirect the old URLs to the new ones.
 
 **Files touched**:
