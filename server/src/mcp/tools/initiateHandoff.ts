@@ -14,10 +14,60 @@ function apiBase(): string {
   return getApiBaseUrl();
 }
 
-interface LeadRouting {
+/**
+ * Two shapes exist on-disk:
+ *
+ *   Wizard / onboarding (canonical, written by /register):
+ *     { preferred_channel: "phone"|"text"|"email"|"form",
+ *       phone?, email?, form_url? }
+ *
+ *   Legacy (early prototypes, plus a handful of hand-written rows):
+ *     { preferred: "sms"|"email", sms_to?, email_to? }
+ *
+ * resolveRouting() normalises either into a dispatch decision. "phone" and
+ * "text" both map to SMS-to-phone because we can't place an automated voice
+ * call — the onboarding distinction between "prefers a call" vs "prefers a
+ * text" collapses at delivery time. "form" is a non-deliverable routing
+ * preference — we surface the form_url so the agent can redirect the user
+ * there rather than silently falling through to email or SMS.
+ */
+interface LeadRoutingNew {
+  preferred_channel?: "phone" | "text" | "email" | "form";
+  phone?: string;
+  email?: string;
+  form_url?: string;
+}
+interface LeadRoutingLegacy {
   preferred?: "sms" | "email";
   sms_to?: string;
   email_to?: string;
+}
+type LeadRoutingAny = LeadRoutingNew & LeadRoutingLegacy;
+
+type RoutingDecision =
+  | { kind: "sms";   recipient: string | null }
+  | { kind: "email"; recipient: string | null }
+  | { kind: "form";  form_url: string | null };
+
+function resolveRouting(routing: LeadRoutingAny): RoutingDecision {
+  // New-shape takes precedence when present.
+  if (routing.preferred_channel) {
+    switch (routing.preferred_channel) {
+      case "phone":
+      case "text":
+        return { kind: "sms", recipient: routing.phone ?? routing.sms_to ?? null };
+      case "email":
+        return { kind: "email", recipient: routing.email ?? routing.email_to ?? null };
+      case "form":
+        return { kind: "form", form_url: routing.form_url ?? null };
+    }
+  }
+  // Legacy fallback. Default channel was "sms" when unspecified.
+  const legacyChannel = routing.preferred ?? "sms";
+  if (legacyChannel === "email") {
+    return { kind: "email", recipient: routing.email_to ?? routing.email ?? null };
+  }
+  return { kind: "sms", recipient: routing.sms_to ?? routing.phone ?? null };
 }
 
 export async function handleInitiateHandoff(
@@ -34,20 +84,50 @@ export async function handleInitiateHandoff(
   const handoff_id = `h_${randomUUID().replace(/-/g, "").slice(0, 20)}`;
 
   if (input.mode === "human") {
-    let routing: LeadRouting = {};
+    let routing: LeadRoutingAny = {};
     if (biz.lead_routing_json) {
       try {
-        routing = JSON.parse(biz.lead_routing_json) as LeadRouting;
+        routing = JSON.parse(biz.lead_routing_json) as LeadRoutingAny;
       } catch {
         /* ignore parse errors */
       }
     }
-    const channel: "sms" | "email" = routing.preferred ?? "sms";
+    const decision = resolveRouting(routing);
+
+    // Form-preferred routing: non-deliverable via SMS/email. Return the form
+    // URL so the agent can redirect the user rather than silently retrying a
+    // channel the tenant didn't opt into.
+    if (decision.kind === "form") {
+      // delivered_via is CHECK-constrained to sms|email|NULL. Form routing
+      // isn't a delivery channel, so we write NULL — the audit row still
+      // captures the attempt for observability.
+      db.prepare(`
+        INSERT INTO handoffs (id, business_slug, reservation_id, mode, delivered_via, ticket_id, agent_id)
+        VALUES (?, ?, ?, 'human', NULL, ?, ?)
+      `).run(handoff_id, input.slug, input.reservation_id ?? null, handoff_id, null);
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              mode: "human",
+              delivered: false,
+              reason: "form_routing_configured",
+              channel: "form",
+              form_url: decision.form_url,
+              handoff_id,
+            }),
+          },
+        ],
+      };
+    }
+
+    const channel: "sms" | "email" = decision.kind;
+    const recipient = decision.recipient;
 
     // Guard: business has no recipient configured for the chosen channel. Return
     // a clear, machine-readable reason so the caller (agent) can react, rather
     // than letting the notify adapter fail downstream with an opaque http_* code.
-    const recipient = channel === "sms" ? routing.sms_to : routing.email_to;
     if (!recipient) {
       db.prepare(`
         INSERT INTO handoffs (id, business_slug, reservation_id, mode, delivered_via, ticket_id, agent_id)

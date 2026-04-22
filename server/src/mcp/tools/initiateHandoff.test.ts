@@ -109,6 +109,100 @@ describe("initiate_handoff — human mode", () => {
   });
 });
 
+describe("initiate_handoff — human mode, onboarding/wizard shape", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  async function seedWithRouting(routingJson: string, slug = "wiz") {
+    process.env.DATABASE_PATH = ":memory:";
+    process.env.TOKEN_SIGNING_KEY = "test-key-ih";
+    process.env.API_BASE_URL = "https://api.test";
+    const dbMod = await import("../../db.js");
+    const { applyMigrations } = await import("../../db/migrations.js");
+    applyMigrations(
+      (dbMod as unknown as { __getRawForTest: () => import("better-sqlite3").Database }).__getRawForTest()
+    );
+    dbMod.getDb().prepare(`
+      INSERT INTO businesses (slug, name, api_key, description, services, lead_routing_json)
+      VALUES (?, ?, 'k', 'd', 's', ?)
+      ON CONFLICT(slug) DO NOTHING
+    `).run(slug, slug, routingJson);
+    return dbMod;
+  }
+
+  it("preferred_channel=text routes SMS to phone field", async () => {
+    const smsSpy = vi.fn().mockResolvedValue({ delivered: true, reason: "ok", ticket_id: "SM7" });
+    vi.doMock("../../lib/notify.js", () => ({ sendSms: smsSpy, sendEmail: vi.fn() }));
+    await seedWithRouting(`{"preferred_channel":"text","phone":"+15555551111"}`);
+    const { handleInitiateHandoff } = await import("./initiateHandoff.js");
+    const res = await handleInitiateHandoff({
+      slug: "wiz", mode: "human", payload: { message: "new lead" },
+    } as unknown as Parameters<typeof handleInitiateHandoff>[0]);
+    expect(smsSpy).toHaveBeenCalledWith({ to: "+15555551111", body: "new lead" });
+    const body = JSON.parse((res.content[0] as { text: string }).text) as { delivered_via: string };
+    expect(body.delivered_via).toBe("sms");
+  });
+
+  it("preferred_channel=phone also routes to SMS (voice not deliverable)", async () => {
+    const smsSpy = vi.fn().mockResolvedValue({ delivered: true, reason: "ok", ticket_id: "SM8" });
+    vi.doMock("../../lib/notify.js", () => ({ sendSms: smsSpy, sendEmail: vi.fn() }));
+    await seedWithRouting(`{"preferred_channel":"phone","phone":"+15555552222"}`);
+    const { handleInitiateHandoff } = await import("./initiateHandoff.js");
+    await handleInitiateHandoff({
+      slug: "wiz", mode: "human", payload: { message: "call me" },
+    } as unknown as Parameters<typeof handleInitiateHandoff>[0]);
+    expect(smsSpy).toHaveBeenCalledWith({ to: "+15555552222", body: "call me" });
+  });
+
+  it("preferred_channel=email routes email to email field", async () => {
+    const emailSpy = vi.fn().mockResolvedValue({ delivered: true, reason: "ok", ticket_id: "E1" });
+    vi.doMock("../../lib/notify.js", () => ({ sendSms: vi.fn(), sendEmail: emailSpy }));
+    await seedWithRouting(`{"preferred_channel":"email","email":"leads@biz.com"}`);
+    const { handleInitiateHandoff } = await import("./initiateHandoff.js");
+    const res = await handleInitiateHandoff({
+      slug: "wiz", mode: "human", payload: { message: "interested" },
+    } as unknown as Parameters<typeof handleInitiateHandoff>[0]);
+    expect(emailSpy).toHaveBeenCalledWith({ to: "leads@biz.com", subject: "New lead", body: "interested" });
+    const body = JSON.parse((res.content[0] as { text: string }).text) as { delivered_via: string };
+    expect(body.delivered_via).toBe("email");
+  });
+
+  it("preferred_channel=form returns form_routing_configured with form_url", async () => {
+    const smsSpy = vi.fn();
+    const emailSpy = vi.fn();
+    vi.doMock("../../lib/notify.js", () => ({ sendSms: smsSpy, sendEmail: emailSpy }));
+    await seedWithRouting(`{"preferred_channel":"form","form_url":"https://biz.example/contact"}`);
+    const { handleInitiateHandoff } = await import("./initiateHandoff.js");
+    const res = await handleInitiateHandoff({
+      slug: "wiz", mode: "human", payload: { message: "x" },
+    } as unknown as Parameters<typeof handleInitiateHandoff>[0]);
+    expect(smsSpy).not.toHaveBeenCalled();
+    expect(emailSpy).not.toHaveBeenCalled();
+    const body = JSON.parse((res.content[0] as { text: string }).text) as {
+      delivered: boolean; reason: string; channel: string; form_url: string;
+    };
+    expect(body.delivered).toBe(false);
+    expect(body.reason).toBe("form_routing_configured");
+    expect(body.channel).toBe("form");
+    expect(body.form_url).toBe("https://biz.example/contact");
+  });
+
+  it("preferred_channel=text with missing phone returns no_recipient_configured", async () => {
+    const smsSpy = vi.fn();
+    vi.doMock("../../lib/notify.js", () => ({ sendSms: smsSpy, sendEmail: vi.fn() }));
+    await seedWithRouting(`{"preferred_channel":"text"}`);
+    const { handleInitiateHandoff } = await import("./initiateHandoff.js");
+    const res = await handleInitiateHandoff({
+      slug: "wiz", mode: "human", payload: { message: "x" },
+    } as unknown as Parameters<typeof handleInitiateHandoff>[0]);
+    expect(smsSpy).not.toHaveBeenCalled();
+    const body = JSON.parse((res.content[0] as { text: string }).text) as { reason: string; channel: string };
+    expect(body.reason).toBe("no_recipient_configured");
+    expect(body.channel).toBe("sms");
+  });
+});
+
 describe("initiate_handoff — agent mode", () => {
   beforeEach(() => {
     vi.resetModules();
