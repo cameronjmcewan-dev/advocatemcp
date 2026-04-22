@@ -251,12 +251,12 @@
       _startSlideTimer();
     });
     el.querySelector('#amcp-wb-skip').addEventListener('click', function () {
-      _closeWelcome(false);
+      _closeWelcome(true);
     });
 
     document.addEventListener('keydown', function (ev) {
       if (!_overlayEl || !_overlayEl.classList.contains('show')) return;
-      if (ev.key === 'Escape') { _closeWelcome(false); ev.preventDefault(); }
+      if (ev.key === 'Escape') { _closeWelcome(true); ev.preventDefault(); }
       if (ev.key === 'ArrowRight') { _stopSlideTimer(); _showSlide(_slideIdx + 1); _startSlideTimer(); }
       if (ev.key === 'ArrowLeft')  { _stopSlideTimer(); _showSlide(_slideIdx - 1); _startSlideTimer(); }
     });
@@ -900,7 +900,7 @@
     _tourBackdrop.classList.add('show');
     _tourCard.classList.add('show');
     _tourKeyHandler = function (ev) {
-      if (ev.key === 'Escape') { _endTour(false); ev.preventDefault(); }
+      if (ev.key === 'Escape') { _endTour(true); ev.preventDefault(); }
     };
     document.addEventListener('keydown', _tourKeyHandler);
     _gotoTourStop(0);
@@ -909,7 +909,7 @@
   function _buildTourBackdrop() {
     var b = document.createElement('div');
     b.className = 'amcp-tour-backdrop';
-    b.addEventListener('click', function () { _endTour(false); });
+    b.addEventListener('click', function () { _endTour(true); });
     return b;
   }
 
@@ -926,7 +926,7 @@
         '<button id="amcp-tour-skip" class="amcp-welcome-btn amcp-welcome-btn-ghost">Skip</button>' +
         '<button id="amcp-tour-next" class="amcp-welcome-btn amcp-welcome-btn-primary">Next</button>' +
       '</div>';
-    c.querySelector('#amcp-tour-skip').addEventListener('click', function () { _endTour(false); });
+    c.querySelector('#amcp-tour-skip').addEventListener('click', function () { _endTour(true); });
     c.querySelector('#amcp-tour-next').addEventListener('click', function () {
       var next = _tourIdx + 1;
       while (next < TOUR_STOPS.length && TOUR_STOPS[next].skipIf && TOUR_STOPS[next].skipIf()) next++;
