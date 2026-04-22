@@ -135,6 +135,7 @@
       .then(function (profile) {
         if (!profile) return;
         fillProfileForm(profile);
+        fillOpsForm(profile);
         profileCache = profile;
       })
       .catch(function (err) {
@@ -238,6 +239,228 @@
       } finally {
         saving = false;
         if (btn) { btn.disabled = false; btn.textContent = 'Save profile'; }
+      }
+    });
+  }
+
+  // ── Agent Operations: hours / pricing ranges / lead routing / tz / webhook ──
+  var DAYS = [
+    { key: 'mon', label: 'Mon' },
+    { key: 'tue', label: 'Tue' },
+    { key: 'wed', label: 'Wed' },
+    { key: 'thu', label: 'Thu' },
+    { key: 'fri', label: 'Fri' },
+    { key: 'sat', label: 'Sat' },
+    { key: 'sun', label: 'Sun' },
+  ];
+  var UNIT_OPTIONS = ['job', 'hour', 'visit', 'sqft'];
+
+  function renderHoursGrid(hours) {
+    var grid = document.getElementById('hours-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    DAYS.forEach(function (d) {
+      var day = hours && hours[d.key];
+      var isOpen = !!(day && day.open && day.close);
+      var row = document.createElement('div');
+      row.style.cssText = 'display:grid;grid-template-columns:60px 24px 1fr 1fr;gap:8px;align-items:center';
+      row.innerHTML =
+        '<span style="font-size:var(--tx-xs);color:var(--muted)">' + d.label + '</span>' +
+        '<input type="checkbox" data-hours-open="' + d.key + '"' + (isOpen ? ' checked' : '') + '>' +
+        '<input type="time" class="fi" data-hours-field="' + d.key + '-open"' +
+          ' value="' + (isOpen ? String(day.open) : '') + '"' +
+          (isOpen ? '' : ' disabled') + '>' +
+        '<input type="time" class="fi" data-hours-field="' + d.key + '-close"' +
+          ' value="' + (isOpen ? String(day.close) : '') + '"' +
+          (isOpen ? '' : ' disabled') + '>';
+      grid.appendChild(row);
+
+      var cb = row.querySelector('[data-hours-open="' + d.key + '"]');
+      cb.addEventListener('change', function () {
+        var openEl  = row.querySelector('[data-hours-field="' + d.key + '-open"]');
+        var closeEl = row.querySelector('[data-hours-field="' + d.key + '-close"]');
+        openEl.disabled  = !cb.checked;
+        closeEl.disabled = !cb.checked;
+        if (cb.checked) {
+          if (!openEl.value)  openEl.value  = '09:00';
+          if (!closeEl.value) closeEl.value = '17:00';
+        }
+      });
+    });
+  }
+
+  function collectHoursJson() {
+    var out = { emergency_24_7: !!(document.getElementById('ops-emergency-24-7') || {}).checked };
+    DAYS.forEach(function (d) {
+      var cb = document.querySelector('[data-hours-open="' + d.key + '"]');
+      var openEl  = document.querySelector('[data-hours-field="' + d.key + '-open"]');
+      var closeEl = document.querySelector('[data-hours-field="' + d.key + '-close"]');
+      if (cb && cb.checked && openEl && closeEl && openEl.value && closeEl.value) {
+        out[d.key] = { open: openEl.value, close: closeEl.value };
+      } else {
+        out[d.key] = null;
+      }
+    });
+    return out;
+  }
+
+  function makeRangeRow(range) {
+    var row = document.createElement('div');
+    row.className = 'pricing-range-row';
+    row.style.cssText = 'display:grid;grid-template-columns:2fr 1fr 1fr 110px 28px;gap:6px;align-items:center';
+    var unit = (range && range.unit) || 'job';
+    row.innerHTML =
+      '<input type="text" class="fi" data-range-field="service" placeholder="Service name" value="' + esc((range && range.service) || '') + '">' +
+      '<input type="number" min="0" step="0.01" class="fi" data-range-field="min" placeholder="Min" value="' + (range && range.min != null ? range.min : '') + '">' +
+      '<input type="number" min="0" step="0.01" class="fi" data-range-field="max" placeholder="Max" value="' + (range && range.max != null ? range.max : '') + '">' +
+      '<select class="fi" data-range-field="unit">' +
+        UNIT_OPTIONS.map(function (u) {
+          return '<option value="' + u + '"' + (u === unit ? ' selected' : '') + '>per ' + u + '</option>';
+        }).join('') +
+      '</select>' +
+      '<button type="button" class="btn-sm btn-ghost" data-range-remove style="padding:0 8px">×</button>';
+    row.querySelector('[data-range-remove]').addEventListener('click', function () {
+      row.parentNode && row.parentNode.removeChild(row);
+    });
+    return row;
+  }
+
+  function renderPricingRanges(pricing) {
+    var wrap = document.getElementById('pricing-ranges');
+    if (!wrap) return;
+    wrap.innerHTML = '';
+    var ranges = (pricing && Array.isArray(pricing.ranges)) ? pricing.ranges : [];
+    ranges.forEach(function (r) { wrap.appendChild(makeRangeRow(r)); });
+    var cfq = document.getElementById('ops-call-for-quote');
+    var fe  = document.getElementById('ops-free-estimates');
+    if (cfq) cfq.checked = !!(pricing && pricing.call_for_quote);
+    if (fe)  fe.checked  = !!(pricing && pricing.free_estimates);
+  }
+
+  function collectPricingJson() {
+    var rows = document.querySelectorAll('#pricing-ranges .pricing-range-row');
+    var ranges = [];
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i];
+      var service = row.querySelector('[data-range-field="service"]').value.trim();
+      var minRaw  = row.querySelector('[data-range-field="min"]').value.trim();
+      var maxRaw  = row.querySelector('[data-range-field="max"]').value.trim();
+      var unit    = row.querySelector('[data-range-field="unit"]').value;
+      if (!service && !minRaw && !maxRaw) continue; // skip fully-empty rows
+      ranges.push({
+        service: service,
+        min: minRaw === '' ? 0 : Number(minRaw),
+        max: maxRaw === '' ? 0 : Number(maxRaw),
+        unit: unit,
+      });
+    }
+    return {
+      ranges: ranges,
+      call_for_quote: !!(document.getElementById('ops-call-for-quote') || {}).checked,
+      free_estimates: !!(document.getElementById('ops-free-estimates') || {}).checked,
+    };
+  }
+
+  function fillRouting(routing) {
+    setVal('ops-routing-channel',  routing && routing.preferred_channel);
+    setVal('ops-routing-phone',    routing && routing.phone);
+    setVal('ops-routing-email',    routing && routing.email);
+    setVal('ops-routing-form-url', routing && routing.form_url);
+  }
+
+  function collectRouting() {
+    var channel = (document.getElementById('ops-routing-channel') || {}).value || '';
+    if (!channel) return null;
+    var out = { preferred_channel: channel };
+    var phone  = (document.getElementById('ops-routing-phone')   || {}).value.trim();
+    var email  = (document.getElementById('ops-routing-email')   || {}).value.trim();
+    var form   = (document.getElementById('ops-routing-form-url')|| {}).value.trim();
+    if (phone) out.phone = phone;
+    if (email) out.email = email;
+    if (form)  out.form_url = form;
+    return out;
+  }
+
+  function fillOpsForm(profile) {
+    renderHoursGrid(profile && profile.hours_json);
+    var em = document.getElementById('ops-emergency-24-7');
+    if (em) em.checked = !!(profile && profile.hours_json && profile.hours_json.emergency_24_7);
+    setVal('ops-timezone', profile && profile.timezone);
+    setVal('ops-availability-webhook-url', profile && profile.availability_webhook_url);
+    renderPricingRanges(profile && profile.pricing_json_v2);
+    fillRouting(profile && profile.lead_routing_json);
+  }
+
+  // Mount initial empty state so controls render before the first profile fetch lands.
+  renderHoursGrid(null);
+  renderPricingRanges(null);
+
+  var addRangeBtn = document.getElementById('btn-add-pricing-range');
+  if (addRangeBtn) {
+    addRangeBtn.addEventListener('click', function () {
+      var wrap = document.getElementById('pricing-ranges');
+      if (wrap) wrap.appendChild(makeRangeRow(null));
+    });
+  }
+
+  function setOpsStatus(msg, variant) {
+    var el = document.getElementById('ops-status');
+    if (!el) return;
+    el.textContent = msg || '';
+    el.style.color = variant === 'error' ? 'var(--red)' : variant === 'success' ? 'var(--green)' : 'var(--muted)';
+  }
+
+  var savingOps = false;
+  var opsForm = document.getElementById('ops-form');
+  if (opsForm) {
+    opsForm.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      if (savingOps) return;
+      var slug = window.AMCP_DATA && window.AMCP_DATA.slug;
+      if (!slug) { AMCP_UI.toast('Business not loaded yet', 'error'); return; }
+
+      var tz = (document.getElementById('ops-timezone') || {}).value.trim();
+      var hook = (document.getElementById('ops-availability-webhook-url') || {}).value.trim();
+
+      var body = {
+        hours_json:      collectHoursJson(),
+        pricing_json_v2: collectPricingJson(),
+        lead_routing_json: collectRouting(),
+        timezone: tz || null,
+        availability_webhook_url: hook || null,
+      };
+
+      savingOps = true;
+      var opsBtn = document.getElementById('btn-save-ops');
+      if (opsBtn) { opsBtn.disabled = true; opsBtn.textContent = 'Saving…'; }
+      setOpsStatus('', '');
+
+      try {
+        var res = await window.AMCP.authedFetch('/api/client/profile?slug=' + encodeURIComponent(slug), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        var data = await res.json().catch(function () { return {}; });
+        if (!res.ok) {
+          AMCP_UI.toast('Save failed', 'error');
+          var detail = data && data.error ? data.error : ('HTTP ' + res.status);
+          if (data && data.details && data.details.fieldErrors) {
+            var firstField = Object.keys(data.details.fieldErrors)[0];
+            var firstMsg   = data.details.fieldErrors[firstField] && data.details.fieldErrors[firstField][0];
+            if (firstField && firstMsg) detail += ' — ' + firstField + ': ' + firstMsg;
+          }
+          setOpsStatus(String(detail), 'error');
+        } else {
+          AMCP_UI.toast('Operations saved', 'success');
+          setOpsStatus('Saved just now', 'success');
+        }
+      } catch (err) {
+        AMCP_UI.toast('Save failed', 'error');
+        setOpsStatus(String(err && err.message || err), 'error');
+      } finally {
+        savingOps = false;
+        if (opsBtn) { opsBtn.disabled = false; opsBtn.textContent = 'Save operations'; }
       }
     });
   }

@@ -917,7 +917,7 @@ body.pro-tier .db-nav-item[data-pro-only]{display:flex}
               <select class="fi" id="profile-pricing-tier">
                 <option value="">—</option>
                 <option value="budget">Budget</option>
-                <option value="moderate">Moderate</option>
+                <option value="mid-range">Mid-range</option>
                 <option value="premium">Premium</option>
               </select>
             </label>
@@ -967,6 +967,100 @@ body.pro-tier .db-nav-item[data-pro-only]{display:flex}
           <div style="display:flex;gap:8px;margin-top:4px">
             <button class="btn-sm btn-ghost" id="btn-save-profile" type="submit">Save profile</button>
             <span style="align-self:center;font-size:var(--tx-xs);color:var(--muted)" id="profile-status"></span>
+          </div>
+        </form>
+      </div>
+
+      <div class="settings-card">
+        <div class="settings-card-title">Agent Operations</div>
+        <div class="settings-card-sub">
+          These power the A2A tools — hours drive <code>get_availability</code> and <code>reserve_slot</code>,
+          pricing drives <code>get_quote</code>, routing drives <code>initiate_handoff</code>.
+        </div>
+        <form id="ops-form" style="display:flex;flex-direction:column;gap:16px">
+
+          <!-- Hours -->
+          <fieldset style="border:1px solid var(--border);border-radius:var(--r-md);padding:12px;display:flex;flex-direction:column;gap:8px">
+            <legend style="font-size:var(--tx-xs);color:var(--muted);padding:0 6px">Hours (local wall-clock)</legend>
+            <div id="hours-grid" style="display:flex;flex-direction:column;gap:6px"></div>
+            <label style="display:flex;align-items:center;gap:8px;font-size:var(--tx-xs);color:var(--muted);margin-top:4px">
+              <input type="checkbox" id="ops-emergency-24-7">
+              <span>Emergency / 24×7 available (bypasses day grid for emergency services)</span>
+            </label>
+          </fieldset>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+              Timezone (IANA)
+              <input type="text" class="fi" id="ops-timezone" placeholder="America/Chicago" list="tz-list">
+              <datalist id="tz-list">
+                <option value="America/New_York">
+                <option value="America/Chicago">
+                <option value="America/Denver">
+                <option value="America/Los_Angeles">
+                <option value="America/Phoenix">
+                <option value="America/Anchorage">
+                <option value="Pacific/Honolulu">
+                <option value="Europe/London">
+                <option value="Europe/Berlin">
+                <option value="UTC">
+              </datalist>
+            </label>
+            <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+              Availability webhook URL (v2 calendar integration)
+              <input type="url" class="fi" id="ops-availability-webhook-url" placeholder="https://">
+            </label>
+          </div>
+
+          <!-- Pricing ranges -->
+          <fieldset style="border:1px solid var(--border);border-radius:var(--r-md);padding:12px;display:flex;flex-direction:column;gap:8px">
+            <legend style="font-size:var(--tx-xs);color:var(--muted);padding:0 6px">Pricing ranges</legend>
+            <div id="pricing-ranges" style="display:flex;flex-direction:column;gap:6px"></div>
+            <button type="button" class="btn-sm btn-ghost" id="btn-add-pricing-range" style="align-self:flex-start">+ Add range</button>
+            <div style="display:flex;gap:16px;margin-top:4px">
+              <label style="display:flex;align-items:center;gap:6px;font-size:var(--tx-xs);color:var(--muted)">
+                <input type="checkbox" id="ops-call-for-quote">
+                Call for quote
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;font-size:var(--tx-xs);color:var(--muted)">
+                <input type="checkbox" id="ops-free-estimates">
+                Free estimates
+              </label>
+            </div>
+          </fieldset>
+
+          <!-- Lead routing -->
+          <fieldset style="border:1px solid var(--border);border-radius:var(--r-md);padding:12px;display:flex;flex-direction:column;gap:8px">
+            <legend style="font-size:var(--tx-xs);color:var(--muted);padding:0 6px">Lead routing (initiate_handoff target)</legend>
+            <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+              Preferred channel
+              <select class="fi" id="ops-routing-channel">
+                <option value="">—</option>
+                <option value="phone">Phone</option>
+                <option value="text">Text / SMS</option>
+                <option value="email">Email</option>
+                <option value="form">Web form</option>
+              </select>
+            </label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+                Phone
+                <input type="tel" class="fi" id="ops-routing-phone" placeholder="+1 555 123 4567">
+              </label>
+              <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+                Email
+                <input type="email" class="fi" id="ops-routing-email" placeholder="leads@example.com">
+              </label>
+            </div>
+            <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+              Web form URL
+              <input type="url" class="fi" id="ops-routing-form-url" placeholder="https://example.com/contact">
+            </label>
+          </fieldset>
+
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <button class="btn-sm btn-ghost" id="btn-save-ops" type="submit">Save operations</button>
+            <span style="align-self:center;font-size:var(--tx-xs);color:var(--muted)" id="ops-status"></span>
           </div>
         </form>
       </div>

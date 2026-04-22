@@ -7,11 +7,25 @@ import { buildToken } from "../lib/tracked-url.js";
 import { resolveAgentId } from "../lib/agentIdentity.js";
 import crypto from "crypto";
 import { z } from "zod";
+import {
+  HoursSchema,
+  PricingV2Schema,
+  LeadRoutingSchema,
+} from "../schemas/business.js";
 
 const QueryBodySchema = z.object({
   query: z.string().trim().min(1, "query must be a non-empty string").max(2000),
   crawler: z.string().max(200).optional(),
 });
+
+// Lenient IANA timezone check — real resolution happens at use-site via
+// Intl.DateTimeFormat. Block obviously malformed inputs only.
+const TimezoneSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(80)
+  .regex(/^[A-Za-z_+-]+(\/[A-Za-z_+\-0-9]+){0,2}$/, "must be an IANA zone like 'America/Chicago'");
 
 export const agentRouter = Router();
 
@@ -37,10 +51,18 @@ agentRouter.get("/agents/:slug/profile", requireApiKey, (req: Request, res: Resp
       `SELECT slug, name, description, services, pricing, location, phone, website,
               referral_url, tone, created_at, category, star_rating, review_count,
               years_in_business, top_services, availability, differentiator,
-              service_radius_miles, certifications, pricing_tier, service_area_keywords
+              service_radius_miles, certifications, pricing_tier, service_area_keywords,
+              hours_json, pricing_json_v2, lead_routing_json, timezone,
+              availability_webhook_url
        FROM businesses WHERE slug = ?`
     )
-    .get(slug) as BusinessRow | undefined;
+    .get(slug) as (BusinessRow & {
+      hours_json: string | null;
+      pricing_json_v2: string | null;
+      lead_routing_json: string | null;
+      timezone: string | null;
+      availability_webhook_url: string | null;
+    }) | undefined;
 
   if (!row) {
     res.status(404).json({ error: `No business registered with slug: ${slug}` });
@@ -52,6 +74,11 @@ agentRouter.get("/agents/:slug/profile", requireApiKey, (req: Request, res: Resp
 
   const parseJSON = (v: string): string[] => {
     try { return JSON.parse(v); } catch { return [v]; }
+  };
+
+  const parseObj = (v: string | null): unknown => {
+    if (!v) return null;
+    try { return JSON.parse(v); } catch { return null; }
   };
 
   res.json({
@@ -76,6 +103,11 @@ agentRouter.get("/agents/:slug/profile", requireApiKey, (req: Request, res: Resp
     service_radius_miles: row.service_radius_miles,
     certifications: parseCSV(row.certifications),
     service_area_keywords: parseCSV(row.service_area_keywords),
+    hours_json: parseObj(row.hours_json),
+    pricing_json_v2: parseObj(row.pricing_json_v2),
+    lead_routing_json: parseObj(row.lead_routing_json),
+    timezone: row.timezone,
+    availability_webhook_url: row.availability_webhook_url,
     created_at: row.created_at,
   });
 });
@@ -108,7 +140,14 @@ agentRouter.patch("/agents/:slug/profile", (req: Request, res: Response) => {
     "description","services","pricing","location","phone","website","referral_url","tone",
     "category","star_rating","review_count","years_in_business","top_services","availability",
     "differentiator","service_radius_miles","certifications","pricing_tier","service_area_keywords",
+    "hours_json","pricing_json_v2","lead_routing_json","timezone","availability_webhook_url",
   ] as const;
+
+  const jsonValidators: Record<string, z.ZodTypeAny> = {
+    hours_json: HoursSchema.nullable(),
+    pricing_json_v2: PricingV2Schema.nullable(),
+    lead_routing_json: LeadRoutingSchema.nullable(),
+  };
 
   const updates: string[] = [];
   const values: unknown[] = [];
@@ -116,10 +155,46 @@ agentRouter.patch("/agents/:slug/profile", (req: Request, res: Response) => {
   for (const field of allowed) {
     if (!(field in req.body)) continue;
     let val = (req.body as Record<string, unknown>)[field];
+
+    // Normalise arrays → CSV for columns that store CSV.
     if (field === "services" && Array.isArray(val)) val = JSON.stringify(val);
     if (field === "top_services" && Array.isArray(val)) val = (val as string[]).join(", ");
     if (field === "certifications" && Array.isArray(val)) val = (val as string[]).join(", ");
     if (field === "service_area_keywords" && Array.isArray(val)) val = (val as string[]).join(", ");
+
+    // JSON columns: validate shape, then stringify (or null).
+    if (field in jsonValidators) {
+      const parsed = jsonValidators[field].safeParse(val);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: `Invalid ${field}`,
+          details: parsed.error.flatten(),
+        });
+        return;
+      }
+      val = parsed.data === null ? null : JSON.stringify(parsed.data);
+    }
+
+    // Lenient timezone shape check.
+    if (field === "timezone" && val !== null && val !== "") {
+      const parsed = TimezoneSchema.safeParse(val);
+      if (!parsed.success) {
+        res.status(400).json({ error: "Invalid timezone", details: parsed.error.flatten() });
+        return;
+      }
+      val = parsed.data;
+    }
+
+    // availability_webhook_url: allow empty string / null; if present, require URL.
+    if (field === "availability_webhook_url" && val !== null && val !== "") {
+      const parsed = z.string().url().safeParse(val);
+      if (!parsed.success) {
+        res.status(400).json({ error: "Invalid availability_webhook_url" });
+        return;
+      }
+      val = parsed.data;
+    }
+
     updates.push(`${field} = ?`);
     values.push(val);
   }

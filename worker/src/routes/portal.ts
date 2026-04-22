@@ -913,6 +913,8 @@ async function apiUpdateProfile(request: Request, env: Env): Promise<Response> {
     "years_in_business", "top_services", "availability", "differentiator",
     "service_radius_miles", "certifications", "pricing_tier",
     "service_area_keywords",
+    "hours_json", "pricing_json_v2", "lead_routing_json", "timezone",
+    "availability_webhook_url",
   ] as const;
 
   const payload: Record<string, unknown> = {};
