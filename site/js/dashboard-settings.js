@@ -71,6 +71,16 @@
     }
   }
 
+  function setVal(id, val) {
+    var el = document.getElementById(id);
+    if (el) el.value = val == null ? '' : String(val);
+  }
+
+  function csvJoin(v) {
+    if (Array.isArray(v)) return v.join(', ');
+    return v == null ? '' : String(v);
+  }
+
   function fillProfileForm(profile) {
     if (!profile) return;
     var n = document.getElementById('profile-name');
@@ -78,14 +88,25 @@
       n.value = profile.name || (window.AMCP_DATA && window.AMCP_DATA.slug) || '';
       // Tooltip already explains why this field is disabled.
     }
-    var d = document.getElementById('profile-description');
-    if (d) d.value = profile.description || '';
-    var c = document.getElementById('profile-category');
-    if (c) c.value = profile.category || '';
-    var s = document.getElementById('profile-services');
-    if (s) s.value = Array.isArray(profile.services) ? profile.services.join(', ') : (profile.services || '');
-    var w = document.getElementById('profile-website');
-    if (w) w.value = profile.website || '';
+    setVal('profile-description',           profile.description);
+    setVal('profile-category',              profile.category);
+    setVal('profile-services',              csvJoin(profile.services));
+    setVal('profile-website',               profile.website);
+    setVal('profile-referral-url',          profile.referral_url);
+    setVal('profile-differentiator',        profile.differentiator);
+    setVal('profile-top-services',          csvJoin(profile.top_services));
+    setVal('profile-phone',                 profile.phone);
+    setVal('profile-location',              profile.location);
+    setVal('profile-tone',                  profile.tone);
+    setVal('profile-pricing-tier',          profile.pricing_tier);
+    setVal('profile-pricing',               profile.pricing);
+    setVal('profile-years-in-business',     profile.years_in_business);
+    setVal('profile-star-rating',           profile.star_rating);
+    setVal('profile-review-count',          profile.review_count);
+    setVal('profile-service-radius-miles',  profile.service_radius_miles);
+    setVal('profile-service-area-keywords', csvJoin(profile.service_area_keywords));
+    setVal('profile-certifications',        csvJoin(profile.certifications));
+    setVal('profile-availability',          profile.availability);
   }
 
   var profileAbortCtrl = null;
@@ -95,11 +116,7 @@
     // while the fetch is in flight, then overlay real values once Railway
     // responds. This also keeps the form usable if the proxy fails.
     var fallback = {
-      name:        (window.AMCP_DATA && window.AMCP_DATA.business_name) || '',
-      description: '',
-      category:    '',
-      services:    [],
-      website:     '',
+      name: (window.AMCP_DATA && window.AMCP_DATA.business_name) || '',
     };
     fillProfileForm(fallback);
     profileCache = fallback;
@@ -117,15 +134,7 @@
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (profile) {
         if (!profile) return;
-        fillProfileForm({
-          name:        profile.name        || fallback.name,
-          description: profile.description || '',
-          category:    profile.category    || '',
-          services:    Array.isArray(profile.services)
-                         ? profile.services
-                         : (profile.services || ''),
-          website:     profile.website     || '',
-        });
+        fillProfileForm(profile);
         profileCache = profile;
       })
       .catch(function (err) {
@@ -168,14 +177,40 @@
         return;
       }
 
-      var servicesRaw = (document.getElementById('profile-services') || {}).value || '';
-      var services = servicesRaw.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      function csvSplit(id) {
+        var raw = (document.getElementById(id) || {}).value || '';
+        return raw.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      }
+      function strVal(id) {
+        return (document.getElementById(id) || {}).value || '';
+      }
+      function numVal(id) {
+        var raw = strVal(id).trim();
+        if (raw === '') return null;
+        var n = Number(raw);
+        return Number.isFinite(n) ? n : null;
+      }
 
       var body = {
-        description: (document.getElementById('profile-description') || {}).value || '',
-        category:    (document.getElementById('profile-category')    || {}).value || '',
-        services:    services,
-        website:     (document.getElementById('profile-website')     || {}).value || '',
+        description:           strVal('profile-description'),
+        category:              strVal('profile-category'),
+        services:              csvSplit('profile-services'),
+        website:               strVal('profile-website'),
+        referral_url:          strVal('profile-referral-url'),
+        differentiator:        strVal('profile-differentiator'),
+        top_services:          csvSplit('profile-top-services'),
+        phone:                 strVal('profile-phone'),
+        location:              strVal('profile-location'),
+        tone:                  strVal('profile-tone'),
+        pricing_tier:          strVal('profile-pricing-tier'),
+        pricing:               strVal('profile-pricing'),
+        years_in_business:     numVal('profile-years-in-business'),
+        star_rating:           numVal('profile-star-rating'),
+        review_count:          numVal('profile-review-count'),
+        service_radius_miles:  numVal('profile-service-radius-miles'),
+        service_area_keywords: csvSplit('profile-service-area-keywords'),
+        certifications:        csvSplit('profile-certifications'),
+        availability:          strVal('profile-availability'),
       };
 
       saving = true;

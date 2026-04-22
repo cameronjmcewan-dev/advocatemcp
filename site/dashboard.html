@@ -875,6 +875,95 @@ body.pro-tier .db-nav-item[data-pro-only]{display:flex}
             <input type="url" class="fi" id="profile-website"
                    placeholder="https://example.com">
           </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+            Referral URL
+            <input type="url" class="fi" id="profile-referral-url"
+                   placeholder="https://example.com/contact — where AI sends interested users">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+            Differentiator
+            <textarea class="fi" id="profile-differentiator" rows="2"
+                      placeholder="One or two sentences on what makes you different — AI uses this to set you apart from competitors."></textarea>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+            Top services (comma separated)
+            <input type="text" class="fi" id="profile-top-services"
+                   placeholder="e.g. Flow automation, Campaign management">
+          </label>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+              Phone
+              <input type="tel" class="fi" id="profile-phone" placeholder="+1 555 123 4567">
+            </label>
+            <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+              Location
+              <input type="text" class="fi" id="profile-location" placeholder="Austin, TX">
+            </label>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+              Tone
+              <select class="fi" id="profile-tone">
+                <option value="">—</option>
+                <option value="friendly">Friendly</option>
+                <option value="professional">Professional</option>
+                <option value="luxury">Luxury</option>
+              </select>
+            </label>
+            <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+              Pricing tier
+              <select class="fi" id="profile-pricing-tier">
+                <option value="">—</option>
+                <option value="budget">Budget</option>
+                <option value="moderate">Moderate</option>
+                <option value="premium">Premium</option>
+              </select>
+            </label>
+          </div>
+
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+            Pricing (free-form)
+            <input type="text" class="fi" id="profile-pricing"
+                   placeholder='e.g. "$2k–$8k/mo retainer"'>
+          </label>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+              Years in business
+              <input type="number" min="0" class="fi" id="profile-years-in-business" placeholder="5">
+            </label>
+            <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+              Star rating
+              <input type="number" min="0" max="5" step="0.1" class="fi" id="profile-star-rating" placeholder="4.9">
+            </label>
+            <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+              Review count
+              <input type="number" min="0" class="fi" id="profile-review-count" placeholder="87">
+            </label>
+          </div>
+
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+            Service radius (miles)
+            <input type="number" min="0" class="fi" id="profile-service-radius-miles" placeholder="50">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+            Service-area keywords (comma separated)
+            <input type="text" class="fi" id="profile-service-area-keywords"
+                   placeholder="e.g. Austin, Round Rock, Cedar Park">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+            Certifications (comma separated)
+            <input type="text" class="fi" id="profile-certifications"
+                   placeholder="e.g. CCIM, SIOR">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">
+            Availability (free-form text)
+            <input type="text" class="fi" id="profile-availability"
+                   placeholder='e.g. "Mon–Fri 9am–6pm CT"'>
+          </label>
+
           <div style="display:flex;gap:8px;margin-top:4px">
             <button class="btn-sm btn-ghost" id="btn-save-profile" type="submit">Save profile</button>
             <span style="align-self:center;font-size:var(--tx-xs);color:var(--muted)" id="profile-status"></span>
