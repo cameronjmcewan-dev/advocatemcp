@@ -289,6 +289,25 @@
     });
   }
 
+  // ── Tutorial controls ───────────────────────────────────────────────────
+  var replayBtn = document.getElementById('btn-replay-welcome');
+  if (replayBtn) {
+    replayBtn.addEventListener('click', function () {
+      if (window.AMCP_ONBOARDING && window.AMCP_ONBOARDING.openWelcome) {
+        window.AMCP_ONBOARDING.openWelcome();
+      }
+    });
+  }
+
+  var restartBtn = document.getElementById('btn-restart-tour');
+  if (restartBtn) {
+    restartBtn.addEventListener('click', function () {
+      if (window.AMCP_ONBOARDING && window.AMCP_ONBOARDING.restart) {
+        window.AMCP_ONBOARDING.restart();
+      }
+    });
+  }
+
   window.AMCP_SECTIONS = window.AMCP_SECTIONS || {};
   window.AMCP_SECTIONS['settings']       = render;
   window.AMCP_SECTIONS['onUserLoaded']   = onUserLoaded;

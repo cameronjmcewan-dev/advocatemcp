@@ -545,6 +545,7 @@ tr:hover td{background:rgba(255,255,255,.02)}
 body.pro-tier .db-nav-item[data-pro-only]{display:flex}
 </style>
 <link rel="stylesheet" href="/css/redesign.css" />
+<link rel="stylesheet" href="/css/onboarding.css" />
 </head>
 <body>
 
@@ -555,6 +556,9 @@ body.pro-tier .db-nav-item[data-pro-only]{display:flex}
     Advocate
   </div>
   <nav class="db-nav" id="db-nav">
+    <div class="db-nav-item" data-section="getting-started" data-onboarding-nav style="display:none">
+      <i data-lucide="rocket"></i><span>Get Started</span>
+    </div>
     <div class="db-nav-item on" data-section="overview">
       <i data-lucide="layout-dashboard"></i><span>Overview</span>
     </div>
@@ -588,6 +592,7 @@ body.pro-tier .db-nav-item[data-pro-only]{display:flex}
   </nav>
   <div class="db-side-foot">
     <span class="db-plan-badge" id="plan-badge">Free</span>
+    <a href="#" id="restart-tour" style="display:none;font-size:var(--tx-xs);color:var(--muted);text-decoration:none;margin-left:10px">Restart tour</a>
   </div>
 </aside>
 
@@ -613,6 +618,12 @@ body.pro-tier .db-nav-item[data-pro-only]{display:flex}
 
   <!-- Content -->
   <div id="content">
+
+    <!-- ── Get Started (onboarding) ── -->
+    <section id="sec-getting-started" class="db-sec">
+      <!-- Rendered entirely by dashboard-onboarding.js when the nav item is
+           clicked. Kept empty here so the script has a stable mount point. -->
+    </section>
 
     <!-- ── Overview ── -->
     <section id="sec-overview" class="db-sec on">
@@ -901,6 +912,17 @@ body.pro-tier .db-nav-item[data-pro-only]{display:flex}
           </div>
         </div>
       </div>
+
+      <div class="settings-card">
+        <div class="settings-card-title">Tutorial</div>
+        <div class="settings-card-sub">
+          Replay the welcome intro or the 5-stop dashboard tour any time.
+        </div>
+        <div class="settings-row" style="gap:8px;flex-wrap:wrap">
+          <button class="btn-sm btn-ghost" id="btn-replay-welcome" type="button">Replay welcome</button>
+          <button class="btn-sm btn-ghost" id="btn-restart-tour" type="button">Restart tour</button>
+        </div>
+      </div>
     </section>
 
     <!-- ── Activity (reservations, handoffs, agent requests, competitor radar) ── -->
@@ -1117,12 +1139,15 @@ body.pro-tier .db-nav-item[data-pro-only]{display:flex}
 <script src="/js/dashboard-surfaces.js"></script>
 <script src="/js/dashboard-domains.js"></script>
 <script src="/js/dashboard-admin.js"></script>
+<script src="/js/dashboard-dns-wizard.js"></script>
+<script src="/js/dashboard-onboarding.js"></script>
 <script>
 /* ── Dashboard shell: auth gate, nav, theme, section routing ── */
 (function () {
   'use strict';
 
   var SECTION_LABELS = {
+    'getting-started':   'Get Started',
     'overview':          'Overview',
     'ai-requests':       'AI Requests',
     'referral-clicks':   'Referral Clicks',
@@ -1241,6 +1266,36 @@ body.pro-tier .db-nav-item[data-pro-only]{display:flex}
         if (isHosted && !isAdmin) {
           var domainsNav = document.querySelector('[data-section="domains"]');
           if (domainsNav) domainsNav.style.display = 'none';
+        }
+
+        /* Onboarding: seed the module with the snapshot shipped by the
+         * metrics endpoint, reveal the Get Started nav item for non-admin
+         * sessions (admin impersonation keeps it hidden so admins don't
+         * accidentally mutate a tenant's state), and fire the welcome
+         * overlay on first dashboard load.
+         *
+         * The admin gate here is belt-and-suspenders: apiMarkOnboardingStep
+         * also no-ops for admin sessions on the server, but skipping the UI
+         * avoids a confusing "welcome to your dashboard" overlay when the
+         * viewer is actually staff. */
+        if (window.AMCP_ONBOARDING) {
+          window.AMCP_ONBOARDING.loadState(data && data.onboarding);
+          if (!isAdmin) {
+            var onbNav = document.querySelector('[data-onboarding-nav]');
+            var onbDone = !!(data && data.onboarding && data.onboarding.onboarded_at);
+            if (onbNav && !onbDone) onbNav.style.display = '';
+            var restartLink = document.getElementById('restart-tour');
+            if (restartLink) {
+              restartLink.style.display = '';
+              restartLink.addEventListener('click', function (ev) {
+                ev.preventDefault();
+                window.AMCP_ONBOARDING.restart();
+              });
+            }
+            if (window.AMCP_ONBOARDING.isFirstLogin()) {
+              window.AMCP_ONBOARDING.openWelcome();
+            }
+          }
         }
 
         /* Trigger initial section */

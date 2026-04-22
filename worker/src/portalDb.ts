@@ -31,6 +31,13 @@ export interface Business {
   activation_token?: string | null;
   activation_status?: string;
   activation_issued_at?: string | null;
+  // Round 4: dashboard onboarding state (migration 0007). All three
+  // optional for the same reason as the Phase F fields — legacy rows
+  // had no such columns. Readers should treat null/undefined as "not
+  // yet onboarded."
+  first_dashboard_at?: string | null;
+  onboarded_at?: string | null;
+  onboarding_state?: string | null;
 }
 
 export interface Session {
@@ -252,6 +259,163 @@ export async function updateBusinessApiKey(
     .prepare("UPDATE businesses SET api_key = ? WHERE slug = ?")
     .bind(newApiKey, slug)
     .run();
+}
+
+// ── Round 4: onboarding state helpers ────────────────────────────────────
+
+/**
+ * Shape of the JSON blob stored in businesses.onboarding_state. Kept
+ * flexible on purpose — checklist keys will churn over time (v2 adds
+ * "invite a teammate"), and we'd rather stay schema-stable than add a
+ * column per step.
+ *
+ * Unknown keys are preserved on round-trip. Readers should treat a
+ * missing key the same as "not completed."
+ */
+export interface OnboardingState {
+  welcome?: {
+    current_slide?: number;
+    completed_at?: string | null;
+  };
+  checklist?: Record<string, { completed_at: string }>;
+  tour?: {
+    completed_at?: string | null;
+  };
+  [extra: string]: unknown;
+}
+
+export interface OnboardingSnapshot {
+  first_dashboard_at: string | null;
+  onboarded_at:       string | null;
+  state:              OnboardingState;
+}
+
+function parseStateBlob(raw: string | null | undefined): OnboardingState {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as OnboardingState;
+    }
+    return {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Return the onboarding snapshot for a single slug. Returns null if the
+ * business row itself doesn't exist so the caller can 404 cleanly.
+ */
+export async function getOnboardingState(
+  db: D1Database,
+  slug: string,
+): Promise<OnboardingSnapshot | null> {
+  const row = await db
+    .prepare(
+      "SELECT first_dashboard_at, onboarded_at, onboarding_state FROM businesses WHERE slug = ? LIMIT 1",
+    )
+    .bind(slug)
+    .first<{
+      first_dashboard_at: string | null;
+      onboarded_at:       string | null;
+      onboarding_state:   string | null;
+    }>();
+  if (!row) return null;
+  return {
+    first_dashboard_at: row.first_dashboard_at ?? null,
+    onboarded_at:       row.onboarded_at ?? null,
+    state:              parseStateBlob(row.onboarding_state),
+  };
+}
+
+/**
+ * Atomically stamp first_dashboard_at the first time a non-admin session
+ * loads the metrics endpoint for a business. Idempotent — only writes
+ * when the column is currently NULL. Returns true if the column was
+ * just set (useful for "should we fire the welcome overlay?" callers),
+ * false if it already had a value or the slug doesn't exist.
+ */
+export async function touchFirstDashboardIfNull(
+  db: D1Database,
+  slug: string,
+  atIso: string,
+): Promise<boolean> {
+  const info = await db
+    .prepare(
+      "UPDATE businesses SET first_dashboard_at = ? WHERE slug = ? AND first_dashboard_at IS NULL",
+    )
+    .bind(atIso, slug)
+    .run();
+  const changes = (info as unknown as { meta?: { changes?: number } }).meta?.changes ?? 0;
+  return changes > 0;
+}
+
+/**
+ * Mark a single onboarding step complete. The step key is a dotted
+ * path ("welcome.completed", "checklist.dns_configured",
+ * "tour.completed") that selects where the value lands in the state
+ * blob. `value`, if provided, is stored under the step key; otherwise
+ * we stamp { completed_at: <nowIso> } as a default.
+ *
+ * Also sets businesses.onboarded_at when the caller asserts the final
+ * step — callers pass `allCompleted: true` when their own state merge
+ * indicates the whole flow is done. We keep that determination on the
+ * caller because the list of required checklist keys is hosted-vs-
+ * custom-domain specific.
+ *
+ * Returns the full snapshot post-write so the endpoint can return it
+ * in one round-trip.
+ */
+export async function markOnboardingStep(
+  db: D1Database,
+  slug: string,
+  stepKey: string,
+  value: unknown,
+  nowIso: string,
+  allCompleted: boolean,
+): Promise<OnboardingSnapshot | null> {
+  const current = await getOnboardingState(db, slug);
+  if (!current) return null;
+
+  const next = mergeStep(current.state, stepKey, value ?? { completed_at: nowIso });
+  const onboardedAt = allCompleted && !current.onboarded_at ? nowIso : current.onboarded_at;
+
+  await db
+    .prepare(
+      "UPDATE businesses SET onboarding_state = ?, onboarded_at = ? WHERE slug = ?",
+    )
+    .bind(JSON.stringify(next), onboardedAt, slug)
+    .run();
+
+  return {
+    first_dashboard_at: current.first_dashboard_at,
+    onboarded_at:       onboardedAt,
+    state:              next,
+  };
+}
+
+function mergeStep(
+  base: OnboardingState,
+  dottedKey: string,
+  value: unknown,
+): OnboardingState {
+  const parts = dottedKey.split(".").filter(Boolean);
+  if (parts.length === 0) return base;
+  const out: OnboardingState = { ...base };
+  let cursor: Record<string, unknown> = out as Record<string, unknown>;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const key = parts[i]!;
+    const existing = cursor[key];
+    const nested: Record<string, unknown> =
+      existing && typeof existing === "object" && !Array.isArray(existing)
+        ? { ...(existing as Record<string, unknown>) }
+        : {};
+    cursor[key] = nested;
+    cursor = nested;
+  }
+  cursor[parts[parts.length - 1]!] = value;
+  return out;
 }
 
 // ── Phase F Part 1: activation token helpers ─────────────────────────────

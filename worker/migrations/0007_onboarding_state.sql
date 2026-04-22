@@ -1,0 +1,43 @@
+-- Round 4 onboarding: per-business first-login state for the dashboard
+-- welcome flow, Get Started checklist, and product tour.
+--
+-- Three new columns on the businesses table:
+--
+--   first_dashboard_at   — ISO timestamp of the first authenticated, non-
+--                          admin dashboard fetch (stamped idempotently by
+--                          apiMetrics). Used as the "is first login?"
+--                          signal that triggers the welcome overlay.
+--
+--   onboarded_at         — ISO timestamp when every checklist item has
+--                          been marked complete. Pegs the checklist
+--                          nav item into its "done" state.
+--
+--   onboarding_state     — JSON blob of the form
+--                          {
+--                            welcome:   { current_slide: number,
+--                                         completed_at: string|null },
+--                            checklist: { [key]: { completed_at } },
+--                            tour:      { completed_at: string|null }
+--                          }
+--                          Stored as a blob rather than per-step columns
+--                          because checklist keys churn ("invite a
+--                          teammate" arrives in v2). Individual columns
+--                          would mean a migration per addition.
+--
+-- Additive only. All three columns are nullable, so existing rows keep
+-- working with no backfill — the dashboard reads NULL as "not yet seen"
+-- and surfaces the welcome flow on next login.
+--
+-- Admin impersonation (session role === 'admin' viewing another tenant
+-- via ?slug=X) MUST NOT write to these columns. That guard lives in
+-- apiMetrics / apiMarkOnboardingStep, not in the schema.
+--
+-- Rollback: run migrations/0007_onboarding_state_rollback.sql.
+--
+-- Run with:
+--   cd worker && npx wrangler d1 execute advocatemcp-auth --remote \
+--     --file=migrations/0007_onboarding_state.sql
+
+ALTER TABLE businesses ADD COLUMN first_dashboard_at TEXT;
+ALTER TABLE businesses ADD COLUMN onboarded_at TEXT;
+ALTER TABLE businesses ADD COLUMN onboarding_state TEXT;

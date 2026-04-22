@@ -10,6 +10,8 @@ import {
   getUserByEmail, createUser, updateUserPassword, createSession, getSessionByToken,
   deleteSession, getUserBusinesses, getAllBusinesses, getActiveBusinesses, getBusinessBySlug, createBusiness,
   grantAccess, checkRateLimit, recordLoginAttempt, updateBusinessApiKey,
+  getOnboardingState, markOnboardingStep, touchFirstDashboardIfNull,
+  type OnboardingSnapshot, type OnboardingState,
 } from "../portalDb";
 import type { Business, User, SessionWithUser } from "../portalDb";
 import { buildDashboard, type AnalyticsData } from "./dashboard";
@@ -66,6 +68,8 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (radarBasketDel && method === "DELETE")                            return apiRadarBasketDelete(request, env, radarBasketDel[1]);
   if (pathname === "/api/client/domain-info"   && method === "GET")    return apiDomainInfo(request, env);
   if (pathname === "/api/client/domain-test"   && method === "GET")    return apiDomainTest(request, env);
+  if (pathname === "/api/client/onboarding"      && method === "GET")  return apiGetOnboarding(request, env);
+  if (pathname === "/api/client/onboarding/step" && method === "POST") return apiMarkOnboardingStep(request, env);
   if (pathname === "/admin/create-client"      && method === "POST") return adminCreateClient(request, env);
   const resyncMatch = pathname.match(/^\/admin\/businesses\/([^/]+)\/resync-api-key$/);
   if (resyncMatch && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
@@ -123,6 +127,8 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (radarBasketDel && method === "OPTIONS")                            return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/domain-info"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/domain-test"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/onboarding"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/onboarding/step" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
 
   // ── Stripe / new onboarding API ──────────────────────────────────────────
   if (pathname === "/api/onboard/basic"     && method === "POST") return handleBasicOnboard(request, env);
@@ -362,10 +368,31 @@ async function apiMetrics(request: Request, env: Env): Promise<Response> {
   // skipDns-like flags on the D1 row.
   const domain    = biz.domain ?? null;
   const isHosted  = !!domain && domain.endsWith(".hosted.advocatemcp.com");
+
+  // Round 4: piggyback the onboarding snapshot on the metrics response
+  // so the dashboard shell has it on boot without a second round-trip.
+  // Also idempotently stamps first_dashboard_at for non-admin sessions
+  // — this is the "is first login?" signal that triggers the welcome
+  // overlay. Admin impersonation never writes, preserving a tenant's
+  // real first-login timestamp even if an admin viewed their dashboard
+  // first.
+  let onboardingSnapshot: OnboardingSnapshot | null = null;
+  try {
+    if (ctx.role !== "admin") {
+      await touchFirstDashboardIfNull(env.DB, biz.slug, new Date().toISOString());
+    }
+    onboardingSnapshot = await getOnboardingState(env.DB, biz.slug);
+  } catch {
+    // Non-fatal — onboarding state is additive. If D1 hiccups, the
+    // dashboard falls back to "no onboarding data, skip welcome."
+    onboardingSnapshot = null;
+  }
+
   const data = {
     ...(analytics ?? { message: "No data available yet", slug: biz.slug }),
     domain,
     is_hosted: isHosted,
+    onboarding: onboardingSnapshot,
   };
   return withCors(jsonOk(data), request, { credentials: true });
 }
@@ -1269,6 +1296,111 @@ async function apiRotateKey(request: Request, env: Env): Promise<Response> {
 
   await updateBusinessApiKey(env.DB, biz.slug, data.new_api_key);
   return withCors(jsonOk({ ok: true, new_api_key: data.new_api_key }), request, { credentials: true });
+}
+
+// ── Round 4: onboarding endpoints ─────────────────────────────────────────
+// Session-authed, per-business. Admin role viewing another tenant via
+// ?slug=X is NOT allowed to mutate state (the guard lives in
+// apiMarkOnboardingStep). Admins CAN read any tenant's state.
+
+/** Which checklist keys a business must complete to be considered onboarded. */
+function requiredChecklistKeys(isHosted: boolean): string[] {
+  return isHosted
+    ? ["watched_welcome", "previewed_voice", "took_tour", "simulated_bot_hit"]
+    : ["watched_welcome", "dns_configured", "previewed_voice", "took_tour", "first_real_bot_hit"];
+}
+
+function isOnboardingComplete(state: OnboardingState, isHosted: boolean): boolean {
+  const needed = requiredChecklistKeys(isHosted);
+  const completed = state.checklist ?? {};
+  return needed.every((key) => !!completed[key]?.completed_at);
+}
+
+async function apiGetOnboarding(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  const snap = await getOnboardingState(env.DB, biz.slug);
+  if (!snap) return withCors(jsonErr(404, "Business not found"), request, { credentials: true });
+
+  return withCors(jsonOk(snap), request, { credentials: true });
+}
+
+async function apiMarkOnboardingStep(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  // Admin impersonation MUST NOT mutate a tenant's onboarding state.
+  // Return 200 with a no-op so the dashboard JS doesn't spin on an error.
+  if (ctx.role === "admin") {
+    const snap: OnboardingSnapshot = {
+      first_dashboard_at: null, onboarded_at: null, state: {},
+    };
+    return withCors(jsonOk({ ok: true, admin_noop: true, ...snap }), request, { credentials: true });
+  }
+
+  let body: { step?: string; value?: unknown };
+  try {
+    body = await request.json() as { step?: string; value?: unknown };
+  } catch {
+    return withCors(jsonErr(400, "Invalid JSON body"), request, { credentials: true });
+  }
+  const step = typeof body.step === "string" ? body.step.trim() : "";
+  if (!step) return withCors(jsonErr(400, "Missing required field: step"), request, { credentials: true });
+
+  const businesses = await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  const isHosted = !!(biz.domain && biz.domain.endsWith(".hosted.advocatemcp.com"));
+  const nowIso = new Date().toISOString();
+
+  // Peek at current state to determine whether this step finishes the flow.
+  const current = await getOnboardingState(env.DB, biz.slug);
+  if (!current) return withCors(jsonErr(404, "Business not found"), request, { credentials: true });
+
+  // Compute the post-merge state and check completion — lets us set
+  // onboarded_at in the same atomic write.
+  const previewValue = body.value ?? { completed_at: nowIso };
+  const previewState = applyStepPreview(current.state, step, previewValue);
+  const allDone = isOnboardingComplete(previewState, isHosted);
+
+  const next = await markOnboardingStep(env.DB, biz.slug, step, previewValue, nowIso, allDone);
+  if (!next) return withCors(jsonErr(404, "Business not found"), request, { credentials: true });
+
+  return withCors(jsonOk({ ok: true, ...next }), request, { credentials: true });
+}
+
+/**
+ * Mirror of portalDb.mergeStep for the preview-and-check path. Kept here
+ * rather than exported from portalDb to avoid leaking the merge semantics
+ * — portalDb's markOnboardingStep is the canonical writer.
+ */
+function applyStepPreview(base: OnboardingState, dottedKey: string, value: unknown): OnboardingState {
+  const parts = dottedKey.split(".").filter(Boolean);
+  if (parts.length === 0) return base;
+  const out: OnboardingState = { ...base };
+  let cursor: Record<string, unknown> = out as Record<string, unknown>;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const key = parts[i]!;
+    const existing = cursor[key];
+    const nested: Record<string, unknown> =
+      existing && typeof existing === "object" && !Array.isArray(existing)
+        ? { ...(existing as Record<string, unknown>) }
+        : {};
+    cursor[key] = nested;
+    cursor = nested;
+  }
+  cursor[parts[parts.length - 1]!] = value;
+  return out;
 }
 
 // ── POST /admin/businesses/:slug/resync-api-key ────────────────────────────
