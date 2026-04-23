@@ -566,6 +566,19 @@
     });
   }
 
+  // Reveal the Get Started nav item (hidden by default once onboarded_at is
+  // set) and navigate there. Checklist items that were already completed
+  // remain checked — the user can click into any specific one to re-run it.
+  var openGsBtn = document.getElementById('btn-open-get-started');
+  if (openGsBtn) {
+    openGsBtn.addEventListener('click', function () {
+      var navItem = document.querySelector('[data-onboarding-nav]');
+      if (navItem) navItem.style.display = '';
+      var gs = document.querySelector('[data-section="getting-started"]');
+      if (gs) gs.click();
+    });
+  }
+
   window.AMCP_SECTIONS = window.AMCP_SECTIONS || {};
   window.AMCP_SECTIONS['settings']       = render;
   window.AMCP_SECTIONS['onUserLoaded']   = onUserLoaded;

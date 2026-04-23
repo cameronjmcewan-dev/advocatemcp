@@ -694,7 +694,52 @@
         if (key) _runChecklistAction(key);
       });
     }
+    var skipBtn = document.getElementById('amcp-onb-skip-all');
+    if (skipBtn) {
+      skipBtn.addEventListener('click', _skipAll);
+    }
     _refreshChecklist();
+  }
+
+  /* Mark every remaining checklist key as complete in series, then hide the
+   * Get Started nav item and route the user to Overview. The server computes
+   * allDone after each step and stamps onboarded_at on the final one, which
+   * keeps the nav hidden on future logins. Triggered by the "Skip" button. */
+  function _skipAll() {
+    var ok = confirm(
+      'Skip the Get Started checklist?\n\n' +
+      'You can restart it any time from Settings \u2192 Tutorial.'
+    );
+    if (!ok) return;
+
+    var skipBtn = document.getElementById('amcp-onb-skip-all');
+    if (skipBtn) { skipBtn.disabled = true; skipBtn.textContent = 'Skipping\u2026'; }
+
+    var keys = checklistKeys().filter(function (k) { return !isStepDone(k); });
+    var chain = Promise.resolve();
+    keys.forEach(function (k) {
+      chain = chain.then(function () { return markStep('checklist.' + k); });
+    });
+    chain
+      .then(function () {
+        // Hide the Get Started nav in the current session too — future
+        // reloads rely on onboarded_at to keep it hidden, but the user
+        // should see the change immediately.
+        var navItem = document.querySelector('[data-onboarding-nav]');
+        if (navItem) navItem.style.display = 'none';
+        if (window.AMCP_UI && window.AMCP_UI.toast) {
+          window.AMCP_UI.toast('Onboarding skipped \u2014 restart any time from Settings.', 'success');
+        }
+        // Send them to Overview since Get Started is now gone.
+        var overview = document.querySelector('[data-section="overview"]');
+        if (overview) overview.click();
+      })
+      .catch(function () {
+        if (skipBtn) { skipBtn.disabled = false; skipBtn.textContent = 'Skip \u2014 I\u2019ll explore on my own'; }
+        if (window.AMCP_UI && window.AMCP_UI.toast) {
+          window.AMCP_UI.toast('Skip failed \u2014 please try again.', 'error');
+        }
+      });
   }
 
   function _sectionShellHTML() {
@@ -710,7 +755,12 @@
         '</div>' +
       '</div>' +
       '<div class="amcp-onb-progress"><div class="amcp-onb-progress-fill" id="amcp-onb-progress-fill"></div></div>' +
-      '<div class="amcp-onb-list" id="amcp-onb-list"></div>'
+      '<div class="amcp-onb-list" id="amcp-onb-list"></div>' +
+      '<div style="display:flex;justify-content:flex-end;margin-top:16px">' +
+        '<button type="button" class="btn-sm btn-ghost" id="amcp-onb-skip-all">' +
+          'Skip — I\u2019ll explore on my own' +
+        '</button>' +
+      '</div>'
     );
   }
 
