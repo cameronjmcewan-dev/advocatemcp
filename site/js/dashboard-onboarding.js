@@ -176,10 +176,14 @@
     if (_overlayEl) _overlayEl.classList.remove('show');
     _stopSlideTimer();
     if (markComplete || _slideIdx >= SLIDE_COUNT - 1) {
-      markStep('welcome.completed_at', new Date().toISOString());
-      markStep('checklist.watched_welcome').then(function () {
-        _refreshChecklist();
-      });
+      // Chain, don't parallelise. markOnboardingStep on the server does a
+      // read-modify-write that isn't atomic across Worker invocations —
+      // firing these in parallel means the later write overwrites the
+      // earlier one, so welcome.completed_at gets wiped by
+      // checklist.watched_welcome and the welcome re-opens on next login.
+      markStep('welcome.completed_at', new Date().toISOString())
+        .then(function () { return markStep('checklist.watched_welcome'); })
+        .then(function () { _refreshChecklist(); });
     } else {
       markStep('welcome.current_slide', _slideIdx);
     }
@@ -706,33 +710,46 @@
    * allDone after each step and stamps onboarded_at on the final one, which
    * keeps the nav hidden on future logins. Triggered by the "Skip" button. */
   function _skipAll() {
-    var ok = confirm(
-      'Skip the Get Started checklist?\n\n' +
-      'You can restart it any time from Settings \u2192 Tutorial.'
-    );
-    if (!ok) return;
+    // DNS is the one step that materially matters — without it, AI
+    // crawlers can't reach the tenant's agent. Never let skip bypass it.
+    var dnsPending = checklistKeys().indexOf('dns_configured') !== -1 && !isStepDone('dns_configured');
+
+    var confirmMsg = dnsPending
+      ? 'Skip the tour? Your DNS is not wired up yet, so the Get Started checklist will stay visible until DNS is configured. The other steps will be marked complete.\n\nContinue?'
+      : 'Skip the Get Started checklist?\n\nYou can restart it any time from Settings \u2192 Tutorial.';
+    if (!confirm(confirmMsg)) return;
 
     var skipBtn = document.getElementById('amcp-onb-skip-all');
     if (skipBtn) { skipBtn.disabled = true; skipBtn.textContent = 'Skipping\u2026'; }
 
-    var keys = checklistKeys().filter(function (k) { return !isStepDone(k); });
+    // Skip marks every UNCHECKED required key except DNS. If DNS is pending,
+    // onboarded_at won't be stamped (isOnboardingComplete returns false),
+    // so the Get Started nav stays until the user wires DNS up.
+    var keys = checklistKeys().filter(function (k) {
+      if (k === 'dns_configured') return false;
+      return !isStepDone(k);
+    });
     var chain = Promise.resolve();
     keys.forEach(function (k) {
       chain = chain.then(function () { return markStep('checklist.' + k); });
     });
     chain
       .then(function () {
-        // Hide the Get Started nav in the current session too — future
-        // reloads rely on onboarded_at to keep it hidden, but the user
-        // should see the change immediately.
-        var navItem = document.querySelector('[data-onboarding-nav]');
-        if (navItem) navItem.style.display = 'none';
-        if (window.AMCP_UI && window.AMCP_UI.toast) {
-          window.AMCP_UI.toast('Onboarding skipped \u2014 restart any time from Settings.', 'success');
+        _refreshChecklist();
+        if (!dnsPending) {
+          var navItem = document.querySelector('[data-onboarding-nav]');
+          if (navItem) navItem.style.display = 'none';
+          if (window.AMCP_UI && window.AMCP_UI.toast) {
+            window.AMCP_UI.toast('Onboarding skipped \u2014 restart any time from Settings.', 'success');
+          }
+          var overview = document.querySelector('[data-section="overview"]');
+          if (overview) overview.click();
+        } else {
+          if (window.AMCP_UI && window.AMCP_UI.toast) {
+            window.AMCP_UI.toast('Other steps marked done. Wire up DNS to finish onboarding.', 'info');
+          }
+          if (skipBtn) { skipBtn.disabled = true; skipBtn.textContent = 'Only DNS remaining'; }
         }
-        // Send them to Overview since Get Started is now gone.
-        var overview = document.querySelector('[data-section="overview"]');
-        if (overview) overview.click();
       })
       .catch(function () {
         if (skipBtn) { skipBtn.disabled = false; skipBtn.textContent = 'Skip \u2014 I\u2019ll explore on my own'; }
@@ -1070,8 +1087,10 @@
       _tourKeyHandler = null;
     }
     if (completed) {
-      markStep('tour.completed_at', new Date().toISOString());
-      markStep('checklist.took_tour').then(function () { _refreshChecklist(); });
+      // Chain to avoid the same race-wipe pattern as _closeWelcome.
+      markStep('tour.completed_at', new Date().toISOString())
+        .then(function () { return markStep('checklist.took_tour'); })
+        .then(function () { _refreshChecklist(); });
     }
   }
 
@@ -1097,6 +1116,7 @@
     restart:              restart,
     markStep:             markStep,
     getState:             getState,
+    refreshChecklist:     _refreshChecklist,
   };
 
 })();

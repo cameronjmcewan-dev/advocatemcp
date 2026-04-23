@@ -571,7 +571,11 @@
       window.AMCP_UI.toast('DNS verified \u2014 you\u2019re live!', 'success');
     }
     if (window.AMCP_ONBOARDING && typeof window.AMCP_ONBOARDING.markStep === 'function') {
-      window.AMCP_ONBOARDING.markStep('checklist.dns_configured');
+      window.AMCP_ONBOARDING.markStep('checklist.dns_configured').then(function () {
+        if (typeof window.AMCP_ONBOARDING.refreshChecklist === 'function') {
+          window.AMCP_ONBOARDING.refreshChecklist();
+        }
+      });
     }
   }
 
