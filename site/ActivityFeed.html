@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fbf9f5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141210" media="(prefers-color-scheme: dark)">
+<meta name="robots" content="noindex, nofollow">
+<title>Activity feed — Advocate</title>
+<link rel="icon" type="image/png" sizes="32x32"  href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://api.fontshare.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/styles.css">
+<link rel="stylesheet" href="/assets/dashboard.css">
+<style>
+  #boot-splash { position: fixed; inset: 0; display: grid; place-items: center; background: var(--paper); color: var(--muted); font-family: var(--sans); font-size: 14px; z-index: 1; }
+  .sb-nav a .badge { color: #fff; }
+</style>
+</head>
+<body>
+<div id="boot-splash" aria-live="polite">Loading activity…</div>
+<script src="/assets/shared.js"></script>
+<script src="/assets/dashboard-chrome.js"></script>
+<script src="/js/dashboard-auth.js"></script>
+<script src="/js/v2/shell.js"></script>
+<script src="/js/v2/activity.js"></script>
+<script>
+window.AMCP_SHELL.boot({
+  activeId: 'activity',
+  crumb:    'Dashboard · Activity',
+  title:    'Activity feed',
+  demo:      window.AMCP_ACTIVITY.demo,
+  fetchReal: window.AMCP_ACTIVITY.fetch,
+  render:    window.AMCP_ACTIVITY.render,
+});
+</script>
+</body>
+</html>

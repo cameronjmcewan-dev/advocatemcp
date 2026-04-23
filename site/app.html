@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fbf9f5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141210" media="(prefers-color-scheme: dark)">
+<meta name="robots" content="noindex, nofollow">
+<title>Dashboard — Advocate</title>
+<link rel="icon" type="image/png" sizes="32x32"  href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://api.fontshare.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/styles.css">
+<link rel="stylesheet" href="/assets/dashboard.css">
+<style>
+  /* Boot splash — shown until requireAuth + /api/client/me resolve. Plain
+     copy on paper so there's no flash of broken chrome if either request
+     is slow. Removed in JS once the chrome mounts. */
+  #boot-splash {
+    position: fixed; inset: 0; display: grid; place-items: center;
+    background: var(--paper); color: var(--muted);
+    font-family: var(--sans); font-size: 14px;
+    letter-spacing: 0.02em;
+    z-index: 1;
+  }
+
+  /* Preview-state card on the Phase 2 Overview — marks the dashboard as
+     a work-in-progress so users aren't misled by the incomplete section
+     wiring. Phase 3 replaces this with real KPI cards wired to
+     /api/client/metrics. */
+  .db-preview-card {
+    background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-lg);
+    padding: 40px; max-width: 760px; margin-top: 12px;
+  }
+  .db-preview-card .eyebrow { color: var(--maroon); }
+  .db-preview-card h2 {
+    font-family: var(--serif); font-weight: 400;
+    font-size: clamp(28px, 3vw, 38px); line-height: 1.1;
+    margin: 12px 0 16px; color: var(--ink);
+  }
+  .db-preview-card p { color: var(--ink-2); line-height: 1.6; font-size: 16px; }
+  .db-preview-card p + p { margin-top: 12px; }
+  .db-preview-card a { color: var(--maroon); font-weight: 500; }
+  .db-preview-card a:hover { color: var(--maroon-2); }
+  .db-preview-meta {
+    display: flex; gap: 18px; flex-wrap: wrap; margin-top: 24px; padding-top: 20px;
+    border-top: 1px solid var(--line);
+    font-size: 13px; color: var(--muted);
+  }
+  .db-preview-meta strong { color: var(--ink-2); font-weight: 500; }
+
+  /* Sidebar brand-mark star + badge color — enforce the site-wide oxblood
+     rule inside the dashboard chrome. .sb-nav badge is white on maroon so
+     it doesn't invert to dark-on-maroon in OS dark mode. */
+  .sb-nav a .badge { color: #fff; }
+</style>
+</head>
+<body>
+
+<div id="boot-splash" aria-live="polite">Loading your dashboard…</div>
+
+<script src="/assets/shared.js"></script>
+<script src="/assets/dashboard-chrome.js"></script>
+<script src="/js/dashboard-auth.js"></script>
+<script src="/js/v2/shell.js"></script>
+<script src="/js/v2/overview.js"></script>
+<script>
+window.AMCP_SHELL.boot({
+  activeId: 'overview',
+  crumb:    'Dashboard · Overview',
+  title:    d => `Welcome back${
+    window.AMCP_DATA && window.AMCP_DATA.full_name
+      ? ', ' + window.AMCP_DATA.full_name.split(' ')[0]
+      : ''
+  }.`,
+  demo:      window.AMCP_OVERVIEW.demo,
+  fetchReal: window.AMCP_OVERVIEW.fetch,
+  render:    window.AMCP_OVERVIEW.render,
+});
+</script>
+</body>
+</html>
