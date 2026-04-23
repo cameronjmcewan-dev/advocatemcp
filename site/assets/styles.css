@@ -15,10 +15,11 @@
   --line: #e4ddd0;
   --line-2: #d3c9b6;
 
-  /* Brand */
-  --maroon: #7d2550;
-  --maroon-2: #5c1a3c;
-  --maroon-3: #a03569;
+  /* Brand — locked deeper per request. Rule: every text surface is either
+     white on oxblood OR oxblood on cream; no light-pink text anywhere. */
+  --maroon:    #5c1a3c;  /* primary oxblood, used for brand + text on cream */
+  --maroon-2:  #3d0f26;  /* deepest, for hover + strong emphasis */
+  --maroon-3:  #6b1f44;  /* one step lighter, reserved for decorative accents */
   --maroon-tint: #f3e4ec;
   --maroon-wash: #fbf3f7;
 
@@ -55,32 +56,32 @@
   --paper: #141210;
   --paper-2: #1c1a17;
   --paper-3: #24211d;
-  --ink: #f2ede4;
-  --ink-2: #ddd5c7;
-  --muted: #9b9387;
-  --muted-2: #7d7569;
-  --line: #2e2a25;
-  --line-2: #3b362f;
-  --maroon-tint: rgba(160, 53, 105, 0.14);
-  --maroon-wash: rgba(160, 53, 105, 0.06);
-  --amber-tint: rgba(200, 119, 42, 0.14);
-  --sage-tint: rgba(95, 122, 78, 0.16);
+  --ink: #fdfaf2;
+  --ink-2: #eae2d1;
+  --muted: #a8a092;
+  --muted-2: #8a8274;
+  --line: #33302a;
+  --line-2: #433d34;
+  --maroon-tint: rgba(160, 53, 105, 0.22);
+  --maroon-wash: rgba(160, 53, 105, 0.08);
+  --amber-tint: rgba(200, 119, 42, 0.18);
+  --sage-tint: rgba(95, 122, 78, 0.20);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --paper: #141210;
     --paper-2: #1c1a17;
     --paper-3: #24211d;
-    --ink: #f2ede4;
-    --ink-2: #ddd5c7;
-    --muted: #9b9387;
-    --muted-2: #7d7569;
-    --line: #2e2a25;
-    --line-2: #3b362f;
-    --maroon-tint: rgba(160, 53, 105, 0.14);
-    --maroon-wash: rgba(160, 53, 105, 0.06);
-    --amber-tint: rgba(200, 119, 42, 0.14);
-    --sage-tint: rgba(95, 122, 78, 0.16);
+    --ink: #fdfaf2;
+    --ink-2: #eae2d1;
+    --muted: #a8a092;
+    --muted-2: #8a8274;
+    --line: #33302a;
+    --line-2: #433d34;
+    --maroon-tint: rgba(160, 53, 105, 0.22);
+    --maroon-wash: rgba(160, 53, 105, 0.08);
+    --amber-tint: rgba(200, 119, 42, 0.18);
+    --sage-tint: rgba(95, 122, 78, 0.20);
   }
 }
 
@@ -138,10 +139,14 @@ p { margin: 0; line-height: 1.55; color: var(--ink-2); text-wrap: pretty; }
   white-space: nowrap;
 }
 .btn-primary {
-  background: var(--maroon); color: var(--paper);
-  box-shadow: 0 6px 18px -6px rgba(125,37,80,.5);
+  /* Rule locked: maroon background always pairs with white text. Using
+     fixed #fff (not var(--paper)) so the text stays bright in OS dark
+     mode too, where --paper flips to near-black and would otherwise
+     render dark-on-maroon. */
+  background: var(--maroon); color: #fff;
+  box-shadow: 0 6px 18px -6px rgba(92,26,60,.5);
 }
-.btn-primary:hover { background: var(--maroon-2); transform: translateY(-1px); box-shadow: 0 10px 22px -6px rgba(125,37,80,.55); }
+.btn-primary:hover { background: var(--maroon-2); color: #fff; transform: translateY(-1px); box-shadow: 0 10px 22px -6px rgba(92,26,60,.55); }
 .btn-ghost {
   background: transparent; color: var(--ink); border-color: var(--line-2);
 }
@@ -176,14 +181,19 @@ p { margin: 0; line-height: 1.55; color: var(--ink-2); text-wrap: pretty; }
 .card.lift { transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
 .card.lift:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border-color: var(--line-2); }
 
-/* --- Global nav --- */
+/* --- Global nav ---
+   Rule locked by the user: where the background is paper (cream), text is
+   oxblood/maroon; where the background is maroon, text is paper. The nav bar
+   stays cream in both light and OS-dark modes (it reads like a letterhead),
+   so everything inside it is explicitly maroon — overriding whatever the
+   page-level --ink tokens happen to be. */
 .nav {
   position: sticky; top: 0; z-index: 30;
   backdrop-filter: saturate(160%) blur(14px);
-  background: rgba(251, 249, 245, 0.78);
-  border-bottom: 1px solid var(--line);
+  background: rgba(251, 249, 245, 0.82);
+  border-bottom: 1px solid #e4ddd0;
+  color: var(--maroon);
 }
-[data-theme="dark"] .nav { background: rgba(20,18,16,0.7); }
 .nav-inner {
   display: flex; align-items: center; justify-content: space-between;
   height: 64px;
@@ -191,6 +201,7 @@ p { margin: 0; line-height: 1.55; color: var(--ink-2); text-wrap: pretty; }
 .brand {
   display: inline-flex; align-items: center; gap: 10px;
   font-family: var(--serif); font-size: 22px; letter-spacing: -0.01em;
+  color: var(--maroon);
 }
 .brand-mark {
   width: 28px; height: 28px; border-radius: 8px;
@@ -201,19 +212,37 @@ p { margin: 0; line-height: 1.55; color: var(--ink-2); text-wrap: pretty; }
   background: var(--maroon) url('/icon-192.png') center / cover no-repeat;
   display: grid; place-items: center; color: transparent;
   font-size: 0; letter-spacing: 0;
-  box-shadow: 0 1px 2px rgba(26,24,22,.12), 0 0 0 1px rgba(125,37,80,.25);
+  box-shadow: 0 1px 2px rgba(26,24,22,.12), 0 0 0 1px rgba(92,26,60,.25);
 }
 .nav-links {
   display: flex; align-items: center; gap: 4px;
   list-style: none; margin: 0; padding: 0;
 }
 .nav-links a {
-  padding: 8px 14px; border-radius: 8px; font-size: 14.5px; color: var(--ink-2);
+  padding: 8px 14px; border-radius: 8px; font-size: 14.5px;
+  color: var(--maroon);
   transition: background .15s ease, color .15s ease;
 }
-.nav-links a:hover { background: var(--paper-2); color: var(--ink); }
-.nav-links a.active { color: var(--maroon); }
+.nav-links a:hover { background: var(--maroon-tint); color: var(--maroon-2); }
+.nav-links a.active { color: var(--maroon-2); background: var(--maroon-tint); }
 .nav-cta { display: flex; align-items: center; gap: 10px; }
+/* Force ghost-buttons inside the nav to oxblood on cream, regardless of the
+   page's current --ink (which follows system color-scheme). */
+.nav-cta .btn-ghost {
+  color: var(--maroon);
+  border-color: rgba(92, 26, 60, .35);
+  background: transparent;
+}
+.nav-cta .btn-ghost:hover {
+  background: var(--maroon-tint);
+  border-color: var(--maroon);
+  color: var(--maroon-2);
+}
+/* The primary CTA in the nav (maroon bg) keeps white text — already true
+   via the global .btn-primary rule, but we override any inherited colors
+   explicitly so the dark-mode --ink doesn't leak in. */
+.nav-cta .btn-primary { color: #fff; }
+.nav-cta .btn-primary:hover { color: #fff; }
 @media (max-width: 820px) {
   .nav-links { display: none; }
 }

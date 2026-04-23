@@ -10,6 +10,7 @@
     { href: '/Features.html',   label: 'Features' },
     { href: '/Industries.html', label: 'Industries' },
     { href: '/Pricing.html',    label: 'Pricing' },
+    { href: '/audit.html',      label: 'Free Audit' },
   ];
 
   function currentPage() {
