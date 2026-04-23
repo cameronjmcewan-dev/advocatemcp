@@ -1,0 +1,653 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fbf9f5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141210" media="(prefers-color-scheme: dark)">
+<meta name="robots" content="noindex, nofollow">
+<title>Advocate — 2-minute intro</title>
+<meta name="description" content="How Advocate puts your local business inside every AI answer, in two minutes.">
+<link rel="icon" type="image/png" sizes="32x32"  href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://api.fontshare.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    display: grid; grid-template-rows: 1fr auto; gap: 0;
+    background: var(--paper);
+  }
+
+  /* Top app bar for the "video" frame */
+  .intro-bar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px; gap: 16px;
+    background: rgba(251, 249, 245, .82);
+    backdrop-filter: saturate(160%) blur(14px);
+    border-bottom: 1px solid #e4ddd0;
+  }
+  .intro-bar .brand { color: var(--maroon); }
+  .intro-bar .pill {
+    font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .intro-bar .x {
+    color: var(--maroon); font-weight: 500; font-size: 14px;
+    padding: 6px 12px; border: 1px solid var(--maroon); border-radius: 999px;
+    transition: background .15s, color .15s;
+  }
+  .intro-bar .x:hover { background: var(--maroon); color: #fff; }
+
+  /* Stage where scenes render */
+  .stage {
+    position: relative;
+    height: 100vh;
+    padding-top: 64px;
+    overflow: hidden;
+  }
+  .stage-inner {
+    position: absolute; inset: 64px 0 80px;
+    display: grid; place-items: center;
+    padding: 0 var(--gutter);
+  }
+
+  /* Each scene is absolutely-positioned and fades in/out */
+  .scene {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    opacity: 0; visibility: hidden;
+    transform: translateY(14px);
+    transition: opacity .6s ease, transform .9s cubic-bezier(.22, 1, .36, 1), visibility 0s linear .6s;
+    padding: 0 var(--gutter);
+  }
+  .scene.on {
+    opacity: 1; visibility: visible;
+    transform: none;
+    transition: opacity .6s ease, transform .9s cubic-bezier(.22, 1, .36, 1), visibility 0s;
+  }
+
+  .scene-col {
+    display: grid; grid-template-columns: 1.1fr 1fr; gap: 48px;
+    max-width: 1100px; width: 100%; align-items: center;
+  }
+  @media (max-width: 820px) { .scene-col { grid-template-columns: 1fr; gap: 32px; } }
+  .scene h2 { font-family: var(--serif); font-weight: 400; font-size: clamp(36px, 5vw, 64px); line-height: 1.05; letter-spacing: -0.015em; text-wrap: balance; }
+  .scene h2 em { font-style: italic; color: var(--maroon); }
+  .scene p  { font-size: clamp(15px, 1.5vw, 18px); color: var(--ink-2); line-height: 1.55; margin-top: 16px; max-width: 480px; }
+  .scene .eyebrow { margin-bottom: 16px; }
+
+  /* Scene visual containers (right side) */
+  .card-mock {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+  }
+  .mock-bar {
+    display: flex; align-items: center; gap: 6px; padding: 10px 14px;
+    background: var(--paper-2); border-bottom: 1px solid var(--line);
+    font-size: 12px; color: var(--muted);
+  }
+  .mock-bar .dot-r { width: 9px; height: 9px; border-radius: 999px; display: inline-block; }
+  .mock-body { padding: 20px; }
+
+  /* Scene 1: chat prompt typing */
+  .s1-prompt {
+    font-size: 15.5px; color: var(--ink); font-style: italic;
+    padding: 16px 18px; background: var(--paper-2); border-radius: 12px;
+    border: 1px solid var(--line);
+  }
+  .s1-cursor::after {
+    content: '▌'; display: inline-block; margin-left: 1px;
+    color: var(--maroon);
+    animation: s1-blink 1s steps(2) infinite;
+  }
+  @keyframes s1-blink { 50% { opacity: 0; } }
+  .s1-scraping {
+    margin-top: 16px; padding: 16px 18px;
+    border: 1px dashed var(--line); border-radius: 12px;
+    color: var(--muted); font-size: 13.5px; line-height: 1.6;
+  }
+  .s1-scraping strong { color: var(--ink-2); }
+
+  /* Scene 2: worker intercept diagram */
+  .s2-flow {
+    display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 14px;
+    align-items: center; margin-top: 8px;
+  }
+  .s2-node {
+    background: var(--paper-2); border: 1px solid var(--line);
+    border-radius: 14px; padding: 18px 14px; text-align: center;
+    transition: background .4s, border-color .4s, transform .4s;
+  }
+  .s2-node .icon { font-size: 22px; margin-bottom: 6px; display: block; }
+  .s2-node .l { font-size: 12.5px; color: var(--ink); font-weight: 500; }
+  .s2-node.highlight { background: var(--maroon-tint); border-color: var(--maroon); transform: translateY(-2px); }
+  .s2-arrow {
+    height: 2px; background: var(--line-2); width: 100%; position: relative;
+  }
+  .s2-arrow::after {
+    content: ''; position: absolute; right: -2px; top: -3px;
+    border: 4px solid transparent; border-left-color: var(--line-2);
+  }
+  .scene.on .s2-node.interceptor { animation: s2-pulse 2.4s cubic-bezier(.22,1,.36,1) .4s 1 forwards; }
+  @keyframes s2-pulse {
+    0%   { background: var(--paper-2); border-color: var(--line); transform: translateY(0); }
+    45%  { background: var(--maroon-tint); border-color: var(--maroon); transform: translateY(-4px); box-shadow: 0 6px 18px -6px rgba(92,26,60,.3); }
+    100% { background: var(--maroon-tint); border-color: var(--maroon); transform: translateY(-2px); }
+  }
+
+  /* Scene 3: AI answer card builds up */
+  .s3-answer {
+    padding: 20px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 14px;
+  }
+  .s3-answer .who { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+  .s3-answer p { font-size: 15.5px; line-height: 1.55; margin: 0; color: var(--ink); }
+  .s3-biz {
+    font-weight: 600; color: var(--maroon);
+    background: linear-gradient(var(--maroon-tint), var(--maroon-tint)) 0 90% / 100% 4px no-repeat;
+  }
+  .s3-cite {
+    margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line);
+    color: var(--maroon); font-size: 13px; font-weight: 500;
+  }
+  .s3-cite::before { content: '→ '; }
+  .scene.on .s3-lines { animation: s3-reveal 4s ease-out both; }
+  @keyframes s3-reveal {
+    0%   { clip-path: inset(0 100% 0 0); }
+    100% { clip-path: inset(0 0    0 0); }
+  }
+
+  /* Scene 4: mini dashboard */
+  .s4-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+  .s4-kpi {
+    background: var(--paper-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px;
+  }
+  .s4-kpi .k { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  .s4-kpi .v { font-family: var(--serif); font-size: 24px; color: var(--maroon); margin-top: 4px; line-height: 1; }
+  .s4-bars {
+    display: grid; grid-template-columns: repeat(14, 1fr); gap: 4px; align-items: end;
+    height: 64px; padding: 8px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 10px;
+  }
+  .s4-bars span {
+    background: var(--maroon); opacity: .7; border-radius: 2px;
+    transform: scaleY(0); transform-origin: bottom;
+    animation: s4-grow .6s cubic-bezier(.22,1,.36,1) forwards;
+  }
+  @keyframes s4-grow { to { transform: scaleY(1); } }
+
+  /* Scene 5: CTA */
+  .s5 { text-align: center; max-width: 640px; }
+  .s5 .hero-cta { justify-content: center; }
+  .s5 .mark {
+    width: 96px; height: 96px; border-radius: 24px; margin: 0 auto 24px;
+    background: var(--maroon) url('/icon-512.png') center / cover no-repeat;
+    box-shadow: 0 24px 48px -16px rgba(92,26,60,.4);
+  }
+
+  /* Play-overlay shown until the user clicks (browsers block audio
+     autoplay until there's a user gesture). Dismisses itself on click. */
+  .intro-overlay {
+    position: fixed; inset: 0; z-index: 20;
+    display: grid; place-items: center;
+    background: rgba(251, 249, 245, .92);
+    backdrop-filter: saturate(160%) blur(10px);
+    transition: opacity .35s ease, visibility 0s linear .35s;
+    padding: 24px;
+  }
+  .intro-overlay.hidden { opacity: 0; visibility: hidden; }
+  .intro-overlay-card { text-align: center; max-width: 520px; }
+  .intro-overlay .mark {
+    width: 96px; height: 96px; border-radius: 24px; margin: 0 auto 24px;
+    background: var(--maroon) url('/icon-512.png') center / cover no-repeat;
+    box-shadow: 0 24px 48px -16px rgba(92,26,60,.4);
+  }
+  .intro-overlay h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(32px, 4vw, 48px); margin-bottom: 8px; color: var(--ink); }
+  .intro-overlay p  { color: var(--ink-2); font-size: 16px; margin-bottom: 28px; }
+  .intro-overlay .plays {
+    display: inline-flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+  }
+  .intro-overlay button {
+    font: inherit; cursor: pointer;
+    padding: 14px 24px; border-radius: 999px;
+  }
+  .intro-overlay .btn-primary {
+    background: var(--maroon); color: #fff; border: 1px solid var(--maroon);
+  }
+  .intro-overlay .btn-ghost {
+    background: transparent; color: var(--maroon); border: 1px solid var(--maroon);
+  }
+  .intro-overlay small { display: block; margin-top: 14px; color: var(--muted); font-size: 12px; }
+
+  /* Bottom control bar */
+  .intro-foot {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 10;
+    display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: center;
+    padding: 12px 20px;
+    background: rgba(251, 249, 245, .92);
+    backdrop-filter: saturate(160%) blur(14px);
+    border-top: 1px solid #e4ddd0;
+    color: var(--maroon);
+  }
+  .intro-foot .scene-nums { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 90px; }
+  .intro-foot button {
+    font: inherit; color: var(--maroon);
+    padding: 6px 14px; border: 1px solid var(--maroon); border-radius: 999px;
+    background: transparent; cursor: pointer;
+    transition: background .15s, color .15s;
+  }
+  .intro-foot button:hover { background: var(--maroon); color: #fff; }
+  .intro-foot .progress { height: 4px; background: var(--line); border-radius: 999px; overflow: hidden; position: relative; }
+  .intro-foot .progress-fill {
+    position: absolute; left: 0; top: 0; bottom: 0; width: 0;
+    background: var(--maroon);
+    transition: width .1s linear;
+  }
+
+  /* Respect reduced motion — freeze all animations + require manual advance */
+  @media (prefers-reduced-motion: reduce) {
+    .scene, .s2-node, .s3-lines, .s4-bars span { animation: none !important; transition: opacity .2s ease !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Initial play overlay — browsers block audio autoplay until the user
+     gestures, so the intro parks on this screen until they pick a mode. -->
+<div class="intro-overlay" id="intro-overlay">
+  <div class="intro-overlay-card">
+    <div class="mark" aria-hidden="true"></div>
+    <h1>2-minute intro to Advocate</h1>
+    <p>How your business shows up when customers ask AI — in five short scenes, narrated.</p>
+    <div class="plays">
+      <button type="button" class="btn-primary" id="btn-play-sound">▶ Play with sound</button>
+      <button type="button" class="btn-ghost"   id="btn-play-silent">Play muted</button>
+    </div>
+    <small id="audio-status">Voiceover will load automatically if available.</small>
+  </div>
+</div>
+
+<!-- Per-scene audio. Each <audio> tries the generated MP3 first (placed
+     by scripts/gen-intro-audio.mjs using the ElevenLabs API) and silently
+     fails if missing — the JS sequencer falls back to speechSynthesis
+     reading the on-page scripts, which works in every modern browser with
+     no key required. -->
+<audio id="aud-0" src="/assets/audio/intro-scene-1.mp3" preload="auto"></audio>
+<audio id="aud-1" src="/assets/audio/intro-scene-2.mp3" preload="auto"></audio>
+<audio id="aud-2" src="/assets/audio/intro-scene-3.mp3" preload="auto"></audio>
+<audio id="aud-3" src="/assets/audio/intro-scene-4.mp3" preload="auto"></audio>
+<audio id="aud-4" src="/assets/audio/intro-scene-5.mp3" preload="auto"></audio>
+
+<!-- Scene narration scripts — read by speechSynthesis when MP3 missing.
+     Same wording as the prompts sent to ElevenLabs in the gen script. -->
+<template id="narration-scripts">
+  <span data-scene="0">Every day, millions of customers ask AI assistants like ChatGPT and Perplexity for a business like yours. "Best florist near me." "Weekend emergency plumber." The problem? AI is scraping old Yelp reviews, outdated blog posts, and hoping it got the answer right.</span>
+  <span data-scene="1">Advocate intercepts the question before AI guesses. When a crawler visits your site, we hand it clean, accurate information, straight from you — your hours, your services, your prices, a direct link to reach you. No code changes. No developer. Fifteen minutes from start to live.</span>
+  <span data-scene="2">Now when someone asks ChatGPT or Claude for a business like yours, your name comes up. With your real hours. Your actual prices. And a tracked link that sends that customer straight to your booking page. No more hoping the AI got it right.</span>
+  <span data-scene="3">You see every mention, every click-back, broken down by AI tool. A plain-English weekly digest lands in your inbox. Pro adds Competitor Radar — so you know the one query where your neighbor is beating you, and exactly what to change to flip it.</span>
+  <span data-scene="4">Start free for fourteen days. No credit card. Cancel any time. Most businesses are live in under fifteen minutes, seeing their first AI mentions within twenty-four hours. Click Start Free Trial, or run a free audit first to see exactly how AI describes you right now.</span>
+</template>
+
+<div class="intro-bar">
+  <a class="brand" href="/">
+    <span class="brand-mark" aria-hidden="true">A</span>
+    <span>Advocate</span>
+  </a>
+  <span class="pill">2-minute intro</span>
+  <a class="x" href="/">Close ✕</a>
+</div>
+
+<div class="stage">
+  <div class="stage-inner">
+
+    <!-- Scene 1 — the problem -->
+    <div class="scene on" data-scene="0">
+      <div class="scene-col">
+        <div>
+          <span class="eyebrow">The problem</span>
+          <h2>Your customers are asking AI <em>for you</em>.</h2>
+          <p>Right now they're typing <span class="serif-italic">"best dentist near me who takes my insurance"</span> into ChatGPT and Perplexity — and hoping the answer names you.</p>
+        </div>
+        <div class="card-mock">
+          <div class="mock-bar">
+            <span class="dot-r" style="background:#f85149"></span>
+            <span class="dot-r" style="background:#d29922"></span>
+            <span class="dot-r" style="background:#3fb950"></span>
+            <span style="margin-left:8px">chatgpt.com</span>
+          </div>
+          <div class="mock-body">
+            <div class="s1-prompt"><span class="s1-cursor">best florist in south austin for same-day delivery</span></div>
+            <div class="s1-scraping">
+              <strong>ChatGPT is looking through:</strong><br>
+              &nbsp;·&nbsp; Yelp reviews from 2019<br>
+              &nbsp;·&nbsp; An old blog post<br>
+              &nbsp;·&nbsp; Random directory listings<br>
+              <em>…and hoping it gets the answer right.</em>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scene 2 — how Advocate fits in -->
+    <div class="scene" data-scene="1">
+      <div class="scene-col">
+        <div>
+          <span class="eyebrow">How it works</span>
+          <h2>Advocate <em>intercepts</em> the ask.</h2>
+          <p>When an AI crawler hits your website looking for info, we answer it first — with your hours, services, prices, and a tracked link. No more guessing, no scraping stale reviews.</p>
+        </div>
+        <div>
+          <div class="s2-flow">
+            <div class="s2-node">
+              <span class="icon">❓</span>
+              <span class="l">Customer asks AI</span>
+            </div>
+            <div class="s2-arrow"></div>
+            <div class="s2-node interceptor">
+              <span class="icon">◈</span>
+              <span class="l">Advocate answers</span>
+            </div>
+            <div class="s2-arrow"></div>
+            <div class="s2-node">
+              <span class="icon">✓</span>
+              <span class="l">Your info, verbatim</span>
+            </div>
+          </div>
+          <p style="font-size:13px;color:var(--muted);margin-top:14px;text-align:center">A ~15-minute setup. No code on your site.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scene 3 — the answer -->
+    <div class="scene" data-scene="2">
+      <div class="scene-col">
+        <div>
+          <span class="eyebrow">The result</span>
+          <h2>Your business <em>shows up</em> — with a link.</h2>
+          <p>Not an approximate summary. The real you — phone number, hours, the differentiators you asked us to emphasize — and a click-back link that sends customers straight to your booking page.</p>
+        </div>
+        <div class="card-mock">
+          <div class="mock-bar">
+            <span class="dot-r" style="background:#f85149"></span>
+            <span class="dot-r" style="background:#d29922"></span>
+            <span class="dot-r" style="background:#3fb950"></span>
+            <span style="margin-left:8px">claude.ai</span>
+          </div>
+          <div class="mock-body">
+            <div class="s3-answer">
+              <div class="who">Claude answered</div>
+              <p class="s3-lines">For same-day flowers in South Austin, <span class="s3-biz">Bloom &amp; Stem</span> offers 2-hour delivery on arrangements starting at $40. They're family-owned, open Sundays 10–5, and take phone or online orders.</p>
+              <div class="s3-cite">Source: Bloom &amp; Stem · bloomandstem.co</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scene 4 — dashboard -->
+    <div class="scene" data-scene="3">
+      <div class="scene-col">
+        <div>
+          <span class="eyebrow">Your dashboard</span>
+          <h2>See <em>which AI</em> sent you who.</h2>
+          <p>Every mention, every click-back, broken down by tool. A plain-English weekly digest lands in your inbox. Pro adds Competitor Radar — the one query where your neighbor is beating you.</p>
+        </div>
+        <div class="card-mock" style="padding:18px">
+          <div class="s4-kpis">
+            <div class="s4-kpi"><div class="k">Mentions</div><div class="v">847</div></div>
+            <div class="s4-kpi"><div class="k">Clicks</div><div class="v">189</div></div>
+            <div class="s4-kpi"><div class="k">Radar win</div><div class="v">64%</div></div>
+            <div class="s4-kpi"><div class="k">Bookings</div><div class="v">23</div></div>
+          </div>
+          <div class="s4-bars" id="s4-bars"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scene 5 — CTA -->
+    <div class="scene" data-scene="4">
+      <div class="s5">
+        <div class="mark" aria-hidden="true"></div>
+        <span class="eyebrow no-rule" style="justify-content:center;display:inline-flex">Get started</span>
+        <h2 style="margin-top:12px">Let AI send you customers. Start free for 14 days.</h2>
+        <p style="margin:16px auto 0">No credit card. Setup takes about 15 minutes. Cancel any time.</p>
+        <div class="hero-cta" style="margin-top:28px">
+          <a href="/Pricing.html" class="btn btn-primary btn-lg">Start 14-day free trial</a>
+          <a href="/audit.html" class="btn btn-ghost btn-lg">Get your free AI audit →</a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="intro-foot" role="toolbar" aria-label="Intro controls">
+  <div class="scene-nums"><span id="scene-idx">1</span> / <span id="scene-total">5</span></div>
+  <div class="progress"><div class="progress-fill" id="progress-fill"></div></div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <button type="button" id="btn-prev"   aria-label="Previous scene">←</button>
+    <button type="button" id="btn-toggle" aria-label="Play/pause">Pause</button>
+    <button type="button" id="btn-next"   aria-label="Next scene">→</button>
+    <button type="button" id="btn-mute"   aria-label="Mute audio">🔊</button>
+  </div>
+</div>
+
+<script>
+/* Scene sequencer with narrated audio.
+ *
+ * Timing model:
+ *   - If an <audio> tag for this scene has loaded successfully, the scene
+ *     advances when that audio ends. Scene duration == audio.duration.
+ *   - Otherwise we fall back to the browser's built-in speechSynthesis
+ *     reading the on-page narration script, and advance on the
+ *     'utterance end' event.
+ *   - If neither works (rare — no SpeechSynthesis, no audio), we fall back
+ *     to a 24-second static timer per scene.
+ *
+ * Browsers block all audio until the user interacts, so the whole thing
+ * parks on an overlay until they click "Play with sound" or "Play muted".
+ * ESC / Close returns to home. Arrow keys + Space drive the toolbar. */
+(function () {
+  const FALLBACK_MS = 24000;
+  const scenes = Array.from(document.querySelectorAll('.scene'));
+  const total  = scenes.length;
+  const idxEl  = document.getElementById('scene-idx');
+  const fill   = document.getElementById('progress-fill');
+  const btnPrev = document.getElementById('btn-prev');
+  const btnNext = document.getElementById('btn-next');
+  const btnTog  = document.getElementById('btn-toggle');
+  const btnMute = document.getElementById('btn-mute');
+  const overlay = document.getElementById('intro-overlay');
+  const audios  = scenes.map((_, i) => document.getElementById(`aud-${i}`));
+  const scripts = Array.from(document.querySelectorAll('#narration-scripts span'))
+    .map(s => s.textContent.trim());
+
+  document.getElementById('scene-total').textContent = String(total);
+
+  let idx = 0;
+  let playing = false;
+  let muted   = false;
+  let sceneTimer = null;
+  let sceneStartedAt = 0;
+  let sceneDurationMs = FALLBACK_MS;
+  let totalElapsedAtSceneStart = 0;
+  let currentUtterance = null;
+
+  /* Total-progress bookkeeping: we approximate by summing prior scenes'
+     full durations + current scene's elapsed fraction. Since audio
+     durations vary slightly we recompute on each scene change. */
+  const scenePlannedDur = scenes.map(() => FALLBACK_MS);
+
+  function hasLoadedAudio(i) {
+    const a = audios[i];
+    return !!(a && !a.error && a.readyState >= 2 && isFinite(a.duration) && a.duration > 0);
+  }
+
+  function stopAllAudio() {
+    audios.forEach(a => { if (a) { try { a.pause(); a.currentTime = 0; } catch (_) {} } });
+    if (window.speechSynthesis) { window.speechSynthesis.cancel(); }
+    currentUtterance = null;
+    if (sceneTimer) { clearTimeout(sceneTimer); sceneTimer = null; }
+  }
+
+  function startAudioForScene(i) {
+    if (muted) return startSilentTimer(i);
+    const a = audios[i];
+    if (hasLoadedAudio(i)) {
+      scenePlannedDur[i] = Math.round(a.duration * 1000);
+      a.currentTime = 0;
+      const onEnded = () => { a.removeEventListener('ended', onEnded); advance(); };
+      a.addEventListener('ended', onEnded);
+      const p = a.play();
+      if (p && typeof p.catch === 'function') p.catch(() => startSpeech(i));
+      return;
+    }
+    startSpeech(i);
+  }
+
+  function startSpeech(i) {
+    if (!window.speechSynthesis || !scripts[i]) return startSilentTimer(i);
+    const u = new SpeechSynthesisUtterance(scripts[i]);
+    u.rate = 1.0; u.pitch = 1.0; u.volume = 1.0;
+    // Prefer a natural-sounding voice if the OS provides one.
+    const voices = window.speechSynthesis.getVoices();
+    const preferred = voices.find(v => /google|natural|samantha|siri|neural/i.test(v.name))
+                   || voices.find(v => v.lang.startsWith('en'));
+    if (preferred) u.voice = preferred;
+    currentUtterance = u;
+    u.onend = () => { if (currentUtterance === u) advance(); };
+    u.onerror = () => { if (currentUtterance === u) startSilentTimer(i); };
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(u);
+    // speechSynthesis has no reliable duration up-front, so keep a hard
+    // ceiling so a stalled synth doesn't freeze the sequence.
+    sceneTimer = setTimeout(() => { if (currentUtterance === u) advance(); }, 45000);
+    scenePlannedDur[i] = FALLBACK_MS;
+  }
+
+  function startSilentTimer(i) {
+    scenePlannedDur[i] = FALLBACK_MS;
+    sceneTimer = setTimeout(advance, FALLBACK_MS);
+  }
+
+  function show(i, opts) {
+    stopAllAudio();
+    idx = (i + total) % total;
+    scenes.forEach((s, j) => s.classList.toggle('on', j === idx));
+    idxEl.textContent = String(idx + 1);
+    totalElapsedAtSceneStart = scenePlannedDur.slice(0, idx).reduce((s, d) => s + d, 0);
+    sceneStartedAt = performance.now();
+    if (idx === 3) kickS4Bars();
+    if (playing) startAudioForScene(idx);
+    requestAnimationFrame(tickProgress);
+  }
+
+  function advance() {
+    if (idx >= total - 1) {
+      // Park on final CTA scene.
+      pause();
+      return;
+    }
+    show(idx + 1);
+  }
+
+  function tickProgress() {
+    const dur = scenePlannedDur[idx] || FALLBACK_MS;
+    const within = Math.min(1, (performance.now() - sceneStartedAt) / dur);
+    const tot = scenePlannedDur.reduce((s, d) => s + d, 0);
+    const elapsed = totalElapsedAtSceneStart + within * dur;
+    fill.style.width = Math.min(100, (elapsed / tot) * 100) + '%';
+    if (playing) requestAnimationFrame(tickProgress);
+  }
+
+  function play() {
+    if (playing) return;
+    playing = true;
+    btnTog.textContent = 'Pause';
+    startAudioForScene(idx);
+    requestAnimationFrame(tickProgress);
+  }
+  function pause() {
+    if (!playing) return;
+    playing = false;
+    btnTog.textContent = 'Play';
+    // Don't rewind — just freeze audio where it is.
+    audios.forEach(a => { if (a) { try { a.pause(); } catch (_) {} } });
+    if (window.speechSynthesis) window.speechSynthesis.pause();
+    if (sceneTimer) { clearTimeout(sceneTimer); sceneTimer = null; }
+  }
+
+  btnPrev.addEventListener('click', () => show(idx - 1));
+  btnNext.addEventListener('click', () => show(idx + 1));
+  btnTog .addEventListener('click', () => playing ? pause() : play());
+  btnMute.addEventListener('click', () => {
+    muted = !muted;
+    btnMute.textContent = muted ? '🔈' : '🔊';
+    btnMute.setAttribute('aria-label', muted ? 'Unmute audio' : 'Mute audio');
+    if (playing) {
+      stopAllAudio();
+      startAudioForScene(idx);
+    }
+  });
+
+  document.getElementById('btn-play-sound').addEventListener('click', () => {
+    muted = false;
+    btnMute.textContent = '🔊';
+    overlay.classList.add('hidden');
+    play();
+  });
+  document.getElementById('btn-play-silent').addEventListener('click', () => {
+    muted = true;
+    btnMute.textContent = '🔈';
+    overlay.classList.add('hidden');
+    play();
+  });
+
+  document.addEventListener('keydown', ev => {
+    if (ev.key === 'ArrowRight')   { show(idx + 1); }
+    else if (ev.key === 'ArrowLeft'){ show(idx - 1); }
+    else if (ev.key === ' ')        { ev.preventDefault(); playing ? pause() : play(); }
+    else if (ev.key === 'Escape')   { location.href = '/'; }
+  });
+
+  // Audio status chip in the overlay — tells the user whether real MP3s
+  // are present or they're about to hear the speechSynthesis fallback.
+  function updateAudioStatus() {
+    const any = audios.some((a, i) => hasLoadedAudio(i));
+    const status = document.getElementById('audio-status');
+    if (!status) return;
+    status.textContent = any
+      ? 'Voiceover loaded.'
+      : 'No MP3 voiceover found — will use your browser\u2019s built-in speech.';
+  }
+  audios.forEach(a => { if (a) a.addEventListener('loadeddata', updateAudioStatus); });
+  setTimeout(updateAudioStatus, 800);
+
+  // Scene 4: lazily render 14 growing bars with staggered delays.
+  let s4Kicked = false;
+  function kickS4Bars() {
+    if (s4Kicked) return;
+    s4Kicked = true;
+    const wrap = document.getElementById('s4-bars');
+    if (!wrap) return;
+    const data = [42, 58, 71, 50, 88, 64, 95, 72, 102, 84, 66, 91, 78, 87];
+    const max = Math.max(...data);
+    wrap.innerHTML = data.map((v, i) =>
+      `<span style="height:${(v / max) * 100}%; animation-delay:${i * 70}ms"></span>`
+    ).join('');
+  }
+})();
+</script>
+</body>
+</html>

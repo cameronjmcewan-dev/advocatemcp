@@ -112,7 +112,7 @@
     <div class="fab-menu" id="fab-menu" role="menu">
       <a id="fab-replay"><span class="g">▶</span> Replay tutorial</a>
       <a href="/FAQs.html"><span class="g">☰</span> What does each number mean?</a>
-      <a href="/Contact.html"><span class="g">▷</span> Watch 2-minute video intro</a>
+      <a href="/intro.html" target="_blank" rel="noopener"><span class="g">▷</span> Watch 2-minute video intro</a>
       <div class="fab-menu-sep"></div>
       <a href="/FAQs.html"><span class="g">◐</span> Browse help articles</a>
       <a href="mailto:hello@advocatemcp.com"><span class="g">✉</span> Email support</a>
