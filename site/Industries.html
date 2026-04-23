@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Industries — Advocate</title>
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fbf9f5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141210" media="(prefers-color-scheme: dark)">
+<meta name="description" content="Advocate works for restaurants, law firms, dental offices, plumbers, electricians, real-estate agents, florists and 30+ other local-business categories.">
+<link rel="canonical" href="https://advocatemcp.com/Industries.html">
+<meta property="og:title" content="Advocate by industry">
+<meta property="og:description" content="Built-in playbooks for the verticals AI searches the most.">
+<meta property="og:image" content="https://advocatemcp.com/og-image.png">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://advocatemcp.com/Industries.html">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://advocatemcp.com/og-image.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://api.fontshare.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+  .page-hero { padding: 80px 0 40px; }
+  .page-hero h1 { max-width: 900px; }
+  .page-hero p { font-size: 19px; margin-top: 20px; max-width: 680px; }
+
+  .tabs {
+    display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 32px;
+    padding: 6px; background: var(--paper-2); border: 1px solid var(--line);
+    border-radius: 999px; width: fit-content; max-width: 100%;
+  }
+  .tab-btn {
+    padding: 10px 18px; border-radius: 999px; font-size: 14px;
+    color: var(--muted); font-weight: 500;
+    transition: all .18s ease; white-space: nowrap;
+  }
+  .tab-btn:hover { color: var(--ink); }
+  .tab-btn.active {
+    background: var(--paper); color: var(--maroon);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .industry-panel { display: none; animation: fadeIn .3s ease; }
+  .industry-panel.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  .panel-grid {
+    display: grid; grid-template-columns: 1.1fr 1fr; gap: 48px; align-items: start;
+  }
+  @media (max-width: 980px) { .panel-grid { grid-template-columns: 1fr; gap: 32px; } }
+
+  .panel-grid h2 { font-family: var(--serif); font-weight: 400; font-size: clamp(32px, 4vw, 48px); line-height: 1.1; }
+  .panel-intro { font-size: 17px; margin-top: 18px; }
+
+  .queries-card {
+    background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-lg);
+    padding: 24px; box-shadow: var(--shadow-sm);
+  }
+  .queries-card h5 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 0 0 16px; font-weight: 500; }
+  .query-row { padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .query-row:last-child { border-bottom: 0; }
+  .query-row .q { font-family: var(--serif); font-style: italic; font-size: 17px; color: var(--ink); line-height: 1.3; }
+  .query-row .a { font-size: 13px; color: var(--muted); margin-top: 6px; display: flex; gap: 6px; align-items: center; }
+  .query-row .a .bot { padding: 2px 8px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 999px; font-size: 11px; color: var(--ink-2); }
+
+  .wins {
+    margin-top: 32px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+  }
+  .win {
+    padding: 20px; background: var(--paper-2); border: 1px solid var(--line);
+    border-radius: var(--r-md);
+  }
+  .win .num { font-family: var(--serif); font-size: 34px; color: var(--maroon); line-height: 1; }
+  .win .label { font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+
+  .all-industries { margin-top: 96px; }
+  .industry-tile {
+    padding: 24px; border: 1px solid var(--line); border-radius: var(--r-lg);
+    background: var(--paper); transition: all .18s ease;
+  }
+  .industry-tile:hover { border-color: var(--maroon); background: var(--maroon-wash); transform: translateY(-2px); }
+  .industry-tile h4 { font-family: var(--serif); font-weight: 400; font-size: 22px; margin-bottom: 6px; }
+  .industry-tile p { font-size: 13.5px; color: var(--muted); }
+  .industry-tile .glyph {
+    width: 40px; height: 40px; border-radius: 10px; background: var(--maroon-tint);
+    color: var(--maroon); display: grid; place-items: center; font-family: var(--serif);
+    font-size: 22px; margin-bottom: 14px;
+  }
+</style>
+</head>
+<body class="grain">
+<div id="nav-mount"></div>
+
+<main>
+  <section class="container page-hero">
+    <span class="eyebrow">Industries</span>
+    <h1 class="mt-4">Whatever you do, people are asking AI about it. <span class="serif-italic" style="color:var(--maroon);">Make sure they find you.</span></h1>
+    <p>Advocate is built for the small, local businesses that make a neighborhood tick. Here's how it shows up for some of them.</p>
+  </section>
+
+  <section class="container">
+    <div class="tabs" id="tabs">
+      <button class="tab-btn active" data-tab="restaurants">Restaurants</button>
+      <button class="tab-btn" data-tab="lawyers">Lawyers</button>
+      <button class="tab-btn" data-tab="dentists">Dentists</button>
+      <button class="tab-btn" data-tab="plumbers">Plumbers</button>
+      <button class="tab-btn" data-tab="electricians">Electricians</button>
+      <button class="tab-btn" data-tab="realestate">Real estate</button>
+      <button class="tab-btn" data-tab="florists">Flower shops</button>
+    </div>
+
+    <!-- Panels -->
+    <div class="industry-panel active" id="panel-restaurants">
+      <div class="panel-grid">
+        <div>
+          <span class="chip maroon"><span class="dot"></span>Restaurants</span>
+          <h2 class="mt-4">Be the place AI tells hungry people to go.</h2>
+          <p class="panel-intro">Diners don't search — they <span class="serif-italic">ask</span>. "Where's the best brunch that takes walk-ins?" "Quiet dinner spot with a patio?" When AI gets those questions, Advocate makes sure it has your menu, your hours, and your specials.</p>
+          <div class="wins">
+            <div class="win"><div class="num">2.8×</div><div class="label">More AI mentions for dinner searches</div></div>
+            <div class="win"><div class="num">+37</div><div class="label">Weekend walk-ins from AI referrals</div></div>
+            <div class="win"><div class="num">12m</div><div class="label">To set up — no POS changes</div></div>
+          </div>
+        </div>
+        <div class="queries-card">
+          <h5>Real queries AI asks about restaurants</h5>
+          <div class="query-row"><div class="q">"Best brunch in south Austin with a patio and no wait"</div><div class="a"><span class="bot">ChatGPT</span> · 43 this week</div></div>
+          <div class="query-row"><div class="q">"Where can I get vegan tacos tonight?"</div><div class="a"><span class="bot">Perplexity</span> · 28 this week</div></div>
+          <div class="query-row"><div class="q">"Restaurants open late for a birthday dinner"</div><div class="a"><span class="bot">Claude</span> · 19 this week</div></div>
+          <div class="query-row"><div class="q">"Family-friendly spot with high chairs"</div><div class="a"><span class="bot">Gemini</span> · 14 this week</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="industry-panel" id="panel-lawyers">
+      <div class="panel-grid">
+        <div>
+          <span class="chip maroon"><span class="dot"></span>Lawyers</span>
+          <h2 class="mt-4">Be the first call — not the tenth search result.</h2>
+          <p class="panel-intro">People asking AI for legal help are in a hurry and anxious. Advocate makes sure your practice areas, consultation fees, and the first question they should ask are front and center in the answer.</p>
+          <div class="wins">
+            <div class="win"><div class="num">4.1×</div><div class="label">More consultation inquiries</div></div>
+            <div class="win"><div class="num">$890</div><div class="label">Average case value from AI leads</div></div>
+            <div class="win"><div class="num">0</div><div class="label">Lines of code touched</div></div>
+          </div>
+        </div>
+        <div class="queries-card">
+          <h5>Real queries AI asks about lawyers</h5>
+          <div class="query-row"><div class="q">"Free consultation personal injury lawyer near me"</div><div class="a"><span class="bot">ChatGPT</span> · 52 this week</div></div>
+          <div class="query-row"><div class="q">"Do I need a lawyer for a small estate in Texas?"</div><div class="a"><span class="bot">Perplexity</span> · 31 this week</div></div>
+          <div class="query-row"><div class="q">"Family lawyer who handles uncontested divorce"</div><div class="a"><span class="bot">Claude</span> · 24 this week</div></div>
+          <div class="query-row"><div class="q">"Small business attorney that works on flat fee"</div><div class="a"><span class="bot">Gemini</span> · 18 this week</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="industry-panel" id="panel-dentists">
+      <div class="panel-grid">
+        <div>
+          <span class="chip maroon"><span class="dot"></span>Dentists</span>
+          <h2 class="mt-4">Fill your chair. This week.</h2>
+          <p class="panel-intro">Insurance, hours, and "do you take new patients?" are the three questions AI gets all day. Advocate answers them correctly the first time, and routes curious patients straight to your online booking page.</p>
+          <div class="wins">
+            <div class="win"><div class="num">+21</div><div class="label">New-patient bookings / month</div></div>
+            <div class="win"><div class="num">63%</div><div class="label">Of AI answers listed your practice</div></div>
+            <div class="win"><div class="num">10m</div><div class="label">Setup time, front-desk approved</div></div>
+          </div>
+        </div>
+        <div class="queries-card">
+          <h5>Real queries AI asks about dentists</h5>
+          <div class="query-row"><div class="q">"Dentist who takes Delta Dental PPO near downtown"</div><div class="a"><span class="bot">ChatGPT</span> · 48 this week</div></div>
+          <div class="query-row"><div class="q">"Emergency dentist open Saturday"</div><div class="a"><span class="bot">Perplexity</span> · 35 this week</div></div>
+          <div class="query-row"><div class="q">"Family dentist accepting new patients"</div><div class="a"><span class="bot">Claude</span> · 22 this week</div></div>
+          <div class="query-row"><div class="q">"How much does a cleaning cost without insurance?"</div><div class="a"><span class="bot">Gemini</span> · 17 this week</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="industry-panel" id="panel-plumbers">
+      <div class="panel-grid">
+        <div>
+          <span class="chip maroon"><span class="dot"></span>Plumbers</span>
+          <h2 class="mt-4">Own "emergency plumber near me."</h2>
+          <p class="panel-intro">When a pipe bursts, nobody scrolls — they ask. Advocate makes sure AI has your service area, your after-hours rate, and a one-tap phone number for the panic calls.</p>
+          <div class="wins">
+            <div class="win"><div class="num">3.4×</div><div class="label">More emergency calls from AI</div></div>
+            <div class="win"><div class="num">$420</div><div class="label">Average ticket from AI referrals</div></div>
+            <div class="win"><div class="num">24/7</div><div class="label">Availability reflected in answers</div></div>
+          </div>
+        </div>
+        <div class="queries-card">
+          <h5>Real queries AI asks about plumbers</h5>
+          <div class="query-row"><div class="q">"24-hour plumber for a burst pipe south Austin"</div><div class="a"><span class="bot">ChatGPT</span> · 61 this week</div></div>
+          <div class="query-row"><div class="q">"Water heater replacement cost"</div><div class="a"><span class="bot">Perplexity</span> · 29 this week</div></div>
+          <div class="query-row"><div class="q">"Plumber who does slab leak detection"</div><div class="a"><span class="bot">Claude</span> · 18 this week</div></div>
+          <div class="query-row"><div class="q">"Licensed plumber with a flat rate"</div><div class="a"><span class="bot">Gemini</span> · 12 this week</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="industry-panel" id="panel-electricians">
+      <div class="panel-grid">
+        <div>
+          <span class="chip maroon"><span class="dot"></span>Electricians</span>
+          <h2 class="mt-4">Win the big remodel jobs.</h2>
+          <p class="panel-intro">Homeowners asking AI for electrical work want two things: a licensed pro and a straight answer on price. Advocate delivers both — and your booking link.</p>
+          <div class="wins">
+            <div class="win"><div class="num">2.7×</div><div class="label">More AI-sourced quote requests</div></div>
+            <div class="win"><div class="num">$2.1k</div><div class="label">Average job value from AI</div></div>
+            <div class="win"><div class="num">Done</div><div class="label">Setup in one afternoon</div></div>
+          </div>
+        </div>
+        <div class="queries-card">
+          <h5>Real queries AI asks about electricians</h5>
+          <div class="query-row"><div class="q">"Cost to install a whole-house generator"</div><div class="a"><span class="bot">ChatGPT</span> · 34 this week</div></div>
+          <div class="query-row"><div class="q">"Electrician for EV charger install"</div><div class="a"><span class="bot">Perplexity</span> · 27 this week</div></div>
+          <div class="query-row"><div class="q">"Licensed electrician for a panel upgrade"</div><div class="a"><span class="bot">Claude</span> · 19 this week</div></div>
+          <div class="query-row"><div class="q">"Smoke detectors keep going off — who to call?"</div><div class="a"><span class="bot">Gemini</span> · 9 this week</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="industry-panel" id="panel-realestate">
+      <div class="panel-grid">
+        <div>
+          <span class="chip maroon"><span class="dot"></span>Real estate</span>
+          <h2 class="mt-4">Be the agent AI actually picks.</h2>
+          <p class="panel-intro">"First-time buyer agent," "agent who knows the school districts," "agent who closed deals last month" — AI is asked all of it. Advocate makes sure your sales, specialties, and testimonials show up in the answer.</p>
+          <div class="wins">
+            <div class="win"><div class="num">+14</div><div class="label">Buyer inquiries per month</div></div>
+            <div class="win"><div class="num">#1</div><div class="label">In 3 of 5 local AI answers</div></div>
+            <div class="win"><div class="num">Zero</div><div class="label">Time spent on "SEO tricks"</div></div>
+          </div>
+        </div>
+        <div class="queries-card">
+          <h5>Real queries AI asks about real estate</h5>
+          <div class="query-row"><div class="q">"Best first-time buyer agent south Austin"</div><div class="a"><span class="bot">ChatGPT</span> · 26 this week</div></div>
+          <div class="query-row"><div class="q">"Agent who knows Eanes school district"</div><div class="a"><span class="bot">Perplexity</span> · 19 this week</div></div>
+          <div class="query-row"><div class="q">"Listing agent with staging services"</div><div class="a"><span class="bot">Claude</span> · 14 this week</div></div>
+          <div class="query-row"><div class="q">"Investor-friendly agent duplex market"</div><div class="a"><span class="bot">Gemini</span> · 9 this week</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="industry-panel" id="panel-florists">
+      <div class="panel-grid">
+        <div>
+          <span class="chip maroon"><span class="dot"></span>Flower shops</span>
+          <h2 class="mt-4">Catch the same-day orders.</h2>
+          <p class="panel-intro">Birthdays, anniversaries, sympathies — AI is asked "can I get flowers delivered today?" every day. Advocate makes sure the answer includes your name, your cutoff time, and a link to order.</p>
+          <div class="wins">
+            <div class="win"><div class="num">+38</div><div class="label">Same-day orders / month</div></div>
+            <div class="win"><div class="num">$68</div><div class="label">Average order from AI referrals</div></div>
+            <div class="win"><div class="num">&lt;10m</div><div class="label">To set up, zero tech skills</div></div>
+          </div>
+        </div>
+        <div class="queries-card">
+          <h5>Real queries AI asks about flower shops</h5>
+          <div class="query-row"><div class="q">"Same-day delivery flowers Austin under $75"</div><div class="a"><span class="bot">ChatGPT</span> · 41 this week</div></div>
+          <div class="query-row"><div class="q">"Funeral arrangement florist with delivery"</div><div class="a"><span class="bot">Perplexity</span> · 22 this week</div></div>
+          <div class="query-row"><div class="q">"Florist open Sunday afternoon"</div><div class="a"><span class="bot">Claude</span> · 17 this week</div></div>
+          <div class="query-row"><div class="q">"Wedding florist that does small ceremonies"</div><div class="a"><span class="bot">Gemini</span> · 11 this week</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ALL INDUSTRIES -->
+  <section class="container all-industries section">
+    <div class="reveal" style="max-width:720px;margin-bottom:40px;">
+      <span class="eyebrow">More categories</span>
+      <h2 class="mt-4">Advocate works for just about any local small business.</h2>
+      <p class="mt-4 text-lg">If your customers are searching with AI, we've probably already seen queries for your industry. Don't see yours? <a href="#" style="color:var(--maroon);text-decoration:underline;">Tell us about it</a> — we'll set you up.</p>
+    </div>
+    <div class="grid grid-4" style="gap:16px;">
+      <div class="industry-tile reveal"><div class="glyph">♨</div><h4>Restaurants &amp; cafés</h4><p>Menus, hours, and reservations in one place.</p></div>
+      <div class="industry-tile reveal"><div class="glyph">⚖</div><h4>Lawyers</h4><p>Practice areas, consults, flat fees.</p></div>
+      <div class="industry-tile reveal"><div class="glyph">◐</div><h4>Dentists</h4><p>Insurance, hours, new-patient bookings.</p></div>
+      <div class="industry-tile reveal"><div class="glyph">⚒</div><h4>Plumbers</h4><p>Emergency calls, service area, rates.</p></div>
+      <div class="industry-tile reveal"><div class="glyph">⚡</div><h4>Electricians</h4><p>Panel work, EV chargers, generators.</p></div>
+      <div class="industry-tile reveal"><div class="glyph">⌂</div><h4>Real estate</h4><p>Specialties, testimonials, areas served.</p></div>
+      <div class="industry-tile reveal"><div class="glyph">✿</div><h4>Flower shops</h4><p>Same-day delivery, events, occasions.</p></div>
+      <div class="industry-tile reveal"><div class="glyph">✂</div><h4>Hair salons</h4><p>Walk-ins, colorists, prices.</p></div>
+      <div class="industry-tile reveal"><div class="glyph">⛭</div><h4>Auto shops</h4><p>Services, pricing, appointment windows.</p></div>
+      <div class="industry-tile reveal"><div class="glyph">♡</div><h4>Medical &amp; clinics</h4><p>Specialties, accepted insurance.</p></div>
+      <div class="industry-tile reveal"><div class="glyph">☂</div><h4>Insurance agents</h4><p>Coverage types, quotes, territories.</p></div>
+      <div class="industry-tile reveal"><div class="glyph">✦</div><h4>Med spas &amp; beauty</h4><p>Services, packages, intro offers.</p></div>
+      <div class="industry-tile reveal"><div class="glyph">♛</div><h4>Wedding vendors</h4><p>Packages, availability, calendars.</p></div>
+      <div class="industry-tile reveal"><div class="glyph">☘</div><h4>Landscapers</h4><p>Service areas, seasons, job sizes.</p></div>
+      <div class="industry-tile reveal"><div class="glyph">◎</div><h4>Veterinarians</h4><p>Species, urgent care, wellness plans.</p></div>
+      <div class="industry-tile reveal"><div class="glyph">+</div><h4>And 30+ more</h4><p>If you serve customers, we can help.</p></div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="container section">
+    <div style="background:var(--ink);color:var(--paper);padding:64px;border-radius:var(--r-xl);display:grid;grid-template-columns:1fr auto;gap:32px;align-items:center;">
+      <div>
+        <h2 style="color:var(--paper);font-family:var(--serif);font-weight:400;">Not sure if Advocate is right for your kind of shop?</h2>
+        <p style="color:#d8d1c3;margin-top:12px;">Book a 15-minute call and we'll tell you honestly — with real numbers from businesses just like yours.</p>
+      </div>
+      <div class="flex gap-3">
+        <a href="/Pricing.html" class="btn btn-primary btn-lg" style="background:var(--paper);color:var(--ink);">Start free trial</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="footer-mount"></div>
+
+<script src="/assets/shared.js"></script>
+<script>
+  AdvocateChrome.renderNav('nav-mount');
+  AdvocateChrome.renderFooter('footer-mount');
+  AdvocateChrome.renderTweaks({
+    defaults: /*EDITMODE-BEGIN*/{
+      "theme": "light",
+      "density": "comfortable",
+      "tutorial": "spotlight"
+    }/*EDITMODE-END*/
+  });
+
+  // Tabs
+  document.getElementById('tabs').addEventListener('click', (e) => {
+    const btn = e.target.closest('.tab-btn');
+    if (!btn) return;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+    const tab = btn.dataset.tab;
+    document.querySelectorAll('.industry-panel').forEach(p => {
+      p.classList.toggle('active', p.id === 'panel-' + tab);
+    });
+  });
+</script>
+</body>
+</html>

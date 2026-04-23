@@ -12,3 +12,11 @@
 # their browser.
 
 /r/*  /r.html?id=:splat  200
+
+# /mcp was the old MCP-server info page; all of that content now lives on
+# /Pricing.html (the new marketing site merges the MCP pitch into pricing).
+# 301 so any external backlink (directories, launch-kit emails) keeps
+# working without preserving the old URL surface.
+/mcp       /Pricing.html   301
+/mcp/      /Pricing.html   301
+/mcp.html  /Pricing.html   301
