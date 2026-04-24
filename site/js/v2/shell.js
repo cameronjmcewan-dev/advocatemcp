@@ -84,13 +84,24 @@
         if (r.ok) me = await r.json();
       } catch (_) { /* non-fatal */ }
 
+      // Impersonation — admin-only. `?as=<slug>` on any dashboard URL
+      // scopes the page to that tenant's data via slug-passing on
+      // /api/client/* calls. Non-admin session ignores the param, so a
+      // user can't switch tenants by URL-hacking. The visible banner
+      // below prevents an admin from forgetting whose data they're in.
+      const url = new URL(location.href);
+      const asSlug  = url.searchParams.get('as');
+      const isAdmin = !!(me && me.role === 'admin');
+      const impersonating = isAdmin && asSlug ? asSlug : null;
+
       data = typeof opts.fetchReal === 'function' ? await opts.fetchReal() : {};
 
       const m = (data && (data.metrics || data)) || {};
       window.AMCP_DATA = Object.assign({}, m, {
-        email:     (me && me.email) || null,
-        user_role: (me && me.role) || null,
-        full_name: (me && me.full_name) || null,
+        email:         (me && me.email) || null,
+        user_role:     (me && me.role) || null,
+        full_name:     (me && me.full_name) || null,
+        impersonating: impersonating,
       });
     }
 
@@ -110,7 +121,41 @@
     });
 
     if (window.__ADVOCATE_PREVIEW) mountPreviewBanner();
+    if (window.AMCP_DATA && window.AMCP_DATA.impersonating) {
+      mountImpersonationBanner(window.AMCP_DATA.impersonating, window.AMCP_DATA.business_name);
+    }
     if (typeof opts.afterMount === 'function') opts.afterMount(data);
+  }
+
+  /* Admin impersonation banner — only mounts when shell.js has decided
+   * the current session is an admin viewing ?as=<slug>. Exit returns to
+   * /admin (which lists every tenant and clears the ?as= param). Not
+   * stylable from outside — the inline styles match Max's maroon
+   * palette so the banner is visually distinct from the paper/ink base. */
+  function mountImpersonationBanner(slug, name) {
+    if (document.getElementById('amcp-impersonation-banner')) return;
+    const b = document.createElement('div');
+    b.id = 'amcp-impersonation-banner';
+    b.setAttribute('role', 'status');
+    b.style.cssText = [
+      'position:fixed', 'top:0', 'left:0', 'right:0', 'z-index:100',
+      'background:#5c1a3c', 'color:#fff',
+      'font-size:13px', 'font-weight:500', 'letter-spacing:.02em',
+      'padding:8px 16px', 'text-align:center',
+      'box-shadow:0 1px 0 rgba(0,0,0,.18)',
+    ].join(';');
+    const shown = name ? `${name} (${slug})` : slug;
+    b.innerHTML = `Impersonating <strong>${escapeHtml(shown)}</strong> &nbsp;·&nbsp; <a href="/admin" style="color:#fff;text-decoration:underline;font-weight:500">Exit</a>`;
+    document.body.appendChild(b);
+    document.querySelectorAll('.app, .sidebar, .main').forEach(el => {
+      el.style.paddingTop = (parseFloat(getComputedStyle(el).paddingTop) + 32) + 'px';
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
   window.AMCP_SHELL = { boot, isPreviewHost };

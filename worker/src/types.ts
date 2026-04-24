@@ -72,6 +72,18 @@ export interface Env {
    */
   RESEND_API_KEY?: string;
 
+  // ── Admin tooling ───────────────────────────────────────────────────
+  /**
+   * Bearer token for Railway's /admin/insights/* JSON endpoints (server-
+   * side admin dashboard). Used by the Worker's /api/admin/insights-proxy
+   * route to surface cross-tenant analytics (topClusters,
+   * embeddingsHealth, overview, trends) inside the Pages-side admin
+   * console without exposing the key to the browser. Must match Railway's
+   * ADMIN_API_KEY env var. Set via:
+   *   cd worker && npx wrangler secret put ADMIN_API_KEY
+   */
+  ADMIN_API_KEY?: string;
+
   // ── Rate limiting (Session 3) ───────────────────────────────────────
   /**
    * Global per-IP rate limiter for `/mcp` proxy traffic. See

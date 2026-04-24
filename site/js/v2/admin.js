@@ -27,10 +27,20 @@
 
   async function fetchReal() {
     const af = window.AMCP && window.AMCP.authedFetch;
-    const r = await af('/api/client/all-metrics');
-    if (r.status === 403) return { __forbidden: true };
-    if (!r.ok) return { __error: `HTTP ${r.status}` };
-    return await r.json();
+    // Kick off both requests in parallel — the aggregate activity feed
+    // (scope=all) is admin-only on the worker side. If either fails we
+    // surface the partial result instead of going 100% blank.
+    const [metricsRes, feedRes] = await Promise.all([
+      af('/api/client/all-metrics').catch(() => null),
+      af('/api/client/activity-detail?scope=all').catch(() => null),
+    ]);
+    if (metricsRes && metricsRes.status === 403) return { __forbidden: true };
+    if (!metricsRes || !metricsRes.ok) return { __error: `HTTP ${metricsRes?.status ?? 'network'}` };
+    const body = await metricsRes.json();
+    if (feedRes && feedRes.ok) {
+      try { body.__feed = await feedRes.json(); } catch { /* ignore */ }
+    }
+    return body;
   }
 
   function esc(s) {
@@ -104,9 +114,30 @@
           <td class="t">${fmtCount(b.analytics?.total_queries)}</td>
           <td class="t">${fmtCount(b.analytics?.referral_clicks_last_30_days)}</td>
           <td style="text-align:right">
-            <a class="btn btn-ghost btn-sm" href="/app.html?slug=${encodeURIComponent(b.slug)}" target="_blank" rel="noopener">Impersonate →</a>
+            <a class="btn btn-ghost btn-sm" href="/app.html?as=${encodeURIComponent(b.slug)}" target="_blank" rel="noopener">Impersonate →</a>
           </td>
         </tr>`).join('');
+
+    // ── Cross-tenant activity feed (scope=all) ──────────────────────
+    const feed = data?.__feed?.feed || [];
+    const feedRows = feed.length === 0
+      ? `<div style="padding:14px 0;color:var(--muted);font-size:13.5px">No recent cross-tenant events.</div>`
+      : feed.slice(0, 12).map((ev) => {
+          const t  = ev.timestamp ? new Date(ev.timestamp).toLocaleString() : '';
+          const ts = t.length > 18 ? t.slice(0, 18) : t;
+          const biz = ev.business_name || ev.business_slug || '';
+          let line = '';
+          if (ev.type === 'reservation') {
+            line = `<strong>${esc(biz)}</strong> reservation <code>${esc(ev.status)}</code>`;
+          } else if (ev.type === 'handoff') {
+            line = `<strong>${esc(biz)}</strong> handoff <code>${esc(ev.mode)}</code>${ev.delivered_via ? ` via ${esc(ev.delivered_via)}` : ''}`;
+          } else if (ev.type === 'agent_call') {
+            line = `<strong>${esc(biz)}</strong> <code>${esc(ev.tool_called)}</code> · ${esc(ev.agent_id || 'anon')} · ${esc(ev.outcome_signal || '–')}`;
+          } else {
+            line = `<strong>${esc(biz)}</strong> ${esc(ev.type || '')}`;
+          }
+          return `<div class="feed-row"><span class="t">${esc(ts)}</span><span class="m">${line}</span></div>`;
+        }).join('');
 
     return `
       <div class="plain-banner">
@@ -127,13 +158,28 @@
           ${crawlerBars}
         </div>
         <div class="card-dash">
-          <div class="card-head"><div><h3>Quick ops links</h3><div class="sub">Internal admin surfaces</div></div></div>
+          <div class="card-head"><div><h3>Live activity · all tenants</h3><div class="sub">Reservations, handoffs, agent calls — most recent first</div></div></div>
+          <div class="feed-list">${feedRows}</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="card-dash">
+          <div class="card-head"><div><h3>Admin shortcuts</h3><div class="sub">Go deeper</div></div></div>
           <ul class="admin-links">
-            <li><a href="https://dash.cloudflare.com" target="_blank" rel="noopener">Cloudflare dashboard</a> <span class="hint">Pages, Workers, D1</span></li>
+            <li><a href="/admin/tenants.html">Tenant list + filter</a> <span class="hint">All tenants, sortable, drill through to impersonate</span></li>
+            <li><a href="/admin/queries.html">Cross-tenant query clusters</a> <span class="hint">Top topics across every tenant (data-product preview)</span></li>
+            <li><a href="#" onclick="event.preventDefault(); window.AMCP_CMDK && window.AMCP_CMDK.open();">Command palette (⌘K)</a> <span class="hint">Jump to any tenant by name</span></li>
+          </ul>
+        </div>
+        <div class="card-dash">
+          <div class="card-head"><div><h3>External ops</h3><div class="sub">Services we depend on</div></div></div>
+          <ul class="admin-links">
+            <li><a href="https://dash.cloudflare.com" target="_blank" rel="noopener">Cloudflare</a> <span class="hint">Pages, Workers, D1</span></li>
             <li><a href="https://railway.app" target="_blank" rel="noopener">Railway</a> <span class="hint">Server logs + redeploys</span></li>
-            <li><a href="https://api.stripe.com" target="_blank" rel="noopener">Stripe</a> <span class="hint">Checkout + subscriptions</span></li>
-            <li><a href="https://api.advocatemcp.com/.well-known/mcp.json" target="_blank" rel="noopener">/.well-known/mcp.json</a> <span class="hint">Live manifest</span></li>
-            <li><a href="/dashboard.html?ui=legacy" target="_blank" rel="noopener">Legacy dashboard</a> <span class="hint">Full admin tools (/admin endpoints)</span></li>
+            <li><a href="https://dashboard.stripe.com" target="_blank" rel="noopener">Stripe</a> <span class="hint">Checkout + subscriptions</span></li>
+            <li><a href="https://resend.com/emails" target="_blank" rel="noopener">Resend</a> <span class="hint">Email deliverability</span></li>
+            <li><a href="https://api.advocatemcp.com/.well-known/mcp.json" target="_blank" rel="noopener">/.well-known/mcp.json</a> <span class="hint">Live MCP manifest</span></li>
           </ul>
         </div>
       </div>
@@ -154,6 +200,11 @@
         .admin-links li:last-child { border-bottom: 0; }
         .admin-links a { color: var(--maroon); font-weight: 500; font-size: 14px; }
         .admin-links .hint { font-size: 12px; color: var(--muted); }
+        .feed-list { display: flex; flex-direction: column; }
+        .feed-row { display: grid; grid-template-columns: 120px 1fr; gap: 10px; padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 13px; }
+        .feed-row:last-child { border-bottom: 0; }
+        .feed-row .t { color: var(--muted); font-family: var(--mono); font-size: 11.5px; white-space: nowrap; }
+        .feed-row .m code { background: var(--paper-2); padding: 1px 5px; border-radius: 3px; font-size: 11.5px; }
       </style>
     `;
   }

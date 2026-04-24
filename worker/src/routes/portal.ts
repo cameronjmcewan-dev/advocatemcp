@@ -42,6 +42,10 @@ import {
 } from "./stripe";
 import { handleSaveDraft, handleLoadDraft } from "./onboardDraft";
 import { handleContact, handleContactPreflight } from "./contact";
+import {
+  handleAdminInsightsProxy,
+  handleAdminInsightsProxyPreflight,
+} from "./adminInsightsProxy";
 
 // ── Public route dispatcher ────────────────────────────────────────────────
 // Returns a Response if this is a portal path, or null to fall through to
@@ -142,6 +146,13 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   // Public marketing contact form → Resend → hello@advocatemcp.com
   if (pathname === "/api/contact"           && method === "OPTIONS") return handleContactPreflight(request);
   if (pathname === "/api/contact"           && method === "POST")    return handleContact(request, env);
+
+  // Admin insights proxy — bridges Pages-side admin console to Railway's
+  // Bearer-auth'd /admin/insights/* endpoints (ADMIN_API_KEY injected
+  // server-side). Admin-role gate inside handler; allowlisted subpaths only.
+  const adminInsightsMatch = pathname.match(/^\/api\/admin\/insights-proxy\/([a-z0-9-]+)$/);
+  if (adminInsightsMatch && method === "OPTIONS") return handleAdminInsightsProxyPreflight(request);
+  if (adminInsightsMatch && method === "GET")     return handleAdminInsightsProxy(request, env, adminInsightsMatch[1]);
 
   // GET /api/onboard/session/:session_id (CORS; public for skipDns tenants)
   const sessionMatch = pathname.match(/^\/api\/onboard\/session\/([^/]+)$/);

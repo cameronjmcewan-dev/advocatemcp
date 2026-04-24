@@ -7,10 +7,8 @@
 <meta name="theme-color" content="#fbf9f5" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#141210" media="(prefers-color-scheme: dark)">
 <meta name="robots" content="noindex, nofollow">
-<title>Admin — Advocate</title>
+<title>Cross-tenant queries — Advocate admin</title>
 <link rel="icon" type="image/png" sizes="32x32"  href="/favicon-32.png">
-<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
-<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://api.fontshare.com">
@@ -30,18 +28,16 @@
 <script src="/js/dashboard-auth.js"></script>
 <script src="/js/v2/shell.js"></script>
 <script src="/js/v2/commandPalette.js"></script>
-<script src="/js/v2/admin.js"></script>
+<script src="/js/v2/adminQueries.js"></script>
 <script>
-/* Admin page uses previewPlan=admin so the sidebar role + any
-   downstream plan checks render correctly in preview. */
 window.AMCP_SHELL.boot({
-  activeId:    'admin-overview',
-  crumb:       'Internal · Mission Control',
-  title:       'Mission Control',
+  activeId:    'admin-queries',
+  crumb:       'Internal · Queries',
+  title:       'Cross-tenant queries',
   previewPlan: 'admin',
-  demo:        window.AMCP_ADMIN.demo,
-  fetchReal:   window.AMCP_ADMIN.fetch,
-  render:      window.AMCP_ADMIN.render,
+  demo:        window.AMCP_ADMIN_QUERIES.demo,
+  fetchReal:   window.AMCP_ADMIN_QUERIES.fetch,
+  render:      window.AMCP_ADMIN_QUERIES.render,
 });
 </script>
 </body>

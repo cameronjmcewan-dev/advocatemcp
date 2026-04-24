@@ -31,6 +31,16 @@
     { id: 'faqs',        href: '/FAQs.html',             g: '?', label: 'FAQs' },
   ];
 
+  // Admin-only nav — rendered only when window.AMCP_DATA.user_role === 'admin'.
+  // Order follows the "operator console" pattern: Mission Control first (single-
+  // page overview), then drill-downs (tenant list, cross-tenant queries). Paths
+  // are /admin/* so they feel like one surface, not scattered files.
+  const NAV_ADMIN = [
+    { id: 'admin-overview',  href: '/admin',               g: '◎', label: 'Mission Control' },
+    { id: 'admin-tenants',   href: '/admin/tenants.html',  g: '◉', label: 'Tenants' },
+    { id: 'admin-queries',   href: '/admin/queries.html',  g: '◔', label: 'Queries' },
+  ];
+
   /* Reads the current tenant from window.AMCP_DATA (populated after /api/
      client/me + /api/client/metrics resolve) and falls back to generic
      placeholders if the boot code hasn't finished yet. Never returns the
@@ -61,6 +71,22 @@
     return `<li><a href="${item.href}"${cls}><span class="g">${item.g}</span> ${item.label}${badge}</a></li>`;
   }
 
+  /* Admin-only section. Rendered ONLY when the current session is an
+     admin — gated on window.AMCP_DATA.user_role (populated by shell.js
+     from the /api/client/me response). For regular users / preview mode
+     this returns an empty string so the Main / Account sections stay
+     flush against the business block. */
+  function renderAdminSection(activeId) {
+    const d = window.AMCP_DATA || {};
+    if (d.user_role !== 'admin') return '';
+    return `
+      <div>
+        <div class="sb-section" style="color:var(--maroon);font-weight:600">Admin</div>
+        <ul class="sb-nav">${NAV_ADMIN.map(i => navItem(i, activeId)).join('')}</ul>
+      </div>
+    `;
+  }
+
   function renderSidebar(activeId) {
     const biz = currentBiz();
     const bizSub = biz.location ? `${escHtml(biz.location)} · ${escHtml(biz.plan)}` : escHtml(biz.plan);
@@ -78,6 +104,7 @@
         </div>
         <span class="caret">⌄</span>
       </div>
+      ${renderAdminSection(activeId)}
       <div>
         <div class="sb-section">Main</div>
         <ul class="sb-nav">${NAV_MAIN.map(i => navItem(i, activeId)).join('')}</ul>
@@ -178,7 +205,26 @@
 
     wireFab();
     injectSpeculationRules();
+    loadCommandPaletteIfAdmin();
   };
+
+  /* Load /js/v2/commandPalette.js on-demand when the current session is
+     an admin. Avoids making every section page list the script tag
+     individually — admins get ⌘K everywhere, regular users don't fetch
+     the script at all.
+     The palette module is self-contained (IIFE + global Cmd+K listener)
+     so once it lands, it just works. Guard against double-load via the
+     script id check. */
+  function loadCommandPaletteIfAdmin() {
+    const d = window.AMCP_DATA || {};
+    if (d.user_role !== 'admin') return;
+    if (document.getElementById('amcp-cmdk-script')) return;
+    const s = document.createElement('script');
+    s.id = 'amcp-cmdk-script';
+    s.src = '/js/v2/commandPalette.js';
+    s.async = true;
+    document.head.appendChild(s);
+  }
 
   window.AdvocateChrome.getContentRoot = () => document.getElementById('page-content');
 
