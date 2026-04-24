@@ -98,7 +98,16 @@ describe("migrations runner", () => {
         case_stories_json TEXT,
         lead_routing_json TEXT
       );
-      CREATE TABLE queries (id INTEGER PRIMARY KEY, intent TEXT);
+      CREATE TABLE queries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_slug TEXT NOT NULL,
+        crawler_agent TEXT,
+        query_text TEXT NOT NULL,
+        response_text TEXT NOT NULL,
+        referral_clicked INTEGER DEFAULT 0,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        intent TEXT
+      );
       CREATE TABLE click_events (
         id INTEGER PRIMARY KEY,
         business_slug TEXT,
@@ -189,7 +198,16 @@ describe("migration 002 partial-application safety", () => {
         case_stories_json TEXT,
         lead_routing_json TEXT
       );
-      CREATE TABLE queries (id INTEGER PRIMARY KEY, intent TEXT);
+      CREATE TABLE queries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        business_slug TEXT NOT NULL,
+        crawler_agent TEXT,
+        query_text TEXT NOT NULL,
+        response_text TEXT NOT NULL,
+        referral_clicked INTEGER DEFAULT 0,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        intent TEXT
+      );
       CREATE TABLE click_events (
         id INTEGER PRIMARY KEY,
         business_slug TEXT,

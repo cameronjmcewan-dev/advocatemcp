@@ -4,6 +4,7 @@ import { adminDigestRouter } from "./digest.js";
 import { tenantsRouter } from "./tenants.js";
 import { adminAuditsRouter } from "./audits.js";
 import { adminAuditBatchRouter } from "./auditBatch.js";
+import { adminInsightsRouter } from "./insights.js";
 
 /**
  * Bearer-token auth gate for /admin/* — keyed on ADMIN_API_KEY env var.
@@ -26,6 +27,15 @@ function requireAdmin(req: Request, res: Response, next: NextFunction): void {
 }
 
 export const adminRouter = Router();
+// Insights must be registered BEFORE the Bearer-only requireAdmin mounts.
+// Express evaluates router middleware in registration order — a request
+// to /admin/insights passes through every matching /admin mount. If
+// requireAdmin ran first and rejected Basic-auth'd browser requests, my
+// handler would never see them. Mounting insights first (no prefix, no
+// outer middleware) lets /admin/insights hit its own handler which owns
+// both Bearer and Basic auth. Everything else continues through the
+// Bearer-only path below unchanged.
+adminRouter.use(adminInsightsRouter);
 adminRouter.use("/admin", requireAdmin, agentsRouter);
 adminRouter.use("/admin", requireAdmin, adminDigestRouter);
 adminRouter.use("/admin", requireAdmin, tenantsRouter);

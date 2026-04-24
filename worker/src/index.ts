@@ -583,6 +583,17 @@ export default {
       `What services do they offer, what are their prices, how can I contact them, ` +
       `and where should I send the user to learn more or get started?`;
 
+    // Layer 1 instrumentation (migration 020): forward CF edge geo so the
+    // server can stamp queries.geo_country / region / city. request.cf is
+    // populated by Cloudflare on every request — free to forward, free to
+    // ignore. If request.cf is undefined (local dev, unit test), the
+    // headers are simply omitted.
+    const cf = (request as unknown as { cf?: { country?: string; region?: string; regionCode?: string; city?: string } }).cf;
+    const geoHeaders: Record<string, string> = {};
+    if (cf?.country)               geoHeaders["X-Geo-Country"] = cf.country;
+    if (cf?.regionCode ?? cf?.region) geoHeaders["X-Geo-Region"] = (cf.regionCode ?? cf.region)!;
+    if (cf?.city)                  geoHeaders["X-Geo-City"]    = cf.city;
+
     let agentResponse: Response;
     try {
       agentResponse = await fetch(agentUrl, {
@@ -590,6 +601,7 @@ export default {
         headers: {
           "Content-Type": "application/json",
           ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}),
+          ...geoHeaders,
         },
         body: JSON.stringify({ query, crawler: botType ?? "" }),
       });
