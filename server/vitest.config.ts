@@ -10,13 +10,5 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.ts"],
     exclude: ["dist/**", "node_modules/**"],
-    // voyageai ships an ESM entrypoint with unresolved directory imports
-    // that Node's strict resolver rejects. Inlining forces Vite to
-    // transform the package so its CJS interop shim handles the load.
-    server: {
-      deps: {
-        inline: ["voyageai"],
-      },
-    },
   },
 });

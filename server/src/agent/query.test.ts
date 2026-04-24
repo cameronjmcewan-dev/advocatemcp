@@ -22,16 +22,6 @@ vi.mock("@anthropic-ai/sdk", () => {
   };
 });
 
-// Stub voyageai so embeddings.ts' top-level import doesn't pull in the
-// real ESM bundle (which breaks under Vitest's resolver). The embedding
-// persister is further disabled via DISABLE_EMBEDDINGS above, so this
-// mock just needs to resolve — no method bodies required for these tests.
-vi.mock("voyageai", () => ({
-  VoyageAIClient: vi.fn().mockImplementation(function (this: any) {
-    this.embed = vi.fn();
-  }),
-}));
-
 // Capture INSERT args so tests can assert agent_id + stage are persisted.
 const { runMock, prepareMock } = vi.hoisted(() => ({
   runMock: vi.fn(() => ({ lastInsertRowid: 1 })),
