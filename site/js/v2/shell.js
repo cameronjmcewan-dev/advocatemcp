@@ -92,36 +92,91 @@
         window.AMCP_DATA.impersonating = previewAsSlug0;
       }
     } else {
+      // ── Progressive-mount flow ─────────────────────────────────────
+      // 1. requireAuth runs first (fast, just a JWT verify)
+      // 2. /api/client/me + opts.fetchReal() fire in parallel (not
+      //    sequential) — halves the round-trip latency on cold nav.
+      // 3. Chrome mounts as soon as /me resolves, with a loading card
+      //    in the main area. This eliminates the "full-screen black
+      //    Loading…" that used to cover the whole viewport until all
+      //    data was in.
+      // 4. When opts.fetchReal() resolves, we swap the loading card
+      //    for the real opts.render(data) output and fire afterMount.
       const authed = await window.AMCP.requireAuth();
       if (!authed) return;  // AMCP.requireAuth already redirected
 
-      let me = null;
-      try {
-        const r = await window.AMCP.authedFetch('/api/client/me');
-        if (r.ok) me = await r.json();
-      } catch (_) { /* non-fatal */ }
+      // Fire both in parallel. Catch per-promise so one slow/failed
+      // request doesn't stall the other.
+      const mePromise = window.AMCP.authedFetch('/api/client/me')
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null);
+      const dataPromise = typeof opts.fetchReal === 'function'
+        ? opts.fetchReal().catch((err) => ({ __error: String(err && err.message || err) }))
+        : Promise.resolve({});
 
-      // Impersonation — admin-only. `?as=<slug>` on any dashboard URL
-      // scopes the page to that tenant's data via slug-passing on
-      // /api/client/* calls. Non-admin session ignores the param, so a
-      // user can't switch tenants by URL-hacking. The visible banner
-      // below prevents an admin from forgetting whose data they're in.
+      const me = await mePromise;
+
+      // Populate AMCP_DATA with IDENTITY-only info now so chrome
+      // renders correctly (admin sidebar section + palette gating).
       const url = new URL(location.href);
       const asSlug  = url.searchParams.get('as');
       const isAdmin = !!(me && me.role === 'admin');
       const impersonating = isAdmin && asSlug ? asSlug : null;
 
-      data = typeof opts.fetchReal === 'function' ? await opts.fetchReal() : {};
-
-      const m = (data && (data.metrics || data)) || {};
-      window.AMCP_DATA = Object.assign({}, m, {
+      window.AMCP_DATA = {
         email:         (me && me.email) || null,
         user_role:     (me && me.role) || null,
         full_name:     (me && me.full_name) || null,
         impersonating: impersonating,
+      };
+
+      // Mount chrome with a loading card BEFORE data arrives. The
+      // sidebar + topbar are visible instantly; only the main content
+      // area shows the spinner.
+      const splashEarly = document.getElementById('boot-splash');
+      if (splashEarly) splashEarly.remove();
+
+      const earlyTitle = typeof opts.title === 'function' ? opts.title({}) : (opts.title || 'Dashboard');
+      window.AdvocateChrome.mount({
+        activeId:      opts.activeId,
+        crumb:         opts.crumb || 'Dashboard',
+        title:         earlyTitle,
+        showDateRange: opts.showDateRange === true,
+        showShare:     opts.showShare === true,
+        showInvite:    opts.showInvite === true,
+        mainContent:   renderLoadingCard(),
       });
+      if (impersonating) {
+        mountImpersonationBanner(impersonating, null);
+      }
+
+      // Wait for data, then merge into AMCP_DATA and swap main content.
+      data = await dataPromise;
+      const m = (data && (data.metrics || data)) || {};
+      Object.assign(window.AMCP_DATA, m);
+
+      // Re-render title if it depends on data
+      if (typeof opts.title === 'function') {
+        const topTitle = document.querySelector('.topbar-title');
+        if (topTitle) topTitle.textContent = opts.title(data);
+      }
+
+      // Swap main content
+      const root = document.getElementById('page-content');
+      if (root) root.innerHTML = opts.render(data);
+
+      // If the banner wasn't mountable earlier because we didn't know
+      // the business name yet, try again now that metrics are in.
+      if (window.AMCP_DATA.impersonating && !document.getElementById('amcp-impersonation-banner')) {
+        mountImpersonationBanner(window.AMCP_DATA.impersonating, window.AMCP_DATA.business_name);
+      }
+
+      if (typeof opts.afterMount === 'function') opts.afterMount(data);
+      return;
     }
 
+    // ── Preview-mode flow (unchanged) — preview demo data is sync
+    //    so the old "mount once with full data" path is fine here.
     const splash = document.getElementById('boot-splash');
     if (splash) splash.remove();
 
@@ -142,6 +197,24 @@
       mountImpersonationBanner(window.AMCP_DATA.impersonating, window.AMCP_DATA.business_name);
     }
     if (typeof opts.afterMount === 'function') opts.afterMount(data);
+  }
+
+  /* Skeleton card shown in the main content area while fetchReal() is
+     in flight. Uses paper/ink tokens so it matches the rest of the
+     chrome — no black flash, no jarring "Loading…" centered on void.
+     Pure CSS spinner so we don't need to add an external animation. */
+  function renderLoadingCard() {
+    return `
+      <div class="row single">
+        <div class="card-dash" style="padding:48px;text-align:center">
+          <div style="display:inline-block;width:22px;height:22px;border:2px solid var(--line);border-top-color:var(--maroon);border-radius:50%;animation:amcp-spin .8s linear infinite;margin-bottom:12px"></div>
+          <div style="font-size:13.5px;color:var(--muted)">Loading your data&hellip;</div>
+        </div>
+      </div>
+      <style>
+        @keyframes amcp-spin { to { transform: rotate(360deg); } }
+      </style>
+    `;
   }
 
   /* Admin impersonation banner — only mounts when shell.js has decided

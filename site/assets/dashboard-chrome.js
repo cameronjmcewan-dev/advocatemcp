@@ -258,19 +258,24 @@
       if (!HTMLScriptElement.supports || !HTMLScriptElement.supports('speculationrules')) return;
     } catch { return; }
 
-    const hrefs = [
+    const isAdmin = (window.AMCP_DATA || {}).user_role === 'admin';
+    // Regular tenant pages: moderate eagerness (hover-triggered) — 7+ pages,
+    // prerendering them all on page load would waste bandwidth.
+    // Admin pages: only 3 URLs, and admins almost certainly click between
+    // them repeatedly, so use eager eagerness to prerender on page load.
+    const tenantHrefs = [
       ...NAV_MAIN.map(i => i.href),
       ...NAV_ACCOUNT.map(i => i.href),
     ];
-    const rules = {
-      prerender: [
-        {
-          source: 'list',
-          urls: hrefs,
-          eagerness: 'moderate',
-        },
-      ],
-    };
+    const adminHrefs = isAdmin ? NAV_ADMIN.map(i => i.href) : [];
+
+    const prerender = [
+      { source: 'list', urls: tenantHrefs, eagerness: 'moderate' },
+    ];
+    if (adminHrefs.length > 0) {
+      prerender.push({ source: 'list', urls: adminHrefs, eagerness: 'eager' });
+    }
+    const rules = { prerender };
     const s = document.createElement('script');
     s.id = 'amcp-speculation-rules';
     s.type = 'speculationrules';
