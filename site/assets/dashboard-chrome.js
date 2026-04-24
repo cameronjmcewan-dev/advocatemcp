@@ -77,9 +77,11 @@
   }
 
   function navItem(item, activeId) {
+    // data-nav-id is the hook the SPA router uses to update the active
+    // pill without re-rendering the whole sidebar on every navigation.
     const cls = item.id === activeId ? ' class="active"' : '';
     const badge = item.badge ? ` <span class="badge">${item.badge}</span>` : '';
-    return `<li><a href="${item.href}"${cls}><span class="g">${item.g}</span> ${item.label}${badge}</a></li>`;
+    return `<li><a href="${item.href}" data-nav-id="${item.id}"${cls}><span class="g">${item.g}</span> ${item.label}${badge}</a></li>`;
   }
 
   /* Admin-only section. Rendered ONLY when the current session is an
@@ -134,11 +136,14 @@
     const dateBtn = showDateRange ? `<button class="date-range">Last 7 days ⌄</button>` : '';
     const shareBtn = showShare ? `<button class="btn btn-ghost btn-sm">Share</button>` : '';
     const inviteBtn = showInvite ? `<button class="btn btn-primary btn-sm">Invite teammate</button>` : '';
+    // Extra classes (topbar-crumb / topbar-title) are selectors the
+    // SPA router uses to update text content on navigation without
+    // re-rendering the whole topbar.
     return `
     <div class="topbar">
       <div class="tb-left">
-        <div class="crumb">${crumb}</div>
-        <h1>${title}</h1>
+        <div class="crumb topbar-crumb">${crumb}</div>
+        <h1 class="topbar-title">${title}</h1>
       </div>
       <div class="tb-right">${dateBtn}${shareBtn}${inviteBtn}</div>
     </div>`;
@@ -217,6 +222,30 @@
     wireFab();
     injectSpeculationRules();
     loadCommandPaletteIfAdmin();
+    loadRouter();
+  };
+
+  /* Auto-load the client-side SPA router on every v2 page so sidebar
+     clicks swap main content in-place instead of full-reloading. Not
+     gated on admin — every logged-in user gets seamless nav. */
+  function loadRouter() {
+    if (window.AMCP_ROUTER) return;
+    if (document.getElementById('amcp-router-script')) return;
+    const s = document.createElement('script');
+    s.id = 'amcp-router-script';
+    s.src = '/js/v2/router.js';
+    s.async = true;
+    document.head.appendChild(s);
+  }
+
+  /* Let the SPA router re-run speculation rules after a client-side
+     navigation so the browser prerenders the siblings of the new
+     page. Replaces the current <script type=speculationrules> block
+     wholesale — browsers treat re-inserted rules idempotently. */
+  window.AdvocateChrome._reapplySpeculationRules = function () {
+    const existing = document.getElementById('amcp-speculation-rules');
+    if (existing) existing.remove();
+    injectSpeculationRules();
   };
 
   /* Load /js/v2/commandPalette.js on-demand when the current session is

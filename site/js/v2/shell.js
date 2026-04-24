@@ -217,6 +217,12 @@
     `;
   }
 
+  // Re-exported on window so the SPA router can mount the banner
+  // without re-importing shell.js internals. Same signature.
+  window.AMCP_SHELL_MOUNT_BANNER = function (slug, name) {
+    mountImpersonationBanner(slug, name);
+  };
+
   /* Admin impersonation banner — only mounts when shell.js has decided
    * the current session is an admin viewing ?as=<slug>. Exit returns to
    * /admin (which lists every tenant and clears the ?as= param). Not
