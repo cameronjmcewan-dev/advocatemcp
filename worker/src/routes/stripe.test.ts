@@ -1105,3 +1105,68 @@ describe("registerBusinessOnRailway — Task 6: Railway forward shape", () => {
     expect(Object.prototype.hasOwnProperty.call(body, "plan")).toBe(false);
   });
 });
+
+describe("CORS origin allowlist (handlePublicOnboardPreflight)", () => {
+  function preflightRequest(origin: string): Request {
+    return new Request("https://customers.advocatemcp.com/api/onboard/public", {
+      method:  "OPTIONS",
+      headers: { "Origin": origin },
+    });
+  }
+
+  it("echoes the production origin", async () => {
+    const { handlePublicOnboardPreflight } = await import("./stripe");
+    const res = handlePublicOnboardPreflight(preflightRequest("https://advocatemcp.com"));
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("https://advocatemcp.com");
+  });
+
+  it("echoes the www production origin", async () => {
+    const { handlePublicOnboardPreflight } = await import("./stripe");
+    const res = handlePublicOnboardPreflight(preflightRequest("https://www.advocatemcp.com"));
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("https://www.advocatemcp.com");
+  });
+
+  it("echoes a Cloudflare Pages preview origin (branch alias)", async () => {
+    const { handlePublicOnboardPreflight } = await import("./stripe");
+    const res = handlePublicOnboardPreflight(
+      preflightRequest("https://design-preview.advocatemcp-site.pages.dev"),
+    );
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe(
+      "https://design-preview.advocatemcp-site.pages.dev",
+    );
+  });
+
+  it("echoes a Cloudflare Pages preview origin (commit-SHA deploy)", async () => {
+    const { handlePublicOnboardPreflight } = await import("./stripe");
+    const res = handlePublicOnboardPreflight(
+      preflightRequest("https://673449c4.advocatemcp-site.pages.dev"),
+    );
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe(
+      "https://673449c4.advocatemcp-site.pages.dev",
+    );
+  });
+
+  it("falls back to the default origin on an unknown host", async () => {
+    const { handlePublicOnboardPreflight } = await import("./stripe");
+    const res = handlePublicOnboardPreflight(preflightRequest("https://evil.example.com"));
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("https://advocatemcp.com");
+  });
+
+  it("rejects a near-miss lookalike domain (not a real Pages subdomain)", async () => {
+    const { handlePublicOnboardPreflight } = await import("./stripe");
+    // Attacker-controlled host that looks like our Pages project but on a
+    // different suffix. Must NOT be allowlisted.
+    const res = handlePublicOnboardPreflight(
+      preflightRequest("https://advocatemcp-site.pages.dev.evil.com"),
+    );
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("https://advocatemcp.com");
+  });
+
+  it("rejects plain http on a preview hostname", async () => {
+    const { handlePublicOnboardPreflight } = await import("./stripe");
+    const res = handlePublicOnboardPreflight(
+      preflightRequest("http://design-preview.advocatemcp-site.pages.dev"),
+    );
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("https://advocatemcp.com");
+  });
+});

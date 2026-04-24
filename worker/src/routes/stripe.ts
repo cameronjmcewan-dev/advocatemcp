@@ -36,17 +36,33 @@ import {
 } from "../portalDb";
 
 // ── CORS helper for the public wizard endpoint ───────────────────────────────
-// Only the marketing site is trusted. Everything else gets the default origin
-// so stray `fetch` from unknown origins cannot read the response.
+// Only the marketing site + Cloudflare Pages preview deploys are trusted.
+// Every Pages preview gets a unique subdomain on *.advocatemcp-site.pages.dev
+// (both commit-SHA deploys and branch aliases like design-preview.*) — so we
+// allowlist the eTLD+1 suffix rather than enumerating every ephemeral deploy.
+// Everything else gets the default origin so stray `fetch` from unknown
+// origins cannot read the response.
 
 const ALLOWED_ORIGINS = new Set<string>([
   "https://advocatemcp.com",
   "https://www.advocatemcp.com",
 ]);
 
+const PREVIEW_HOST_SUFFIX = ".advocatemcp-site.pages.dev";
+
+function isAllowedOrigin(origin: string): boolean {
+  if (ALLOWED_ORIGINS.has(origin)) return true;
+  try {
+    const u = new URL(origin);
+    return u.protocol === "https:" && u.hostname.endsWith(PREVIEW_HOST_SUFFIX);
+  } catch {
+    return false;
+  }
+}
+
 function corsHeaders(request: Request): Record<string, string> {
   const origin = request.headers.get("Origin") ?? "";
-  const allowed = ALLOWED_ORIGINS.has(origin) ? origin : "https://advocatemcp.com";
+  const allowed = isAllowedOrigin(origin) ? origin : "https://advocatemcp.com";
   return {
     "Access-Control-Allow-Origin": allowed,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
