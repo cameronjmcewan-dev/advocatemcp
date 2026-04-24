@@ -6,6 +6,8 @@ import {
   topQueries,
   profileGaps,
   trendsByIndustry,
+  topClusters,
+  embeddingsHealth,
 } from "./insights.js";
 
 /* Seed helper — inserts a handful of businesses and queries at varied
@@ -178,6 +180,76 @@ describe("insights SQL helpers", () => {
       const rowsAll = trendsByIndustry(db, { days: 60 });
       const totalIn60 = rowsAll.reduce((s, r) => s + r.query_count, 0);
       expect(totalIn14).toBeLessThan(totalIn60);
+    });
+  });
+
+  describe("topClusters", () => {
+    it("returns clusters sorted by query count with representative queries", () => {
+      const c = new Float32Array(512).fill(0);
+      c[0] = 1;
+      const centroid = Buffer.from(c.buffer);
+      db.prepare(
+        `INSERT INTO query_clusters (id, label, centroid, size, representative_query_ids)
+         VALUES (1, 'dental pricing', ?, 5, '[1,2,3]')`
+      ).run(centroid);
+      db.prepare(
+        `INSERT INTO query_clusters (id, label, centroid, size, representative_query_ids)
+         VALUES (2, 'hours query', ?, 2, '[4]')`
+      ).run(centroid);
+      // Seed 5 dental queries, 2 hours queries, all last-30d
+      for (let i = 0; i < 5; i++) {
+        db.prepare(
+          `INSERT INTO queries (business_slug, query_text, response_text, cluster_id, timestamp)
+           VALUES ('dental1', 'q' || ?, 'r', 1, datetime('now'))`
+        ).run(i);
+      }
+      for (let i = 0; i < 2; i++) {
+        db.prepare(
+          `INSERT INTO queries (business_slug, query_text, response_text, cluster_id, timestamp)
+           VALUES ('dental1', 'h' || ?, 'r', 2, datetime('now'))`
+        ).run(i);
+      }
+      const rows = topClusters(db, { limit: 10, days: 30 });
+      expect(rows.length).toBe(2);
+      expect(rows[0].label).toBe("dental pricing");
+      expect(rows[0].count).toBe(5);
+      expect(rows[0].representative_query_ids).toEqual([1, 2, 3]);
+    });
+
+    it("ignores archived clusters", () => {
+      const c = new Float32Array(512).fill(0);
+      const centroid = Buffer.from(c.buffer);
+      db.prepare(
+        `INSERT INTO query_clusters (id, label, centroid, size, archived_at)
+         VALUES (1, 'archived', ?, 5, datetime('now'))`
+      ).run(centroid);
+      db.prepare(
+        `INSERT INTO queries (business_slug, query_text, response_text, cluster_id, timestamp)
+         VALUES ('dental1', 'q', 'r', 1, datetime('now'))`
+      ).run();
+      const rows = topClusters(db, { limit: 10, days: 30 });
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  describe("embeddingsHealth", () => {
+    it("reports coverage % for last 7d and 30d", () => {
+      // Start from a clean queries table so the coverage ratio is bounded
+      // by exactly the two rows we insert below (1 embedded, 1 not).
+      db.prepare(`DELETE FROM queries`).run();
+      db.prepare(
+        `INSERT INTO queries (business_slug, query_text, response_text, timestamp)
+         VALUES ('dental1', 'q', 'r', datetime('now'))`
+      ).run();
+      const embed = Buffer.from(new Float32Array(512).buffer);
+      db.prepare(
+        `INSERT INTO queries (business_slug, query_text, response_text, query_embedding, timestamp)
+         VALUES ('dental1', 'q', 'r', ?, datetime('now'))`
+      ).run(embed);
+      const h = embeddingsHealth(db);
+      expect(h.coverage_last_7d_pct).toBeCloseTo(0.5, 2);
+      expect(h.total_clusters_active).toBe(0);
+      expect(h.backfill_remaining).toBeGreaterThanOrEqual(1);
     });
   });
 });

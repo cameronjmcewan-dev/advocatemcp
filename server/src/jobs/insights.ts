@@ -292,3 +292,133 @@ export function trendsByIndustry(db: Database, opts?: { days?: number }): Indust
     ORDER BY day DESC, query_count DESC`
   ).all(days) as IndustryTrend[];
 }
+
+// ── Top clusters (replaces topQueries for dashboard) ────────────────────
+
+export interface TopCluster {
+  cluster_id: number;
+  label: string;
+  count: number;
+  unique_tenants: number;
+  last_seen: string;
+  representative_query_ids: number[];
+  representative_queries: string[];
+}
+
+export function topClusters(
+  db: Database,
+  opts?: { limit?: number; days?: number },
+): TopCluster[] {
+  const limit = opts?.limit ?? 25;
+  const days  = opts?.days  ?? 30;
+
+  const rows = db.prepare(
+    `SELECT
+       c.id                          AS cluster_id,
+       c.label                       AS label,
+       c.representative_query_ids    AS rep_ids_json,
+       COUNT(q.id)                   AS count,
+       COUNT(DISTINCT q.business_slug) AS unique_tenants,
+       MAX(q.timestamp)              AS last_seen
+     FROM query_clusters c
+     JOIN queries q ON q.cluster_id = c.id
+    WHERE c.archived_at IS NULL
+      AND q.timestamp >= datetime('now', '-' || ? || ' days')
+    GROUP BY c.id, c.label, c.representative_query_ids
+    ORDER BY count DESC, last_seen DESC
+    LIMIT ?`
+  ).all(days, limit) as Array<{
+    cluster_id: number;
+    label: string;
+    rep_ids_json: string | null;
+    count: number;
+    unique_tenants: number;
+    last_seen: string;
+  }>;
+
+  if (rows.length === 0) return [];
+
+  // Resolve representative query texts in one go for all rows
+  const allIds = new Set<number>();
+  const parsed = rows.map((r) => {
+    let ids: number[] = [];
+    try { ids = r.rep_ids_json ? (JSON.parse(r.rep_ids_json) as number[]) : []; }
+    catch { ids = []; }
+    for (const id of ids) allIds.add(id);
+    return { ...r, ids };
+  });
+  const textById = new Map<number, string>();
+  if (allIds.size > 0) {
+    const placeholders = Array.from(allIds).map(() => "?").join(",");
+    const texts = db.prepare(
+      `SELECT id, query_text FROM queries WHERE id IN (${placeholders})`
+    ).all(...Array.from(allIds)) as { id: number; query_text: string }[];
+    for (const t of texts) textById.set(t.id, t.query_text);
+  }
+
+  return parsed.map((r) => ({
+    cluster_id: r.cluster_id,
+    label: r.label,
+    count: r.count,
+    unique_tenants: r.unique_tenants,
+    last_seen: r.last_seen,
+    representative_query_ids: r.ids,
+    representative_queries: r.ids.map((id) => textById.get(id) ?? "").filter(Boolean),
+  }));
+}
+
+// ── Embeddings health (observability for the /admin/insights/embeddings-health endpoint) ─
+
+export interface EmbeddingsHealth {
+  coverage_last_7d_pct: number;
+  coverage_last_30d_pct: number;
+  total_clusters_active: number;
+  total_clusters_archived: number;
+  avg_cluster_size: number;
+  last_cluster_update_at: string | null;
+  backfill_remaining: number;
+}
+
+export function embeddingsHealth(db: Database): EmbeddingsHealth {
+  const cov = (win: string): number => {
+    const total = (db.prepare(
+      `SELECT COUNT(*) AS n FROM queries WHERE timestamp >= datetime('now', '-' || ? || ' days')`
+    ).get(win) as { n: number }).n;
+    if (total === 0) return 0;
+    const withEmbed = (db.prepare(
+      `SELECT COUNT(*) AS n FROM queries
+        WHERE timestamp >= datetime('now', '-' || ? || ' days') AND query_embedding IS NOT NULL`
+    ).get(win) as { n: number }).n;
+    return withEmbed / total;
+  };
+
+  const activeClusters = (db.prepare(
+    `SELECT COUNT(*) AS n FROM query_clusters WHERE archived_at IS NULL`
+  ).get() as { n: number }).n;
+
+  const archivedClusters = (db.prepare(
+    `SELECT COUNT(*) AS n FROM query_clusters WHERE archived_at IS NOT NULL`
+  ).get() as { n: number }).n;
+
+  const avgSize = activeClusters === 0 ? 0 : (db.prepare(
+    `SELECT COALESCE(AVG(size), 0) AS a FROM query_clusters WHERE archived_at IS NULL`
+  ).get() as { a: number }).a;
+
+  const lastUpdate = (db.prepare(
+    `SELECT MAX(updated_at) AS t FROM query_clusters WHERE archived_at IS NULL`
+  ).get() as { t: string | null }).t;
+
+  const remaining = (db.prepare(
+    `SELECT COUNT(*) AS n FROM queries WHERE query_embedding IS NULL AND query_text IS NOT NULL`
+  ).get() as { n: number }).n;
+
+  return {
+    coverage_last_7d_pct:   cov("7"),
+    coverage_last_30d_pct:  cov("30"),
+    total_clusters_active:  activeClusters,
+    total_clusters_archived: archivedClusters,
+    avg_cluster_size:        avgSize,
+    last_cluster_update_at:  lastUpdate,
+    backfill_remaining:      remaining,
+  };
+}
