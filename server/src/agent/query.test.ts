@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // the classifier here so the counts stay deterministic. Integration tests
 // for classify.ts cover its own behavior.
 process.env.DISABLE_INTENT_CLASSIFIER = "true";
+process.env.DISABLE_EMBEDDINGS = "true";
 
 // Mock the Anthropic SDK BEFORE any import of query.ts.
 const { createMock } = vi.hoisted(() => ({
@@ -20,6 +21,16 @@ vi.mock("@anthropic-ai/sdk", () => {
     },
   };
 });
+
+// Stub voyageai so embeddings.ts' top-level import doesn't pull in the
+// real ESM bundle (which breaks under Vitest's resolver). The embedding
+// persister is further disabled via DISABLE_EMBEDDINGS above, so this
+// mock just needs to resolve — no method bodies required for these tests.
+vi.mock("voyageai", () => ({
+  VoyageAIClient: vi.fn().mockImplementation(function (this: any) {
+    this.embed = vi.fn();
+  }),
+}));
 
 // Capture INSERT args so tests can assert agent_id + stage are persisted.
 const { runMock, prepareMock } = vi.hoisted(() => ({

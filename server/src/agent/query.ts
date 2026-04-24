@@ -9,6 +9,7 @@ import {
 import { getDb, type BusinessRow } from "../db.js";
 import type { QueryStage } from "../prompts/types.js";
 import { classifyAndPersist } from "./classify.js";
+import { embedAndPersist } from "./embeddings.js";
 import { classifyIndustry, computeCostCents } from "./taxonomy.js";
 
 const anthropic = new Anthropic({
@@ -192,6 +193,11 @@ export async function queryAgent(
   // queries.intent_v2 when the classifier resolves — the request handler
   // doesn't wait.
   classifyAndPersist(queryId, { query, businessName: business.name });
+
+  // Fire-and-forget Voyage embedding. Mirrors the classifier: UPDATEs
+  // queries.query_embedding when it resolves; the primary response has
+  // already been sent to the caller by the time this lands.
+  embedAndPersist(queryId, query);
 
   return {
     response: responseText,
