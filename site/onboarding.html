@@ -889,12 +889,12 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
   <h1 class="step-title">Pick your plan</h1>
   <p class="step-desc">Choose the plan that fits your business. You can upgrade or downgrade any time.</p>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px">
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:8px">
     <div class="radio-opt selected" onclick="setPlan('base')" data-val="base" style="flex-direction:column;align-items:flex-start;padding:20px">
       <div style="display:flex;align-items:center;gap:8px;width:100%;margin-bottom:12px">
         <div class="radio-dot"><div class="radio-dot-inner"></div></div>
         <span style="font-weight:600">Base</span>
-        <span style="margin-left:auto;font-family:var(--font-serif);font-size:1.25rem">$100</span>
+        <span style="margin-left:auto;font-family:var(--font-serif);font-size:1.25rem">$149</span>
         <span style="font-size:var(--tx-xs);color:var(--muted)">/mo</span>
       </div>
       <ul style="list-style:none;display:flex;flex-direction:column;gap:6px;font-size:var(--tx-xs);color:var(--muted)">
@@ -910,7 +910,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
       <div style="display:flex;align-items:center;gap:8px;width:100%;margin-bottom:12px">
         <div class="radio-dot"><div class="radio-dot-inner"></div></div>
         <span style="font-weight:600">Pro</span>
-        <span style="margin-left:auto;font-family:var(--font-serif);font-size:1.25rem">$250</span>
+        <span style="margin-left:auto;font-family:var(--font-serif);font-size:1.25rem">$349</span>
         <span style="font-size:var(--tx-xs);color:var(--muted)">/mo</span>
       </div>
       <ul style="list-style:none;display:flex;flex-direction:column;gap:6px;font-size:var(--tx-xs);color:var(--muted)">
@@ -919,6 +919,22 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
         <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> Priority AI indexing</li>
         <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> Advanced analytics &amp; exports</li>
         <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> Custom query basket (15)</li>
+      </ul>
+    </div>
+    <!-- Enterprise — consultation-only. Clicking routes to Contact instead of
+         staying in the self-serve wizard, since pricing here is custom. -->
+    <div class="radio-opt" onclick="window.location.href='/Contact.html?plan=enterprise'" data-val="enterprise" style="flex-direction:column;align-items:flex-start;padding:20px;cursor:pointer">
+      <div style="display:flex;align-items:center;gap:8px;width:100%;margin-bottom:12px">
+        <div class="radio-dot"><div class="radio-dot-inner"></div></div>
+        <span style="font-weight:600">Enterprise</span>
+        <span style="margin-left:auto;font-family:var(--font-serif);font-size:.95rem;color:var(--muted)">Custom</span>
+      </div>
+      <ul style="list-style:none;display:flex;flex-direction:column;gap:6px;font-size:var(--tx-xs);color:var(--muted)">
+        <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> Everything in Pro</li>
+        <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> Multi-location support</li>
+        <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> White-glove setup</li>
+        <li style="display:flex;align-items:center;gap:6px"><span style="color:var(--green)">✓</span> Dedicated success manager</li>
+        <li style="display:flex;align-items:center;gap:6px;color:var(--accent-dk)">→ 15-min consultation call</li>
       </ul>
     </div>
   </div>
@@ -1059,7 +1075,7 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
         <button class="edit-link" onclick="goToStep(8)">Edit</button>
       </div>
       <div class="review-grid">
-        <div class="rv"><span class="rv-label">Selected plan</span><span class="rv-val" id="rv-plan">Base — $100/mo</span></div>
+        <div class="rv"><span class="rv-label">Selected plan</span><span class="rv-val" id="rv-plan">Base — $149/mo</span></div>
       </div>
     </div>
 
@@ -1227,8 +1243,8 @@ const LEAD_DEST_ERRORS = {
 };
 
 const PLAN_LABELS = {
-  base: 'Base — $100/mo',
-  pro: 'Pro — $250/mo',
+  base: 'Base — $149/mo',
+  pro: 'Pro — $349/mo',
 };
 
 const API_BASE = 'https://advocate-production-2887.up.railway.app';
