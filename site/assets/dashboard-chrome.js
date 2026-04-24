@@ -45,9 +45,20 @@
      client/me + /api/client/metrics resolve) and falls back to generic
      placeholders if the boot code hasn't finished yet. Never returns the
      design-mockup florist persona — that would leak "Bloom & Stem" copy
-     to real users. */
+     to real users.
+
+     Admin flavouring: when the session role is admin AND we aren't
+     currently impersonating a specific tenant, the sidebar block
+     renders as "Admin · All tenants" so it's obvious this isn't a
+     single-business session. When admin IS impersonating, we show the
+     impersonated tenant's name + slug (driven by AMCP_DATA.impersonating). */
   function currentBiz() {
     const d = window.AMCP_DATA || {};
+    const isAdmin       = d.user_role === 'admin';
+    const impersonating = d.impersonating;
+    if (isAdmin && !impersonating) {
+      return { name: 'Admin', location: 'All tenants', plan: 'Operator', letter: 'A' };
+    }
     const name     = d.business_name || d.name || 'Your business';
     const location = d.location || '';
     const planRaw  = (d.plan || '').toLowerCase();
