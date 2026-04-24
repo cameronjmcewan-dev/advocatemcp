@@ -19,15 +19,18 @@
 <link rel="stylesheet" href="/assets/styles.css">
 <link rel="stylesheet" href="/assets/dashboard.css">
 <style>
-  /* Boot splash — shown until requireAuth + /api/client/me resolve. Plain
-     copy on paper so there's no flash of broken chrome if either request
-     is slow. Removed in JS once the chrome mounts. */
+  /* Hardcoded fallbacks so the splash paints Max's paper shade the
+     instant the HTML lands — before /assets/styles.css loads and the
+     CSS variables resolve. Without this, a dark-mode OS flashes the
+     browser-default black on every sidebar click. */
   #boot-splash {
     position: fixed; inset: 0; display: grid; place-items: center;
-    background: var(--paper); color: var(--muted);
-    font-family: var(--sans); font-size: 14px;
-    letter-spacing: 0.02em;
-    z-index: 1;
+    background: #fbf9f5; color: #766f63;
+    font-family: "General Sans", system-ui, -apple-system, sans-serif;
+    font-size: 14px; letter-spacing: 0.02em; z-index: 1;
+  }
+  @media (prefers-color-scheme: dark) {
+    #boot-splash { background: #141210; color: #8a7c78; }
   }
 
   /* Preview-state card on the Phase 2 Overview — marks the dashboard as
@@ -63,7 +66,7 @@
 </head>
 <body>
 
-<div id="boot-splash" aria-live="polite">Loading your dashboard…</div>
+<div id="boot-splash" aria-live="polite">Loading&hellip;</div>
 
 <script src="/assets/shared.js"></script>
 <script src="/assets/dashboard-chrome.js"></script>

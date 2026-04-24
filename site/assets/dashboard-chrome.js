@@ -177,7 +177,47 @@
     while (fabHolder.firstChild) body.appendChild(fabHolder.firstChild);
 
     wireFab();
+    injectSpeculationRules();
   };
 
   window.AdvocateChrome.getContentRoot = () => document.getElementById('page-content');
+
+  /* Speculation Rules — tell Chromium-based browsers to prerender the
+     sidebar nav targets the moment a user hovers (moderate eagerness) so
+     the next click lands near-instantly and the #boot-splash doesn't
+     flash between sections. Firefox and Safari ignore the tag; the
+     fallback there is the inline dark-mode splash bg we set on each
+     page, which already prevents the black flash that was most jarring.
+
+     Eagerness "moderate" means the browser only prefetches after a brief
+     hover / touch — not every link on page load — which keeps bandwidth
+     sane on low-end connections. */
+  function injectSpeculationRules() {
+    if (document.getElementById('amcp-speculation-rules')) return;
+    // Feature-detect: browsers without SpeculationRules support just
+    // ignore the <script> tag, but skip the DOM insert on the ones that
+    // trip over "unexpected script type" errors in the console.
+    try {
+      if (!HTMLScriptElement.supports || !HTMLScriptElement.supports('speculationrules')) return;
+    } catch { return; }
+
+    const hrefs = [
+      ...NAV_MAIN.map(i => i.href),
+      ...NAV_ACCOUNT.map(i => i.href),
+    ];
+    const rules = {
+      prerender: [
+        {
+          source: 'list',
+          urls: hrefs,
+          eagerness: 'moderate',
+        },
+      ],
+    };
+    const s = document.createElement('script');
+    s.id = 'amcp-speculation-rules';
+    s.type = 'speculationrules';
+    s.textContent = JSON.stringify(rules);
+    document.head.appendChild(s);
+  }
 })();
