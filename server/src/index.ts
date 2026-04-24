@@ -6,6 +6,7 @@ import { startReputationRollupSchedule } from "./jobs/reputationRollup.js";
 import { pollAll } from "./jobs/competitorRadar.js";
 import { startWeeklyDigestSchedule } from "./jobs/weeklyDigest.js";
 import { startBackfillSchedule } from "./jobs/backfillQueries.js";
+import { startEmbeddingsBackfillSchedule } from "./jobs/backfillEmbeddings.js";
 
 if (!process.env.ANTHROPIC_API_KEY) {
   console.error("❌ ANTHROPIC_API_KEY is not set. Copy .env.example to .env and add your key.");
@@ -57,6 +58,7 @@ startReputationRollupSchedule(getDb());
 // a dev/test deploy without the key silently skips. Daily budget guard
 // inside the job protects against a runaway classifier bill.
 startBackfillSchedule();
+startEmbeddingsBackfillSchedule();
 
 // Session 4 (Competitor Radar): cron-driven Perplexity poll loop.
 // Default schedule = Mon/Wed/Fri at 04:00 UTC. Cron is gated on
