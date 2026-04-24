@@ -18,6 +18,16 @@ const QueryBodySchema = z.object({
   crawler: z.string().max(200).optional(),
 });
 
+/** Coerce an Express header (which can be string | string[] | undefined)
+ *  to a single string, trimmed, or null. Shared by the X-Geo-* lookups on
+ *  POST /agents/:slug/query. */
+function headerValue(h: string | string[] | undefined): string | null {
+  if (!h) return null;
+  const s = Array.isArray(h) ? h[0] : h;
+  const trimmed = String(s).trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 // Lenient IANA timezone check — real resolution happens at use-site via
 // Intl.DateTimeFormat. Block obviously malformed inputs only.
 const TimezoneSchema = z
@@ -273,12 +283,24 @@ agentRouter.post("/agents/:slug/query", requireApiKey, async (req: Request, res:
     // API caller looks anonymous to the reputation system. Header-only on the
     // REST surface (no tool-arg equivalent on this endpoint).
     const agentId = resolveAgentId(req, null);
+
+    // Migration 020 / Layer 1: Worker forwards cf.country/region/city via
+    // X-Geo-* headers on this POST. If headers are absent (direct curl,
+    // legacy Worker, unit tests) we stamp null and the row still inserts.
+    const geo = {
+      country: headerValue(req.headers["x-geo-country"]),
+      region:  headerValue(req.headers["x-geo-region"]),
+      city:    headerValue(req.headers["x-geo-city"]),
+    };
+
     const result = await queryAgent(
       business,
       query,
       crawler,
       requestId,
       agentId,
+      undefined,
+      geo,
     );
 
     // Build signed attribution token if TOKEN_SIGNING_KEY is configured.

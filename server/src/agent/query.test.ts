@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+// Phase 1 added an async Haiku classifier that fires from queryAgent.
+// These tests pre-date that and assert exact Anthropic call counts; skip
+// the classifier here so the counts stay deterministic. Integration tests
+// for classify.ts cover its own behavior.
+process.env.DISABLE_INTENT_CLASSIFIER = "true";
+
 // Mock the Anthropic SDK BEFORE any import of query.ts.
 const { createMock } = vi.hoisted(() => ({
   createMock: vi.fn(async (_args: any) => ({
