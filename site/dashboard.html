@@ -6,35 +6,41 @@
 <meta name="color-scheme" content="dark light" />
 <title>Dashboard — Advocate</title>
 <script>
-/* ?ui=v2 opt-in redirect stub for the new design-preview dashboard.
+/* v2-default redirect stub. Cutover landed 2026-04-24.
  *
- * Users who want the new chrome can append ?ui=v2 to any dashboard URL
- * and we bounce them to /app.html. Also honors an opt-in stored in
- * localStorage so repeat visits land on the new UI without the query.
+ * dashboard.html now bounces to /app.html by default. The legacy UI is
+ * still compiled and shipped (this page) — accessible via ?ui=legacy
+ * for anyone who hits a migration bug and needs an escape hatch. Once
+ * we remove that flag (target: +7 days with no legacy opt-outs), the
+ * legacy HTML/JS is safe to delete.
  *
- * The legacy dashboard is otherwise untouched during the parallel-run
- * phase — anyone who arrives without the flag (or with ?ui=legacy) sees
- * exactly what they saw before. */
+ *   default   → /app.html  (Max's chrome, v2 section pages)
+ *   ?ui=legacy → stays on this page, remembers the preference
+ *   ?ui=v2    → forces v2 (also remembered), for users pinned to legacy
+ *               via a stale localStorage entry from the parallel-run
+ *               phase. */
 (function () {
   try {
     var q = new URLSearchParams(location.search);
     var flag = q.get('ui');
-    if (flag === 'v2') {
-      localStorage.setItem('advocate-ui', 'v2');
-      location.replace('/app.html' + (location.hash || ''));
-      return;
-    }
     if (flag === 'legacy') {
-      localStorage.removeItem('advocate-ui');
+      localStorage.setItem('advocate-ui', 'legacy');
       // Strip the flag from the URL so refreshes stay on legacy cleanly.
       q.delete('ui');
       var qs = q.toString();
       history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + (location.hash || ''));
       return;
     }
-    if (localStorage.getItem('advocate-ui') === 'v2') {
+    if (flag === 'v2') {
+      localStorage.removeItem('advocate-ui');
       location.replace('/app.html' + (location.hash || ''));
+      return;
     }
+    if (localStorage.getItem('advocate-ui') === 'legacy') {
+      // Honored pinned-legacy preference — stay here without redirect.
+      return;
+    }
+    location.replace('/app.html' + (location.hash || ''));
   } catch (_) { /* localStorage blocked in private mode, etc. — fall through */ }
 })();
 </script>
