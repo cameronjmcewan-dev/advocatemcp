@@ -4,6 +4,7 @@ import { adminDigestRouter } from "./digest.js";
 import { tenantsRouter } from "./tenants.js";
 import { adminAuditsRouter } from "./audits.js";
 import { adminAuditBatchRouter } from "./auditBatch.js";
+import { adminInsightsRouter } from "./insights.js";
 
 /**
  * Bearer-token auth gate for /admin/* — keyed on ADMIN_API_KEY env var.
@@ -31,3 +32,8 @@ adminRouter.use("/admin", requireAdmin, adminDigestRouter);
 adminRouter.use("/admin", requireAdmin, tenantsRouter);
 adminRouter.use("/admin", requireAdmin, adminAuditsRouter);
 adminRouter.use("/admin", requireAdmin, adminAuditBatchRouter);
+// Insights mounts without the outer requireAdmin because its own handler
+// supports both Bearer (scripts) AND HTTP Basic (browsers hitting the
+// HTML dashboard directly). Mounting behind requireAdmin would reject
+// Basic-auth'd browser requests before insights.ts got to see them.
+adminRouter.use(adminInsightsRouter);
