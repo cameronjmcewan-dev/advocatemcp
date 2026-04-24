@@ -133,7 +133,7 @@
           <div class="set-row"><div class="l">Last bot hit</div><div class="r">${esc(timeAgo(domain.last_bot_hit))}</div></div>
           <div class="set-row" style="border-bottom:0;padding-top:16px">
             <div class="l"></div>
-            <div class="r"><a class="btn btn-ghost btn-sm" href="/dashboard.html#sec-domains">Open DNS wizard →</a></div>
+            <div class="r"><button class="btn btn-ghost btn-sm" id="btn-open-dns-wizard" type="button">Open DNS wizard →</button></div>
           </div>
         </div>
       </div>
@@ -241,6 +241,30 @@
       status.textContent = msg || '';
       status.style.color = kind === 'error' ? 'var(--red)' : kind === 'success' ? 'var(--sage)' : 'var(--muted)';
     };
+
+    // Open DNS wizard — launches the existing legacy module in a modal.
+    // The wizard's own public API (window.AMCP_DNS_WIZARD.open) is
+    // unchanged. Its <script> + deps (dashboard-ui, dashboard-auth,
+    // dashboard-onboarding) are loaded from Settings.html so the global
+    // is available here. Preview mode falls through to the legacy page
+    // because the wizard needs a real authedFetch and real slug to do
+    // anything useful.
+    const dnsBtn = document.getElementById('btn-open-dns-wizard');
+    if (dnsBtn) {
+      dnsBtn.addEventListener('click', () => {
+        if (preview) {
+          setStatus('DNS wizard requires a real account. Log in to use it.', '');
+          return;
+        }
+        if (window.AMCP_DNS_WIZARD && typeof window.AMCP_DNS_WIZARD.open === 'function') {
+          window.AMCP_DNS_WIZARD.open();
+        } else {
+          // Script failed to load — graceful fallback to the legacy entry
+          // point so the customer isn't stranded.
+          window.location.href = '/dashboard.html#sec-domains';
+        }
+      });
+    }
 
     // Rotate key
     const rotBtn = document.getElementById('btn-rotate-key');

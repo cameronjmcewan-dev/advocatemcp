@@ -28,6 +28,12 @@
 <script src="/assets/shared.js"></script>
 <script src="/assets/dashboard-chrome.js"></script>
 <script src="/js/dashboard-auth.js"></script>
+<!-- DNS wizard deps — the wizard is a legacy module that still lives
+     under /js/. Loaded here so window.AMCP_DNS_WIZARD.open() is
+     available from the Connection subtab in v2 Settings. -->
+<script src="/js/dashboard-ui.js"></script>
+<script src="/js/dashboard-onboarding.js"></script>
+<script src="/js/dashboard-dns-wizard.js"></script>
 <script src="/js/v2/shell.js"></script>
 <script src="/js/v2/settings.js"></script>
 <script>
