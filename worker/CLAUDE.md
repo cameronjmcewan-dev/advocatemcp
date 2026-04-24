@@ -87,8 +87,8 @@ npx wrangler deploy        # deploy to customers.advocatemcp.com
 
 - `STRIPE_SECRET_KEY` — `sk_test_...` or `sk_live_...`
 - `STRIPE_WEBHOOK_SECRET` — `whsec_...` (mode-specific — test-mode whsec ≠ live-mode whsec)
-- `STRIPE_PRICE_ID_BASE` — $100/mo (mode-specific — test-mode price_id ≠ live-mode price_id)
-- `STRIPE_PRICE_ID_PRO` — $250/mo (mode-specific)
+- `STRIPE_PRICE_ID_BASE` — $149/mo (mode-specific — test-mode price_id ≠ live-mode price_id)
+- `STRIPE_PRICE_ID_PRO` — $349/mo (mode-specific)
 
 **All four secrets must be in the same mode** (all test OR all live). Mixing modes produces 400 "No such price" errors from Stripe.
 

@@ -61,8 +61,8 @@ API_BASE_URL = "https://advocate-production-2887.up.railway.app"
 #   ADMIN_SECRET           — protects POST /admin/create-client (use a long random string)
 #   STRIPE_SECRET_KEY      — Stripe secret key (sk_test_... or sk_live_...)
 #   STRIPE_WEBHOOK_SECRET  — Stripe webhook signing secret (whsec_...)
-#   STRIPE_PRICE_ID_BASE   — Stripe Price ID for $100/mo base plan
-#   STRIPE_PRICE_ID_PRO    — Stripe Price ID for $250/mo pro plan
+#   STRIPE_PRICE_ID_BASE   — Stripe Price ID for $149/mo base plan
+#   STRIPE_PRICE_ID_PRO    — Stripe Price ID for $349/mo pro plan
 
 # ── Routes ──────────────────────────────────────────────────────────────────
 # customers.advocatemcp.com only. All portal, auth, admin, webhook, and
