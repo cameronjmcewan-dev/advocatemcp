@@ -26,13 +26,17 @@
   };
 
   async function fetchReal() {
-    const af = window.AMCP && window.AMCP.authedFetch;
-    // Kick off both requests in parallel — the aggregate activity feed
-    // (scope=all) is admin-only on the worker side. If either fails we
-    // surface the partial result instead of going 100% blank.
+    // cachedFetch memoises both of these in sessionStorage (60s default).
+    // First visit pays the network cost; Mission Control ↔ Tenants ↔
+    // Queries navigation inside the same session serves cached data
+    // instantly. Cache key includes the access token prefix so cross-
+    // account bleed can't happen.
+    const cf = (window.AMCP && window.AMCP.cachedFetch)
+      ? window.AMCP.cachedFetch
+      : window.AMCP && window.AMCP.authedFetch;
     const [metricsRes, feedRes] = await Promise.all([
-      af('/api/client/all-metrics').catch(() => null),
-      af('/api/client/activity-detail?scope=all').catch(() => null),
+      cf('/api/client/all-metrics').catch(() => null),
+      cf('/api/client/activity-detail?scope=all').catch(() => null),
     ]);
     if (metricsRes && metricsRes.status === 403) return { __forbidden: true };
     if (!metricsRes || !metricsRes.ok) return { __error: `HTTP ${metricsRes?.status ?? 'network'}` };

@@ -45,12 +45,17 @@
   }
 
   async function fetchReal() {
-    const af = window.AMCP && window.AMCP.authedFetch;
+    // Session-cache the insights proxy too — same rationale as
+    // admin.js/adminTenants.js. Clusters refresh nightly so a 60-second
+    // cache has zero stale-data risk inside a single session.
+    const cf = (window.AMCP && window.AMCP.cachedFetch)
+      ? window.AMCP.cachedFetch
+      : window.AMCP && window.AMCP.authedFetch;
     const base = '/api/admin/insights-proxy';
     const [health, clusters, trends] = await Promise.all([
-      af(`${base}/embeddings-health`).catch(() => null),
-      af(`${base}/top-clusters?limit=25&days=30`).catch(() => null),
-      af(`${base}/trends?days=14`).catch(() => null),
+      cf(`${base}/embeddings-health`).catch(() => null),
+      cf(`${base}/top-clusters?limit=25&days=30`).catch(() => null),
+      cf(`${base}/trends?days=14`).catch(() => null),
     ]);
     // 403 from any of them = non-admin; 503 = ADMIN_API_KEY not set.
     if (health && health.status === 403) return { __forbidden: true };

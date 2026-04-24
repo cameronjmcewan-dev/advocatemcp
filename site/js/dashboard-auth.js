@@ -90,6 +90,53 @@
       }));
     },
 
+    /* ── cachedFetch ────────────────────────────────────────────────────
+     * Session-scoped memoisation for idempotent GETs. Key is the path +
+     * query string. Default TTL is 60s — tuned for the admin console
+     * workflow where the same /api/client/all-metrics is consumed by
+     * Mission Control, Tenants, and Queries pages inside the same
+     * 5–10-second user session. Returns a Response-shaped object so
+     * callers that expect `.ok` + `.status` + `.json()` keep working.
+     *
+     * Cache only survives while the tab is open (sessionStorage). It is
+     * keyed against the current access token hash-prefix so two signed-in
+     * accounts in different tabs don't cross-contaminate. Missing
+     * sessionStorage (private mode, some embedded browsers) falls
+     * through to the network every call without throwing. */
+    async cachedFetch(path, ttlMs) {
+      const ttl = typeof ttlMs === 'number' ? ttlMs : 60_000;
+      let storageKey = null;
+      try {
+        const who = AMCP.token ? AMCP.token.slice(0, 16) : 'anon';
+        storageKey = 'amcp.cache.' + who + '.' + path;
+        const cached = sessionStorage.getItem(storageKey);
+        if (cached) {
+          const { t, body, status } = JSON.parse(cached);
+          if (Date.now() - t < ttl) {
+            return {
+              ok:     status >= 200 && status < 300,
+              status: status,
+              async json() { return JSON.parse(body); },
+            };
+          }
+        }
+      } catch { /* sessionStorage blocked — fall through */ }
+
+      const res = await AMCP.authedFetch(path);
+      // Only cache 2xx responses; errors must always re-fetch.
+      if (storageKey && res.ok) {
+        try {
+          const body = await res.clone().text();
+          sessionStorage.setItem(storageKey, JSON.stringify({
+            t:      Date.now(),
+            body:   body,
+            status: res.status,
+          }));
+        } catch { /* quota exceeded or serialisation failed — ignore */ }
+      }
+      return res;
+    },
+
     /* ── requireAuth ────────────────────────────────────────────────────
      * Call at the top of every protected page before rendering data.
      * Attempts a silent refresh if no in-memory token is present.

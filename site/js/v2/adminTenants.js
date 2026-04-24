@@ -23,8 +23,12 @@
   };
 
   async function fetchReal() {
-    const af = window.AMCP && window.AMCP.authedFetch;
-    const r = await af('/api/client/all-metrics');
+    // Reuse sessionStorage cache so jumping between Mission Control
+    // and Tenants inside the same session is instant.
+    const cf = (window.AMCP && window.AMCP.cachedFetch)
+      ? window.AMCP.cachedFetch
+      : window.AMCP && window.AMCP.authedFetch;
+    const r = await cf('/api/client/all-metrics');
     if (r.status === 403) return { __forbidden: true };
     if (!r.ok) return { __error: `HTTP ${r.status}` };
     return await r.json();

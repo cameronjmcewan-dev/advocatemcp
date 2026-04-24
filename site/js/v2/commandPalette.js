@@ -32,7 +32,10 @@
   async function loadTenants() {
     if (tenantsCache && Date.now() - tenantsFetchedAt < TENANT_CACHE_TTL_MS) return tenantsCache;
     try {
-      const r = await window.AMCP.authedFetch('/api/client/all-metrics');
+      // Cache-share with Mission Control / Tenants / Queries pages so
+      // opening the palette right after viewing any of them is instant.
+      const cf = (window.AMCP && window.AMCP.cachedFetch) || window.AMCP.authedFetch;
+      const r = await cf('/api/client/all-metrics');
       if (!r.ok) return [];
       const j = await r.json();
       tenantsCache = (j.businesses || []).map((b) => ({
