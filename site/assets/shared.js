@@ -1,5 +1,12 @@
 /* Shared site chrome: nav, footer, tweaks, reveals. */
 (function () {
+  // Cloudflare Web Analytics token. Set to the token string emitted when
+  // Web Analytics is enabled on the `advocatemcp-site` Pages project in
+  // the Cloudflare dashboard (Analytics → Web Analytics → "Manual" →
+  // copy the `data-cf-beacon` token). Empty string = analytics off.
+  const CF_BEACON_TOKEN = "";
+
+
   // Nav items for the marketing site chrome.
   // "Dashboard" intentionally omitted here during Phase 1 of the design
   // rollout — the new v2 dashboard isn't live yet, and the existing
@@ -11,6 +18,7 @@
     { href: '/Industries.html', label: 'Industries' },
     { href: '/Pricing.html',    label: 'Pricing' },
     { href: '/audit.html',      label: 'Free Audit' },
+    { href: '/Contact.html',    label: 'Contact' },
   ];
 
   function currentPage() {
@@ -27,6 +35,10 @@
     renderNav(mountId) {
       const mount = document.getElementById(mountId);
       if (!mount) return;
+      // Piggyback on the nav mount (every marketing page calls renderNav
+      // exactly once) to fire the analytics beacon. Keeps pages from
+      // having to individually opt in to tracking.
+      this.mountAnalytics();
       const cur = currentPage();
       mount.innerHTML = `
         <nav class="nav">
@@ -40,7 +52,7 @@
             </ul>
             <div class="nav-cta">
               <a href="/login.html" class="btn btn-ghost btn-sm">Sign in</a>
-              <a href="/Pricing.html" class="btn btn-primary btn-sm">Start free trial</a>
+              <a href="/onboarding.html" class="btn btn-primary btn-sm">Start free trial</a>
             </div>
           </div>
         </nav>
@@ -94,6 +106,35 @@
           </div>
         </footer>
       `;
+    },
+
+    /* Cloudflare Web Analytics (free, privacy-first, no cookies).
+     *
+     * Token is read from a `<meta name="cf-beacon" content="{token}">` tag
+     * on the page. Enable Web Analytics on the `advocatemcp-site` Pages
+     * project in the Cloudflare dashboard — it emits the token there. Drop
+     * it into the meta tag once and every marketing page that loads
+     * shared.js starts reporting.
+     *
+     * When the meta is absent, this is a no-op — the dashboard-hosted
+     * automatic beacon still fires (Pages can inject it for us) so we're
+     * not strictly required to mount anything, but having the explicit
+     * beacon gives us richer custom-event support if we need it later. */
+    mountAnalytics() {
+      if (typeof document === 'undefined') return;
+      if (document.getElementById('cf-beacon-script')) return;
+      // Token comes from the module-level CF_BEACON_TOKEN constant so there's
+      // a single place to flip analytics on for the whole site. Fallback to
+      // a `<meta name="cf-beacon" content="...">` if a page wants to override.
+      const meta = document.querySelector('meta[name="cf-beacon"]');
+      const token = CF_BEACON_TOKEN || (meta && meta.getAttribute('content'));
+      if (!token) return;
+      const s = document.createElement('script');
+      s.id = 'cf-beacon-script';
+      s.defer = true;
+      s.src = 'https://static.cloudflareinsights.com/beacon.min.js';
+      s.setAttribute('data-cf-beacon', JSON.stringify({ token }));
+      document.head.appendChild(s);
     },
 
     setupReveals() {

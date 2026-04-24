@@ -1,0 +1,70 @@
+# Advocate — robots.txt
+#
+# Intent: we WANT AI crawlers to index the marketing site (that's literally
+# the product pitch — "get recommended by AI"). Generic search crawlers too.
+# What we don't want indexed: the dashboard, onboarding, login, activation,
+# and read-only audit result pages — those are per-user and should never
+# appear in search results.
+
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /dashboard.html
+Disallow: /Dashboard.html
+Disallow: /app
+Disallow: /app.html
+Disallow: /Settings.html
+Disallow: /BusinessProfile.html
+Disallow: /BotTraffic.html
+Disallow: /ClickThroughs.html
+Disallow: /Mentions.html
+Disallow: /CompetitorRadar.html
+Disallow: /ActivityFeed.html
+Disallow: /A2APipeline.html
+Disallow: /Billing.html
+Disallow: /admin.html
+Disallow: /onboarding
+Disallow: /onboarding.html
+Disallow: /onboarding-preview.html
+Disallow: /login
+Disallow: /login.html
+Disallow: /activate
+Disallow: /activate.html
+Disallow: /r/
+Disallow: /r.html
+
+# Explicit allow for AI search crawlers — this is the whole product pitch.
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Googlebot
+Allow: /
+
+User-agent: meta-externalagent
+Allow: /
+
+User-agent: cohere-ai
+Allow: /
+
+Sitemap: https://advocatemcp.com/sitemap.xml

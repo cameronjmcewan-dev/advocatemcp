@@ -41,6 +41,7 @@ import {
   handleRetryRailwayRegistration,
 } from "./stripe";
 import { handleSaveDraft, handleLoadDraft } from "./onboardDraft";
+import { handleContact, handleContactPreflight } from "./contact";
 
 // ── Public route dispatcher ────────────────────────────────────────────────
 // Returns a Response if this is a portal path, or null to fall through to
@@ -137,6 +138,10 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   // Public wizard endpoint (advocatemcp.com → customers.advocatemcp.com)
   if (pathname === "/api/onboard/public"    && method === "OPTIONS") return handlePublicOnboardPreflight(request);
   if (pathname === "/api/onboard/public"    && method === "POST")    return handlePublicOnboard(request, env);
+
+  // Public marketing contact form → Resend → hello@advocatemcp.com
+  if (pathname === "/api/contact"           && method === "OPTIONS") return handleContactPreflight(request);
+  if (pathname === "/api/contact"           && method === "POST")    return handleContact(request, env);
 
   // GET /api/onboard/session/:session_id (CORS; public for skipDns tenants)
   const sessionMatch = pathname.match(/^\/api\/onboard\/session\/([^/]+)$/);

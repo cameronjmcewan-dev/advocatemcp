@@ -75,28 +75,97 @@
       
         <div class="row single">
           <div class="card-dash">
-            <div class="card-head"><div><h3>Send us a message</h3><div class="sub">We'll reply to the email on your account</div></div></div>
-            <div style="max-width:560px;">
-              <div class="form-field"><label>What's up?</label>
-                <select>
-                  <option>I have a question about my data</option>
-                  <option>Something looks wrong on my dashboard</option>
-                  <option>I want to upgrade or change plans</option>
-                  <option>Billing question</option>
+            <div class="card-head"><div><h3>Send us a message</h3><div class="sub">We usually reply within 4 hours on weekdays.</div></div></div>
+            <form id="contact-form" style="max-width:560px;" novalidate>
+              <!-- Honeypot: hidden from humans, tempting for bots. -->
+              <div aria-hidden="true" style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden">
+                <label>Website <input type="text" name="website" tabindex="-1" autocomplete="off"></label>
+              </div>
+
+              <div class="form-field"><label for="cf-name">Your name</label>
+                <input id="cf-name" name="name" type="text" required maxlength="200" autocomplete="name">
+              </div>
+              <div class="form-field"><label for="cf-email">Email</label>
+                <input id="cf-email" name="email" type="email" required maxlength="200" autocomplete="email">
+              </div>
+              <div class="form-field"><label for="cf-company">Company <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+                <input id="cf-company" name="company" type="text" maxlength="200" autocomplete="organization">
+              </div>
+              <div class="form-field"><label for="cf-topic">What's up?</label>
+                <select id="cf-topic" name="topic">
+                  <option>General question</option>
+                  <option>Request a demo</option>
+                  <option>Enterprise / multi-location</option>
+                  <option>Billing or account</option>
                   <option>Feature request</option>
-                  <option>Something else</option>
+                  <option>Press / partnerships</option>
                 </select>
               </div>
-              <div class="form-field"><label>Tell us more</label>
-                <textarea placeholder="The more detail, the better  screenshots welcome."></textarea>
+              <div class="form-field"><label for="cf-message">Tell us more</label>
+                <textarea id="cf-message" name="message" required minlength="5" maxlength="4000"
+                          placeholder="The more detail, the better — screenshots welcome (reply to our confirmation email to attach)."></textarea>
               </div>
-              <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
-                <!-- reply-to hint removed, users reply via their own email -->
-                <button class="btn btn-primary btn-sm">Send message →</button>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+                <span id="cf-status" aria-live="polite" style="font-size:13px;color:var(--muted);min-height:18px"></span>
+                <button type="submit" id="cf-submit" class="btn btn-primary btn-sm">Send message →</button>
               </div>
-            </div>
+            </form>
           </div>
         </div>
+
+        <script>
+          (function () {
+            var form   = document.getElementById('contact-form');
+            if (!form) return;
+            var status = document.getElementById('cf-status');
+            var submit = document.getElementById('cf-submit');
+            var ENDPOINT = 'https://customers.advocatemcp.com/api/contact';
+
+            form.addEventListener('submit', async function (ev) {
+              ev.preventDefault();
+              var fd = new FormData(form);
+              // Bake the topic into the message body so it reaches the inbox
+              // without needing a separate field on the server side.
+              var topic   = (fd.get('topic')   || '').toString();
+              var message = (fd.get('message') || '').toString();
+              var payload = {
+                name:    (fd.get('name')    || '').toString().trim(),
+                email:   (fd.get('email')   || '').toString().trim(),
+                company: (fd.get('company') || '').toString().trim(),
+                website: (fd.get('website') || '').toString(), // honeypot
+                message: topic ? ('[' + topic + ']\n\n' + message) : message,
+              };
+
+              submit.disabled = true;
+              status.style.color = 'var(--muted)';
+              status.textContent = 'Sending…';
+
+              try {
+                var res = await fetch(ENDPOINT, {
+                  method:  'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body:    JSON.stringify(payload),
+                });
+                var data = {};
+                try { data = await res.json(); } catch (_) {}
+
+                if (res.ok && data.ok) {
+                  form.reset();
+                  status.style.color = 'var(--sage, #2f5c3d)';
+                  status.textContent = 'Message sent — we\'ll reply to ' + payload.email + ' shortly.';
+                } else {
+                  status.style.color = 'var(--red, #b3261e)';
+                  status.textContent = (data && data.detail) || 'Send failed. Email hello@advocatemcp.com directly?';
+                }
+              } catch (err) {
+                status.style.color = 'var(--red, #b3261e)';
+                status.textContent = 'Network error. Email hello@advocatemcp.com directly?';
+              } finally {
+                submit.disabled = false;
+              }
+            });
+          })();
+        </script>
       
         <div class="page-foot">
           <span>Prefer to help yourself? <a href="/FAQs.html" style="color:var(--maroon)">Browse the FAQs →</a></span>

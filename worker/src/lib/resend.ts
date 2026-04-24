@@ -162,3 +162,96 @@ export async function sendActivationEmail(
     clearTimeout(timeout);
   }
 }
+
+/**
+ * Send a contact-form submission from the public marketing site to
+ * hello@advocatemcp.com. Used by POST /api/contact (the Contact.html
+ * form). Reply-to is set to the visitor's email so replying from the
+ * inbox goes straight to them.
+ *
+ * All fields arrive as plain text — escape before embedding in the
+ * HTML body so a hostile submission can't inject markup into our own
+ * inbox. Resend accepts `text` alongside `html` for plain-text
+ * fallback; we send both.
+ */
+const CONTACT_INBOX = "hello@advocatemcp.com";
+const MAX_MESSAGE_LEN = 4000;
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export async function sendContactEmail(
+  apiKey: string,
+  visitor: { name: string; email: string; company?: string; message: string },
+): Promise<SendResult> {
+  const name    = visitor.name.slice(0, 200);
+  const email   = visitor.email.slice(0, 200);
+  const company = (visitor.company ?? "").slice(0, 200);
+  const message = visitor.message.slice(0, MAX_MESSAGE_LEN);
+
+  const subject = `New contact from ${name}${company ? ` (${company})` : ""}`;
+  const text = [
+    `From: ${name} <${email}>`,
+    company ? `Company: ${company}` : null,
+    "",
+    message,
+  ].filter(Boolean).join("\n");
+  const html = `
+    <div style="font-family:system-ui,-apple-system,sans-serif;line-height:1.5;color:#141210">
+      <p><strong>From:</strong> ${escapeHtml(name)} &lt;${escapeHtml(email)}&gt;</p>
+      ${company ? `<p><strong>Company:</strong> ${escapeHtml(company)}</p>` : ""}
+      <hr style="border:0;border-top:1px solid #e6dfd2;margin:16px 0">
+      <div style="white-space:pre-wrap">${escapeHtml(message)}</div>
+    </div>
+  `;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(RESEND_ENDPOINT, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from:       FROM_ADDRESS,
+        to:         [CONTACT_INBOX],
+        reply_to:   email,
+        subject,
+        text,
+        html,
+      }),
+    });
+
+    if (res.ok) {
+      const data = (await res.json()) as { id?: string };
+      return { ok: true, id: data.id, retryable: false };
+    }
+
+    let errorMsg = `Resend API ${res.status}`;
+    try {
+      const errBody = (await res.json()) as { message?: string };
+      if (errBody.message) errorMsg += `: ${errBody.message}`;
+    } catch { /* non-JSON error body */ }
+
+    return { ok: false, error: errorMsg, retryable: res.status >= 500 };
+  } catch (err) {
+    const isAbort = err instanceof DOMException && err.name === "AbortError";
+    return {
+      ok: false,
+      error: isAbort ? "Resend API timed out after 10s" : `Network error: ${String(err)}`,
+      retryable: true,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
