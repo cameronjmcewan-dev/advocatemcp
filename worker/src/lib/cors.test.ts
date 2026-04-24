@@ -58,6 +58,34 @@ describe("cors", () => {
     expect(noOriginHeaders["Access-Control-Allow-Origin"]).toBe("https://advocatemcp.com");
   });
 
+  it("echoes any *.advocatemcp-site.pages.dev preview origin (branch alias)", async () => {
+    const request = makeRequest("https://design-preview.advocatemcp-site.pages.dev");
+    const headers = corsHeadersFor(request);
+    expect(headers["Access-Control-Allow-Origin"]).toBe(
+      "https://design-preview.advocatemcp-site.pages.dev",
+    );
+  });
+
+  it("echoes a *.advocatemcp-site.pages.dev commit-SHA preview origin", async () => {
+    const request = makeRequest("https://c0708e27.advocatemcp-site.pages.dev");
+    const headers = corsHeadersFor(request);
+    expect(headers["Access-Control-Allow-Origin"]).toBe(
+      "https://c0708e27.advocatemcp-site.pages.dev",
+    );
+  });
+
+  it("rejects a lookalike pretending to be a Pages subdomain", async () => {
+    const request = makeRequest("https://advocatemcp-site.pages.dev.evil.com");
+    const headers = corsHeadersFor(request);
+    expect(headers["Access-Control-Allow-Origin"]).toBe("https://advocatemcp.com");
+  });
+
+  it("rejects plain http on a Pages hostname (suffix must be https)", async () => {
+    const request = makeRequest("http://design-preview.advocatemcp-site.pages.dev");
+    const headers = corsHeadersFor(request);
+    expect(headers["Access-Control-Allow-Origin"]).toBe("https://advocatemcp.com");
+  });
+
   // 3. credentials: true sets Allow-Credentials: true
   it("sets Access-Control-Allow-Credentials: true when credentials=true", async () => {
     const request = makeRequest("https://advocatemcp.com");

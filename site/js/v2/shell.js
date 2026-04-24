@@ -63,17 +63,34 @@
       // Populate AMCP_DATA with whatever the page's demo provides so the
       // sidebar business block renders sensible placeholders.
       const m = (data && (data.metrics || data)) || {};
+      // previewPlan="admin" upgrades the preview identity so admin-only
+      // surfaces (sidebar Admin section, Cmd+K palette, impersonation
+      // banner, /admin/* pages) render as they would for a real admin
+      // on production. Any other previewPlan keeps user_role=owner.
+      // Either previewPlan='admin' (admin pages pass this explicitly)
+      // OR ?as=<slug> on the URL (lets operators flip any preview page
+      // into admin mode to visually verify impersonation + the admin
+      // sidebar without touching each page's boot options).
+      const previewUrl0 = new URL(location.href);
+      const previewAsSlug0 = previewUrl0.searchParams.get('as');
+      const isPreviewAdmin = opts.previewPlan === 'admin' || !!previewAsSlug0;
       window.AMCP_DATA = Object.assign({
         slug:      'preview-demo',
         plan:      opts.previewPlan || 'base',
         location:  'Austin, TX',
         email:     'you@advocatemcp.com',
         full_name: 'Preview User',
-        user_role: 'owner',
+        user_role: isPreviewAdmin ? 'admin' : 'owner',
       }, m);
       // If the page asked for a specific preview plan, let it win over
       // whatever the demo payload carries so the right view renders.
       if (opts.previewPlan) window.AMCP_DATA.plan = opts.previewPlan;
+      // Mirror the real-auth impersonation flow in preview: admin
+      // previews on /app.html?as=<slug> should see the banner too so
+      // the UX can be visually verified without signing in on prod.
+      if (isPreviewAdmin && previewAsSlug0) {
+        window.AMCP_DATA.impersonating = previewAsSlug0;
+      }
     } else {
       const authed = await window.AMCP.requireAuth();
       if (!authed) return;  // AMCP.requireAuth already redirected

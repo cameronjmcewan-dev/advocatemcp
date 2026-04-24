@@ -77,12 +77,35 @@ export interface CorsOptions {
  * Use `withCors` (below) to wrap an existing Response with these
  * headers, or `handleCorsPreflight` for OPTIONS preflight handlers.
  */
+/**
+ * Cloudflare Pages preview deploys all live under
+ * `*.advocatemcp-site.pages.dev` — both the stable branch alias
+ * (e.g. `design-preview.advocatemcp-site.pages.dev`) and the
+ * per-commit URLs (`abc12345.advocatemcp-site.pages.dev`). We
+ * allowlist the whole suffix so every preview deploy can hit the
+ * auth + client APIs without a per-deploy config change. The suffix
+ * match is strict: https only, `.advocatemcp-site.pages.dev` must be
+ * the eTLD+1 tail (not a substring), so a lookalike like
+ * `advocatemcp-site.pages.dev.evil.com` is rejected.
+ */
+const PREVIEW_HOST_SUFFIX = ".advocatemcp-site.pages.dev";
+
+function isAllowedOrigin(origin: string): boolean {
+  if (ALLOWED_ORIGINS.has(origin)) return true;
+  try {
+    const u = new URL(origin);
+    return u.protocol === "https:" && u.hostname.endsWith(PREVIEW_HOST_SUFFIX);
+  } catch {
+    return false;
+  }
+}
+
 export function corsHeadersFor(
   request: Request,
   opts: CorsOptions = {},
 ): Record<string, string> {
   const origin = request.headers.get("Origin") ?? "";
-  const allowedOrigin = ALLOWED_ORIGINS.has(origin) ? origin : "https://advocatemcp.com";
+  const allowedOrigin = isAllowedOrigin(origin) ? origin : "https://advocatemcp.com";
 
   const headers: Record<string, string> = {
     "Access-Control-Allow-Origin":  allowedOrigin,
