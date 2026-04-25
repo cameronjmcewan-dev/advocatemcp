@@ -123,3 +123,82 @@ export async function apiAdminEmbeddingsHealth(request: Request, env: Env): Prom
 export async function apiAdminTrends(request: Request, env: Env): Promise<Response> {
   return handleAdminInsightsProxy(request, env, "trends");
 }
+
+// ── POST /api/admin/experiments/format-judge ─────────────────────────────
+// Worker-side proxy to Railway's POST /admin/experiments/format-judge
+// so admins can trigger format-judge experiments from the dashboard
+// without exposing ADMIN_API_KEY to the browser.
+//
+// Same admin-role + ADMIN_API_KEY gate as the insights proxy. POST body
+// flows through unchanged. Response streams through.
+
+export async function handleAdminExperimentFormatJudge(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) {
+    return withCors(jsonErr(401, "unauthorized", "Session required"), request, { credentials: true });
+  }
+  if (ctx.role !== "admin") {
+    return withCors(jsonErr(403, "forbidden", "Admin only"), request, { credentials: true });
+  }
+
+  const adminKey = env.ADMIN_API_KEY;
+  if (!adminKey) {
+    return withCors(
+      jsonErr(503, "not_configured", "ADMIN_API_KEY not configured on Worker"),
+      request,
+      { credentials: true },
+    );
+  }
+
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  const upstreamUrl = `${base}/admin/experiments/format-judge`;
+
+  // Forward the POST body verbatim. Body may be {} (use defaults) or
+  // { profile_slugs, queries, variant_ids, judges }.
+  let body = "{}";
+  try { body = await request.text(); } catch { /* keep default */ }
+  if (!body || !body.trim()) body = "{}";
+
+  try {
+    // Format-judge is slow — Railway runs N trials sequentially against
+    // Claude. 30 trials at ~5s each = 2.5 minutes. The Worker default
+    // fetch timeout is 30 minutes for subrequests so we're fine, but
+    // browser fetch may hang up earlier — caller should be aware.
+    const upstream = await fetch(upstreamUrl, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${adminKey}`,
+        "Content-Type":  "application/json",
+        "Accept":        "application/json",
+      },
+      body,
+    });
+
+    const text = await upstream.text();
+    const headers = new Headers({
+      "Content-Type": upstream.headers.get("content-type") ?? "application/json",
+    });
+    return withCors(
+      new Response(text, { status: upstream.status, headers }),
+      request,
+      { credentials: true },
+    );
+  } catch (err) {
+    console.error(JSON.stringify({
+      event: "admin_format_judge_error",
+      error: String(err instanceof Error ? err.message : err),
+    }));
+    return withCors(
+      jsonErr(502, "upstream_unreachable", "format-judge upstream failed"),
+      request,
+      { credentials: true },
+    );
+  }
+}
+
+export function handleAdminExperimentFormatJudgePreflight(request: Request): Response {
+  return handleCorsPreflight(request, { credentials: true });
+}

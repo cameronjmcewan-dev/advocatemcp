@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fbf9f5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141210" media="(prefers-color-scheme: dark)">
+<meta name="robots" content="noindex, nofollow">
+<title>Format Experiments — Advocate Admin</title>
+<link rel="icon" type="image/png" sizes="32x32"  href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://api.fontshare.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/styles.css">
+<link rel="stylesheet" href="/assets/dashboard.css">
+<style>
+  #boot-splash { position: fixed; inset: 0; display: grid; place-items: center; background: #fbf9f5; color: #766f63; font-family: "General Sans", system-ui, -apple-system, sans-serif; font-size: 14px; z-index: 1; } @media (prefers-color-scheme: dark) { #boot-splash { background: #141210; color: #8a7c78; } }
+  .sb-nav a .badge { color: #fff; }
+  .exp-summary-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .exp-summary-table th, .exp-summary-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+  .exp-summary-table th { font-weight: 500; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .exp-summary-table td.t { text-align: right; font-variant-numeric: tabular-nums; }
+  .exp-summary-table tr.rank-1 { background: rgba(125, 37, 80, 0.06); }
+  .exp-bar { height: 6px; background: var(--line); border-radius: 999px; overflow: hidden; min-width: 60px; }
+  .exp-bar-fill { height: 100%; background: var(--maroon); }
+  .exp-status { font-size: 13px; color: var(--muted); margin-top: 12px; min-height: 18px; }
+  .exp-status.error { color: var(--red); }
+  .exp-status.ok    { color: var(--sage); }
+  details.exp-details summary { cursor: pointer; padding: 6px 0; color: var(--maroon); font-size: 13px; }
+</style>
+</head>
+<body>
+<div id="boot-splash" aria-live="polite">Loading&hellip;</div>
+<script src="/assets/shared.js"></script>
+<script src="/assets/dashboard-chrome.js"></script>
+<script src="/js/dashboard-auth.js"></script>
+<script src="/js/v2/shell.js"></script>
+<script src="/js/v2/adminExperiments.js"></script>
+<script>
+window.AMCP_SHELL.boot({
+  activeId: 'admin-experiments',
+  crumb:    'Admin · Format Experiments',
+  title:    'Format Experiments',
+  previewPlan: 'admin',
+  demo:       window.AMCP_ADMIN_EXPERIMENTS.demo,
+  fetchReal:  window.AMCP_ADMIN_EXPERIMENTS.fetch,
+  render:     window.AMCP_ADMIN_EXPERIMENTS.render,
+  afterMount: window.AMCP_ADMIN_EXPERIMENTS.afterMount,
+});
+</script>
+</body>
+</html>

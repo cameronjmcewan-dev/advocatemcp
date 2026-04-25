@@ -36,9 +36,10 @@
   // page overview), then drill-downs (tenant list, cross-tenant queries). Paths
   // are /admin/* so they feel like one surface, not scattered files.
   const NAV_ADMIN = [
-    { id: 'admin-overview',  href: '/admin',               g: '◎', label: 'Mission Control' },
-    { id: 'admin-tenants',   href: '/admin/tenants.html',  g: '◉', label: 'Tenants' },
-    { id: 'admin-queries',   href: '/admin/queries.html',  g: '◔', label: 'Queries' },
+    { id: 'admin-overview',     href: '/admin',                     g: '◎', label: 'Mission Control' },
+    { id: 'admin-tenants',      href: '/admin/tenants.html',        g: '◉', label: 'Tenants' },
+    { id: 'admin-queries',      href: '/admin/queries.html',        g: '◔', label: 'Queries' },
+    { id: 'admin-experiments',  href: '/admin/experiments.html',    g: '⚗', label: 'Experiments' },
   ];
 
   /* Reads the current tenant from window.AMCP_DATA (populated after /api/

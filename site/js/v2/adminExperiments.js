@@ -1,0 +1,241 @@
+/* v2 Admin · Format Experiments — runs the LLM-as-judge harness via
+ * the worker proxy and renders the report inline.
+ *
+ * Worker route: POST /api/admin/experiments/format-judge
+ *   - Auth: admin session (re-uses the same session as Mission Control)
+ *   - Forwards to Railway with ADMIN_API_KEY injected server-side
+ *   - Body: { profile_slugs?, queries?, variant_ids?, judges? }  (all optional)
+ *
+ * Cost: ~$0.50–$1 per default run. Visible in the report after each run.
+ *
+ * The admin endpoint is slow (Claude API trial loop, ~5s per trial × 30
+ * trials = ~2.5 minutes default). UI shows a determinate-ish status
+ * line during the wait. */
+
+(function () {
+  'use strict';
+
+  function isAdmin() {
+    const d = window.AMCP_DATA || {};
+    return d.user_role === 'admin';
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // No fetchReal needed — the experiment is on-demand via the Run button.
+  async function fetchReal() { return {}; }
+
+  function renderForbidden() {
+    return `
+      <div class="plain-banner" style="background:var(--maroon-wash);border-color:var(--maroon-tint)">
+        <strong>Admin only.</strong>
+        Format experiments measure how well each AI engine cites different presentation formats.
+      </div>
+    `;
+  }
+
+  function render() {
+    if (!window.__ADVOCATE_PREVIEW && !isAdmin()) return renderForbidden();
+
+    return `
+      <div class="row single">
+        <div class="card-dash">
+          <div class="card-head">
+            <div>
+              <h3>Format Judge</h3>
+              <div class="sub">Run the LLM-as-judge harness against any tenant. Measures how each AI engine would score 6 presentation formats for citability.</div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:18px;align-items:flex-end">
+            <div style="flex:1;min-width:200px">
+              <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Tenant slug (optional)</label>
+              <input id="exp-slug" type="text" placeholder="workman-copy-co" autocomplete="off"
+                     style="width:100%;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:14px;background:var(--paper);color:var(--ink)">
+            </div>
+            <div style="flex:2;min-width:300px">
+              <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Queries (one per line, blank = use defaults)</label>
+              <textarea id="exp-queries" rows="3" placeholder="best email marketing agency for DTC&#10;Klaviyo specialist agencies near me"
+                        style="width:100%;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;background:var(--paper);color:var(--ink);font-family:var(--mono)"></textarea>
+            </div>
+            <div>
+              <button id="exp-run" type="button" class="btn btn-primary">Run experiment →</button>
+            </div>
+          </div>
+          <div id="exp-status" class="exp-status" aria-live="polite"></div>
+        </div>
+      </div>
+
+      <div id="exp-results"></div>
+    `;
+  }
+
+  function setStatus(msg, kind) {
+    const el = document.getElementById('exp-status');
+    if (!el) return;
+    el.textContent = msg || '';
+    el.className = 'exp-status' + (kind ? ' ' + kind : '');
+  }
+
+  function renderSummaryTable(summary) {
+    if (!summary || !summary.length) return '<p style="color:var(--muted)">No trials returned.</p>';
+    const max = Math.max(1, ...summary.map((s) => s.mean_citability));
+    const rows = summary.map((s, i) => `
+      <tr class="rank-${i + 1}">
+        <td style="font-variant-numeric:tabular-nums;color:var(--muted);width:36px">${i + 1}</td>
+        <td><code style="font-size:12.5px">${esc(s.variant_id)}</code></td>
+        <td style="width:120px">
+          <div class="exp-bar"><div class="exp-bar-fill" style="width:${Math.round((s.mean_citability / 10) * 100)}%"></div></div>
+        </td>
+        <td class="t">${s.mean_citability.toFixed(2)}</td>
+        <td class="t">±${s.stddev_citability.toFixed(2)}</td>
+        <td class="t">${Math.round(s.cite_rate * 100)}%</td>
+        <td class="t">${s.trial_count}</td>
+        <td class="t">$${s.total_cost_usd.toFixed(4)}</td>
+      </tr>
+    `).join('');
+    return `
+      <table class="exp-summary-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Variant</th>
+            <th>Score</th>
+            <th class="t">Mean</th>
+            <th class="t">Stddev</th>
+            <th class="t">Cite rate</th>
+            <th class="t">Trials</th>
+            <th class="t">Cost</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }
+
+  function renderTrialDetails(trials) {
+    if (!trials || !trials.length) return '';
+    const byVariant = new Map();
+    for (const t of trials) {
+      if (!byVariant.has(t.variant_id)) byVariant.set(t.variant_id, []);
+      byVariant.get(t.variant_id).push(t);
+    }
+    const blocks = Array.from(byVariant.entries()).map(([vid, ts]) => {
+      const sample = ts[0];
+      return `
+        <details class="exp-details">
+          <summary><code>${esc(vid)}</code> — ${ts.length} trials, sample reasoning</summary>
+          <div style="padding:8px 16px;font-size:13px;color:var(--ink-2);line-height:1.5">
+            <strong>Score ${sample.citability_score}/10 · would_cite=${sample.would_cite}</strong>
+            <p style="margin:8px 0 0">${esc(sample.reasoning)}</p>
+            <div style="margin-top:10px;font-size:12px;color:var(--muted)">All scores: ${ts.map((t) => t.citability_score).join(', ')}</div>
+          </div>
+        </details>
+      `;
+    }).join('');
+    return blocks;
+  }
+
+  function renderResults(result) {
+    const cfg = result.cfg || {};
+    const totalCost = (result.summary || []).reduce((a, s) => a + (s.total_cost_usd || 0), 0);
+    const totalTrials = (result.trials || []).length;
+    return `
+      <div class="row single" style="margin-top:18px">
+        <div class="card-dash">
+          <div class="card-head">
+            <div>
+              <h3>Latest results</h3>
+              <div class="sub">${(cfg.profiles || []).length} profile(s) · ${(cfg.queries || []).length} queries · ${(cfg.variants || []).length} variants · ${(cfg.judges || []).length} judge(s) · ${totalTrials} trials · $${totalCost.toFixed(4)} total</div>
+            </div>
+          </div>
+          <div style="margin-top:14px">
+            ${renderSummaryTable(result.summary)}
+          </div>
+          <div style="margin-top:18px">
+            <strong style="font-size:13px">Sample reasoning per variant</strong>
+            <div style="margin-top:6px">
+              ${renderTrialDetails(result.trials)}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  async function runExperiment() {
+    const slugInput = document.getElementById('exp-slug');
+    const queriesInput = document.getElementById('exp-queries');
+    const btn = document.getElementById('exp-run');
+    const resultsEl = document.getElementById('exp-results');
+    if (!btn || !resultsEl) return;
+
+    const slug = (slugInput && slugInput.value || '').trim();
+    const queries = (queriesInput && queriesInput.value || '')
+      .split('\n').map((s) => s.trim()).filter(Boolean);
+
+    btn.disabled = true;
+    const started = Date.now();
+    setStatus('Running experiment — this takes ~2-3 minutes (one Claude call per trial)…');
+
+    // Status ticker so the user sees something is happening.
+    const ticker = setInterval(() => {
+      const elapsed = Math.round((Date.now() - started) / 1000);
+      setStatus(`Running… ${elapsed}s elapsed (~150-180s typical)`);
+    }, 2000);
+
+    try {
+      const af = window.AMCP && window.AMCP.authedFetch;
+      if (!af) { setStatus('Auth wrapper missing.', 'error'); return; }
+      const body = {};
+      if (slug) body.profile_slugs = [slug];
+      if (queries.length) body.queries = queries;
+
+      const res = await af('/api/admin/experiments/format-judge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      clearInterval(ticker);
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        if (res.status === 503) {
+          setStatus(
+            'Worker missing ADMIN_API_KEY secret. Run on terminal: cd worker && npx wrangler secret put ADMIN_API_KEY (paste the same key Railway uses).',
+            'error',
+          );
+        } else {
+          setStatus('Experiment failed: ' + (err.error || `HTTP ${res.status}`), 'error');
+        }
+        return;
+      }
+      const result = await res.json();
+      const elapsed = Math.round((Date.now() - started) / 1000);
+      const trials = (result.trials || []).length;
+      setStatus(`Done — ${trials} trials in ${elapsed}s.`, 'ok');
+      resultsEl.innerHTML = renderResults(result);
+    } catch (err) {
+      clearInterval(ticker);
+      setStatus('Network error: ' + String((err && err.message) || err), 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function afterMount() {
+    const btn = document.getElementById('exp-run');
+    if (btn) btn.addEventListener('click', runExperiment);
+  }
+
+  window.AMCP_ADMIN_EXPERIMENTS = {
+    demo:  () => ({}),
+    fetch: fetchReal,
+    render,
+    afterMount,
+  };
+})();

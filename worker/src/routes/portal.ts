@@ -45,6 +45,8 @@ import { handleContact, handleContactPreflight } from "./contact";
 import {
   handleAdminInsightsProxy,
   handleAdminInsightsProxyPreflight,
+  handleAdminExperimentFormatJudge,
+  handleAdminExperimentFormatJudgePreflight,
 } from "./adminInsightsProxy";
 
 // ── Public route dispatcher ────────────────────────────────────────────────
@@ -155,6 +157,13 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   const adminInsightsMatch = pathname.match(/^\/api\/admin\/insights-proxy\/([a-z0-9-]+)$/);
   if (adminInsightsMatch && method === "OPTIONS") return handleAdminInsightsProxyPreflight(request);
   if (adminInsightsMatch && method === "GET")     return handleAdminInsightsProxy(request, env, adminInsightsMatch[1]);
+
+  // Format-judge experiments — POST proxy to Railway. Bearer-auth via
+  // ADMIN_API_KEY env on Worker, same pattern as insights proxy.
+  if (pathname === "/api/admin/experiments/format-judge" && method === "OPTIONS")
+    return handleAdminExperimentFormatJudgePreflight(request);
+  if (pathname === "/api/admin/experiments/format-judge" && method === "POST")
+    return handleAdminExperimentFormatJudge(request, env);
 
   // GET /api/onboard/session/:session_id (CORS; public for skipDns tenants)
   const sessionMatch = pathname.match(/^\/api\/onboard\/session\/([^/]+)$/);
