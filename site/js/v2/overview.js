@@ -80,15 +80,20 @@
   async function fetchReal() {
     const af = window.AMCP && window.AMCP.authedFetch;
     if (!af) throw new Error('AMCP.authedFetch not available — did dashboard-auth.js load?');
-    const [metrics, radar, activity] = await Promise.all([
+    const [metrics, radar, activity, onboarding] = await Promise.all([
       af('/api/client/metrics').then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/radar').then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/activity-detail').then(r => r.ok ? r.json() : null).catch(() => null),
+      // Onboarding snapshot drives the inline Get Started panel. 404
+      // means the business row hasn't been created yet (fresh signup
+      // mid-Stripe-webhook); treat as "no snapshot, hide panel".
+      af('/api/client/onboarding').then(r => r.ok ? r.json() : null).catch(() => null),
     ]);
     return {
-      metrics:  metrics  || {},
-      radar:    radar    || { summary: {}, basket: { queries: [] }, authority_report: {} },
-      activity: activity || { reservations: [], handoffs: [], agent_requests: [], totals: {} },
+      metrics:    metrics  || {},
+      radar:      radar    || { summary: {}, basket: { queries: [] }, authority_report: {} },
+      activity:   activity || { reservations: [], handoffs: [], agent_requests: [], totals: {} },
+      onboarding: onboarding || null,
     };
   }
 
@@ -371,6 +376,8 @@
     const d = data || {};
     const name = (d.metrics && d.metrics.business_name) || 'your business';
     return `
+      <div id="gs-panel-mount"></div>
+
       <div class="plain-banner" id="plain-banner">
         <strong>In plain English:</strong>
         Here's what AI is saying about ${esc(name)} and what visitors did next.
@@ -401,9 +408,41 @@
     `;
   }
 
+  // Mount the inline Get Started panel after render(). The panel
+  // hides itself when the tenant has onboarded_at set, when the user
+  // is an admin viewing ?as=<slug>, or when the snapshot is null
+  // (admin impersonation server-side returns an empty state). Click
+  // through any step → the panel re-renders from the new snapshot.
+  function afterMount(data) {
+    const mount = document.getElementById('gs-panel-mount');
+    if (mount && window.AMCP_GET_STARTED && typeof window.AMCP_GET_STARTED.render === 'function') {
+      const snap = (data && data.onboarding) || null;
+      window.AMCP_GET_STARTED.render(mount, snap);
+    }
+    // First-login welcome modal. Tour bridge gates internally on
+    // AMCP_ONBOARDING.isFirstLogin() and on user role, so calling
+    // unconditionally here is safe.
+    if (window.AMCP_TOUR && typeof window.AMCP_TOUR.maybeAutoStart === 'function') {
+      window.AMCP_TOUR.maybeAutoStart();
+    }
+    // Footer "Replay the tutorial" link.
+    const replay = document.getElementById('footer-help');
+    if (replay) {
+      replay.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (window.AMCP_TOUR && typeof window.AMCP_TOUR.start === 'function') {
+          window.AMCP_TOUR.start();
+        } else if (window.AMCP_ONBOARDING && typeof window.AMCP_ONBOARDING.openWelcome === 'function') {
+          window.AMCP_ONBOARDING.openWelcome();
+        }
+      });
+    }
+  }
+
   window.AMCP_OVERVIEW = {
     demo:   () => DEMO,
     fetch:  fetchReal,
     render,
+    afterMount,
   };
 })();

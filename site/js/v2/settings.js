@@ -205,11 +205,11 @@
       <div class="row">
         <div class="card-dash">
           <div class="card-head"><div><h3>Tutorial</h3><div class="sub">Replay the welcome or restart the dashboard tour</div></div></div>
-          <p style="font-size:13.5px;color:var(--ink-2);line-height:1.6;margin-bottom:12px">The onboarding flow lives on the legacy dashboard until the tour is ported in Phase 5. Clicking below takes you there with the relevant action armed.</p>
+          <p style="font-size:13.5px;color:var(--ink-2);line-height:1.6;margin-bottom:12px">All tutorial flows live on the v2 dashboard now (Phase 5 done). Each button below kicks the matching action without leaving Settings.</p>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <a class="btn btn-ghost btn-sm" href="/dashboard.html?ui=legacy#restart-welcome">Replay welcome</a>
-            <a class="btn btn-ghost btn-sm" href="/dashboard.html?ui=legacy#restart-tour">Restart tour</a>
-            <a class="btn btn-ghost btn-sm" href="/dashboard.html?ui=legacy#sec-getting-started">Open Get Started</a>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-replay-welcome">Replay welcome</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-restart-tour">Restart tour</button>
+            <a class="btn btn-ghost btn-sm" href="/app.html#get-started">Open Get Started</a>
           </div>
         </div>
 
@@ -277,6 +277,34 @@
           // Script failed to load — graceful fallback to the legacy entry
           // point so the customer isn't stranded.
           window.location.href = '/dashboard.html#sec-domains';
+        }
+      });
+    }
+
+    // Tutorial buttons — wire to v2 tour bridge if loaded, else fall
+    // back to the legacy welcome overlay so the buttons never dead-end.
+    const replayWelcomeBtn = document.getElementById('btn-replay-welcome');
+    if (replayWelcomeBtn) {
+      replayWelcomeBtn.addEventListener('click', () => {
+        if (window.AMCP_TOUR && typeof window.AMCP_TOUR.showWelcome === 'function') {
+          window.AMCP_TOUR.showWelcome();
+        } else if (window.AMCP_ONBOARDING && typeof window.AMCP_ONBOARDING.openWelcome === 'function') {
+          window.AMCP_ONBOARDING.openWelcome();
+        } else {
+          // Tour modules not loaded on this page (Settings.html doesn't
+          // include tour-bridge.js by default since it's only on
+          // /app.html). Send the user to Overview with the replay flag.
+          window.location.href = '/app.html?replay=1';
+        }
+      });
+    }
+    const restartTourBtn = document.getElementById('btn-restart-tour');
+    if (restartTourBtn) {
+      restartTourBtn.addEventListener('click', () => {
+        if (window.AMCP_TOUR && typeof window.AMCP_TOUR.start === 'function') {
+          window.AMCP_TOUR.start();
+        } else {
+          window.location.href = '/app.html?replay=1';
         }
       });
     }

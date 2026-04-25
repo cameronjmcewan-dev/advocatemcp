@@ -71,7 +71,16 @@
 <script src="/assets/shared.js"></script>
 <script src="/assets/dashboard-chrome.js"></script>
 <script src="/js/dashboard-auth.js"></script>
+<!-- Onboarding state machine + dependencies. Loaded on /app.html
+     specifically because that's where the inline Get Started panel
+     and the welcome-tour bridge fire. Other v2 pages don't need
+     these — they only render data, not onboarding flows. -->
+<script src="/js/dashboard-ui.js"></script>
+<script src="/js/dashboard-onboarding.js"></script>
+<script src="/js/dashboard-dns-wizard.js"></script>
 <script src="/js/v2/shell.js"></script>
+<script src="/js/v2/get-started.js"></script>
+<script src="/js/v2/tour-bridge.js"></script>
 <script src="/js/v2/overview.js"></script>
 <script>
 window.AMCP_SHELL.boot({
@@ -82,9 +91,10 @@ window.AMCP_SHELL.boot({
       ? ', ' + window.AMCP_DATA.full_name.split(' ')[0]
       : ''
   }.`,
-  demo:      window.AMCP_OVERVIEW.demo,
-  fetchReal: window.AMCP_OVERVIEW.fetch,
-  render:    window.AMCP_OVERVIEW.render,
+  demo:       window.AMCP_OVERVIEW.demo,
+  fetchReal:  window.AMCP_OVERVIEW.fetch,
+  render:     window.AMCP_OVERVIEW.render,
+  afterMount: window.AMCP_OVERVIEW.afterMount,
 });
 </script>
 </body>

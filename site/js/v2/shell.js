@@ -155,6 +155,21 @@
       const m = (data && (data.metrics || data)) || {};
       Object.assign(window.AMCP_DATA, m);
 
+      // Derive is_hosted from the domain hostname so the legacy
+      // AMCP_ONBOARDING state machine (and the v2 Get Started panel)
+      // can pick the right checklist (hosted has no DNS step). Worker
+      // doesn't return is_hosted explicitly today; suffix-match is the
+      // single source of truth.
+      const host = (window.AMCP_DATA.domain && window.AMCP_DATA.domain.hostname) || '';
+      window.AMCP_DATA.is_hosted = /\.hosted\.advocatemcp\.com$/i.test(host);
+
+      // Hand the onboarding snapshot (if the page returned it) to the
+      // legacy state machine so isFirstLogin() and the inline Get
+      // Started panel both see the same state without re-fetching.
+      if (data && data.onboarding && window.AMCP_ONBOARDING && typeof window.AMCP_ONBOARDING.loadState === 'function') {
+        window.AMCP_ONBOARDING.loadState(data.onboarding);
+      }
+
       // Re-render title if it depends on data
       if (typeof opts.title === 'function') {
         const topTitle = document.querySelector('.topbar-title');

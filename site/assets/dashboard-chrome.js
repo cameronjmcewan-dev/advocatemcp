@@ -178,10 +178,14 @@
     if (replay) {
       replay.addEventListener('click', () => {
         menu.classList.remove('open');
-        if (typeof window.__startTour === 'function') {
+        // v2 tour bridge is the canonical tour on /app.html. Fall back
+        // to the legacy spotlight if it's loaded, then to a full-page
+        // hand-off if neither is present.
+        if (window.AMCP_TOUR && typeof window.AMCP_TOUR.start === 'function') {
+          window.AMCP_TOUR.start();
+        } else if (typeof window.__startTour === 'function') {
           window.__startTour();
         } else {
-          // On pages without a tour, land on Dashboard with replay trigger
           localStorage.removeItem('advocate-tour-seen');
           window.location.href = '/app.html?replay=1';
         }
