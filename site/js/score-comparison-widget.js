@@ -1,14 +1,18 @@
-/* Homepage "See the math" widget, predicted citation rating
- * comparison: with-Advocate vs baseline.
+/* Homepage "See the math" widget, citation-readiness score
+ * distribution across one Advocate-enabled tenant and several
+ * archetype non-customer SMBs.
  *
- * Reads pre-computed JSON from /data/score-comparison.json. Pure
- * client-side, no API calls, no per-visitor cost. The data is real:
- * Workman Copy Co.'s actual harness output for the with-Advocate panel,
- * synthesized typical sites for the baselines (with that explicitly
- * labeled). Refresh quarterly via server/scripts/refresh-comparison-data.ts.
+ * v2 (Apr 25 2026): expanded from 3-card layout to a 7-row
+ * distribution view. The previous version had WCC + 2 baselines,
+ * which read as cherry-picked. The new version shows a real spread
+ * (8.5, 3.8) across realistic SMB archetypes, credibility move
+ * straight out of the strategic critique. Sophisticated buyers
+ * pattern-match self-graded benchmarks; the spread + linked
+ * methodology page is the antidote.
  *
- * Mounts under #score-comparison-mount on /index.html if present.
- * Silent no-op otherwise (other pages don't need the widget).
+ * Pure client-side, no API calls, no per-visitor cost. Reads
+ * /data/score-comparison.json. Refreshes when that JSON does
+ * (quarterly via server/scripts/refresh-comparison-data.ts).
  */
 
 (function () {
@@ -21,42 +25,50 @@
       .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
 
-  function pctRate(rate) {
-    if (typeof rate !== "number" || !isFinite(rate)) return ",";
-    return `${Math.round(rate * 100)}%`;
+  /* Visual horizontal bar showing where the score sits on the 0-10
+   * scale. Advocate-enabled gets the maroon fill; everything else gets
+   * a muted ink-2 fill so the visual hierarchy makes the contrast
+   * (rather than the size of the cards). */
+  function renderBar(score, max, isReal) {
+    const pct = Math.max(0, Math.min(100, (score / max) * 100));
+    const fill = isReal ? "var(--maroon)" : "var(--ink-2)";
+    return `
+      <div style="height:8px;background:var(--paper-2);border-radius:999px;overflow:hidden;border:1px solid var(--line);">
+        <div style="height:100%;width:${pct}%;background:${fill};"></div>
+      </div>
+    `;
   }
 
-  function renderCard(example) {
+  function renderRow(example) {
     const isReal = example.is_real_data === true;
-    const dotColor = isReal ? "var(--maroon)" : "var(--muted)";
-    const scoreColor = isReal ? "var(--maroon)" : "var(--ink-2)";
+    const dotBg = isReal ? "var(--maroon)" : "var(--ink-2)";
+    const labelBg = isReal ? "var(--maroon)" : "var(--paper-2)";
+    const labelColor = isReal ? "#fff" : "var(--ink-2)";
+    const scoreColor = isReal ? "var(--maroon)" : "var(--ink)";
     return `
-      <div class="sc-card" style="
-        background: var(--paper);
+      <div class="sc-row" style="
+        padding: 16px 18px;
         border: 1px solid var(--line);
-        border-radius: 10px;
-        padding: 18px 20px;
-        display: flex; flex-direction: column;
-        ${isReal ? "border-color: var(--maroon); border-width: 1.5px;" : ""}
+        border-left: 3px solid ${dotBg};
+        border-radius: 8px;
+        background: var(--paper);
+        ${isReal ? "border-color: var(--maroon); border-left-width: 4px; background: rgba(125,37,80,0.04);" : ""}
       ">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-          <span style="display:inline-block;width:6px;height:6px;border-radius:999px;background:${dotColor};"></span>
-          <span style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);font-weight:600;">${esc(example.label)}</span>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
+            <span style="display:inline-flex;align-items:center;padding:3px 9px;border-radius:999px;background:${labelBg};color:${labelColor};font-size:10px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;flex-shrink:0;">${esc(example.label)}</span>
+            <div style="font-family:var(--serif);font-size:16px;color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(example.subtitle)}</div>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:6px;flex-shrink:0;">
+            <span style="font-family:var(--serif);font-size:28px;font-weight:400;line-height:1;color:${scoreColor};">${example.score.toFixed(1)}</span>
+            <span style="font-size:12px;color:var(--muted);">/ ${example.score_max}</span>
+          </div>
         </div>
-        <div style="font-family:var(--serif);font-size:15px;color:var(--ink);margin-bottom:10px;">${esc(example.subtitle)}</div>
-        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px;">
-          <div style="font-family:var(--serif);font-size:42px;font-weight:400;line-height:1;color:${scoreColor};">${example.score.toFixed(1)}</div>
-          <div style="font-size:14px;color:var(--muted);">/ ${example.score_max}</div>
-        </div>
-        <div style="font-size:11.5px;color:var(--muted);margin-bottom:10px;">
-          Cite rate: <strong style="color:var(--ink-2);">${pctRate(example.cite_rate)}</strong>
-        </div>
-        <p style="font-size:12.5px;color:var(--ink-2);line-height:1.45;margin:0 0 10px;">
-          ${esc(example.description)}
-        </p>
-        <div style="margin-top:auto;padding-top:10px;border-top:1px solid var(--line);font-size:12px;color:var(--ink-2);font-style:italic;line-height:1.45;">
-          <strong style="font-style:normal;color:var(--ink);display:block;margin-bottom:3px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;">Claude judge</strong>
-          "${esc(example.judge_excerpt)}"
+        ${renderBar(example.score, example.score_max, isReal)}
+        <div style="margin-top:10px;font-size:12.5px;color:var(--ink-2);line-height:1.5;">
+          <span style="color:var(--muted);font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:600;">${esc(example.category || "")}</span>
+          <span style="color:var(--muted);"> · </span>
+          <span style="font-style:italic;">"${esc(example.judge_excerpt)}"</span>
         </div>
       </div>
     `;
@@ -65,43 +77,36 @@
   function renderWidget(data) {
     const mount = document.getElementById(MOUNT_ID);
     if (!mount) return;
-    const advocate = data.examples.find((e) => e.id === "with_advocate");
-    const baselines = data.examples.filter((e) => e.id !== "with_advocate");
-    if (!advocate || baselines.length === 0) {
-      mount.innerHTML = "";
+    if (!data.examples || data.examples.length === 0) {
+      mount.style.display = "none";
       return;
     }
+    // Sort by score descending. Visible distribution > arbitrary order.
+    const rows = [...data.examples].sort((a, b) => b.score - a.score);
     const generatedDate = new Date(data.generated_at_utc).toLocaleDateString("en-US", {
       month: "short", year: "numeric",
     });
+    const advocateScore = (rows.find((r) => r.is_real_data) || {}).score;
+    const otherMax = Math.max(...rows.filter((r) => !r.is_real_data).map((r) => r.score));
+    const gap = advocateScore && otherMax ? (advocateScore - otherMax).toFixed(1) : null;
+
     mount.innerHTML = `
-      <div class="container" style="max-width:1080px;">
-        <div style="max-width:640px;margin-bottom:24px;">
+      <div class="container" style="max-width:920px;">
+        <div style="max-width:680px;margin-bottom:22px;">
           <span class="eyebrow">See the math</span>
-          <h2 style="font-family:var(--serif);font-weight:400;font-size:32px;line-height:1.15;margin:8px 0 12px;color:var(--ink);">What AI sees: with Advocate vs without.</h2>
+          <h2 style="font-family:var(--serif);font-weight:400;font-size:32px;line-height:1.15;margin:8px 0 12px;color:var(--ink);">Citation-readiness, measured.</h2>
           <p style="margin:0;font-size:14.5px;line-height:1.55;color:var(--ink-2);">
-            Same Claude-judge harness we use internally to optimize per-engine output.
-            The "With Advocate" panel reflects Workman Copy Co.'s real configuration; baselines are synthesized typical websites.
+            One Advocate-enabled tenant alongside six anonymized SMB archetypes. Same Claude-judge harness, same rubric, same prompt. ${gap ? `Advocate's WCC scores ${gap} points above the strongest non-customer archetype.` : ""} The full prompt + rubric is published on <a href="/methodology.html" style="color:var(--maroon);">/methodology.html</a> so you can reproduce against your own site.
           </p>
         </div>
-        <div class="sc-grid" style="
-          display: grid;
-          grid-template-columns: repeat(${1 + baselines.length}, minmax(0, 1fr));
-          gap: 16px;
-        ">
-          ${renderCard(advocate)}
-          ${baselines.map(renderCard).join("")}
+        <div class="sc-stack" style="display:flex;flex-direction:column;gap:10px;">
+          ${rows.map(renderRow).join("")}
         </div>
         <div style="margin-top:18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;font-size:12.5px;color:var(--muted);">
-          <span>Refreshed ${esc(generatedDate)} · <a href="/methodology.html" style="color:var(--maroon);">methodology →</a></span>
-          <a href="/Pricing.html" class="btn btn-primary btn-sm">Get this for your business →</a>
+          <span>Refreshed ${esc(generatedDate)} · <a href="/methodology.html" style="color:var(--maroon);">harness prompt + rubric &rarr;</a></span>
+          <a href="/Pricing.html" class="btn btn-primary btn-sm">Get this for your business &rarr;</a>
         </div>
       </div>
-      <style>
-        @media (max-width: 880px) {
-          .sc-grid { grid-template-columns: 1fr !important; }
-        }
-      </style>
     `;
   }
 
@@ -114,10 +119,7 @@
       const data = await res.json();
       renderWidget(data);
     } catch (err) {
-      // Soft-fail: hide the mount entirely if the JSON is missing /
-      // malformed. Better to show no widget than a broken one.
       mount.style.display = "none";
-      // Surface for debugging in dev, silent in prod.
       if (typeof console !== "undefined" && console.warn) {
         console.warn("[score-comparison] failed to load:", err);
       }

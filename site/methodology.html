@@ -126,6 +126,71 @@
         LLM judge that approximates their scoring.
       </div>
 
+      <h2>The exact judge prompt + rubric</h2>
+      <p>
+        Below is the verbatim system prompt we send to Claude Sonnet for every score on
+        every dashboard. You can copy it and run it against your own site to reproduce
+        the score yourself, or fork it and substitute a different judge model. We
+        publish this so the score isn't a black-box claim.
+      </p>
+      <pre style="background:var(--paper-2);border:1px solid var(--line);border-radius:10px;padding:18px 20px;font-size:12.5px;line-height:1.55;white-space:pre-wrap;color:var(--ink-2);overflow-x:auto;">You are evaluating a webpage's quality as a citation source for an AI search engine.
+
+You are NOT a content marketer. You are simulating how an AI search engine's extraction pipeline (Google AI Overview, Perplexity, ChatGPT search, Claude search) would assess this content as a candidate citation source.
+
+For each evaluation, output exactly this JSON shape and nothing else:
+
+{
+  "citability_score": &lt;integer 1-10&gt;,
+  "would_cite": &lt;boolean&gt;,
+  "reasoning": "&lt;2-3 sentences explaining your score&gt;"
+}
+
+Scoring rubric:
+- 10: ideal. Schema.org JSON-LD present and complete. Clear lead sentence. Self-contained citable claims. Trust signals. Action-oriented CTA. Would definitely cite.
+- 7-9: strong. Most extraction signals present, minor gaps.
+- 4-6: workable but weak. Either the prose is good but structure is missing, or vice versa. Citation likely only if alternatives are worse.
+- 1-3: poor. Hard to extract entity/facts cleanly, or mostly marketing fluff.
+
+Penalize:
+- Over-confident claims without attribution
+- Marketing hype words ("amazing", "best in class", "world-class")
+- AI-disclaimer hedges ("I'm an AI", "based on available info")
+- Missing structured data when the format type implies it (e.g. an HTML page with no JSON-LD)
+- JSON envelopes wrapping markdown when HTML would be more parseable
+- Bullet pages where the bullets aren't self-contained (rely on pronouns to a missing antecedent)
+
+Reward:
+- Clean schema.org JSON-LD (LocalBusiness, ProfessionalService, FAQPage, Speakable)
+- Bold inline key facts (Perplexity-style)
+- Self-reported attribution preserved ("reports", "states", "describes as")
+- Action-specific CTA naming the verb (Book / Quote / Call / Visit)
+- First sentence &le;160 chars containing entity + specialty + location
+
+Be a tough but fair judge. Most pages should land 4-7. Reserve 9-10 for genuinely strong extraction targets.</pre>
+
+      <p style="margin-top:18px;">
+        Source location in the codebase:
+        <code>server/src/experiments/formatJudge/judges.ts</code> (the
+        <code>SYSTEM_PROMPT</code> constant). When the prompt evolves we increment the
+        harness <code>iteration_count</code> on the comparison data and refresh the
+        published scores quarterly.
+      </p>
+
+      <h2>Reproducing the score against your own site</h2>
+      <p>If you want to verify the methodology before signing up:</p>
+      <ol>
+        <li>Take the system prompt above. Paste it into Claude Sonnet (or any frontier model) as a system message.</li>
+        <li>For your own site, fetch your homepage HTML and any JSON-LD it emits. Pick a likely user query like "best [your category] in [your city]?".</li>
+        <li>Send a user message with the format shown in <code>judges.ts</code>: <code>Query: "..."</code> followed by <code>Candidate citation source:</code> and the rendered HTML.</li>
+        <li>The model returns the same JSON shape we use. Compare the score to the scores on our comparison page.</li>
+      </ol>
+      <p>
+        We don't ask you to take our word for it. The harness is reproducible by any
+        sufficiently determined buyer in about ten minutes. If your site scores 8.5/10
+        already with no Advocate, you don't need us. If it doesn't, the gap is what we
+        close.
+      </p>
+
       <h2>Where the real-citation data is</h2>
       <p>
         For ground truth, actual times an AI engine cited your business in a real query,

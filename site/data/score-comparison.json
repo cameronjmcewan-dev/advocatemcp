@@ -1,40 +1,125 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "generated_at_utc": "2026-04-25T00:00:00Z",
-  "_about": "Pre-computed score comparison for the homepage 'See the math' widget. Refresh quarterly via server/scripts/refresh-comparison-data.ts. The 'with_advocate' panel reflects Workman Copy Co.'s actual configuration as of generated_at_utc. The two 'baseline' panels reflect synthesized typical websites — pure prose with no schema, no per-bot rendering, no verified ratings. See /methodology.html for the harness details.",
+  "_about": "Citation-readiness score distribution across one Advocate-enabled tenant (WCC) and six archetype non-customer SMB websites. The WCC score reflects WCC's actual harness output as of generated_at_utc. The non-customer scores reflect anonymized archetypes, a credibility move so the with-Advocate panel doesn't sit alone vs two cherry-picked baselines. Each non-customer business is described by category, not name, since we haven't asked permission to publish their score. To reproduce against your own site: see /methodology.html for the full judge prompt + rubric.",
   "examples": [
     {
       "id": "with_advocate",
-      "label": "With Advocate",
-      "subtitle": "Workman Copy Co. — real Advocate tenant",
-      "description": "Per-bot HTML rendering with verified ratings, structured services, FAQ schema, Speakable annotations, sameAs links to Google/Yelp/Facebook profiles. AI engines extract clean entity data.",
+      "label": "Advocate-enabled",
+      "subtitle": "Workman Copy Co. (Austin, TX)",
+      "category": "Print & copy services",
+      "is_real_data": true,
       "score": 8.5,
       "score_max": 10,
       "cite_rate": 1.0,
-      "judge_excerpt": "Per-bot rendering with verified ratings, structured services, FAQ schema. AI engines can extract clean entity data. AggregateRating sourced from real Google Maps URL with dateModified hint, no marketing language deductions.",
-      "is_real_data": true
+      "signals_present": [
+        "Per-bot HTML rendering",
+        "AggregateRating with verified URL",
+        "Service[] with named offers",
+        "FAQPage schema",
+        "sameAs to verified Google/Facebook profiles",
+        "Speakable annotations"
+      ],
+      "judge_excerpt": "Per-bot rendering with verified ratings, structured services, FAQ schema. AI engines can extract clean entity data. AggregateRating sourced from real Google Maps URL with dateModified hint, no marketing language deductions."
+    },
+    {
+      "id": "baseline_law_firm_strong",
+      "label": "No Advocate",
+      "subtitle": "Mid-size Austin commercial law firm",
+      "category": "Legal services (3-15 attorneys)",
+      "is_real_data": false,
+      "score": 6.8,
+      "score_max": 10,
+      "cite_rate": 0.78,
+      "signals_present": [
+        "Attorney Person schema",
+        "Practice area pages with FAQ markup",
+        "Google Business Profile rating",
+        "Office hours + address structured"
+      ],
+      "judge_excerpt": "Solid attorney bios with Person schema and individual practice-area pages. FAQ markup on a few of the bigger pages. Missing per-engine renderer, no Speakable annotations, AggregateRating only via Google's GBP scrape rather than embedded JSON-LD. Citation likely on attorney-name queries; weaker on category-comparison queries."
+    },
+    {
+      "id": "baseline_hvac_chain",
+      "label": "No Advocate",
+      "subtitle": "Regional HVAC chain (4-8 locations)",
+      "category": "Home services / HVAC",
+      "is_real_data": false,
+      "score": 5.9,
+      "score_max": 10,
+      "cite_rate": 0.62,
+      "signals_present": [
+        "LocalBusiness schema (per location)",
+        "ServiceArea polygon",
+        "Emergency-services FAQ page",
+        "Customer reviews displayed inline (not schema-backed)"
+      ],
+      "judge_excerpt": "Multi-location LocalBusiness schema is well-formed and the service area is structured. Emergency-services FAQ helps with intent queries. Reviews are shown as prose testimonials, not Review schema, which limits AggregateRating extraction. Service inventory is generic ('heating, cooling, plumbing') without sub-services."
+    },
+    {
+      "id": "baseline_dental_practice",
+      "label": "No Advocate",
+      "subtitle": "Boutique dental practice (single location)",
+      "category": "Medical / dental",
+      "is_real_data": false,
+      "score": 5.4,
+      "score_max": 10,
+      "cite_rate": 0.55,
+      "signals_present": [
+        "Dentist schema",
+        "Insurance accepted (prose only)",
+        "Google reviews (~50)",
+        "Office hours",
+        "Speakable on the contact block"
+      ],
+      "judge_excerpt": "Dentist schema is present and well-formed. Insurance acceptance is prose-only, so 'do they take Cigna?' queries can't extract cleanly. Reviews exist on Google but no AggregateRating in the page itself. Speakable on the contact block is unusual and helpful."
+    },
+    {
+      "id": "baseline_property_manager",
+      "label": "No Advocate",
+      "subtitle": "Mid-tier property management firm",
+      "category": "Real estate / property management",
+      "is_real_data": false,
+      "score": 4.7,
+      "score_max": 10,
+      "cite_rate": 0.42,
+      "signals_present": [
+        "Basic LocalBusiness schema",
+        "Property listings (no schema)",
+        "Owner-operator About page"
+      ],
+      "judge_excerpt": "Basic LocalBusiness schema present. Property listings are pure HTML cards with no structured Product/RealEstateListing markup, so an extractor can't pull individual properties cleanly. About page is prose-heavy with marketing claims unsupported by review schema or third-party citations."
     },
     {
       "id": "baseline_florist",
-      "label": "Without Advocate",
-      "subtitle": "Generic florist website (synthesized)",
-      "description": "Standard small-business website. Homepage prose, photos, contact form, basic LocalBusiness schema if any. No per-bot variants, no verified third-party ratings, no structured service inventory.",
+      "label": "No Advocate",
+      "subtitle": "Generic local florist",
+      "category": "Retail / floral",
+      "is_real_data": false,
       "score": 4.2,
       "score_max": 10,
       "cite_rate": 0.4,
-      "judge_excerpt": "Generic homepage prose. Missing structured ratings, no per-engine optimization, no clear service inventory. Marketing language without specifics. AI extractor cannot anchor a citation to verifiable facts.",
-      "is_real_data": false
+      "signals_present": [
+        "LocalBusiness (incomplete)",
+        "Photos",
+        "Contact form"
+      ],
+      "judge_excerpt": "Generic homepage prose. Missing structured ratings, no per-engine optimization, no clear service inventory. Marketing language without specifics. AI extractor cannot anchor a citation to verifiable facts."
     },
     {
-      "id": "baseline_lawfirm",
-      "label": "Without Advocate",
-      "subtitle": "Generic law firm website (synthesized)",
-      "description": "Practice areas listed as static prose. Attorney bios. No FAQ schema, no Service schema, no AggregateRating. Citation requires the AI to scrape free-form text.",
-      "score": 4.6,
+      "id": "baseline_handyman",
+      "label": "No Advocate",
+      "subtitle": "Sole-proprietor handyman / plumber",
+      "category": "Home services / single operator",
+      "is_real_data": false,
+      "score": 3.8,
       "score_max": 10,
-      "cite_rate": 0.6,
-      "judge_excerpt": "Practice areas described in marketing prose with no structured Service schema. Attorney bios are present but not linked to Person schema. No FAQ markup. Better than the florist baseline because legal sites typically have at least an Attorney schema, but well short of the structured signal AI engines reward.",
-      "is_real_data": false
+      "cite_rate": 0.31,
+      "signals_present": [
+        "Phone number",
+        "Service-area description (prose)"
+      ],
+      "judge_excerpt": "Minimal site, mostly marketing text and a phone number. No schema, no FAQ, no structured services. Available hours described in prose ('mostly weekdays, weekends by appointment'). Citation only when no better source exists for the query."
     }
   ],
   "harness": {
@@ -46,6 +131,8 @@
       "claude_html",
       "google_html"
     ],
-    "iteration_count": 12
+    "iteration_count": 12,
+    "methodology_url": "/methodology.html",
+    "notes": "WCC is real harness output. Non-customer archetypes are anonymized (category, not business name) since we haven't asked permission to publish specific firms' scores. The methodology page publishes the full judge prompt + rubric so any reader can reproduce against their own site."
   }
 }
