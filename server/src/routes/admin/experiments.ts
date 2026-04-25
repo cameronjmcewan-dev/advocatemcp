@@ -21,7 +21,26 @@
 import { Router, type Request, type Response } from "express";
 import { runExperiment } from "../../experiments/formatJudge/runner.js";
 import { getDb } from "../../db.js";
+import { checkLimit } from "../../middleware/costRateLimit.js";
 import type { BusinessRow } from "../../db.js";
+
+/* Rate limits on POST /admin/experiments/format-judge.
+ *
+ * Each run = up to ~$0.40 in API spend (default config: 5 queries
+ * × 6 variants × 2 judges = 60 trials × $0.007). Operator-facing
+ * endpoint, but defense-in-depth against:
+ *   - Runaway scripts (CI loop firing experiments)
+ *   - Multiple admins running simultaneous large experiments
+ *   - Compromised admin token spamming the harness
+ *
+ * Single global bucket (key="admin"). Daily cap of 60 runs is
+ * ~$24/day max — generous for ops use, hard cap on disaster.
+ * Burst cap of 5 in 5 minutes prevents accidental retry-loops
+ * from blowing the budget in seconds. */
+const FORMAT_JUDGE_LIMITS = [
+  { label: "format-judge:burst", cfg: { max: 5,  windowMs: 5 * 60_000 } },
+  { label: "format-judge:daily", cfg: { max: 60, windowMs: 24 * 60 * 60_000 } },
+];
 
 export const adminExperimentsRouter = Router();
 
@@ -66,6 +85,22 @@ adminExperimentsRouter.get(
 adminExperimentsRouter.post(
   "/experiments/format-judge",
   async (req: Request, res: Response) => {
+    // Cost-protection: cap format-judge runs to prevent runaway
+    // CI scripts or compromised admin sessions from emptying the
+    // Anthropic budget. Single global bucket since this endpoint
+    // is admin-only (any caller is "the operator").
+    const gate = checkLimit({ key: "admin", limits: FORMAT_JUDGE_LIMITS });
+    if (!gate.allowed) {
+      const retryAfterSec = Math.ceil(gate.retryAfterMs / 1000);
+      res.setHeader("Retry-After", String(retryAfterSec));
+      res.status(429).json({
+        error: "rate_limited",
+        message: `Too many format-judge runs (${gate.label}). Try again in ${retryAfterSec}s.`,
+        retry_after_seconds: retryAfterSec,
+      });
+      return;
+    }
+
     const body = (req.body ?? {}) as {
       profile_slugs?: unknown;
       queries?: unknown;

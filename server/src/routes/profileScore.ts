@@ -34,9 +34,33 @@ import crypto from "crypto";
 import { getDb } from "../db.js";
 import { runExperiment } from "../experiments/formatJudge/runner.js";
 import { requireSlugOrAdminKey } from "../middleware/auth.js";
+import { rateLimit, checkLimit } from "../middleware/costRateLimit.js";
 import type { BusinessRow } from "../db.js";
 
 export const profileScoreRouter = Router();
+
+/* Rate limits on /agents/:slug/profile-score (fresh runs only).
+ *
+ * Each fresh run = ~$0.04 in Anthropic API spend. Without a cap, a
+ * compromised session or runaway client could rack up thousands in
+ * a few minutes. Two-tier per-slug bucket:
+ *   - 3 fresh runs per 60 seconds  (burst protection — covers
+ *     auto-rerun-on-save races without blocking legitimate ops).
+ *   - 60 fresh runs per 24 hours   (~$2.40/day max per tenant —
+ *     well above any realistic legit usage).
+ *
+ * Cache HITS do not consume a slot (they spend nothing). We
+ * checkLimit() only after we determine the request is going to
+ * actually run fresh. The 60s debounce on the client already
+ * collapses save spree → 1 fresh run; this is server-side
+ * defense-in-depth.
+ *
+ * Limits are scoped per slug. Different tenants can run in parallel
+ * without interfering with each other. */
+const PROFILE_SCORE_LIMITS = [
+  { label: "profile-score:burst", cfg: { max: 3,  windowMs: 60_000 } },
+  { label: "profile-score:daily", cfg: { max: 60, windowMs: 24 * 60 * 60_000 } },
+];
 
 const HISTORY_CAP = 30;
 
@@ -301,6 +325,19 @@ profileScoreRouter.post(
     }
 
     // Cache miss (or force) → run the harness fresh.
+    // Rate limit fires HERE so cache hits don't burn slots.
+    const gate = checkLimit({ key: slug, limits: PROFILE_SCORE_LIMITS });
+    if (!gate.allowed) {
+      const retryAfterSec = Math.ceil(gate.retryAfterMs / 1000);
+      res.setHeader("Retry-After", String(retryAfterSec));
+      res.status(429).json({
+        error: "rate_limited",
+        message: `Too many fresh runs for ${slug} (${gate.label}). Try again in ${retryAfterSec}s.`,
+        retry_after_seconds: retryAfterSec,
+      });
+      return;
+    }
+
     try {
       const result = await runExperiment({
         profileSlugs: [slug],
