@@ -175,12 +175,15 @@
         }).join('');
 
     const basketRows = basket.length === 0
-      ? `<tr><td colspan="4" style="padding:20px;color:var(--muted);font-size:13.5px;text-align:center">Your query basket is empty. Add queries to start tracking.</td></tr>`
-      : basket.map(q => `<tr>
+      ? `<tr><td colspan="5" style="padding:20px;color:var(--muted);font-size:13.5px;text-align:center">Your query basket is empty. Add queries below to start tracking.</td></tr>`
+      : basket.map(q => `<tr data-basket-id="${esc(q.id)}">
           <td><span class="q">${esc(q.query)}</span></td>
           <td class="t" style="font-weight:500;color:${(q.win_rate || 0) >= 0.5 ? 'var(--sage)' : 'var(--red)'}">${fmtPct(q.win_rate)}</td>
           <td class="t">${fmtCount(q.tests)}</td>
           <td>${trendGlyph(q.trend)}</td>
+          <td style="text-align:right">
+            <button class="btn btn-ghost btn-sm radar-del" data-id="${esc(q.id)}" title="Remove query" aria-label="Remove query">×</button>
+          </td>
         </tr>`).join('');
 
     const lossRows = losses.length === 0
@@ -226,10 +229,17 @@
       <div class="row single">
         <div class="card-dash">
           <div class="card-head"><div><h3>Query basket</h3><div class="sub">The phrasings we poll weekly — edit any time</div></div></div>
-          <table class="tbl">
-            <thead><tr><th>Query</th><th>Win rate</th><th>Tests this week</th><th>Trend</th></tr></thead>
+          <table class="tbl" id="radar-basket-tbl">
+            <thead><tr><th>Query</th><th style="width:90px">Win rate</th><th style="width:100px">Tests this week</th><th style="width:60px">Trend</th><th style="width:40px"></th></tr></thead>
             <tbody>${basketRows}</tbody>
           </table>
+          <form id="radar-basket-form" style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;align-items:center">
+            <input id="radar-basket-input" type="text" required maxlength="240" autocomplete="off"
+                   placeholder='e.g. "best dental in austin tx"'
+                   style="flex:1;min-width:220px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:14px;background:var(--paper);color:var(--ink)">
+            <button type="submit" id="radar-basket-add" class="btn btn-primary btn-sm">Add to basket</button>
+            <span id="radar-basket-status" aria-live="polite" style="font-size:12.5px;color:var(--muted);min-height:18px;flex-basis:100%"></span>
+          </form>
         </div>
       </div>
 
@@ -248,5 +258,105 @@
     return renderPro(radar || {});
   }
 
-  window.AMCP_RADAR = { demo: () => DEMO, fetch: fetchReal, render };
+  /* afterMount wires the basket-add form + per-row delete buttons.
+     Runs after the chrome + content swap so DOM nodes exist. The
+     SPA router calls this exactly once per navigation; the legacy
+     full-page boot calls it via shell.js. Slug-aware so admin
+     impersonation (?as=<slug>) hits the correct tenant's basket. */
+  function afterMount(_data) {
+    if (!isPro()) return;  // Locked view has no form to wire.
+    const af = window.AMCP && window.AMCP.authedFetch;
+    if (!af) return;
+
+    const slug = new URL(location.href).searchParams.get('as')
+      || (window.AMCP_DATA && window.AMCP_DATA.slug)
+      || '';
+    const slugSuffix = slug ? `?slug=${encodeURIComponent(slug)}` : '';
+
+    const form   = document.getElementById('radar-basket-form');
+    const input  = document.getElementById('radar-basket-input');
+    const btn    = document.getElementById('radar-basket-add');
+    const status = document.getElementById('radar-basket-status');
+    const tbody  = document.querySelector('#radar-basket-tbl tbody');
+
+    function setStatus(msg, kind) {
+      if (!status) return;
+      status.textContent = msg || '';
+      status.style.color = kind === 'error'
+        ? 'var(--red)'
+        : kind === 'ok'
+          ? 'var(--sage)'
+          : 'var(--muted)';
+    }
+
+    if (form) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const query = (input && input.value || '').trim();
+        if (!query) return;
+        if (query.length > 240) { setStatus('Query too long (max 240 chars)', 'error'); return; }
+        btn.disabled = true;
+        setStatus('Adding…');
+        try {
+          const res = await af('/api/client/radar/basket' + slugSuffix, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query }),
+          });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            setStatus('Add failed: ' + (body.error || `HTTP ${res.status}`), 'error');
+            return;
+          }
+          setStatus('Added — first poll runs Mon/Wed/Fri at 04:00 UTC', 'ok');
+          input.value = '';
+          // Reload page so the new row + win-rate columns hydrate
+          // from /api/client/radar. Cheap because the SPA router
+          // serves the page from cache + only the data swaps.
+          if (window.AMCP_ROUTER && typeof window.AMCP_ROUTER.navigate === 'function') {
+            window.AMCP_ROUTER.navigate(location.href, { push: false });
+          } else {
+            window.location.reload();
+          }
+        } catch (err) {
+          setStatus('Network error: ' + String(err && err.message || err), 'error');
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    }
+
+    if (tbody) {
+      tbody.addEventListener('click', async (e) => {
+        const target = e.target;
+        if (!(target instanceof HTMLElement)) return;
+        const delBtn = target.closest('.radar-del');
+        if (!delBtn) return;
+        const id = delBtn.getAttribute('data-id');
+        if (!id) return;
+        if (!confirm('Remove this query from the basket?')) return;
+        delBtn.disabled = true;
+        try {
+          const res = await af(
+            `/api/client/radar/basket/${encodeURIComponent(id)}` + slugSuffix,
+            { method: 'DELETE' },
+          );
+          if (!res.ok) {
+            setStatus('Remove failed: HTTP ' + res.status, 'error');
+            delBtn.disabled = false;
+            return;
+          }
+          // Drop the row immediately for instant feedback
+          const row = delBtn.closest('tr');
+          if (row && row.parentNode) row.parentNode.removeChild(row);
+          setStatus('Removed', 'ok');
+        } catch (err) {
+          setStatus('Network error: ' + String(err && err.message || err), 'error');
+          delBtn.disabled = false;
+        }
+      });
+    }
+  }
+
+  window.AMCP_RADAR = { demo: () => DEMO, fetch: fetchReal, render, afterMount };
 })();
