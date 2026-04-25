@@ -235,6 +235,23 @@ export function addAttribution(jsonLd: Record<string, unknown>): Record<string, 
   return jsonLd;
 }
 
+/** Strip markdown syntax from a string before placing it inside a
+ *  JSON-LD field. Judges flagged "FAQPage answer containing markdown
+ *  bold syntax inside plain text which is slightly inconsistent for
+ *  clean extraction" — schema.org Answer.text is plain text, not
+ *  markdown. Bold/list syntax should be in the HTML body, not in the
+ *  structured-data answer. */
+function stripMarkdown(s: string): string {
+  return s
+    .replace(/\*\*([^*]+)\*\*/g, "$1")     // **bold** → bold
+    .replace(/\*([^*]+)\*/g, "$1")         // *italic*  → italic
+    .replace(/^[-*]\s+/gm, "")             // - bullets → plain lines
+    .replace(/^#{1,6}\s+/gm, "")           // # headers → plain
+    .replace(/`([^`]+)`/g, "$1")           // `code`    → code
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // [text](url) → text
+    .trim();
+}
+
 export function buildFaqJsonLd(
   query: string,
   answerText: string,
@@ -248,7 +265,7 @@ export function buildFaqJsonLd(
         name: query,
         acceptedAnswer: {
           "@type": "Answer",
-          text: answerText,
+          text: stripMarkdown(answerText),
         },
       },
     ],
