@@ -118,7 +118,7 @@
           <td class="t">${fmtCount(b.analytics?.total_queries)}</td>
           <td class="t">${fmtCount(b.analytics?.referral_clicks_last_30_days)}</td>
           <td style="text-align:right">
-            <a class="btn btn-ghost btn-sm" href="/app.html?as=${encodeURIComponent(b.slug)}" target="_blank" rel="noopener">Impersonate →</a>
+            <a class="btn btn-ghost btn-sm" href="/app.html?as=${encodeURIComponent(b.slug)}" title="Click to impersonate in place; ⌘-click for new tab">Impersonate →</a>
           </td>
         </tr>`).join('');
 
@@ -146,7 +146,7 @@
     return `
       <div class="plain-banner">
         <strong>Admin view.</strong>
-        Aggregate across every active tenant. Impersonate to see a specific business's dashboard (your session stays intact — it's a read-through view).
+        Aggregate across every active tenant. Click "Impersonate" on any row to view that tenant's dashboard in this tab — sidebar clicks preserve the impersonation, the maroon banner stays mounted, and "Exit" returns here.
       </div>
 
       <div class="kpis">

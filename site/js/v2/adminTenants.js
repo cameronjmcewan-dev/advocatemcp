@@ -148,7 +148,7 @@
           <td class="t">${fmtCount(b.analytics?.total_queries)}</td>
           <td class="t">${fmtCount(b.analytics?.referral_clicks_last_30_days)}</td>
           <td style="text-align:right" class="row-action">
-            <a href="/app.html?as=${encodeURIComponent(b.slug)}" target="_blank" rel="noopener">Impersonate →</a>
+            <a href="/app.html?as=${encodeURIComponent(b.slug)}" title="Click to impersonate in place; ⌘-click for new tab">Impersonate →</a>
           </td>
         </tr>
       `).join('');
