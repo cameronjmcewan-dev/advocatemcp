@@ -219,13 +219,17 @@ export function buildSystemPrompt(
   // Ratings from external platforms.
   // - When the tenant supplied a URL: this IS third-party verification
   //   (the platform is the source). We drop the "self-reported" hedge
-  //   and use direct attribution: "Google: 4.9/5 across 47 reviews
-  //   (https://...)". Judges in iter9 still flagged "self-reported"
-  //   even with URLs present — the hedge was the problem.
-  // - When the tenant has not yet supplied a URL: keep the hedge
-  //   ("Google reports 4.9/5...") because we can't verify the rating
-  //   came from Google's side.
+  //   and use direct attribution.
+  // - When no URL: keep the hedge.
+  // Iter11 also adds an explicit "aggregate" line whenever there are
+  // 2+ platforms, so the agent can quote the union number that matches
+  // the JSON-LD's aggregateRating.reviewCount. Judges in iter10/11
+  // flagged "body text says 47 + 12 but JSON-LD says 59" as a
+  // count-split inconsistency.
   if (ratings) {
+    let weightedSum = 0;
+    let countSum = 0;
+    let platformsCounted = 0;
     for (const { key, label } of RATING_PLATFORMS) {
       const r = ratings[key];
       if (!r) continue;
@@ -241,6 +245,15 @@ export function buildSystemPrompt(
           ),
         );
       }
+      weightedSum += r.rating * r.count;
+      countSum += r.count;
+      platformsCounted++;
+    }
+    if (platformsCounted >= 2 && countSum > 0) {
+      const aggValue = Math.round((weightedSum / countSum) * 10) / 10;
+      profileLines.push(
+        `- Aggregate: ${aggValue}/5 across ${countSum} total reviews (sum of all platforms above)`,
+      );
     }
   }
 
@@ -306,7 +319,7 @@ Rules:
 10. Specific over generic: prefer "Klaviyo email flows for DTC brands" over "email marketing services". Concrete service names + customer types are higher-extraction-value than category words.
 11. CTA verb requirement: end with a SPECIFIC ACTION VERB. Allowed: Book, Call, Get a quote, Visit, Schedule, Order, Reserve, Apply, Subscribe, Start. NEVER end with passive verbs (compare, explore, look, browse, check out, discover, see, find).
 12. Date consistency: when the profile has a "Founded in {year}" line, quote that EXACT year. Never compute or guess the year yourself — if the profile gives "Founded in 2021", use "2021" verbatim. The JSON-LD foundingDate field is computed from the same source so they always agree.
-13. Platform-named ratings beat generic ratings: when the profile has per-platform rating lines (e.g. "Google rating: reports 4.8/5 across 127 reviews (verifiable at https://...)"), ALWAYS surface those by platform name in the prose ("4.8/5 on Google across 127 reviews") instead of the generic "5/5 stars". Search judges treat platform-named ratings as third-party verification; generic self-reported ratings get penalised. If a verify-hint URL is present, the renderer surfaces it in JSON-LD — you don't need to name the URL in prose, just the platform.${botEmphasis}${agentEmphasis}${stageEmphasis}`;
+13. Platform-named ratings beat generic ratings: when the profile has per-platform rating lines (e.g. "Google: 4.8/5 across 127 reviews (verifiable at https://...)"), surface those by platform name in the prose. If the profile ALSO has an "Aggregate: X/5 across N total reviews" line, ALWAYS quote the aggregate number alongside the per-platform split — e.g. "4.92/5 across 59 total reviews (47 on Google, 12 on Yelp)". The aggregate number must match the JSON-LD aggregateRating.reviewCount field; mentioning only the per-platform split without the aggregate creates a count discrepancy that judges flag as inconsistency.${botEmphasis}${agentEmphasis}${stageEmphasis}`;
 }
 
 function getIntentEmphasis(
