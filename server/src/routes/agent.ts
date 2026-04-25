@@ -16,6 +16,10 @@ import {
 const QueryBodySchema = z.object({
   query: z.string().trim().min(1, "query must be a non-empty string").max(2000),
   crawler: z.string().max(200).optional(),
+  // Phase A (per-bot HTML rendering): when format === "html" we wrap
+  // the agent's answer in HTML+JSON-LD using the renderer matched to
+  // `crawler`. Default (omitted or "json") returns the legacy envelope.
+  format: z.enum(["json", "html"]).optional(),
 });
 
 /** Coerce an Express header (which can be string | string[] | undefined)
@@ -265,7 +269,7 @@ agentRouter.post("/agents/:slug/query", requireApiKey, async (req: Request, res:
     });
     return;
   }
-  const { query, crawler } = parsed.data;
+  const { query, crawler, format } = parsed.data;
 
   const db = getDb();
   const business = db
@@ -328,6 +332,32 @@ agentRouter.post("/agents/:slug/query", requireApiKey, async (req: Request, res:
           signingKey
         )
       : undefined;
+
+    // Phase A: per-bot HTML rendering. When format === "html", wrap the
+    // agent's answer in HTML+JSON-LD using the renderer matched to the
+    // bot's canonical name (passed in `crawler`). Drops in as a parallel
+    // response shape; the JSON envelope path is unchanged when
+    // format === "json" (default).
+    if (format === "html") {
+      try {
+        const { renderForBot } = await import("../agent/renderers/dispatcher.js");
+        const { html, renderer_id } = renderForBot({
+          business,
+          result,
+          query,
+          botType: crawler,
+        });
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader("X-Renderer-Variant", renderer_id);
+        if (attributionToken) res.setHeader("X-Attribution-Token", attributionToken);
+        res.send(html);
+        return;
+      } catch (renderErr) {
+        // Renderer crash → fall back to JSON so the bot still gets
+        // SOMETHING. Logged for follow-up.
+        console.error(`[agent] HTML render failed for ${slug}, falling back to JSON:`, renderErr);
+      }
+    }
 
     res.json({
       ...result,

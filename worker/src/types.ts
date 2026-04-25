@@ -84,6 +84,21 @@ export interface Env {
    */
   ADMIN_API_KEY?: string;
 
+  // ── Per-bot HTML rendering (Phase A, validated by format-judge harness) ──
+  /**
+   * Feature flag for the Phase A per-bot HTML rendering rollout. When
+   * "true" (string), the worker's bot interception path requests
+   * format=html from Railway, which renders the agent's answer wrapped
+   * in HTML+JSON-LD using a per-bot variant. Iter7 of the format-judge
+   * harness validated this lifts the variant from 4/10 (0% cite rate)
+   * to 8/10 (100% cite rate) per bot.
+   *
+   * Default OFF. Flip to "true" once a tenant's next radar polling
+   * cycle confirms the predicted citation lift. Set via:
+   *   cd worker && npx wrangler secret put BOT_HTML_RENDERING_ENABLED
+   */
+  BOT_HTML_RENDERING_ENABLED?: string;
+
   // ── Rate limiting (Session 3) ───────────────────────────────────────
   /**
    * Global per-IP rate limiter for `/mcp` proxy traffic. See

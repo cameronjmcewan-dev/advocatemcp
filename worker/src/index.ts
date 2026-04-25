@@ -594,6 +594,19 @@ export default {
     if (cf?.regionCode ?? cf?.region) geoHeaders["X-Geo-Region"] = (cf.regionCode ?? cf.region)!;
     if (cf?.city)                  geoHeaders["X-Geo-City"]    = cf.city;
 
+    // Phase A (per-bot HTML rendering): when BOT_HTML_RENDERING_ENABLED
+    // is "true", request format=html from Railway. Railway picks the
+    // right renderer for `crawler` and returns text/html with JSON-LD
+    // baked in. iter7 of the format-judge harness validated this lifts
+    // the variant from the JSON envelope's 4/10 (0% cite rate) to
+    // 8/10 (100% cite rate) for each per-bot renderer.
+    //
+    // Default OFF — flag-gated rollout. Flip to "true" once we've
+    // verified one tenant's next radar polling cycle (~7 days) shows
+    // the predicted citation lift.
+    const htmlRenderingEnabled =
+      String(env.BOT_HTML_RENDERING_ENABLED ?? "false").toLowerCase() === "true";
+
     let agentResponse: Response;
     try {
       agentResponse = await fetch(agentUrl, {
@@ -603,7 +616,11 @@ export default {
           ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}),
           ...geoHeaders,
         },
-        body: JSON.stringify({ query, crawler: botType ?? "" }),
+        body: JSON.stringify({
+          query,
+          crawler: botType ?? "",
+          ...(htmlRenderingEnabled ? { format: "html" } : {}),
+        }),
       });
     } catch (err) {
       ctx.waitUntil(
@@ -625,6 +642,44 @@ export default {
     }
 
     // ── 6. Return enriched agent response ─────────────────────────────────
+
+    // HTML path: stream Railway's pre-rendered HTML through to the bot,
+    // attaching attribution headers from Railway's response. No envelope
+    // wrapping — bots get raw HTML, which is the whole point.
+    const upstreamContentType = agentResponse.headers.get("content-type") ?? "";
+    if (htmlRenderingEnabled && upstreamContentType.includes("text/html")) {
+      const html = await agentResponse.text();
+      const attributionTokenHdr = agentResponse.headers.get("x-attribution-token") ?? null;
+      const rendererVariant = agentResponse.headers.get("x-renderer-variant") ?? "default";
+      // Build the tracking URL in case downstream wants it as a header
+      // (no longer surfaces in the response body since there's no body
+      // shape to inject it into for HTML).
+      const trackingHeader = attributionTokenHdr
+        ? `${url.origin}/track?t=${encodeURIComponent(attributionTokenHdr)}`
+        : null;
+
+      ctx.waitUntil(
+        Promise.resolve(
+          logEvent({ ...baseEvent, slug, pagePath, status: 200, referralUrl: null, taggedReferralUrl: trackingHeader, latencyMs: Date.now() - startMs, error: null })
+        )
+      );
+
+      return new Response(html, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "X-Powered-By":      "AdvocateMCP",
+          "X-Agent-Slug":      slug,
+          "X-Renderer-Variant": rendererVariant,
+          ...(trackingHeader ? { "X-Tracking-Url": trackingHeader } : {}),
+          "Cache-Control":     "no-store",
+          "Access-Control-Allow-Origin": "*",
+        },
+      });
+    }
+
+    // JSON path (legacy default): unchanged behavior — wrap Railway's
+    // JSON in our envelope with the disclosure + tracking URL.
     const data          = (await agentResponse.json()) as Record<string, unknown>;
     const referralUrl      = typeof data?.referral_url === "string" ? data.referral_url : null;
     const taggedRefUrl     = utmTag(referralUrl, botType);
