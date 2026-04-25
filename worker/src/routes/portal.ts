@@ -47,6 +47,7 @@ import {
   handleAdminInsightsProxyPreflight,
   handleAdminExperimentFormatJudge,
   handleAdminExperimentFormatJudgePreflight,
+  handleAdminProfileScores,
 } from "./adminInsightsProxy";
 
 // ── Public route dispatcher ────────────────────────────────────────────────
@@ -167,6 +168,8 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
     return handleAdminExperimentFormatJudgePreflight(request);
   if (pathname === "/api/admin/experiments/format-judge" && method === "POST")
     return handleAdminExperimentFormatJudge(request, env);
+  if (pathname === "/api/admin/profile-scores" && method === "GET")
+    return handleAdminProfileScores(request, env);
 
   // GET /api/onboard/session/:session_id (CORS; public for skipDns tenants)
   const sessionMatch = pathname.match(/^\/api\/onboard\/session\/([^/]+)$/);

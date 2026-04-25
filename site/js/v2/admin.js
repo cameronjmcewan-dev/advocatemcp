@@ -190,6 +190,15 @@
 
       <div class="row single">
         <div class="card-dash">
+          <div class="card-head"><div><h3>AI citation scores · all tenants</h3><div class="sub">Cached scores from /api/client/profile-score (no API spend on this view).</div></div></div>
+          <div id="score-fleet">
+            <div style="padding:14px 0;font-size:13px;color:var(--muted)">Loading scores…</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row single">
+        <div class="card-dash">
           <div class="card-head"><div><h3>Every tenant</h3><div class="sub">Sorted by mentions, descending</div></div></div>
           <table class="tbl">
             <thead><tr><th>Business</th><th>Domain</th><th>Plan</th><th>Mentions</th><th>Clicks 30d</th><th></th></tr></thead>
@@ -213,5 +222,75 @@
     `;
   }
 
-  window.AMCP_ADMIN = { demo: () => DEMO, fetch: fetchReal, render };
+  /* Bulk profile-scores load. Fires after the main render so the
+   * Mission Control page paints fast — the fleet score grid streams
+   * in afterward. Reads from cache (no API spend). */
+  async function loadFleetScores() {
+    const mount = document.getElementById('score-fleet');
+    if (!mount) return;
+    const af = window.AMCP && window.AMCP.authedFetch;
+    if (!af) return;
+    try {
+      const res = await af('/api/admin/profile-scores');
+      if (!res.ok) {
+        if (res.status === 503) {
+          mount.innerHTML = `<p style="color:var(--muted);font-size:13px">Worker missing ADMIN_API_KEY — bulk scores unavailable.</p>`;
+        } else {
+          mount.innerHTML = `<p style="color:var(--red);font-size:13px">Failed to load scores: HTTP ${res.status}</p>`;
+        }
+        return;
+      }
+      const body = await res.json();
+      const tenants = (body.tenants || []).slice().sort((a, b) => {
+        if (a.has_score !== b.has_score) return a.has_score ? -1 : 1;
+        return (b.score ?? -1) - (a.score ?? -1);
+      });
+      if (tenants.length === 0) {
+        mount.innerHTML = `<p style="color:var(--muted);font-size:13px">No tenants.</p>`;
+        return;
+      }
+      const colorFor = (s) => {
+        if (s == null) return 'var(--muted)';
+        if (s >= 8) return '#2c5d3a';
+        if (s >= 6) return '#7a6014';
+        return '#7d2550';
+      };
+      const rows = tenants.map((t) => {
+        if (!t.has_score) {
+          return `<tr><td><strong>${esc(t.name || t.slug)}</strong><div style="font-size:11.5px;color:var(--muted);font-family:var(--mono)">${esc(t.slug)}</div></td>
+            <td colspan="3" style="color:var(--muted);font-size:13px">No score yet</td>
+            <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="/app.html?as=${encodeURIComponent(t.slug)}">Run check →</a></td></tr>`;
+        }
+        const ts = t.run_at ? new Date(t.run_at).toLocaleDateString() : '—';
+        return `<tr>
+          <td><strong>${esc(t.name || t.slug)}</strong><div style="font-size:11.5px;color:var(--muted);font-family:var(--mono)">${esc(t.slug)}</div></td>
+          <td class="t" style="font-size:18px;color:${colorFor(t.score)};font-weight:600">${t.score.toFixed(1)}</td>
+          <td class="t">${t.cite_rate}%</td>
+          <td class="t">${esc(ts)}</td>
+          <td style="text-align:right"><a class="btn btn-ghost btn-sm" href="/BusinessProfile.html?as=${encodeURIComponent(t.slug)}">Open profile →</a></td>
+        </tr>`;
+      }).join('');
+      const summary = (() => {
+        const scored = tenants.filter((t) => t.has_score);
+        if (scored.length === 0) return '';
+        const avg = scored.reduce((a, t) => a + t.score, 0) / scored.length;
+        return `<div style="padding:8px 0;font-size:12.5px;color:var(--muted)">Mean across ${scored.length} scored tenants: <strong style="color:var(--ink)">${avg.toFixed(2)}/10</strong></div>`;
+      })();
+      mount.innerHTML = `
+        ${summary}
+        <table class="tbl">
+          <thead><tr><th>Business</th><th class="t">Score</th><th class="t">Cite rate</th><th class="t">Last run</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    } catch (err) {
+      mount.innerHTML = `<p style="color:var(--red);font-size:13px">Network error: ${esc(String(err && err.message || err))}</p>`;
+    }
+  }
+
+  function afterMount() {
+    loadFleetScores();
+  }
+
+  window.AMCP_ADMIN = { demo: () => DEMO, fetch: fetchReal, render, afterMount };
 })();

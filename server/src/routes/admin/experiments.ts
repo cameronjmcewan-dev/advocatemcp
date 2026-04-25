@@ -20,8 +20,47 @@
 
 import { Router, type Request, type Response } from "express";
 import { runExperiment } from "../../experiments/formatJudge/runner.js";
+import { getDb } from "../../db.js";
+import type { BusinessRow } from "../../db.js";
 
 export const adminExperimentsRouter = Router();
+
+/* GET /admin/profile-scores
+ * Bulk read of every tenant's cached profile-score (no API spend).
+ * Powers a fleet-wide admin view: which tenants score high, which
+ * have stale scores, who hasn't run yet. */
+adminExperimentsRouter.get(
+  "/admin/profile-scores",
+  (_req: Request, res: Response) => {
+    const db = getDb();
+    const rows = db
+      .prepare(
+        `SELECT slug, name, last_score_json, score_history_json
+           FROM businesses
+          ORDER BY name ASC`
+      )
+      .all() as Array<Pick<BusinessRow, "slug" | "name" | "last_score_json" | "score_history_json">>;
+    const out = rows.map((r) => {
+      let blob: { score?: number; cite_rate?: number; run_at?: string; profile_hash?: string } | null = null;
+      try { blob = r.last_score_json ? JSON.parse(r.last_score_json) : null; } catch { blob = null; }
+      let history: Array<{ score: number; run_at: string }> = [];
+      try {
+        const h = r.score_history_json ? JSON.parse(r.score_history_json) : [];
+        if (Array.isArray(h)) history = h;
+      } catch { history = []; }
+      return {
+        slug:      r.slug,
+        name:      r.name,
+        has_score: !!blob,
+        score:     blob?.score ?? null,
+        cite_rate: blob?.cite_rate ?? null,
+        run_at:    blob?.run_at ?? null,
+        history,
+      };
+    });
+    res.json({ tenants: out, count: out.length });
+  },
+);
 
 adminExperimentsRouter.post(
   "/experiments/format-judge",

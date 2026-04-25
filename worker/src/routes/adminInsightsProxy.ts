@@ -202,3 +202,63 @@ export async function handleAdminExperimentFormatJudge(
 export function handleAdminExperimentFormatJudgePreflight(request: Request): Response {
   return handleCorsPreflight(request, { credentials: true });
 }
+
+// ── GET /api/admin/profile-scores ────────────────────────────────────────
+// Worker-side proxy to Railway's GET /admin/profile-scores. Returns the
+// cached profile-score for every tenant in one call (no API spend on
+// any tenant; reads from businesses.last_score_json).
+//
+// Powers the fleet-wide admin view: which tenants have scores, which
+// are stale, score distribution. Same auth pattern as the rest of the
+// admin proxy.
+
+export async function handleAdminProfileScores(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) {
+    return withCors(jsonErr(401, "unauthorized", "Session required"), request, { credentials: true });
+  }
+  if (ctx.role !== "admin") {
+    return withCors(jsonErr(403, "forbidden", "Admin only"), request, { credentials: true });
+  }
+
+  const adminKey = env.ADMIN_API_KEY;
+  if (!adminKey) {
+    return withCors(
+      jsonErr(503, "not_configured", "ADMIN_API_KEY not configured on Worker"),
+      request,
+      { credentials: true },
+    );
+  }
+
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  try {
+    const upstream = await fetch(`${base}/admin/profile-scores`, {
+      headers: {
+        "Authorization": `Bearer ${adminKey}`,
+        "Accept":        "application/json",
+      },
+    });
+    const text = await upstream.text();
+    const headers = new Headers({
+      "Content-Type": upstream.headers.get("content-type") ?? "application/json",
+    });
+    return withCors(
+      new Response(text, { status: upstream.status, headers }),
+      request,
+      { credentials: true },
+    );
+  } catch (err) {
+    console.error(JSON.stringify({
+      event: "admin_profile_scores_error",
+      error: String(err instanceof Error ? err.message : err),
+    }));
+    return withCors(
+      jsonErr(502, "upstream_unreachable", "profile-scores upstream failed"),
+      request,
+      { credentials: true },
+    );
+  }
+}
