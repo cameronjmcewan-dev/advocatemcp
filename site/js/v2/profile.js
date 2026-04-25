@@ -586,22 +586,49 @@
     // "+ Add another quote" — extends the quotes list one entry at a time
     // so the form grows with the tenant's testimonial pile rather than
     // forcing a fixed count.
-    // "Run AI score check" — calls POST /api/client/profile-score and
-    // renders the score + improvements card inline. Disabled during
-    // the ~30-45s call so a tenant can't spam-click it.
+    // AI score check on BusinessProfile.
+    // - Page load: GET /api/client/profile-score (no API spend) →
+    //   shows cached score immediately if present.
+    // - Manual click → POST → cache hit (instant) or fresh run.
+    // - Profile saves elsewhere on the page → trigger fresh run with
+    //   60s client-side debounce so a save spree doesn't cost
+    //   $0.04 × 20.
     const scoreBtn = document.getElementById('btn-run-score');
     const scoreResult = document.getElementById('score-result');
+    let lastScoreRunAt = 0;
     if (scoreBtn && scoreResult) {
-      scoreBtn.addEventListener('click', async () => {
-        const af = window.AMCP && window.AMCP.authedFetch;
+      const af = window.AMCP && window.AMCP.authedFetch;
+
+      async function loadCachedScore() {
+        if (!af) return;
+        try {
+          const res = await af('/api/client/profile-score', { method: 'GET' });
+          const body = await res.json().catch(() => ({}));
+          if (res.ok && body.has_score) {
+            scoreResult.innerHTML = renderScoreResult(body);
+            scoreBtn.textContent = body.is_stale ? 'Profile changed — re-run check →' : 'Re-run check →';
+          }
+        } catch { /* silent */ }
+      }
+
+      window.AMCP_PROFILE_RUN_SCORE = async function (opts) {
+        opts = opts || {};
         if (!af) { scoreResult.innerHTML = '<p style="color:var(--red)">Not signed in.</p>'; return; }
+        // 60s debounce: rapid profile saves shouldn't burn $0.04 × N.
+        if (opts.fromSave && Date.now() - lastScoreRunAt < 60_000) {
+          // Still trigger a cache-read so the stale label clears once
+          // the prior in-flight call returns.
+          await loadCachedScore();
+          return;
+        }
         scoreBtn.disabled = true;
         const started = Date.now();
-        scoreResult.innerHTML = `<div class="score-loading"><div class="score-spinner"></div><span>Running AI score check… this takes about 30-45 seconds (we're scoring how 4 different AI engines would cite your profile right now).</span></div>`;
+        lastScoreRunAt = started;
+        scoreResult.innerHTML = `<div class="score-loading"><div class="score-spinner"></div><span>${opts.fromSave ? 'Profile saved — re-running AI score…' : 'Running AI score check…'} ~30-45s</span></div>`;
         const ticker = setInterval(() => {
           const elapsed = Math.round((Date.now() - started) / 1000);
           const span = scoreResult.querySelector('.score-loading span');
-          if (span) span.textContent = `Running AI score check… ${elapsed}s elapsed`;
+          if (span) span.textContent = `Running… ${elapsed}s elapsed`;
         }, 2000);
         try {
           const res = await af('/api/client/profile-score', {
@@ -616,13 +643,17 @@
             return;
           }
           scoreResult.innerHTML = renderScoreResult(body);
+          scoreBtn.textContent = 'Re-run check →';
         } catch (err) {
           clearInterval(ticker);
           scoreResult.innerHTML = `<p style="color:var(--red);font-size:13.5px">Network error: ${esc(String((err && err.message) || err))}</p>`;
         } finally {
           scoreBtn.disabled = false;
         }
-      });
+      };
+
+      scoreBtn.addEventListener('click', () => window.AMCP_PROFILE_RUN_SCORE());
+      loadCachedScore();
     }
 
     const addQuoteBtn = document.getElementById('btn-add-quote');
@@ -823,6 +854,14 @@
           setStatus(msg, 'error');
         } else {
           setStatus('Saved', 'success');
+          // Auto-rerun the AI citation score after a successful save
+          // (60s debounced inside the runner). The score is only
+          // legit if it reflects what AI is currently being served —
+          // a save changes the rendered output, so the cached score
+          // is now stale until we re-run.
+          if (typeof window.AMCP_PROFILE_RUN_SCORE === 'function') {
+            window.AMCP_PROFILE_RUN_SCORE({ fromSave: true });
+          }
         }
       } catch (err) {
         setStatus(String(err && err.message || err), 'error');

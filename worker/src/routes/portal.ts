@@ -78,6 +78,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/onboarding"      && method === "GET")  return apiGetOnboarding(request, env);
   if (pathname === "/api/client/onboarding/step" && method === "POST") return apiMarkOnboardingStep(request, env);
   if (pathname === "/api/client/preview-voice"   && method === "POST") return apiPreviewVoice(request, env);
+  if (pathname === "/api/client/profile-score"   && method === "GET")  return apiProfileScore(request, env);
   if (pathname === "/api/client/profile-score"   && method === "POST") return apiProfileScore(request, env);
   if (pathname === "/admin/create-client"      && method === "POST") return adminCreateClient(request, env);
   const resyncMatch = pathname.match(/^\/admin\/businesses\/([^/]+)\/resync-api-key$/);
@@ -1490,18 +1491,24 @@ async function apiProfileScore(request: Request, env: Env): Promise<Response> {
     );
   }
 
-  let body: Record<string, unknown> = {};
-  try { body = await request.json() as Record<string, unknown>; } catch { /* empty body OK */ }
+  // GET = fast cache read (no API spend, no run). POST = run on
+  // cache miss. Both forwarded transparently to Railway.
+  const isGet = request.method === "GET";
+  let body = "{}";
+  if (!isGet) {
+    try { body = await request.text(); } catch { /* empty body OK */ }
+    if (!body || !body.trim()) body = "{}";
+  }
 
   const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
   try {
     const r = await fetch(`${base}/agents/${biz.slug}/profile-score`, {
-      method: "POST",
+      method: isGet ? "GET" : "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${biz.api_key}`,
       },
-      body: JSON.stringify(body),
+      ...(isGet ? {} : { body }),
     });
     const text = await r.text();
     return withCors(

@@ -116,6 +116,13 @@ export interface BusinessRow {
   guarantee_text: string | null;
   case_stories_json: string | null;
   lead_routing_json: string | null;
+  // Migration 023: format-judge score cache. Both fields are typed
+  // as optional+nullable so existing test fixtures (which don't yet
+  // populate them) keep compiling. SELECT * from production rows
+  // either populated post-migration or returns null. Treat missing
+  // and null as equivalent everywhere.
+  last_score_json?: string | null;
+  score_history_json?: string | null;
 }
 
 export interface ReservationRow {

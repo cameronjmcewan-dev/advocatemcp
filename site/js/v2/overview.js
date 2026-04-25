@@ -376,12 +376,42 @@
    * info density than the BusinessProfile version — just the big
    * number, per-engine bars, and the top 2 improvements with
    * deep-links so the customer sees "fix this → re-run". */
+  /* SVG sparkline for the score_history array. ~120px wide × 28px
+   * tall, fits inline next to the big score. Renders nothing if
+   * fewer than 2 data points (need at least two to draw a line). */
+  function renderSparkline(history) {
+    if (!Array.isArray(history) || history.length < 2) return '';
+    const w = 120, h = 28;
+    const pts = history.slice(-30);
+    const minScore = Math.min(...pts.map((p) => p.score));
+    const maxScore = Math.max(...pts.map((p) => p.score));
+    const range = Math.max(0.5, maxScore - minScore);
+    const step = pts.length > 1 ? (w - 4) / (pts.length - 1) : 0;
+    const path = pts.map((p, i) => {
+      const x = 2 + i * step;
+      const y = h - 2 - ((p.score - minScore) / range) * (h - 4);
+      return `${i === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+    }).join(' ');
+    const last = pts[pts.length - 1];
+    const lastX = 2 + (pts.length - 1) * step;
+    const lastY = h - 2 - ((last.score - minScore) / range) * (h - 4);
+    return `
+      <svg class="ov-spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">
+        <path d="${path}" fill="none" stroke="var(--maroon)" stroke-width="1.5" />
+        <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="2.5" fill="var(--maroon)" />
+      </svg>
+    `;
+  }
+
   function renderOverviewScore(data) {
     if (!data) return '';
     const score = (data.score != null ? data.score : 0).toFixed(1);
     const cite = data.cite_rate != null ? data.cite_rate : 0;
     const variants = data.per_variant || [];
     const improvements = (data.improvements || []).slice(0, 2);
+    const history = data.history || [];
+    const isStale = data.is_stale === true;
+    const lastRun = data.run_at ? new Date(data.run_at) : null;
 
     const labelMap = {
       perplexity_html: 'Perplexity',
@@ -411,11 +441,17 @@
           </div>
         `).join('');
 
+    const staleLabel = isStale
+      ? `<div class="ov-stale">Profile changed since last check — score may be out of date</div>`
+      : '';
+
     return `
+      ${staleLabel}
       <div class="ov-score-summary">
         <div class="ov-score-big">
           <div class="ov-score-num">${score}<span class="ov-score-max">/10</span></div>
-          <div class="ov-score-meta">${cite}% cite rate</div>
+          <div class="ov-score-meta">${cite}% cite rate ${lastRun ? '· ' + timeAgo(lastRun.toISOString()) : ''}</div>
+          ${renderSparkline(history)}
         </div>
         <div class="ov-engine-list">${variantBars}</div>
       </div>
@@ -441,6 +477,13 @@
         .ov-tip { display:grid; grid-template-columns:36px 1fr auto; gap:10px; align-items:center; padding:8px 0; font-size:13px; line-height:1.45; color:var(--ink-2); }
         .ov-tip strong { font-family:var(--serif); font-size:18px; color:var(--sage); text-align:center; }
         .ov-tip a { color:var(--maroon); font-weight:500; font-size:12.5px; white-space:nowrap; }
+        .ov-spark { display:block; margin: 8px auto 0; opacity: 0.85; }
+        .ov-stale {
+          background: var(--paper-2); border: 1px solid var(--line);
+          border-left: 3px solid var(--maroon);
+          padding: 8px 12px; border-radius: 6px;
+          font-size: 12.5px; color: var(--ink-2); margin-bottom: 14px;
+        }
       </style>
     `;
   }
@@ -526,16 +569,38 @@
     if (window.AMCP_TOUR && typeof window.AMCP_TOUR.maybeAutoStart === 'function') {
       window.AMCP_TOUR.maybeAutoStart();
     }
-    // AI citation score on the Overview. Same endpoint as
-    // BusinessProfile's scoring card but rendered as a compact
-    // "score + top 2 improvements" summary here. Click → run →
-    // ~30-45s → inline render. No persistence in v0; each click
-    // costs ~$0.04 so customer chooses when to refresh.
-    const scoreBtn = document.getElementById('btn-run-overview-score');
-    const scoreResultEl = document.getElementById('score-overview-result');
+    // AI citation score: load cached value instantly via GET (no API
+    // spend), then if cache is stale or missing, expose a "Run check"
+    // button. The cached score IS the legit score of the info served
+    // because mutations invalidate the hash → next view triggers
+    // fresh run.
+    const scoreBtn       = document.getElementById('btn-run-overview-score');
+    const scoreResultEl  = document.getElementById('score-overview-result');
     if (scoreBtn && scoreResultEl) {
-      scoreBtn.addEventListener('click', async () => {
-        const af = window.AMCP && window.AMCP.authedFetch;
+      const af = window.AMCP && window.AMCP.authedFetch;
+
+      async function loadCached() {
+        if (!af) return;
+        try {
+          const res = await af('/api/client/profile-score', { method: 'GET' });
+          const body = await res.json().catch(() => ({}));
+          if (res.ok && body.has_score) {
+            scoreResultEl.innerHTML = renderOverviewScore(body);
+          } else {
+            scoreResultEl.innerHTML = '';
+          }
+          // Update button label based on state.
+          if (body.has_score && body.is_stale) {
+            scoreBtn.textContent = 'Profile changed — re-run check →';
+          } else if (body.has_score) {
+            scoreBtn.textContent = 'Re-run check →';
+          } else {
+            scoreBtn.textContent = 'Run AI score check →';
+          }
+        } catch { /* silent — show "Run check" button */ }
+      }
+
+      async function runScore() {
         if (!af) { scoreResultEl.innerHTML = '<p style="color:var(--red)">Not signed in.</p>'; return; }
         scoreBtn.disabled = true;
         const started = Date.now();
@@ -558,13 +623,17 @@
             return;
           }
           scoreResultEl.innerHTML = renderOverviewScore(body);
+          scoreBtn.textContent = 'Re-run check →';
         } catch (err) {
           clearInterval(ticker);
           scoreResultEl.innerHTML = `<p style="color:var(--red);font-size:13.5px">Network error: ${esc(String((err && err.message) || err))}</p>`;
         } finally {
           scoreBtn.disabled = false;
         }
-      });
+      }
+
+      scoreBtn.addEventListener('click', runScore);
+      loadCached();
     }
 
     // Footer "Replay the tutorial" link.
