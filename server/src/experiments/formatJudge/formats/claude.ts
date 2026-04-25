@@ -8,7 +8,7 @@
 import type { FormatVariant, RenderInput } from "../types.js";
 import {
   addAttribution,
-  aiDisclosureFooter,
+  aiDisclosureComment,
   buildBusinessJsonLd,
   buildFaqJsonLd,
   buildReviewsJsonLd,
@@ -58,6 +58,7 @@ export const claudeHtml: FormatVariant = {
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
+  ${aiDisclosureComment()}
   <meta charset="utf-8">
   <title>${escapeHtml(title)}</title>
   <meta name="description" content="${escapeHtml(desc.slice(0, 155))}">
@@ -78,7 +79,6 @@ export const claudeHtml: FormatVariant = {
     <h2>Get in touch</h2>
     <p>Visit <a href="${escapeHtml(referralUrl)}" rel="nofollow">${escapeHtml(referralUrl)}</a>.</p>
   </article>
-  ${aiDisclosureFooter()}
 </body>
 </html>`;
   },

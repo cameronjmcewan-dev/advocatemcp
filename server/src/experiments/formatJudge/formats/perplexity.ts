@@ -9,7 +9,7 @@
 import type { FormatVariant, RenderInput } from "../types.js";
 import {
   addAttribution,
-  aiDisclosureFooter,
+  aiDisclosureComment,
   buildBusinessJsonLd,
   buildFaqJsonLd,
   buildReviewsJsonLd,
@@ -40,6 +40,7 @@ export const perplexityHtml: FormatVariant = {
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
+  ${aiDisclosureComment()}
   <meta charset="utf-8">
   <title>${escapeHtml(title)}</title>
   <meta name="description" content="${escapeHtml((business.description ?? "").slice(0, 155))}">
@@ -57,7 +58,6 @@ export const perplexityHtml: FormatVariant = {
     ${body}
     <p><a href="${escapeHtml(referralUrl)}" rel="nofollow">${escapeHtml(referralUrl)}</a></p>
   </article>
-  ${aiDisclosureFooter()}
 </body>
 </html>`;
   },

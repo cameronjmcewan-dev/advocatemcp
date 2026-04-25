@@ -9,7 +9,7 @@
 import type { FormatVariant, RenderInput } from "../types.js";
 import {
   addAttribution,
-  aiDisclosureFooter,
+  aiDisclosureComment,
   buildBusinessJsonLd,
   buildFaqJsonLd,
   buildReviewsJsonLd,
@@ -81,6 +81,7 @@ export const googleHtml: FormatVariant = {
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
+  ${aiDisclosureComment()}
   <meta charset="utf-8">
   <title>${escapeHtml(title)}</title>
   <meta name="description" content="${escapeHtml(firstSentence)}">
@@ -102,7 +103,6 @@ export const googleHtml: FormatVariant = {
     ${body}
     <p>Book at <a href="${escapeHtml(referralUrl)}" rel="nofollow">${escapeHtml(referralUrl)}</a>.</p>
   </article>
-  ${aiDisclosureFooter()}
 </body>
 </html>`;
   },

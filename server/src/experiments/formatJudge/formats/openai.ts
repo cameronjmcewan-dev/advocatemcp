@@ -8,7 +8,7 @@
 import type { FormatVariant, RenderInput } from "../types.js";
 import {
   addAttribution,
-  aiDisclosureFooter,
+  aiDisclosureComment,
   buildBusinessJsonLd,
   buildFaqJsonLd,
   buildReviewsJsonLd,
@@ -61,6 +61,7 @@ export const openaiHtml: FormatVariant = {
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
+  ${aiDisclosureComment()}
   <meta charset="utf-8">
   <title>${escapeHtml(title)}</title>
   <meta name="description" content="${escapeHtml(desc.slice(0, 155))}">
@@ -82,7 +83,6 @@ export const openaiHtml: FormatVariant = {
     ${proseBody}
     <p>To learn more, visit <a href="${escapeHtml(referralUrl)}" rel="nofollow">${escapeHtml(referralUrl)}</a>.</p>
   </article>
-  ${aiDisclosureFooter()}
 </body>
 </html>`;
   },
