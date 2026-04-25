@@ -372,6 +372,105 @@
   /* ────────────────────────────────────────────────────────────────────
    * Public render: the whole main content for /app.html.
    * ──────────────────────────────────────────────────────────────────── */
+  /* Compact result rendering for the Overview score card. Lower
+   * info density than the BusinessProfile version — just the big
+   * number, per-engine bars, and the top 2 improvements with
+   * deep-links so the customer sees "fix this → re-run". */
+  function renderOverviewScore(data) {
+    if (!data) return '';
+    const score = (data.score != null ? data.score : 0).toFixed(1);
+    const cite = data.cite_rate != null ? data.cite_rate : 0;
+    const variants = data.per_variant || [];
+    const improvements = (data.improvements || []).slice(0, 2);
+
+    const labelMap = {
+      perplexity_html: 'Perplexity',
+      openai_html:     'ChatGPT',
+      claude_html:     'Claude',
+      google_html:     'Google AI Overview',
+    };
+    const variantBars = variants.map((v) => {
+      const label = labelMap[v.variant_id] || v.variant_id;
+      const pct = Math.round((v.score / 10) * 100);
+      return `
+        <div class="ov-engine-row">
+          <span class="ov-engine-name">${esc(label)}</span>
+          <div class="ov-engine-bar"><div class="ov-engine-fill" style="width:${pct}%"></div></div>
+          <span class="ov-engine-num">${v.score.toFixed(1)}</span>
+        </div>
+      `;
+    }).join('');
+
+    const improvementsHtml = improvements.length === 0
+      ? `<p style="color:var(--muted);font-size:13.5px;margin:6px 0 0">Great score. Re-run periodically to keep tracking.</p>`
+      : improvements.map((i) => `
+          <div class="ov-tip">
+            <strong>+${i.expected_lift.toFixed(1)}</strong>
+            <span>${esc(i.reason)}</span>
+            <a href="${esc(i.href)}">Open →</a>
+          </div>
+        `).join('');
+
+    return `
+      <div class="ov-score-summary">
+        <div class="ov-score-big">
+          <div class="ov-score-num">${score}<span class="ov-score-max">/10</span></div>
+          <div class="ov-score-meta">${cite}% cite rate</div>
+        </div>
+        <div class="ov-engine-list">${variantBars}</div>
+      </div>
+      ${improvementsHtml ? `<div class="ov-tips"><strong class="ov-tips-h">Top opportunities</strong>${improvementsHtml}</div>` : ''}
+      <style>
+        .ov-score-loading { display:flex; align-items:center; gap:10px; padding:14px; color:var(--muted); font-size:13.5px; }
+        .ov-score-spinner { width:14px; height:14px; border-radius:999px; border:2px solid var(--line); border-top-color:var(--maroon); animation:ov-spin 1s linear infinite; }
+        @keyframes ov-spin { to { transform: rotate(360deg); } }
+        .ov-score-summary { display:grid; grid-template-columns:160px 1fr; gap:24px; align-items:center; padding:6px 0 14px; }
+        @media (max-width:720px) { .ov-score-summary { grid-template-columns:1fr; } }
+        .ov-score-big { padding:14px 16px; background:var(--paper-2); border-radius:12px; text-align:center; }
+        .ov-score-num { font-family:var(--serif); font-size:48px; line-height:1; color:var(--maroon); font-weight:400; }
+        .ov-score-max { font-size:22px; color:var(--muted); }
+        .ov-score-meta { font-size:12.5px; color:var(--muted); margin-top:4px; }
+        .ov-engine-list { display:flex; flex-direction:column; gap:8px; }
+        .ov-engine-row { display:grid; grid-template-columns:140px 1fr 36px; gap:10px; align-items:center; font-size:13px; }
+        .ov-engine-name { color:var(--ink-2); }
+        .ov-engine-bar { height:6px; background:var(--line); border-radius:999px; overflow:hidden; }
+        .ov-engine-fill { height:100%; background:var(--maroon); }
+        .ov-engine-num { font-variant-numeric:tabular-nums; color:var(--ink); text-align:right; }
+        .ov-tips { padding-top:12px; border-top:1px solid var(--line); }
+        .ov-tips-h { font-size:11.5px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:8px; }
+        .ov-tip { display:grid; grid-template-columns:36px 1fr auto; gap:10px; align-items:center; padding:8px 0; font-size:13px; line-height:1.45; color:var(--ink-2); }
+        .ov-tip strong { font-family:var(--serif); font-size:18px; color:var(--sage); text-align:center; }
+        .ov-tip a { color:var(--maroon); font-weight:500; font-size:12.5px; white-space:nowrap; }
+      </style>
+    `;
+  }
+
+  /* AI citation score card on the Overview. The customer-facing
+   * scoring tool lives on /BusinessProfile.html (full UI with
+   * improvements list); this card is the at-a-glance summary +
+   * one-click "Run a fresh check" surface that lives on the page
+   * the customer hits on every login. By default it shows a
+   * "no score yet" prompt so we don't burn API budget on every
+   * page load — customer chooses when to run a check. */
+  function renderScoreOverviewCard() {
+    return `
+      <div class="row single">
+        <div class="card-dash" id="score-overview-card">
+          <div class="card-head">
+            <div>
+              <h3>AI citation score</h3>
+              <div class="sub">How likely AI search engines (Perplexity, ChatGPT, Claude, Google) are to cite your business when someone asks about you. Run a check to see the number + what to improve.</div>
+            </div>
+            <div>
+              <button id="btn-run-overview-score" type="button" class="btn btn-primary btn-sm">Run AI score check →</button>
+            </div>
+          </div>
+          <div id="score-overview-result" style="margin-top:14px"></div>
+        </div>
+      </div>
+    `;
+  }
+
   function render(data) {
     const d = data || {};
     const name = (d.metrics && d.metrics.business_name) || 'your business';
@@ -383,6 +482,8 @@
         Here's what AI is saying about ${esc(name)} and what visitors did next.
         <span class="x" onclick="this.parentElement.style.display='none'">✕</span>
       </div>
+
+      ${renderScoreOverviewCard()}
 
       ${renderKPIs(d)}
 
@@ -425,6 +526,47 @@
     if (window.AMCP_TOUR && typeof window.AMCP_TOUR.maybeAutoStart === 'function') {
       window.AMCP_TOUR.maybeAutoStart();
     }
+    // AI citation score on the Overview. Same endpoint as
+    // BusinessProfile's scoring card but rendered as a compact
+    // "score + top 2 improvements" summary here. Click → run →
+    // ~30-45s → inline render. No persistence in v0; each click
+    // costs ~$0.04 so customer chooses when to refresh.
+    const scoreBtn = document.getElementById('btn-run-overview-score');
+    const scoreResultEl = document.getElementById('score-overview-result');
+    if (scoreBtn && scoreResultEl) {
+      scoreBtn.addEventListener('click', async () => {
+        const af = window.AMCP && window.AMCP.authedFetch;
+        if (!af) { scoreResultEl.innerHTML = '<p style="color:var(--red)">Not signed in.</p>'; return; }
+        scoreBtn.disabled = true;
+        const started = Date.now();
+        scoreResultEl.innerHTML = '<div class="ov-score-loading"><span class="ov-score-spinner"></span><span class="ov-score-loading-text">Scoring how 4 AI engines would cite you right now… ~30-45s</span></div>';
+        const ticker = setInterval(() => {
+          const elapsed = Math.round((Date.now() - started) / 1000);
+          const span = scoreResultEl.querySelector('.ov-score-loading-text');
+          if (span) span.textContent = `Running… ${elapsed}s elapsed`;
+        }, 2000);
+        try {
+          const res = await af('/api/client/profile-score', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}',
+          });
+          clearInterval(ticker);
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            scoreResultEl.innerHTML = `<p style="color:var(--red);font-size:13.5px">Score check failed: ${esc(body.error || ('HTTP ' + res.status))}</p>`;
+            return;
+          }
+          scoreResultEl.innerHTML = renderOverviewScore(body);
+        } catch (err) {
+          clearInterval(ticker);
+          scoreResultEl.innerHTML = `<p style="color:var(--red);font-size:13.5px">Network error: ${esc(String((err && err.message) || err))}</p>`;
+        } finally {
+          scoreBtn.disabled = false;
+        }
+      });
+    }
+
     // Footer "Replay the tutorial" link.
     const replay = document.getElementById('footer-help');
     if (replay) {
