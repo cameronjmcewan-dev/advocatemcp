@@ -125,7 +125,13 @@ export function buildSystemPrompt(
   if (business.location) profileLines.push(`- Location: ${business.location}`);
 
   // Tier 2 (attribute softly) — self-reported metrics.
-  if (business.star_rating != null) {
+  // When ratings_json has per-platform data, the per-platform lines
+  // below carry the canonical numbers — emitting the legacy star_rating
+  // here would create a contradiction (iter8 judge flagged "10 reviews
+  // on the page conflicts with 47 + 12 in Review schema"). Skip the
+  // generic line if ratings_json has populated platforms.
+  const hasPlatformRatings = !!ratings && RATING_PLATFORMS.some(({ key }) => !!ratings[key]);
+  if (business.star_rating != null && !hasPlatformRatings) {
     const platform = reviewPlatformLabel(ratings);
     const reviewsSuffix = business.review_count
       ? ` across ${business.review_count} ${platform ? `${platform} ` : ""}reviews`
