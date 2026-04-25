@@ -11,6 +11,7 @@ import {
   buildFaqJsonLd,
   escapeHtml,
   jsonLdScript,
+  mdBoldToHtml,
 } from "./shared.js";
 
 export const openaiHtml: FormatVariant = {
@@ -41,7 +42,11 @@ export const openaiHtml: FormatVariant = {
         }
         return para;
       })
-      .map((p) => `<p>${escapeHtml(p)}</p>`)
+      // Escape HTML first (safety), then re-introduce <strong> for **bold**
+      // markdown so judges treat key facts as parsed bold, not literal
+      // asterisks. First-run experiment (n=1) caught this: openai_html
+      // lost 2 points to "raw markdown asterisks rendered as literal text".
+      .map((p) => `<p>${mdBoldToHtml(escapeHtml(p))}</p>`)
       .join("\n  ");
 
     const title = `${business.name} — ${business.category ?? "Business"}`;
