@@ -24,7 +24,7 @@ import { runExperiment } from "../../experiments/formatJudge/runner.js";
 export const adminExperimentsRouter = Router();
 
 adminExperimentsRouter.post(
-  "/admin/experiments/format-judge",
+  "/experiments/format-judge",
   async (req: Request, res: Response) => {
     const body = (req.body ?? {}) as {
       profile_slugs?: unknown;

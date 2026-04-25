@@ -42,4 +42,4 @@ adminRouter.use("/admin", requireAdmin, adminDigestRouter);
 adminRouter.use("/admin", requireAdmin, tenantsRouter);
 adminRouter.use("/admin", requireAdmin, adminAuditsRouter);
 adminRouter.use("/admin", requireAdmin, adminAuditBatchRouter);
-adminRouter.use(requireAdmin, adminExperimentsRouter);
+adminRouter.use("/admin", requireAdmin, adminExperimentsRouter);
