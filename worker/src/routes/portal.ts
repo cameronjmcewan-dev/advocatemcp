@@ -168,6 +168,8 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
     return handleAdminExperimentFormatJudgePreflight(request);
   if (pathname === "/api/admin/experiments/format-judge" && method === "POST")
     return handleAdminExperimentFormatJudge(request, env);
+  if (pathname === "/api/admin/profile-scores" && method === "OPTIONS")
+    return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/admin/profile-scores" && method === "GET")
     return handleAdminProfileScores(request, env);
 
