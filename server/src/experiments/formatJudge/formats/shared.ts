@@ -276,11 +276,15 @@ export function jsonLdScript(obj: Record<string, unknown>): string {
   return `<script type="application/ld+json">\n${JSON.stringify(obj, null, 2)}\n</script>`;
 }
 
-/** Convert markdown bold (`**foo**`) to HTML strong tags. Not a
- *  full markdown parser — just enough so per-bot HTML variants can
- *  re-use the bold formatting Claude produces. */
+/** Convert markdown bold (`**foo**`) AND markdown links `[text](url)`
+ *  to HTML `<strong>` and `<a>` tags. Not a full markdown parser —
+ *  just enough to handle the patterns Claude produces. iter6 caught
+ *  `[https://x.com](https://x.com)` rendering as literal text in body
+ *  ("markdown link rendered literally", "sloppy templating"). */
 export function mdBoldToHtml(s: string): string {
-  return s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  return s
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" rel="nofollow">$1</a>');
 }
 
 /** Convert markdown bullet list (lines starting with "- ") to a `<ul>`. */
