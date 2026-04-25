@@ -62,8 +62,9 @@
               <textarea id="exp-queries" rows="3" placeholder="best email marketing agency for DTC&#10;Klaviyo specialist agencies near me"
                         style="width:100%;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:13.5px;background:var(--paper);color:var(--ink);font-family:var(--mono)"></textarea>
             </div>
-            <div>
+            <div style="display:flex;flex-direction:column;gap:6px">
               <button id="exp-run" type="button" class="btn btn-primary">Run experiment →</button>
+              <button id="exp-run-whatif" type="button" class="btn btn-ghost btn-sm" title="Run with simulated Google + Yelp ratings injected via profile_patches — shows the score lift third-party verification would unlock without modifying the tenant's actual profile.">+ What-if: simulated ratings</button>
             </div>
           </div>
           <div id="exp-status" class="exp-status" aria-live="polite"></div>
@@ -246,10 +247,27 @@
     return merged;
   }
 
-  async function runExperiment() {
+  // Simulated third-party ratings used by the What-if button. Lets the
+  // operator preview the score lift a tenant would unlock by adding
+  // verified ratings WITHOUT mutating their live profile.
+  const WHAT_IF_PATCH = {
+    ratings_json: {
+      google: { rating: 4.9, count: 47, url: "https://www.google.com/maps/place/Workman+Copy+Co" },
+      yelp:   { rating: 5.0, count: 12, url: "https://www.yelp.com/biz/workman-copy-co-austin" },
+    },
+    customer_quotes_json: [
+      { author: "Anya R.",  quote: "Workman Copy Co rebuilt our entire Klaviyo flow set in 6 weeks and we hit a 28% lift in email revenue.", source: "google" },
+      { author: "Devon P.", quote: "Their copy reads like our customers wrote it. We finally stopped sending generic blasts.",                source: "yelp" },
+      { author: "Jin S.",   quote: "Worked with three other agencies before. None understood DTC like Workman does.",                            source: "google" },
+    ],
+  };
+
+  async function runExperiment(opts) {
+    opts = opts || {};
     const slugInput = document.getElementById('exp-slug');
     const queriesInput = document.getElementById('exp-queries');
     const btn = document.getElementById('exp-run');
+    const btnWhatIf = document.getElementById('exp-run-whatif');
     const resultsEl = document.getElementById('exp-results');
     if (!btn || !resultsEl) return;
 
@@ -260,6 +278,7 @@
     const batches = chunk(queries, QUERIES_PER_BATCH);
 
     btn.disabled = true;
+    if (btnWhatIf) btnWhatIf.disabled = true;
     const started = Date.now();
     setStatus(`Running ${batches.length} batch(es) of ${QUERIES_PER_BATCH} queries to stay under Cloudflare's 100s edge timeout…`);
 
@@ -279,6 +298,14 @@
         setStatus(`Batch ${i + 1}/${batches.length} (${batch.length} queries × 6 variants = ~${batch.length * 6 * 5}s)… ${elapsed}s elapsed`);
         const body = { queries: batch };
         if (slug) body.profile_slugs = [slug];
+        // What-if mode: inject simulated third-party ratings on the
+        // target tenant's profile via profile_patches. Server merges
+        // them on top of the loaded BusinessRow before rendering, so
+        // the experiment scores the HYPOTHETICAL state without
+        // mutating the tenant's live record.
+        if (opts.whatIf && slug) {
+          body.profile_patches = { [slug]: WHAT_IF_PATCH };
+        }
         const res = await af('/api/admin/experiments/format-judge', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -318,12 +345,15 @@
       setStatus('Network error: ' + String((err && err.message) || err), 'error');
     } finally {
       btn.disabled = false;
+      if (btnWhatIf) btnWhatIf.disabled = false;
     }
   }
 
   function afterMount() {
     const btn = document.getElementById('exp-run');
-    if (btn) btn.addEventListener('click', runExperiment);
+    if (btn) btn.addEventListener('click', () => runExperiment());
+    const btnWhatIf = document.getElementById('exp-run-whatif');
+    if (btnWhatIf) btnWhatIf.addEventListener('click', () => runExperiment({ whatIf: true }));
   }
 
   window.AMCP_ADMIN_EXPERIMENTS = {
