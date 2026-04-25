@@ -87,7 +87,20 @@
     return !!(cl && cl[key] && cl[key].completed_at);
   }
 
+  // ?preview=onboarding bypasses the admin gate AND synthesizes an
+  // empty snapshot if the server returned none. Lets the operator see
+  // the panel + tour from their own admin session without switching
+  // accounts. Marking steps from a preview session still no-ops on
+  // the server (admin role short-circuits markStep) so this is read-
+  // only previewing, not real state mutation.
+  function isPreviewMode() {
+    try {
+      return new URL(window.location.href).searchParams.get('preview') === 'onboarding';
+    } catch { return false; }
+  }
+
   function shouldShow(snapshot) {
+    if (isPreviewMode()) return true;
     if (!snapshot) return false;
     if (snapshot.onboarded_at) return false;
     // Admin impersonating: server returns a no-op state (all empty) on
@@ -116,6 +129,13 @@
 
   function render(container, snapshot) {
     _container = container;
+    // Preview mode: if the server returned no snapshot (admin endpoint),
+    // synthesize an empty one so the rendering path has data to work
+    // with. Production-real tenants always get a real snapshot from
+    // /api/client/onboarding so this branch never fires for them.
+    if (!snapshot && isPreviewMode()) {
+      snapshot = { first_dashboard_at: null, onboarded_at: null, state: {} };
+    }
     _snapshot  = snapshot;
     if (!container) return;
     if (!shouldShow(snapshot)) {

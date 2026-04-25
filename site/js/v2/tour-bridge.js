@@ -391,13 +391,25 @@
     document.getElementById('amcp-tour-welcome').classList.add('active');
   }
 
+  function isPreviewMode() {
+    try {
+      return new URL(window.location.href).searchParams.get('preview') === 'onboarding';
+    } catch { return false; }
+  }
+
   // First-login auto-trigger. Called by overview.js's afterMount once
   // the page has mounted. Conditions:
   //   - Onboarding state machine reports first login (welcome not yet
   //     completed)
   //   - User is not an admin (we never auto-trigger flows for admins
   //     viewing ?as=<slug> — they're not the user being onboarded)
+  // Bypassed by ?preview=onboarding so operators can preview the
+  // first-login experience without switching accounts.
   function maybeAutoStart() {
+    if (isPreviewMode()) {
+      setTimeout(showWelcome, 600);
+      return;
+    }
     const ob = window.AMCP_ONBOARDING;
     if (!ob || typeof ob.isFirstLogin !== 'function') return;
     const role = (window.AMCP_DATA && window.AMCP_DATA.user_role) || null;
