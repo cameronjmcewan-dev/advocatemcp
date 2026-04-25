@@ -25,12 +25,13 @@ import type { BusinessRow } from "../../db.js";
 
 export const adminExperimentsRouter = Router();
 
-/* GET /admin/profile-scores
+/* GET /admin/profile-scores  (router mounted at /admin in admin/index.ts,
+ * so the inner path is /profile-scores).
  * Bulk read of every tenant's cached profile-score (no API spend).
  * Powers a fleet-wide admin view: which tenants score high, which
  * have stale scores, who hasn't run yet. */
 adminExperimentsRouter.get(
-  "/admin/profile-scores",
+  "/profile-scores",
   (_req: Request, res: Response) => {
     const db = getDb();
     const rows = db
