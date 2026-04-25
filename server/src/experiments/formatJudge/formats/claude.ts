@@ -12,6 +12,7 @@ import {
   buildBusinessJsonLd,
   buildFaqJsonLd,
   buildReviewsJsonLd,
+  buildPlatformRatingsJsonLd,
   buildWebsiteJsonLd,
   escapeHtml,
   jsonLdScript,
@@ -33,6 +34,7 @@ export const claudeHtml: FormatVariant = {
     const faqJsonLd = buildFaqJsonLd(query, answerText);
     const websiteJsonLd = buildWebsiteJsonLd(business);
     const reviewsJsonLd = buildReviewsJsonLd(business);
+    const platformRatingsJsonLd = buildPlatformRatingsJsonLd(business);
 
     // Convert markdown bullets into a <dl> when each line has a "Label: value"
     // shape. Otherwise fall through to a normal <ul>.
@@ -67,6 +69,7 @@ export const claudeHtml: FormatVariant = {
   ${jsonLdScript(faqJsonLd)}
   ${websiteJsonLd ? jsonLdScript(websiteJsonLd) : ""}
   ${reviewsJsonLd.map(jsonLdScript).join("\n  ")}
+  ${platformRatingsJsonLd.map(jsonLdScript).join("\n  ")}
 </head>
 <body>
   <article>

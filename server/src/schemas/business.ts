@@ -53,6 +53,16 @@ export const CredentialsSchema = z.object({
 export const SourceRatingSchema = z.object({
   rating: z.number().min(0).max(5),
   count: z.number().int().nonnegative(),
+  // Optional URL to the platform's review page (e.g.
+  // https://www.google.com/maps/place/.../@.../reviews ,
+  // https://www.yelp.com/biz/...). When present, the per-bot HTML
+  // renderer emits Review.url + subjectOf links into JSON-LD so AI
+  // search judges treat the platform as a third-party verification
+  // source rather than as self-reported. iter7 of the format-judge
+  // harness flagged "no third-party verification" as the universal
+  // -1 to -2 deduction across all variants — this field unlocks the
+  // path to 9-10.
+  url: z.string().url().optional(),
 });
 
 export const RatingsSchema = z.object({

@@ -13,6 +13,7 @@ import {
   buildBusinessJsonLd,
   buildFaqJsonLd,
   buildReviewsJsonLd,
+  buildPlatformRatingsJsonLd,
   buildWebsiteJsonLd,
   escapeHtml,
   jsonLdScript,
@@ -35,6 +36,7 @@ export const googleHtml: FormatVariant = {
     const faqJsonLd = buildFaqJsonLd(query, answerText);
     const websiteJsonLd = buildWebsiteJsonLd(business);
     const reviewsJsonLd = buildReviewsJsonLd(business);
+    const platformRatingsJsonLd = buildPlatformRatingsJsonLd(business);
     const speakable = {
       "@context": "https://schema.org",
       "@type": "WebPage",
@@ -109,6 +111,7 @@ export const googleHtml: FormatVariant = {
   ${jsonLdScript(breadcrumb)}
   ${websiteJsonLd ? jsonLdScript(websiteJsonLd) : ""}
   ${reviewsJsonLd.map(jsonLdScript).join("\n  ")}
+  ${platformRatingsJsonLd.map(jsonLdScript).join("\n  ")}
 </head>
 <body>
   <article>

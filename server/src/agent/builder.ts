@@ -24,7 +24,7 @@ function formatSelfReported(
   return opts.verifyHint ? `${base} (${opts.verifyHint})` : base;
 }
 
-type RatingSource = { rating: number; count: number };
+type RatingSource = { rating: number; count: number; url?: string };
 type RatingsBlob = {
   google?: RatingSource; yelp?: RatingSource;
   facebook?: RatingSource; bbb?: RatingSource;

@@ -12,6 +12,7 @@ import {
   buildBusinessJsonLd,
   buildFaqJsonLd,
   buildReviewsJsonLd,
+  buildPlatformRatingsJsonLd,
   buildWebsiteJsonLd,
   escapeHtml,
   jsonLdScript,
@@ -34,6 +35,7 @@ export const openaiHtml: FormatVariant = {
     const faqJsonLd = buildFaqJsonLd(query, answerText);
     const websiteJsonLd = buildWebsiteJsonLd(business);
     const reviewsJsonLd = buildReviewsJsonLd(business);
+    const platformRatingsJsonLd = buildPlatformRatingsJsonLd(business);
 
     // Strip markdown bullets — ChatGPT prefers prose. Convert each "- ..." line
     // into a sentence pulled into the next paragraph.
@@ -76,6 +78,7 @@ export const openaiHtml: FormatVariant = {
   ${jsonLdScript(faqJsonLd)}
   ${websiteJsonLd ? jsonLdScript(websiteJsonLd) : ""}
   ${reviewsJsonLd.map(jsonLdScript).join("\n  ")}
+  ${platformRatingsJsonLd.map(jsonLdScript).join("\n  ")}
 </head>
 <body>
   <article>

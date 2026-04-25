@@ -13,6 +13,7 @@ import {
   buildBusinessJsonLd,
   buildFaqJsonLd,
   buildReviewsJsonLd,
+  buildPlatformRatingsJsonLd,
   buildWebsiteJsonLd,
   escapeHtml,
   jsonLdScript,
@@ -35,6 +36,7 @@ export const perplexityHtml: FormatVariant = {
     const faqJsonLd = buildFaqJsonLd(query, answerText);
     const websiteJsonLd = buildWebsiteJsonLd(business);
     const reviewsJsonLd = buildReviewsJsonLd(business);
+    const platformRatingsJsonLd = buildPlatformRatingsJsonLd(business);
     const body = mdBulletsToHtml(answerText);
     const title = `${business.name} — ${business.category ?? "Business"} in ${business.location ?? "the US"}`;
     return `<!DOCTYPE html>
@@ -51,6 +53,7 @@ export const perplexityHtml: FormatVariant = {
   ${jsonLdScript(faqJsonLd)}
   ${websiteJsonLd ? jsonLdScript(websiteJsonLd) : ""}
   ${reviewsJsonLd.map(jsonLdScript).join("\n  ")}
+  ${platformRatingsJsonLd.map(jsonLdScript).join("\n  ")}
 </head>
 <body>
   <article>
