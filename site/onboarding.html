@@ -55,10 +55,14 @@
     --border:      #3a342c;
     --text:        #e8e3e0;
     --muted:       #a39b8f;
-    --accent:      #a0356a;      /* brighter maroon for dark-mode contrast */
-    --accent-dk:   #5c1a3c;
-    --accent-dim:  rgba(160,53,105,.14);
-    --accent-ring: rgba(160,53,105,.28);
+    /* Keep the brand oxblood in dark mode — the earlier #a0356a was
+     * legible on ink but drifted toward magenta / pink, which the
+     * whole palette is meant to avoid. #7d2550 reads as unmistakable
+     * deep maroon against the dark bg without going rosy. */
+    --accent:      #7d2550;         /* brand maroon, holds in dark mode */
+    --accent-dk:   #5c1a3c;         /* one step deeper for hover */
+    --accent-dim:  rgba(125,37,80,.10);
+    --accent-ring: rgba(125,37,80,.22);
     --green:       #5fa879;
     --red:         #f27873;
     --red-dim:     rgba(242,120,115,.12);
