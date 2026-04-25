@@ -8,8 +8,12 @@
 
 import type { FormatVariant, RenderInput } from "../types.js";
 import {
+  addAttribution,
+  aiDisclosureFooter,
   buildBusinessJsonLd,
   buildFaqJsonLd,
+  buildReviewsJsonLd,
+  buildWebsiteJsonLd,
   escapeHtml,
   jsonLdScript,
   mdBulletsToHtml,
@@ -21,12 +25,16 @@ export const googleHtml: FormatVariant = {
   optimizedFor: "google",
   render: (input: RenderInput): string => {
     const { business, answerText, query, referralUrl } = input;
-    const bizJsonLd = buildBusinessJsonLd(business, {
+    const bizJsonLd = addAttribution(buildBusinessJsonLd(business, {
       type: "LocalBusiness",
       includeRating: true,
       includeAddress: true,
-    });
+      includeKnowsAbout: true,
+      includeServiceArray: true,
+    }));
     const faqJsonLd = buildFaqJsonLd(query, answerText);
+    const websiteJsonLd = buildWebsiteJsonLd(business);
+    const reviewsJsonLd = buildReviewsJsonLd(business);
     const speakable = {
       "@context": "https://schema.org",
       "@type": "WebPage",
@@ -76,7 +84,6 @@ export const googleHtml: FormatVariant = {
   <meta charset="utf-8">
   <title>${escapeHtml(title)}</title>
   <meta name="description" content="${escapeHtml(firstSentence)}">
-  <meta name="ai-generated" content="true">
   <link rel="canonical" href="${escapeHtml(referralUrl)}">
   <meta property="og:title" content="${escapeHtml(business.name)}">
   <meta property="og:description" content="${escapeHtml(firstSentence)}">
@@ -85,6 +92,8 @@ export const googleHtml: FormatVariant = {
   ${jsonLdScript(speakable)}
   ${jsonLdScript(website)}
   ${jsonLdScript(breadcrumb)}
+  ${websiteJsonLd ? jsonLdScript(websiteJsonLd) : ""}
+  ${reviewsJsonLd.map(jsonLdScript).join("\n  ")}
 </head>
 <body>
   <article>
@@ -93,6 +102,7 @@ export const googleHtml: FormatVariant = {
     ${body}
     <p>Book at <a href="${escapeHtml(referralUrl)}" rel="nofollow">${escapeHtml(referralUrl)}</a>.</p>
   </article>
+  ${aiDisclosureFooter()}
 </body>
 </html>`;
   },

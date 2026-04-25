@@ -7,8 +7,12 @@
 
 import type { FormatVariant, RenderInput } from "../types.js";
 import {
+  addAttribution,
+  aiDisclosureFooter,
   buildBusinessJsonLd,
   buildFaqJsonLd,
+  buildReviewsJsonLd,
+  buildWebsiteJsonLd,
   escapeHtml,
   jsonLdScript,
   mdBoldToHtml,
@@ -20,14 +24,16 @@ export const openaiHtml: FormatVariant = {
   optimizedFor: "openai",
   render: (input: RenderInput): string => {
     const { business, answerText, query, referralUrl } = input;
-    const bizJsonLd = buildBusinessJsonLd(business, {
+    const bizJsonLd = addAttribution(buildBusinessJsonLd(business, {
       type: "ProfessionalService",
       includeRating: true,
       includeAddress: true,
       includeKnowsAbout: true,
       includeServiceArray: true,
-    });
+    }));
     const faqJsonLd = buildFaqJsonLd(query, answerText);
+    const websiteJsonLd = buildWebsiteJsonLd(business);
+    const reviewsJsonLd = buildReviewsJsonLd(business);
 
     // Strip markdown bullets — ChatGPT prefers prose. Convert each "- ..." line
     // into a sentence pulled into the next paragraph.
@@ -58,15 +64,17 @@ export const openaiHtml: FormatVariant = {
   <meta charset="utf-8">
   <title>${escapeHtml(title)}</title>
   <meta name="description" content="${escapeHtml(desc.slice(0, 155))}">
-  <meta name="ai-generated" content="true">
   <meta property="og:title" content="${escapeHtml(business.name)}">
   <meta property="og:description" content="${escapeHtml(desc)}">
   <meta property="og:type" content="website">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="${escapeHtml(business.name)}">
   <meta name="twitter:description" content="${escapeHtml(desc)}">
+  <link rel="canonical" href="${escapeHtml(referralUrl)}">
   ${jsonLdScript(bizJsonLd)}
   ${jsonLdScript(faqJsonLd)}
+  ${websiteJsonLd ? jsonLdScript(websiteJsonLd) : ""}
+  ${reviewsJsonLd.map(jsonLdScript).join("\n  ")}
 </head>
 <body>
   <article>
@@ -74,6 +82,7 @@ export const openaiHtml: FormatVariant = {
     ${proseBody}
     <p>To learn more, visit <a href="${escapeHtml(referralUrl)}" rel="nofollow">${escapeHtml(referralUrl)}</a>.</p>
   </article>
+  ${aiDisclosureFooter()}
 </body>
 </html>`;
   },

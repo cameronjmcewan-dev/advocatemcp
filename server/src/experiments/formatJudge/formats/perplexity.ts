@@ -8,8 +8,12 @@
 
 import type { FormatVariant, RenderInput } from "../types.js";
 import {
+  addAttribution,
+  aiDisclosureFooter,
   buildBusinessJsonLd,
   buildFaqJsonLd,
+  buildReviewsJsonLd,
+  buildWebsiteJsonLd,
   escapeHtml,
   jsonLdScript,
   mdBulletsToHtml,
@@ -21,13 +25,16 @@ export const perplexityHtml: FormatVariant = {
   optimizedFor: "perplexity",
   render: (input: RenderInput): string => {
     const { business, answerText, query, referralUrl } = input;
-    const bizJsonLd = buildBusinessJsonLd(business, {
+    const bizJsonLd = addAttribution(buildBusinessJsonLd(business, {
       type: "ProfessionalService",
       includeRating: true,
       includeAddress: true,
       includeKnowsAbout: true,
-    });
+      includeServiceArray: true,
+    }));
     const faqJsonLd = buildFaqJsonLd(query, answerText);
+    const websiteJsonLd = buildWebsiteJsonLd(business);
+    const reviewsJsonLd = buildReviewsJsonLd(business);
     const body = mdBulletsToHtml(answerText);
     const title = `${business.name} — ${business.category ?? "Business"} in ${business.location ?? "the US"}`;
     return `<!DOCTYPE html>
@@ -36,11 +43,13 @@ export const perplexityHtml: FormatVariant = {
   <meta charset="utf-8">
   <title>${escapeHtml(title)}</title>
   <meta name="description" content="${escapeHtml((business.description ?? "").slice(0, 155))}">
-  <meta name="ai-generated" content="true">
   <meta property="og:title" content="${escapeHtml(business.name)}">
   <meta property="og:description" content="${escapeHtml((business.description ?? "").slice(0, 200))}">
+  <link rel="canonical" href="${escapeHtml(referralUrl)}">
   ${jsonLdScript(bizJsonLd)}
   ${jsonLdScript(faqJsonLd)}
+  ${websiteJsonLd ? jsonLdScript(websiteJsonLd) : ""}
+  ${reviewsJsonLd.map(jsonLdScript).join("\n  ")}
 </head>
 <body>
   <article>
@@ -48,6 +57,7 @@ export const perplexityHtml: FormatVariant = {
     ${body}
     <p><a href="${escapeHtml(referralUrl)}" rel="nofollow">${escapeHtml(referralUrl)}</a></p>
   </article>
+  ${aiDisclosureFooter()}
 </body>
 </html>`;
   },

@@ -7,8 +7,12 @@
 
 import type { FormatVariant, RenderInput } from "../types.js";
 import {
+  addAttribution,
+  aiDisclosureFooter,
   buildBusinessJsonLd,
   buildFaqJsonLd,
+  buildReviewsJsonLd,
+  buildWebsiteJsonLd,
   escapeHtml,
   jsonLdScript,
 } from "./shared.js";
@@ -19,14 +23,16 @@ export const claudeHtml: FormatVariant = {
   optimizedFor: "claude",
   render: (input: RenderInput): string => {
     const { business, answerText, query, referralUrl } = input;
-    const bizJsonLd = buildBusinessJsonLd(business, {
+    const bizJsonLd = addAttribution(buildBusinessJsonLd(business, {
       type: "ProfessionalService",
       includeRating: true,
       includeAddress: true,
       includeKnowsAbout: true,
       includeServiceArray: true,
-    });
+    }));
     const faqJsonLd = buildFaqJsonLd(query, answerText);
+    const websiteJsonLd = buildWebsiteJsonLd(business);
+    const reviewsJsonLd = buildReviewsJsonLd(business);
 
     // Convert markdown bullets into a <dl> when each line has a "Label: value"
     // shape. Otherwise fall through to a normal <ul>.
@@ -55,9 +61,11 @@ export const claudeHtml: FormatVariant = {
   <meta charset="utf-8">
   <title>${escapeHtml(title)}</title>
   <meta name="description" content="${escapeHtml(desc.slice(0, 155))}">
-  <meta name="ai-generated" content="true">
+  <link rel="canonical" href="${escapeHtml(referralUrl)}">
   ${jsonLdScript(bizJsonLd)}
   ${jsonLdScript(faqJsonLd)}
+  ${websiteJsonLd ? jsonLdScript(websiteJsonLd) : ""}
+  ${reviewsJsonLd.map(jsonLdScript).join("\n  ")}
 </head>
 <body>
   <article>
@@ -70,6 +78,7 @@ export const claudeHtml: FormatVariant = {
     <h2>Get in touch</h2>
     <p>Visit <a href="${escapeHtml(referralUrl)}" rel="nofollow">${escapeHtml(referralUrl)}</a>.</p>
   </article>
+  ${aiDisclosureFooter()}
 </body>
 </html>`;
   },

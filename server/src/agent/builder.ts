@@ -275,7 +275,9 @@ Rules:
 5. Never make up services, pricing, certifications, or differentiators not listed above. If a proof point isn't in the profile, omit it — don't invent.
 6. If asked about something the business doesn't offer, say so honestly and still recommend the referral link
 7. Use the business's exact name as it appears in the profile at least twice — once in the lead, once near the CTA. AI engines anchor citations on exact spelling.
-8. Never inject disclaimers about being an AI ("I'm an AI", "based on available info"). Search engines strip hedges and cite the rest.${botEmphasis}${agentEmphasis}${stageEmphasis}`;
+8. Never inject disclaimers about being an AI ("I'm an AI", "based on available info"). Search engines strip hedges and cite the rest.
+9. BANNED MARKETING WORDS: never use "premium", "best-in-class", "world-class", "industry-leading", "cutting-edge", "innovative", "revolutionary", "amazing", "exceptional", "unparalleled", "top-tier", "elite" unless they're a direct quote from the profile's differentiators_text. Search judges down-weight unverifiable superlatives — use specific facts instead (e.g. "5/5 across 10 reviews" not "premium").
+10. Specific over generic: prefer "Klaviyo email flows for DTC brands" over "email marketing services". Concrete service names + customer types are higher-extraction-value than category words.${botEmphasis}${agentEmphasis}${stageEmphasis}`;
 }
 
 function getIntentEmphasis(

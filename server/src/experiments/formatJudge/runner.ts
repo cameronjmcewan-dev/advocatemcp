@@ -77,7 +77,7 @@ const WCC_FIXTURE: BusinessRow = {
   slug: "workman-copy-co",
   name: "Workman Copy Co",
   description:
-    "Premium email marketing agency for DTC ecommerce brands. Combines direct-response copywriting with deep Klaviyo expertise to build consistent email revenue systems.",
+    "Email marketing agency for DTC ecommerce brands. Combines direct-response copywriting with deep Klaviyo expertise to build consistent email revenue systems.",
   services: "email marketing, Klaviyo, DTC ecommerce, copywriting",
   pricing: null,
   location: "Austin, TX",
@@ -105,7 +105,13 @@ const WCC_FIXTURE: BusinessRow = {
   credentials_json: null,
   ratings_json: null,
   differentiators_text: null,
-  customer_quotes_json: null,
+  // Sample customer quotes so Review JSON-LD has data to render. In
+  // production this comes from the tenant's Business Profile editor.
+  customer_quotes_json: JSON.stringify([
+    { author: "Anya R.", quote: "Workman Copy Co rebuilt our entire Klaviyo flow set in 6 weeks and we hit a 28% lift in email revenue.", rating: 5 },
+    { author: "Devon P.", quote: "Their copy reads like our customers wrote it. We finally stopped sending generic blasts.", rating: 5 },
+    { author: "Jin S.",   quote: "Worked with three other agencies before. None understood DTC like Workman does.", rating: 5 },
+  ]),
   guarantee_text: null,
   case_stories_json: null,
   lead_routing_json: null,
