@@ -40,7 +40,18 @@
 
 import { getDb } from "../db.js";
 
-const DEFAULT_PER_TENANT_DAILY_BUDGET_USD = 5;
+/* Per-tenant default cap. Lowered from $5 to $2 on 2026-04-25 to keep
+ * a healthy gross-margin cushion against Base-tier pricing
+ * ($149/mo ÷ 30 = $4.96/day revenue per tenant). At $2/day cap the
+ * worst-case theoretical spend is $60/mo, which is 30-300x more than
+ * any realistic tenant has ever spent on customer-facing endpoints —
+ * the cap is an abuse ceiling, not expected usage.
+ *
+ * Note: this cap currently only covers profile-score + verify-rating.
+ * Bot queries (POST /agents/:slug/query, the actual production hot
+ * path) are NOT in this bucket — that's a separate concern tracked
+ * in docs/followups.md ("bot-query budget tracking"). */
+const DEFAULT_PER_TENANT_DAILY_BUDGET_USD = 2;
 
 interface TenantBudgetState {
   slug: string;

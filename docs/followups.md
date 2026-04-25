@@ -8,14 +8,40 @@ Last updated: 2026-04-25
 ## Operator action required
 
 ### `PER_TENANT_DAILY_BUDGET_USD` env var (Railway, optional)
-**Added 2026-04-25.** Per-tenant daily AI-spend cap layered on top of
-the global kill-switch. Default $5/tenant/day. Set in Railway env to
-override (e.g. raise for trusted tenants, tighten during incident).
-A tenant who exceeds the per-tenant cap gets a clear 503 with
-`scope: "tenant"` and a "contact support to raise" message — global
-cap stays untouched, other tenants unaffected. See
+**Added 2026-04-25, default lowered $5 → $2 same day.** Per-tenant daily
+AI-spend cap on customer-facing endpoints (profile-score + verify-rating).
+Default $2/tenant/day to keep gross-margin headroom against Base-tier
+pricing ($149/mo ÷ 30 = $4.96/day revenue per tenant). Override via env
+to raise for trusted tenants or tighten during incident. A tenant who
+exceeds gets 503 with `scope: "tenant"` and a "contact support to raise"
+message; global cap stays untouched and other tenants unaffected. See
 `server/src/middleware/tenantBudget.ts`. Ops view via `GET /admin/budget`
 (now returns `top_spenders_today`) and `GET /admin/budget/tenant/:slug`.
+
+## Real bugs / known gaps
+
+### Bot-query graceful-degrade (deferred design call)
+**Tracked 2026-04-25.** `POST /agents/:slug/query` (the production
+hot-path that fires every time an AI bot crawls a tenant's site) is
+now wired through the GLOBAL $25/day kill-switch — fail-closed at
+fleet level. But it intentionally is NOT wired through the per-tenant
+cap, because applying that cap would 503 individual tenants who get
+viral traffic at exactly the worst time.
+
+The proper answer is graceful degrade: when a tenant exceeds their
+budget, instead of 503'ing the bot, serve a static/cached response
+(generic "see <website> for more info" or last-successful-similar-query
+cache) so the citation still happens but no Claude call fires. That's
+a real product call — not shipped today; bot queries currently rely
+solely on the global cap to bound spend. Per-tenant *visibility* on
+bot-query spend IS tracked (recordForSlug fires after each call) so
+ops can see which tenant is driving spend in `/admin/budget`.
+
+Tracking this separately from "shipped" since the right design needs
+explicit decisions on:
+  - What to serve when over cap (cached, generic, redirect-only?)
+  - Whether to per-cap bot queries or rely on global cap forever
+  - How to communicate over-cap state to the tenant in their dashboard
 
 ### `GOOGLE_PLACES_API_KEY` env var (Railway)
 **Added 2026-04-25.** The new Verify-with-Google button on the BusinessProfile

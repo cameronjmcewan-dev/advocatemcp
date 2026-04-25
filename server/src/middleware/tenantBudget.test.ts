@@ -114,7 +114,9 @@ describe("tenantBudget", () => {
   it("uses default cap when PER_TENANT_DAILY_BUDGET_USD is unset", () => {
     delete process.env.PER_TENANT_DAILY_BUDGET_USD;
     _resetTenantBudgetForTesting();
-    expect(snapshotForSlug("alpha").cap_usd).toBe(5);
+    // Default lowered from $5 → $2 on 2026-04-25 to keep gross-margin
+    // headroom against Base-tier pricing ($149/mo ≈ $4.96/day rev).
+    expect(snapshotForSlug("alpha").cap_usd).toBe(2);
   });
 
   it("topSpendersToday returns rows sorted by spent desc", () => {

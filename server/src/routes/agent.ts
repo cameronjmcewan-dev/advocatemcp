@@ -561,6 +561,34 @@ agentRouter.post("/agents/:slug/query", requireApiKey, async (req: Request, res:
     return;
   }
 
+  // Global daily budget kill-switch on bot queries — the production
+  // hot path. ~$0.005-0.02 per Claude call after prompt caching. Reserve
+  // $0.05/call (5x headroom over typical actual). When the global $25/day
+  // cap is exceeded we 503 — a tenant in that state would still want
+  // SOMETHING served (graceful degrade), but graceful degrade is a
+  // product call that needs explicit design (see docs/followups.md
+  // "bot-query graceful degrade"). For now, fail-closed protects the
+  // billing relationship; the alternative is unbounded spend.
+  //
+  // Per-tenant cap intentionally NOT applied to bot queries here —
+  // applying it would 503 individual tenants who get viral traffic at
+  // the worst possible time. Per-tenant tracking on bot queries is
+  // visibility-only (recordForSlug after the call succeeds) so we can
+  // see in /admin/budget which tenant is driving spend, without
+  // gating the route.
+  const QUERY_RESERVATION_USD = 0.05;
+  const queryBudget = budgetReserve(QUERY_RESERVATION_USD);
+  if (!queryBudget.allowed) {
+    res.status(503).json({
+      error: "budget_exhausted",
+      message: `Daily AI budget exhausted ($${queryBudget.capUsd.toFixed(2)} cap, $${queryBudget.remainingUsd.toFixed(2)} left). Try again after UTC midnight.`,
+      remaining_usd: queryBudget.remainingUsd,
+      cap_usd: queryBudget.capUsd,
+      scope: "global",
+    });
+    return;
+  }
+
   try {
     const requestId = res.locals.requestId as string | undefined;
     // Session 11.5: REST callers may self-identify via x-agent-identity. The
@@ -610,6 +638,19 @@ agentRouter.post("/agents/:slug/query", requireApiKey, async (req: Request, res:
         )
       : undefined;
 
+    // Close the budget reservation. queryAgent doesn't currently
+    // surface per-call Claude cost, so we estimate $0.01 — the rough
+    // average across the WCC profile size + prompt-caching uplift on
+    // repeat calls. Refining this to use actual Anthropic-reported
+    // cost (which queryAgent could expose via response.usage) is a
+    // follow-up. Per-tenant tracking is visibility-only here — recorded
+    // so the /admin/budget top_spenders view stays accurate without
+    // gating the bot path on per-tenant cap (a viral tenant should not
+    // 503 mid-traffic).
+    const ESTIMATED_QUERY_COST_USD = 0.01;
+    budgetRecord(QUERY_RESERVATION_USD, ESTIMATED_QUERY_COST_USD);
+    recordForSlug(slug, QUERY_RESERVATION_USD, ESTIMATED_QUERY_COST_USD);
+
     // Phase A: per-bot HTML rendering. When format === "html", wrap the
     // agent's answer in HTML+JSON-LD using the renderer matched to the
     // bot's canonical name (passed in `crawler`). Drops in as a parallel
@@ -641,6 +682,9 @@ agentRouter.post("/agents/:slug/query", requireApiKey, async (req: Request, res:
       ...(attributionToken !== undefined ? { attribution_token: attributionToken } : {}),
     });
   } catch (err) {
+    // Failed before/during Claude call — release the reservation so it
+    // doesn't permanently consume the daily cap.
+    budgetRelease(QUERY_RESERVATION_USD);
     console.error(`[agent] Error querying ${slug}:`, err);
     res.status(500).json({
       error: "Agent query failed",
