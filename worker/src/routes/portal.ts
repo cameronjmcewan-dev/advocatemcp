@@ -1409,15 +1409,27 @@ async function apiPreviewVoice(request: Request, env: Env): Promise<Response> {
       },
       body: JSON.stringify({ query, crawler: "PerplexityBot" }),
     });
-    const data = await r.json().catch(() => ({})) as { answer?: string; error?: string };
+    // Railway returns AgentQueryResult — answer text is in `response`,
+    // not `answer`. (See server/src/agent/query.ts AgentQueryResult.)
+    const data = await r.json().catch(() => ({})) as {
+      response?: string;
+      answer?: string;        // tolerate either name in case the upstream renames
+      error?: string;
+      referral_url?: string | null;
+    };
     if (!r.ok) {
       return withCors(
         jsonErr(r.status, data.error || `Preview failed (HTTP ${r.status})`),
         request, { credentials: true },
       );
     }
+    const answerText = (data.response ?? data.answer ?? "").trim();
     return withCors(
-      jsonOk({ query, answer: data.answer || "(no answer returned)" }),
+      jsonOk({
+        query,
+        answer: answerText || "(no answer returned)",
+        referral_url: data.referral_url ?? null,
+      }),
       request, { credentials: true },
     );
   } catch (err) {
