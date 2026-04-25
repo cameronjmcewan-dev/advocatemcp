@@ -216,25 +216,31 @@ export function buildSystemPrompt(
     }
   }
 
-  // Ratings from external platforms. When the tenant supplies a URL
-  // pointing at the actual review page (Phase A iter8), include it as
-  // a verify-hint so the agent can attribute the rating to a specific,
-  // checkable source. This is the third-party verification path the
-  // format-judge harness identified as the difference between 8/10
-  // and 9-10.
+  // Ratings from external platforms.
+  // - When the tenant supplied a URL: this IS third-party verification
+  //   (the platform is the source). We drop the "self-reported" hedge
+  //   and use direct attribution: "Google: 4.9/5 across 47 reviews
+  //   (https://...)". Judges in iter9 still flagged "self-reported"
+  //   even with URLs present — the hedge was the problem.
+  // - When the tenant has not yet supplied a URL: keep the hedge
+  //   ("Google reports 4.9/5...") because we can't verify the rating
+  //   came from Google's side.
   if (ratings) {
     for (const { key, label } of RATING_PLATFORMS) {
       const r = ratings[key];
       if (!r) continue;
-      profileLines.push(
-        formatSelfReported(
-          `${label} rating`,
-          `${r.rating}/5 across ${r.count} reviews`,
-          r.url
-            ? { verifyHint: `verifiable at ${r.url}` }
-            : undefined,
-        ),
-      );
+      if (r.url) {
+        profileLines.push(
+          `- ${label}: ${r.rating}/5 across ${r.count} reviews (verifiable at ${r.url})`,
+        );
+      } else {
+        profileLines.push(
+          formatSelfReported(
+            `${label} rating`,
+            `${r.rating}/5 across ${r.count} reviews`,
+          ),
+        );
+      }
     }
   }
 

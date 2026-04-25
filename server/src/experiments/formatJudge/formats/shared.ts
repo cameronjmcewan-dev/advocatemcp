@@ -90,7 +90,7 @@ export function buildBusinessJsonLd(
         ratingValue: aggregate.value,
         reviewCount: aggregate.count,
         bestRating: 5,
-        worstRating: 0,
+        worstRating: 1,
       };
     } else if (business.star_rating != null) {
       ld.aggregateRating = {
@@ -98,7 +98,7 @@ export function buildBusinessJsonLd(
         ratingValue: business.star_rating,
         reviewCount: business.review_count ?? 1,
         bestRating: 5,
-        worstRating: 0,
+        worstRating: 1,
       };
     }
   }
@@ -277,7 +277,7 @@ export function buildPlatformRatingsJsonLd(business: BusinessRow): Record<string
         "@type": "Rating",
         ratingValue: r.rating,
         bestRating: 5,
-        worstRating: 0,
+        worstRating: 1,
       },
       // The url field is the link a judge or AI engine can follow to
       // verify. iter7 deduction was "no verification source named";
@@ -329,7 +329,7 @@ export function buildReviewsJsonLd(business: BusinessRow): Record<string, unknow
             "@type": "Rating",
             ratingValue: q.rating,
             bestRating: 5,
-            worstRating: 0,
+            worstRating: 1,
           },
         } : {}),
       };
