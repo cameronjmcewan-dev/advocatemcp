@@ -1,0 +1,75 @@
+/* ChatGPT-tuned variant: HTML with conversational paragraph prose +
+ * rich entity-focused JSON-LD (ProfessionalService with knowsAbout +
+ * service array) + OpenGraph for link-out previews.
+ *
+ * Hypothesis under test: ChatGPT search favors quotable paragraph
+ * passages and rich entity disambiguation via JSON-LD. */
+
+import type { FormatVariant, RenderInput } from "../types.js";
+import {
+  buildBusinessJsonLd,
+  buildFaqJsonLd,
+  escapeHtml,
+  jsonLdScript,
+} from "./shared.js";
+
+export const openaiHtml: FormatVariant = {
+  id: "openai_html",
+  label: "ChatGPT-tuned HTML (prose paragraphs, rich entity JSON-LD, OpenGraph)",
+  optimizedFor: "openai",
+  render: (input: RenderInput): string => {
+    const { business, answerText, query, referralUrl } = input;
+    const bizJsonLd = buildBusinessJsonLd(business, {
+      type: "ProfessionalService",
+      includeRating: true,
+      includeAddress: true,
+      includeKnowsAbout: true,
+      includeServiceArray: true,
+    });
+    const faqJsonLd = buildFaqJsonLd(query, answerText);
+
+    // Strip markdown bullets — ChatGPT prefers prose. Convert each "- ..." line
+    // into a sentence pulled into the next paragraph.
+    const proseBody = answerText
+      .split(/\n\n+/)
+      .map((para) => {
+        const lines = para.split("\n");
+        const bullets = lines.filter((l) => /^[-*]\s+/.test(l));
+        if (bullets.length === lines.length) {
+          // pure bullet block → flatten to a single sentence-ish prose line
+          return bullets.map((b) => b.replace(/^[-*]\s+/, "")).join(" ");
+        }
+        return para;
+      })
+      .map((p) => `<p>${escapeHtml(p)}</p>`)
+      .join("\n  ");
+
+    const title = `${business.name} — ${business.category ?? "Business"}`;
+    const desc = (business.description ?? "").slice(0, 200);
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>${escapeHtml(title)}</title>
+  <meta name="description" content="${escapeHtml(desc.slice(0, 155))}">
+  <meta name="ai-generated" content="true">
+  <meta property="og:title" content="${escapeHtml(business.name)}">
+  <meta property="og:description" content="${escapeHtml(desc)}">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="${escapeHtml(business.name)}">
+  <meta name="twitter:description" content="${escapeHtml(desc)}">
+  ${jsonLdScript(bizJsonLd)}
+  ${jsonLdScript(faqJsonLd)}
+</head>
+<body>
+  <article>
+    <h1>${escapeHtml(business.name)}</h1>
+    ${proseBody}
+    <p>To learn more, visit <a href="${escapeHtml(referralUrl)}" rel="nofollow">${escapeHtml(referralUrl)}</a>.</p>
+  </article>
+</body>
+</html>`;
+  },
+};
