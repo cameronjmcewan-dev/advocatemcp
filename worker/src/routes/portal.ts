@@ -75,6 +75,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/domain-test"   && method === "GET")    return apiDomainTest(request, env);
   if (pathname === "/api/client/onboarding"      && method === "GET")  return apiGetOnboarding(request, env);
   if (pathname === "/api/client/onboarding/step" && method === "POST") return apiMarkOnboardingStep(request, env);
+  if (pathname === "/api/client/preview-voice"   && method === "POST") return apiPreviewVoice(request, env);
   if (pathname === "/admin/create-client"      && method === "POST") return adminCreateClient(request, env);
   const resyncMatch = pathname.match(/^\/admin\/businesses\/([^/]+)\/resync-api-key$/);
   if (resyncMatch && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
@@ -134,6 +135,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/domain-test"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/onboarding"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/onboarding/step" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/preview-voice"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
 
   // ── Stripe / new onboarding API ──────────────────────────────────────────
   if (pathname === "/api/onboard/basic"     && method === "POST") return handleBasicOnboard(request, env);
@@ -1352,6 +1354,75 @@ async function apiGetOnboarding(request: Request, env: Env): Promise<Response> {
   if (!snap) return withCors(jsonErr(404, "Business not found"), request, { credentials: true });
 
   return withCors(jsonOk(snap), request, { credentials: true });
+}
+
+// ── POST /api/client/preview-voice ────────────────────────────────────────
+// Server-side proxy to Railway's POST /agents/:slug/query so the dashboard
+// can render an *actual* agent answer in the onboarding voice-preview step
+// — not a hardcoded sample. The api_key for the bearer header is read from
+// D1 server-side; never exposed to the browser.
+//
+// Body: { query?: string }   (optional; defaults to "Tell me about <name>")
+// Returns: { answer: string, query: string }   on success
+//          { error, hint }                     on failure
+//
+// Cost: each call is one paid Claude invocation (~$0.005-0.02 depending on
+// profile size). Onboarding hits this once per tenant under normal use; the
+// FE ratelimits clicks via a disabled-button pattern. No KV/DO budget cap
+// here yet — add one if a tenant abuses it.
+
+async function apiPreviewVoice(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  let query = "";
+  try {
+    const body = await request.json() as Record<string, unknown>;
+    query = typeof body.query === "string" ? body.query.trim().slice(0, 500) : "";
+  } catch { /* empty body is fine — we'll synthesize one below */ }
+  if (!query) {
+    const name = biz.business_name || biz.slug;
+    query = `Tell me about ${name}.`;
+  }
+
+  if (!biz.api_key || biz.api_key === "pending") {
+    return withCors(
+      jsonErr(409, "Tenant has no usable api_key (Stripe webhook may still be in flight). Try again in a minute."),
+      request, { credentials: true },
+    );
+  }
+
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  try {
+    const r = await fetch(`${base}/agents/${biz.slug}/query`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${biz.api_key}`,
+      },
+      body: JSON.stringify({ query, crawler: "PerplexityBot" }),
+    });
+    const data = await r.json().catch(() => ({})) as { answer?: string; error?: string };
+    if (!r.ok) {
+      return withCors(
+        jsonErr(r.status, data.error || `Preview failed (HTTP ${r.status})`),
+        request, { credentials: true },
+      );
+    }
+    return withCors(
+      jsonOk({ query, answer: data.answer || "(no answer returned)" }),
+      request, { credentials: true },
+    );
+  } catch (err) {
+    return withCors(jsonErr(502, `Preview backend unreachable: ${String(err)}`), request, { credentials: true });
+  }
 }
 
 async function apiMarkOnboardingStep(request: Request, env: Env): Promise<Response> {

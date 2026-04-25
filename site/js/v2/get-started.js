@@ -259,15 +259,17 @@
 
     switch (key) {
       case 'watched_welcome':
-        // Phase 5 (tour bridge) wires v2 welcome modal. For now, mark
-        // complete inline so users can advance — the tour bridge will
-        // upgrade this to a real overlay.
-        if (typeof ob.openWelcome === 'function') {
-          ob.openWelcome();
-          // Re-render after a delay so the user sees the welcome flow
-          // mark itself complete.
+        // Use the v2 paper-themed welcome modal from tour-bridge.js,
+        // NOT the legacy 4-scene SVG welcome from dashboard-onboarding.js
+        // — that overlay is dark-theme and was designed for the legacy
+        // /dashboard.html surface; it visibly clashes with v2's paper UI.
+        // Tour bridge marks the welcome step complete on close.
+        if (window.AMCP_TOUR && typeof window.AMCP_TOUR.showWelcome === 'function') {
+          window.AMCP_TOUR.showWelcome();
           setTimeout(update, 500);
         } else {
+          // Tour bridge not loaded — mark complete inline so the user
+          // can still advance the checklist.
           ob.markStep('checklist.watched_welcome').then(update);
         }
         break;
@@ -283,18 +285,9 @@
         }
         break;
 
-      case 'previewed_voice': {
-        // Inline mock preview — same content as legacy _openVoicePreview
-        // but without the legacy drawer. We just toast a summary, mark
-        // complete, and let the user explore the real agent in any AI tool.
-        const name = (window.AMCP_DATA && window.AMCP_DATA.business_name) || 'your business';
-        const sample =
-          'Sure — ' + name + ' is a local business. They handle inquiries through ' +
-          'their booking page. For pricing, hours, or to schedule, tap through to their site.';
-        if (window.alert) window.alert('Sample agent answer:\n\n' + sample);
-        ob.markStep('checklist.previewed_voice').then(update);
+      case 'previewed_voice':
+        openVoicePreviewModal();
         break;
-      }
 
       case 'took_tour':
         if (window.AMCP_TOUR && typeof window.AMCP_TOUR.start === 'function') {
@@ -321,6 +314,180 @@
       default:
         // Unknown key — just mark and move on so the user isn't stuck.
         ob.markStep('checklist.' + key).then(update);
+    }
+  }
+
+  // Voice preview — calls the real agent endpoint via the worker proxy
+  // and renders the answer in a paper-themed modal. The displayed
+  // answer is what AI tools actually receive when they ask about this
+  // tenant, so the user sees an honest preview rather than a mock.
+  // Modal markup is injected once and re-used on subsequent opens.
+  let _vpInjected = false;
+  function injectVoicePreviewModal() {
+    if (_vpInjected) return;
+    _vpInjected = true;
+    const wrap = document.createElement('div');
+    wrap.id = 'amcp-vp-root';
+    wrap.innerHTML = `
+      <div id="amcp-vp-mask" role="dialog" aria-modal="true" aria-labelledby="amcp-vp-title">
+        <div class="amcp-vp-card">
+          <div class="amcp-vp-eyebrow">Sample agent answer</div>
+          <h2 id="amcp-vp-title" class="amcp-vp-title">Preview your voice</h2>
+          <div class="amcp-vp-question" id="amcp-vp-question"></div>
+          <div class="amcp-vp-answer" id="amcp-vp-answer">
+            <div class="amcp-vp-spinner" aria-hidden="true">
+              <div class="amcp-vp-dot"></div>
+              <div class="amcp-vp-dot"></div>
+              <div class="amcp-vp-dot"></div>
+            </div>
+            <span class="amcp-vp-loading-text">Asking your agent…</span>
+          </div>
+          <p class="amcp-vp-hint">This is exactly what ChatGPT, Perplexity, or Claude get when they ask about your business. Edit your profile to refine the tone.</p>
+          <div class="amcp-vp-actions">
+            <button type="button" class="amcp-vp-close" id="amcp-vp-close">Close</button>
+            <a class="amcp-vp-edit" href="/BusinessProfile.html">Edit profile →</a>
+          </div>
+        </div>
+      </div>
+      <style>
+        #amcp-vp-mask {
+          position: fixed; inset: 0; z-index: 9996; display: none;
+          background: rgba(20, 18, 16, 0.6);
+          align-items: center; justify-content: center; padding: 20px;
+        }
+        #amcp-vp-mask.active { display: flex; }
+        .amcp-vp-card {
+          background: var(--paper, #fbf9f5); border: 1px solid var(--line, #e6dfd5);
+          border-radius: 14px; padding: 32px; max-width: 560px; width: 100%;
+          box-shadow: 0 24px 60px rgba(20, 18, 16, 0.3);
+          font-family: "General Sans", system-ui, -apple-system, sans-serif;
+          max-height: 80vh; overflow-y: auto;
+        }
+        .amcp-vp-eyebrow {
+          font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase;
+          color: var(--maroon, #7d2550); font-weight: 600; margin-bottom: 10px;
+        }
+        .amcp-vp-title {
+          font-family: "Instrument Serif", serif; font-weight: 400;
+          font-size: 26px; line-height: 1.15; color: var(--ink, #1a1715);
+          margin: 0 0 18px;
+        }
+        .amcp-vp-question {
+          font-size: 13.5px; color: var(--ink-2, #46403a);
+          background: var(--paper-2, #f3ede2); padding: 12px 14px; border-radius: 8px;
+          margin-bottom: 14px; font-style: italic;
+        }
+        .amcp-vp-question::before { content: '"'; }
+        .amcp-vp-question::after  { content: '"'; }
+        .amcp-vp-answer {
+          font-size: 14.5px; line-height: 1.6; color: var(--ink, #1a1715);
+          padding: 16px 18px; background: var(--paper, #fbf9f5);
+          border: 1px solid var(--line, #e6dfd5); border-radius: 10px;
+          min-height: 80px;
+          white-space: pre-wrap;
+        }
+        .amcp-vp-answer.error { color: var(--red, #c64242); }
+        .amcp-vp-spinner { display: inline-flex; gap: 4px; margin-right: 8px; vertical-align: middle; }
+        .amcp-vp-dot {
+          width: 6px; height: 6px; border-radius: 999px; background: var(--maroon, #7d2550);
+          animation: amcp-vp-bounce 1.2s infinite ease-in-out both;
+        }
+        .amcp-vp-dot:nth-child(1) { animation-delay: -.32s; }
+        .amcp-vp-dot:nth-child(2) { animation-delay: -.16s; }
+        @keyframes amcp-vp-bounce {
+          0%, 80%, 100% { transform: scale(0.4); opacity: 0.4; }
+          40%           { transform: scale(1);   opacity: 1; }
+        }
+        .amcp-vp-loading-text { color: var(--muted, #8a7c78); font-size: 13.5px; vertical-align: middle; }
+        .amcp-vp-hint {
+          margin: 14px 0 0; font-size: 12.5px; color: var(--muted, #8a7c78); line-height: 1.5;
+        }
+        .amcp-vp-actions {
+          display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px;
+          align-items: center;
+        }
+        .amcp-vp-close {
+          font-size: 13.5px; padding: 9px 16px; border-radius: 8px;
+          border: 1px solid var(--line, #e6dfd5); background: transparent;
+          color: var(--ink-2, #46403a); cursor: pointer;
+        }
+        .amcp-vp-edit {
+          font-size: 13.5px; padding: 9px 16px; border-radius: 8px;
+          background: var(--maroon, #7d2550); color: #fff !important;
+          text-decoration: none; font-weight: 500;
+        }
+        @media (prefers-color-scheme: dark) {
+          .amcp-vp-card { background: #1f1c19; border-color: #3a342e; }
+          .amcp-vp-title { color: #f1ece5; }
+          .amcp-vp-question { background: #15120f; color: #c5bdb3; }
+          .amcp-vp-answer { background: #1f1c19; border-color: #3a342e; color: #e8e3dd; }
+          .amcp-vp-close { background: transparent; border-color: #3a342e; color: #c5bdb3; }
+        }
+      </style>
+    `;
+    document.body.appendChild(wrap);
+    document.getElementById('amcp-vp-close').addEventListener('click', closeVoicePreviewModal);
+    document.getElementById('amcp-vp-mask').addEventListener('click', (e) => {
+      if (e.target.id === 'amcp-vp-mask') closeVoicePreviewModal();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && document.getElementById('amcp-vp-mask').classList.contains('active')) {
+        closeVoicePreviewModal();
+      }
+    });
+  }
+
+  function closeVoicePreviewModal() {
+    const m = document.getElementById('amcp-vp-mask');
+    if (m) m.classList.remove('active');
+  }
+
+  async function openVoicePreviewModal() {
+    injectVoicePreviewModal();
+    const m  = document.getElementById('amcp-vp-mask');
+    const q  = document.getElementById('amcp-vp-question');
+    const a  = document.getElementById('amcp-vp-answer');
+    const name = (window.AMCP_DATA && window.AMCP_DATA.business_name) || 'your business';
+    const question = `Tell me about ${name}.`;
+    q.textContent = question;
+    a.classList.remove('error');
+    a.innerHTML = `
+      <span class="amcp-vp-spinner" aria-hidden="true">
+        <span class="amcp-vp-dot"></span><span class="amcp-vp-dot"></span><span class="amcp-vp-dot"></span>
+      </span>
+      <span class="amcp-vp-loading-text">Asking your agent…</span>
+    `;
+    m.classList.add('active');
+
+    const af = window.AMCP && window.AMCP.authedFetch;
+    if (!af) {
+      a.classList.add('error');
+      a.textContent = 'Not signed in. Refresh and try again.';
+      return;
+    }
+    try {
+      const res = await af('/api/client/preview-voice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: question }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        a.classList.add('error');
+        a.textContent = body.error || `Preview failed (HTTP ${res.status})`;
+        return;
+      }
+      a.textContent = body.answer || '(empty answer)';
+      // Mark complete after the answer renders so the checklist
+      // updates. Server short-circuits markStep for admins so preview
+      // mode doesn't accidentally stamp anything.
+      const ob = window.AMCP_ONBOARDING;
+      if (ob && typeof ob.markStep === 'function') {
+        ob.markStep('checklist.previewed_voice').then(update);
+      }
+    } catch (err) {
+      a.classList.add('error');
+      a.textContent = 'Network error: ' + String((err && err.message) || err);
     }
   }
 
