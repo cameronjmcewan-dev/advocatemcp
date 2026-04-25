@@ -7,6 +7,16 @@ Last updated: 2026-04-25
 
 ## Operator action required
 
+### `PER_TENANT_DAILY_BUDGET_USD` env var (Railway, optional)
+**Added 2026-04-25.** Per-tenant daily AI-spend cap layered on top of
+the global kill-switch. Default $5/tenant/day. Set in Railway env to
+override (e.g. raise for trusted tenants, tighten during incident).
+A tenant who exceeds the per-tenant cap gets a clear 503 with
+`scope: "tenant"` and a "contact support to raise" message — global
+cap stays untouched, other tenants unaffected. See
+`server/src/middleware/tenantBudget.ts`. Ops view via `GET /admin/budget`
+(now returns `top_spenders_today`) and `GET /admin/budget/tenant/:slug`.
+
 ### `GOOGLE_PLACES_API_KEY` env var (Railway)
 **Added 2026-04-25.** The new Verify-with-Google button on the BusinessProfile
 Verified Ratings card hits Places API (New) to pull live rating, count, and the

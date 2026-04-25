@@ -12,6 +12,11 @@ import {
   record as budgetRecord,
   release as budgetRelease,
 } from "../middleware/budgetKillSwitch.js";
+import {
+  reserveForSlug,
+  recordForSlug,
+  releaseForSlug,
+} from "../middleware/tenantBudget.js";
 import crypto from "crypto";
 import { z } from "zod";
 import {
@@ -394,17 +399,32 @@ agentRouter.post("/agents/:slug/profile/verify-rating", async (req: Request, res
     return;
   }
 
-  // Daily-total kill switch — protects the global account from runaway
-  // verification storms across all tenants. $0.05 reservation gives 5x
-  // headroom over actual Places API atomic-tier cost.
+  // Two-tier budget reserve. Per-tenant first (cheaper to fail-fast
+  // and the more common limiter for actively-running tenants); then
+  // global. $0.05 reservation gives 5x headroom over actual Places
+  // API atomic-tier cost (~$0.005/call).
   const VERIFY_MAX_USD = 0.05;
+  const tenantBudget = reserveForSlug(slug, VERIFY_MAX_USD);
+  if (!tenantBudget.allowed) {
+    res.status(503).json({
+      error: "tenant_budget_exhausted",
+      message: `Per-tenant daily AI budget exhausted for ${slug} ($${tenantBudget.capUsd.toFixed(2)} cap, $${tenantBudget.remainingUsd.toFixed(2)} left). Try again after UTC midnight or contact support to raise.`,
+      remaining_usd: tenantBudget.remainingUsd,
+      cap_usd: tenantBudget.capUsd,
+      scope: "tenant",
+    });
+    return;
+  }
   const budget = budgetReserve(VERIFY_MAX_USD);
   if (!budget.allowed) {
+    // Roll back per-tenant reservation since we're not running.
+    releaseForSlug(slug, VERIFY_MAX_USD);
     res.status(503).json({
       error: "budget_exhausted",
       message: `Daily AI budget exhausted ($${budget.capUsd.toFixed(2)} cap, $${budget.remainingUsd.toFixed(2)} left). Try again after UTC midnight.`,
       remaining_usd: budget.remainingUsd,
       cap_usd: budget.capUsd,
+      scope: "global",
     });
     return;
   }
@@ -413,6 +433,7 @@ agentRouter.post("/agents/:slug/profile/verify-rating", async (req: Request, res
     // Defensive — zod already enforces this, but in case the enum gains
     // values later, fail closed rather than silently no-op.
     budgetRelease(VERIFY_MAX_USD);
+    releaseForSlug(slug, VERIFY_MAX_USD);
     res.status(400).json({ error: "unsupported_platform", platform });
     return;
   }
@@ -429,8 +450,10 @@ agentRouter.post("/agents/:slug/profile/verify-rating", async (req: Request, res
       if (incurredSpend) {
         // Estimate atomic-tier cost ($0.005); Places New atomic SKU.
         budgetRecord(VERIFY_MAX_USD, 0.005);
+        recordForSlug(slug, VERIFY_MAX_USD, 0.005);
       } else {
         budgetRelease(VERIFY_MAX_USD);
+        releaseForSlug(slug, VERIFY_MAX_USD);
       }
       const status =
         result.reason === "no_api_key" ? 503 :
@@ -445,8 +468,10 @@ agentRouter.post("/agents/:slug/profile/verify-rating", async (req: Request, res
       return;
     }
 
-    // Successful Places call — record the actual atomic-tier spend.
+    // Successful Places call — record the actual atomic-tier spend
+    // against both budgets.
     budgetRecord(VERIFY_MAX_USD, 0.005);
+    recordForSlug(slug, VERIFY_MAX_USD, 0.005);
 
     // Audit-log the verification (separately from PATCH writes since
     // verify is read-only — but we still want a forensic trail of who
@@ -504,6 +529,7 @@ agentRouter.post("/agents/:slug/profile/verify-rating", async (req: Request, res
     });
   } catch (err) {
     budgetRelease(VERIFY_MAX_USD);
+    releaseForSlug(slug, VERIFY_MAX_USD);
     console.error("[verify-rating] unexpected error:", err);
     res.status(500).json({ error: "internal_error", message: err instanceof Error ? err.message : String(err) });
   }

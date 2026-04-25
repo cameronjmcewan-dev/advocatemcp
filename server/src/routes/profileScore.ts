@@ -36,6 +36,7 @@ import { runExperiment } from "../experiments/formatJudge/runner.js";
 import { requireServerKeyOnly } from "../middleware/auth.js";
 import { rateLimit, checkLimit } from "../middleware/costRateLimit.js";
 import { reserve as budgetReserve, record as budgetRecord, release as budgetRelease } from "../middleware/budgetKillSwitch.js";
+import { reserveForSlug, recordForSlug, releaseForSlug } from "../middleware/tenantBudget.js";
 import type { BusinessRow } from "../db.js";
 
 export const profileScoreRouter = Router();
@@ -346,14 +347,33 @@ profileScoreRouter.post(
     // Reserve budget for this run. Default profile-score config:
     // 4 trials × ~$0.01 each = $0.04. Reserve $0.08 to stay clear
     // of edge cases.
+    //
+    // Two-stage reserve: per-tenant cap first (cheaper to fail-fast,
+    // and the more common limiter for an actively-running tenant),
+    // then global cap. If global fails after per-tenant succeeds we
+    // must release the per-tenant reservation — done explicitly below.
     const RESERVATION_USD = 0.08;
+    const tenantBudget = reserveForSlug(slug, RESERVATION_USD);
+    if (!tenantBudget.allowed) {
+      res.status(503).json({
+        error: "tenant_budget_exhausted",
+        message: `Per-tenant daily AI budget exhausted for ${slug} ($${tenantBudget.capUsd.toFixed(2)} cap, $${tenantBudget.remainingUsd.toFixed(2)} left). Try again after UTC midnight or contact support to raise.`,
+        remaining_usd: tenantBudget.remainingUsd,
+        cap_usd: tenantBudget.capUsd,
+        scope: "tenant",
+      });
+      return;
+    }
     const budget = budgetReserve(RESERVATION_USD);
     if (!budget.allowed) {
+      // Roll back per-tenant reservation since we're not running.
+      releaseForSlug(slug, RESERVATION_USD);
       res.status(503).json({
         error: "budget_exhausted",
         message: `Daily AI budget exhausted ($${budget.capUsd.toFixed(2)} cap, $${budget.remainingUsd.toFixed(2)} left). Try again after UTC midnight.`,
         remaining_usd: budget.remainingUsd,
         cap_usd: budget.capUsd,
+        scope: "global",
       });
       return;
     }
@@ -403,13 +423,16 @@ profileScoreRouter.post(
         { score: blob.score, cite_rate: blob.cite_rate, run_at: blob.run_at },
       ].slice(-HISTORY_CAP);
 
-      // Record actual spend against the budget. Approximate from the
-      // experiment's reported total_cost (sum of trial costs).
+      // Record actual spend against BOTH budgets. Approximate from the
+      // experiment's reported total_cost (sum of trial costs). Order
+      // doesn't matter — both modules are idempotent on the
+      // (reserved_max, actual) tuple.
       const actualCost = (result.summary || []).reduce(
         (a, s) => a + (s.total_cost_usd || 0),
         0,
       );
       budgetRecord(RESERVATION_USD, actualCost);
+      recordForSlug(slug, RESERVATION_USD, actualCost);
 
       res.json({
         slug,
@@ -420,9 +443,11 @@ profileScoreRouter.post(
         history: newHistory,
       });
     } catch (err) {
-      // Failure: release the reservation so it doesn't permanently
-      // burn budget for a request that didn't incur cost.
+      // Failure: release BOTH reservations so neither budget
+      // permanently burns headroom for a request that didn't incur
+      // cost. Order doesn't matter; both releases are idempotent.
       budgetRelease(RESERVATION_USD);
+      releaseForSlug(slug, RESERVATION_USD);
       console.error(`[profile-score] ${slug} failed:`, err);
       res.status(500).json({
         error: "score_failed",

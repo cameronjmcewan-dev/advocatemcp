@@ -23,6 +23,7 @@ import { runExperiment } from "../../experiments/formatJudge/runner.js";
 import { getDb } from "../../db.js";
 import { checkLimit } from "../../middleware/costRateLimit.js";
 import { reserve as budgetReserve, record as budgetRecord, release as budgetRelease, snapshot as budgetSnapshot } from "../../middleware/budgetKillSwitch.js";
+import { topSpendersToday, snapshotForSlug } from "../../middleware/tenantBudget.js";
 import type { BusinessRow } from "../../db.js";
 
 /* Rate limits on POST /admin/experiments/format-judge.
@@ -168,11 +169,33 @@ adminExperimentsRouter.post(
 );
 
 /* GET /admin/budget — read-only snapshot of today's AI spend.
- * Lets admins (and future dashboard cards) see the kill-switch
- * state in real time. */
+ * Returns the global kill-switch state PLUS the top-N per-tenant
+ * spenders today (from the per-tenant cap layer added in migration
+ * 025). Lets ops see at a glance:
+ *   - Are we close to the global $25/day cap?
+ *   - Which tenant is burning the most today?
+ *   - Is any tenant near its per-tenant cap (default $5)?
+ *
+ * No auth on this route by design — it's mounted at /admin behind
+ * router-level admin-key middleware in admin/index.ts. */
 adminExperimentsRouter.get(
   "/budget",
   (_req: Request, res: Response) => {
-    res.json(budgetSnapshot());
+    const global = budgetSnapshot();
+    const top = topSpendersToday(20);
+    res.json({
+      ...global,
+      top_spenders_today: top,
+    });
+  },
+);
+
+/* GET /admin/budget/tenant/:slug — per-tenant budget snapshot for a
+ * specific slug today. Useful for support triage when a tenant pings
+ * us saying their score endpoint is 503'ing. */
+adminExperimentsRouter.get(
+  "/budget/tenant/:slug",
+  (req: Request, res: Response) => {
+    res.json(snapshotForSlug(req.params.slug));
   },
 );
