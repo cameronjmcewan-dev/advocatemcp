@@ -78,6 +78,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/onboarding"      && method === "GET")  return apiGetOnboarding(request, env);
   if (pathname === "/api/client/onboarding/step" && method === "POST") return apiMarkOnboardingStep(request, env);
   if (pathname === "/api/client/preview-voice"   && method === "POST") return apiPreviewVoice(request, env);
+  if (pathname === "/api/client/profile-score"   && method === "POST") return apiProfileScore(request, env);
   if (pathname === "/admin/create-client"      && method === "POST") return adminCreateClient(request, env);
   const resyncMatch = pathname.match(/^\/admin\/businesses\/([^/]+)\/resync-api-key$/);
   if (resyncMatch && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
@@ -138,6 +139,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/onboarding"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/onboarding/step" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/preview-voice"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/profile-score"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
 
   // ── Stripe / new onboarding API ──────────────────────────────────────────
   if (pathname === "/api/onboard/basic"     && method === "POST") return handleBasicOnboard(request, env);
@@ -1447,6 +1449,70 @@ async function apiPreviewVoice(request: Request, env: Env): Promise<Response> {
     );
   } catch (err) {
     return withCors(jsonErr(502, `Preview backend unreachable: ${String(err)}`), request, { credentials: true });
+  }
+}
+
+// ── POST /api/client/profile-score ────────────────────────────────────────
+// Server-side proxy for the customer-facing AI citation score. Calls
+// Railway POST /agents/:slug/profile-score, which runs the format-judge
+// harness against the tenant's own profile and returns:
+//   { score, score_max, cite_rate, per_variant[], improvements[], ... }
+//
+// Same auth shape as preview-voice: customer session bearer (or admin
+// session impersonating via ?as=<slug>). The api_key the worker forwards
+// to Railway is the tenant's own — never the admin key — so even an
+// impersonating admin gets the customer's view.
+//
+// Cost: ~$0.04 per call (4 trials × ~$0.01). Worker is the only public
+// surface for this; no rate-limit on the worker side yet beyond the
+// existing per-IP rateLimitMiddleware. Add per-tenant throttling here
+// if cost becomes a concern.
+//
+// Latency: ~30-45 seconds (one Claude call per trial × 4 trials,
+// sequential on Railway). Caller should show a progress indicator.
+// Cloudflare's edge proxy timeout (~100s) is comfortably above this.
+
+async function apiProfileScore(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  if (!biz.api_key || biz.api_key === "pending") {
+    return withCors(
+      jsonErr(409, "Tenant has no usable api_key (Stripe webhook may still be in flight). Try again in a minute."),
+      request, { credentials: true },
+    );
+  }
+
+  let body: Record<string, unknown> = {};
+  try { body = await request.json() as Record<string, unknown>; } catch { /* empty body OK */ }
+
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  try {
+    const r = await fetch(`${base}/agents/${biz.slug}/profile-score`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${biz.api_key}`,
+      },
+      body: JSON.stringify(body),
+    });
+    const text = await r.text();
+    return withCors(
+      new Response(text, {
+        status: r.status,
+        headers: { "Content-Type": r.headers.get("content-type") ?? "application/json" },
+      }),
+      request, { credentials: true },
+    );
+  } catch (err) {
+    return withCors(jsonErr(502, `Profile score backend unreachable: ${String(err)}`), request, { credentials: true });
   }
 }
 

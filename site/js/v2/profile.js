@@ -97,6 +97,108 @@
   ];
   const UNITS = ['job', 'hour', 'visit', 'sqft'];
 
+  /* AI citation score card. Calls POST /api/client/profile-score on
+   * demand — runs the format-judge harness against THIS tenant's
+   * profile and returns a 0-10 score plus actionable improvements
+   * mapped from the judge's deductions. The same harness used in
+   * /admin/experiments.html for ops-side measurement, but scoped to
+   * the calling tenant only and surfacing customer-friendly UX.
+   *
+   * Cost per click: ~$0.04. The "Run check" button is disabled
+   * during the ~30-45s call so a tenant can't click it 100x. */
+  function renderScoreCard(p) {
+    return `
+      <div class="card-dash" id="score-card">
+        <div class="card-head">
+          <div>
+            <h3>AI citation score</h3>
+            <div class="sub">How likely are AI search engines to cite your business when someone asks about you? We measure this against the same models AI engines run.</div>
+          </div>
+          <div>
+            <button id="btn-run-score" type="button" class="btn btn-primary btn-sm">Run AI score check →</button>
+          </div>
+        </div>
+        <div id="score-result" style="margin-top:14px"></div>
+      </div>
+    `;
+  }
+
+  function renderScoreResult(data) {
+    if (!data) return "";
+    const score = (data.score != null ? data.score : 0).toFixed(1);
+    const max = data.score_max || 10;
+    const cite = (data.cite_rate != null ? data.cite_rate : 0);
+    const variants = data.per_variant || [];
+    const improvements = data.improvements || [];
+    const fillPct = Math.round((data.score / max) * 100);
+
+    const variantRows = variants.map((v) => {
+      const labelMap = {
+        perplexity_html: "Perplexity",
+        openai_html:     "ChatGPT",
+        claude_html:     "Claude",
+        google_html:     "Google AI Overview",
+      };
+      const label = labelMap[v.variant_id] || v.variant_id;
+      const pct = Math.round((v.score / 10) * 100);
+      return `
+        <tr>
+          <td>${esc(label)}</td>
+          <td style="width:120px"><div class="score-bar"><div class="score-bar-fill" style="width:${pct}%"></div></div></td>
+          <td class="t" style="font-variant-numeric:tabular-nums">${v.score.toFixed(1)}/10</td>
+        </tr>
+      `;
+    }).join("");
+
+    const improvementsHtml = improvements.length === 0
+      ? `<p style="color:var(--muted);font-size:13.5px;margin:8px 0 0">No specific improvements suggested — your score is high. Re-run after adding more profile data to keep tracking.</p>`
+      : improvements.map((i) => `
+          <div class="score-tip">
+            <div class="score-tip-lift">+${i.expected_lift.toFixed(1)}</div>
+            <div class="score-tip-body">
+              <div class="score-tip-reason">${esc(i.reason)}</div>
+              <a class="score-tip-link" href="${esc(i.href)}">Open ${esc(prettyField(i.field))} →</a>
+            </div>
+          </div>
+        `).join("");
+
+    return `
+      <div class="score-summary">
+        <div class="score-bigwheel">
+          <div class="score-num">${score}<span class="score-num-max">/${max}</span></div>
+          <div class="score-num-label">${cite}% cite rate</div>
+        </div>
+        <div class="score-table-wrap">
+          <table class="score-table">
+            <thead><tr><th>AI engine</th><th></th><th class="t">Score</th></tr></thead>
+            <tbody>${variantRows}</tbody>
+          </table>
+        </div>
+      </div>
+      <div class="score-improvements">
+        <strong>Top opportunities to improve</strong>
+        ${improvementsHtml}
+      </div>
+      <div class="score-meta">
+        Last run: ${esc(new Date(data.run_at || Date.now()).toLocaleString())} · Re-run anytime · ~30s · ~$0.04/run
+      </div>
+    `;
+  }
+
+  /* Pretty label for an internal profile field name. Used in the
+   * "Open <field>" CTA inside score improvements. */
+  function prettyField(f) {
+    const map = {
+      ratings_json:         "Verified ratings",
+      customer_quotes_json: "Customer quotes",
+      credentials_json:     "Credentials",
+      differentiator:       "Positioning",
+      pricing_json_v2:      "Pricing",
+      _internal:            "Settings",
+    };
+    return map[f] || f;
+  }
+
   function renderBasicsCard(p) {
     return `
       <div class="card-dash" data-form="basics">
@@ -484,6 +586,45 @@
     // "+ Add another quote" — extends the quotes list one entry at a time
     // so the form grows with the tenant's testimonial pile rather than
     // forcing a fixed count.
+    // "Run AI score check" — calls POST /api/client/profile-score and
+    // renders the score + improvements card inline. Disabled during
+    // the ~30-45s call so a tenant can't spam-click it.
+    const scoreBtn = document.getElementById('btn-run-score');
+    const scoreResult = document.getElementById('score-result');
+    if (scoreBtn && scoreResult) {
+      scoreBtn.addEventListener('click', async () => {
+        const af = window.AMCP && window.AMCP.authedFetch;
+        if (!af) { scoreResult.innerHTML = '<p style="color:var(--red)">Not signed in.</p>'; return; }
+        scoreBtn.disabled = true;
+        const started = Date.now();
+        scoreResult.innerHTML = `<div class="score-loading"><div class="score-spinner"></div><span>Running AI score check… this takes about 30-45 seconds (we're scoring how 4 different AI engines would cite your profile right now).</span></div>`;
+        const ticker = setInterval(() => {
+          const elapsed = Math.round((Date.now() - started) / 1000);
+          const span = scoreResult.querySelector('.score-loading span');
+          if (span) span.textContent = `Running AI score check… ${elapsed}s elapsed`;
+        }, 2000);
+        try {
+          const res = await af('/api/client/profile-score', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+          });
+          clearInterval(ticker);
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            scoreResult.innerHTML = `<p style="color:var(--red);font-size:13.5px">Score check failed: ${esc(body.error || ('HTTP ' + res.status))}</p>`;
+            return;
+          }
+          scoreResult.innerHTML = renderScoreResult(body);
+        } catch (err) {
+          clearInterval(ticker);
+          scoreResult.innerHTML = `<p style="color:var(--red);font-size:13.5px">Network error: ${esc(String((err && err.message) || err))}</p>`;
+        } finally {
+          scoreBtn.disabled = false;
+        }
+      });
+    }
+
     const addQuoteBtn = document.getElementById('btn-add-quote');
     if (addQuoteBtn) {
       addQuoteBtn.addEventListener('click', () => {
@@ -699,6 +840,7 @@
         This is what AI tools learn about you. The fuller and more accurate it is, the more often AI picks you and the fewer corrections it needs to make.
       </div>
 
+      <div class="row single">${renderScoreCard(p)}</div>
       <div class="row single">${renderBasicsCard(p)}</div>
       <div class="row single">${renderPositioningCard(p)}</div>
       <div class="row single">${renderRatingsCard(p)}</div>
@@ -749,6 +891,74 @@
         .prof-form code {
           background: var(--paper-2); padding: 1px 5px;
           border-radius: 4px; font-size: 12.5px; color: var(--maroon);
+        }
+
+        /* AI citation score card */
+        #score-card .card-head { gap: 16px; }
+        .score-loading {
+          display: flex; align-items: center; gap: 10px;
+          padding: 16px; color: var(--muted); font-size: 13.5px;
+        }
+        .score-spinner {
+          width: 16px; height: 16px; border-radius: 999px;
+          border: 2px solid var(--line); border-top-color: var(--maroon);
+          animation: score-spin 1s linear infinite;
+        }
+        @keyframes score-spin { to { transform: rotate(360deg); } }
+        .score-summary {
+          display: grid; grid-template-columns: 200px 1fr; gap: 24px;
+          align-items: center; padding: 8px 0 14px;
+          border-bottom: 1px solid var(--line);
+        }
+        @media (max-width: 720px) { .score-summary { grid-template-columns: 1fr; } }
+        .score-bigwheel {
+          display: flex; flex-direction: column; align-items: center;
+          justify-content: center; padding: 12px;
+          background: var(--paper-2); border-radius: 12px;
+        }
+        .score-num {
+          font-family: var(--serif); font-size: 56px; line-height: 1;
+          color: var(--maroon); font-weight: 400;
+        }
+        .score-num-max { font-size: 24px; color: var(--muted); }
+        .score-num-label { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+        .score-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+        .score-table th {
+          text-align: left; padding: 6px 8px;
+          font-size: 11.5px; color: var(--muted); font-weight: 500;
+          text-transform: uppercase; letter-spacing: .05em;
+        }
+        .score-table th.t, .score-table td.t { text-align: right; }
+        .score-table td { padding: 8px 8px; border-top: 1px solid var(--line); }
+        .score-bar { height: 6px; background: var(--line); border-radius: 999px; overflow: hidden; }
+        .score-bar-fill { height: 100%; background: var(--maroon); }
+        .score-improvements {
+          padding: 14px 0 4px;
+        }
+        .score-improvements > strong {
+          font-size: 13px; letter-spacing: .04em; text-transform: uppercase;
+          color: var(--muted); display: block; margin-bottom: 10px;
+        }
+        .score-tip {
+          display: grid; grid-template-columns: 56px 1fr; gap: 14px;
+          padding: 12px 0; border-top: 1px solid var(--line);
+        }
+        .score-tip:first-of-type { border-top: 0; }
+        .score-tip-lift {
+          font-family: var(--serif); font-size: 22px; color: var(--sage);
+          font-weight: 500; text-align: center; padding-top: 4px;
+        }
+        .score-tip-reason {
+          font-size: 13.5px; line-height: 1.5; color: var(--ink-2);
+        }
+        .score-tip-link {
+          display: inline-block; margin-top: 6px; color: var(--maroon);
+          font-size: 13px; font-weight: 500;
+        }
+        .score-meta {
+          margin-top: 14px; padding-top: 12px;
+          border-top: 1px solid var(--line);
+          font-size: 11.5px; color: var(--muted);
         }
       </style>
     `;

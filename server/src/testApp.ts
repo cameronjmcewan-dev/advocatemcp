@@ -10,6 +10,7 @@ import { wellknownMcpRouter } from "./routes/wellknownMcp.js";
 import { a2aRouter } from "./routes/a2a.js";
 import { adminRouter } from "./routes/admin/index.js";
 import { competitorRadarRouter } from "./routes/competitorRadar.js";
+import { profileScoreRouter } from "./routes/profileScore.js";
 import { digestRouter } from "./routes/digest.js";
 import { decodeRouter } from "./routes/decode.js";
 import { auditRouter } from "./routes/audit.js";
@@ -94,6 +95,7 @@ export function createTestApp(): express.Express {
   app.use(a2aRouter);
   app.use(adminRouter);
   app.use(competitorRadarRouter);
+  app.use(profileScoreRouter);
   app.use(digestRouter);
 
   app.get("/health", (_req, res) => {
