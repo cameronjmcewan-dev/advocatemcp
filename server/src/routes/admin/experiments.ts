@@ -22,6 +22,7 @@ import { Router, type Request, type Response } from "express";
 import { runExperiment } from "../../experiments/formatJudge/runner.js";
 import { getDb } from "../../db.js";
 import { checkLimit } from "../../middleware/costRateLimit.js";
+import { reserve as budgetReserve, record as budgetRecord, release as budgetRelease, snapshot as budgetSnapshot } from "../../middleware/budgetKillSwitch.js";
 import type { BusinessRow } from "../../db.js";
 
 /* Rate limits on POST /admin/experiments/format-judge.
@@ -101,6 +102,21 @@ adminExperimentsRouter.post(
       return;
     }
 
+    // Daily-total kill switch. Default config (5 queries × 6 variants
+    // × 2 judges) ≈ $0.40 max. Reserve up to $1.00 to cover larger
+    // overrides without thrashing the budget logic.
+    const FORMAT_JUDGE_MAX_USD = 1.0;
+    const budget = budgetReserve(FORMAT_JUDGE_MAX_USD);
+    if (!budget.allowed) {
+      res.status(503).json({
+        error: "budget_exhausted",
+        message: `Daily AI budget exhausted ($${budget.capUsd.toFixed(2)} cap, $${budget.remainingUsd.toFixed(2)} left). Try again after UTC midnight.`,
+        remaining_usd: budget.remainingUsd,
+        cap_usd: budget.capUsd,
+      });
+      return;
+    }
+
     const body = (req.body ?? {}) as {
       profile_slugs?: unknown;
       queries?: unknown;
@@ -134,13 +150,29 @@ adminExperimentsRouter.post(
         judges:         asStringArray(body.judges),
         profilePatches: asProfilePatches(body.profile_patches),
       });
+      const actualCost = (result.summary || []).reduce(
+        (a, s) => a + (s.total_cost_usd || 0),
+        0,
+      );
+      budgetRecord(FORMAT_JUDGE_MAX_USD, actualCost);
       res.json(result);
     } catch (err) {
+      budgetRelease(FORMAT_JUDGE_MAX_USD);
       console.error("[format-judge] error:", err);
       res.status(500).json({
         error: "Experiment failed",
         message: err instanceof Error ? err.message : String(err),
       });
     }
+  },
+);
+
+/* GET /admin/budget — read-only snapshot of today's AI spend.
+ * Lets admins (and future dashboard cards) see the kill-switch
+ * state in real time. */
+adminExperimentsRouter.get(
+  "/budget",
+  (_req: Request, res: Response) => {
+    res.json(budgetSnapshot());
   },
 );

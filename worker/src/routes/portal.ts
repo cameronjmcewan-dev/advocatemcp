@@ -1427,6 +1427,7 @@ async function apiPreviewVoice(request: Request, env: Env): Promise<Response> {
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${biz.api_key}`,
+        ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}),
       },
       body: JSON.stringify({ query, crawler: "PerplexityBot" }),
     });
@@ -1507,11 +1508,16 @@ async function apiProfileScore(request: Request, env: Env): Promise<Response> {
 
   const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
   try {
+    // Server-side gate: profile-score requires the X-API-Key
+    // (server admin key, only the Worker has it). Direct-Railway
+    // requests with a leaked tenant Bearer alone get 401. The Worker
+    // proxy is the only path through.
     const r = await fetch(`${base}/agents/${biz.slug}/profile-score`, {
       method: isGet ? "GET" : "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${biz.api_key}`,
+        ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}),
       },
       ...(isGet ? {} : { body }),
     });

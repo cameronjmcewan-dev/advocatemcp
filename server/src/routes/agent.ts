@@ -239,6 +239,40 @@ agentRouter.patch("/agents/:slug/profile", (req: Request, res: Response) => {
   values.push(slug);
   db.prepare(`UPDATE businesses SET ${updates.join(", ")} WHERE slug = ?`).run(...values);
 
+  // Audit trail: every PATCH to a tenant profile is logged with the
+  // caller's identity (Bearer key prefix), the fields touched, and
+  // request metadata. Critical for detecting compromised admin keys
+  // or anomalous mass-mutation patterns. Best-effort write — if the
+  // audit_logs table is missing the request still succeeds.
+  try {
+    const dbAudit = getDb();
+    dbAudit.prepare(`
+      CREATE TABLE IF NOT EXISTS audit_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ts TEXT NOT NULL,
+        action TEXT NOT NULL,
+        slug TEXT,
+        actor_hint TEXT,
+        ip TEXT,
+        fields TEXT,
+        meta TEXT
+      )
+    `).run();
+    dbAudit.prepare(
+      `INSERT INTO audit_logs (ts, action, slug, actor_hint, ip, fields, meta) VALUES (?,?,?,?,?,?,?)`,
+    ).run(
+      new Date().toISOString(),
+      "profile.patch",
+      slug,
+      apiKey.slice(0, 12) + "…",
+      String(req.headers["x-forwarded-for"] ?? req.socket?.remoteAddress ?? "—"),
+      JSON.stringify(updates.map((u) => u.split(" ")[0])),
+      JSON.stringify({ ua: String(req.headers["user-agent"] ?? "") }),
+    );
+  } catch (auditErr) {
+    console.warn("[agent.PATCH] audit insert failed (non-fatal):", auditErr);
+  }
+
   res.json({ ok: true, slug, updated: updates.map((u) => u.split(" ")[0]) });
 });
 

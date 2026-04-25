@@ -85,6 +85,51 @@ export function requireSlugApiKey(
 }
 
 /**
+ * Strict server-only gate. Accepts ONLY the server admin key
+ * (X-API-Key: <API_KEY>). Does NOT accept tenant Bearer keys.
+ *
+ * Used to lock down cost-sensitive endpoints (profile-score,
+ * format-judge) so they can ONLY be reached via the Worker proxy
+ * (which holds the secret). Direct Railway access with a leaked
+ * tenant api_key is rejected — even though that tenant could call
+ * cheap reads, they can't trigger paid Claude runs without going
+ * through the Worker.
+ *
+ * Why this matters: tenant api_keys are visible in the dashboard
+ * and could be screenshared, screenshot, or exfiltrated. A leaked
+ * tenant key should not let an attacker spam expensive endpoints
+ * by hitting Railway's public URL directly. The Worker is the
+ * front door; SERVER_API_KEY is its key.
+ *
+ * The customer's path is unchanged: their session → Worker proxy
+ * → Worker injects X-API-Key: SERVER_API_KEY → Railway accepts.
+ * Direct curl-with-leaked-Bearer-token paths now get 401.
+ */
+export function requireServerKeyOnly(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  const xKey = req.headers["x-api-key"];
+  const serverKey = process.env.API_KEY;
+  if (!serverKey) {
+    // If SERVER_API_KEY isn't configured, fail closed. We'd rather
+    // 503 than accept everything.
+    res.status(503).json({ error: "server_misconfigured", message: "API_KEY not configured" });
+    return;
+  }
+  if (typeof xKey === "string" && xKey === serverKey) {
+    next();
+    return;
+  }
+  console.warn(`[auth] requireServerKeyOnly rejected ${req.method} ${req.path} from ${req.headers["x-forwarded-for"] ?? req.socket?.remoteAddress}`);
+  res.status(401).json({
+    error: "server_key_required",
+    message: "This endpoint can only be reached via the Worker proxy.",
+  });
+}
+
+/**
  * Accept EITHER the server admin key (X-API-Key: <API_KEY>) OR a slug-bound
  * business key (Authorization: Bearer <business_api_key> matching :slug).
  *

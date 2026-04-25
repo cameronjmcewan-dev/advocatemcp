@@ -33,8 +33,9 @@ import { Router, type Request, type Response } from "express";
 import crypto from "crypto";
 import { getDb } from "../db.js";
 import { runExperiment } from "../experiments/formatJudge/runner.js";
-import { requireSlugOrAdminKey } from "../middleware/auth.js";
+import { requireServerKeyOnly } from "../middleware/auth.js";
 import { rateLimit, checkLimit } from "../middleware/costRateLimit.js";
+import { reserve as budgetReserve, record as budgetRecord, release as budgetRelease } from "../middleware/budgetKillSwitch.js";
 import type { BusinessRow } from "../db.js";
 
 export const profileScoreRouter = Router();
@@ -251,7 +252,7 @@ function buildImprovements(
  * last run). Never spends API budget. */
 profileScoreRouter.get(
   "/agents/:slug/profile-score",
-  requireSlugOrAdminKey,
+  requireServerKeyOnly,
   (req: Request, res: Response) => {
     const { slug } = req.params;
     const db = getDb();
@@ -286,7 +287,7 @@ profileScoreRouter.get(
  *   force=true bypasses the cache and always runs fresh (cost: $0.04). */
 profileScoreRouter.post(
   "/agents/:slug/profile-score",
-  requireSlugOrAdminKey,
+  requireServerKeyOnly,
   async (req: Request, res: Response) => {
     const { slug } = req.params;
     const body = (req.body ?? {}) as { query?: unknown; force?: unknown };
@@ -325,7 +326,11 @@ profileScoreRouter.post(
     }
 
     // Cache miss (or force) → run the harness fresh.
-    // Rate limit fires HERE so cache hits don't burn slots.
+    // Two gates BEFORE we start spending API budget:
+    //   1. Per-slug rate limit (cache hits skip this entirely).
+    //   2. Daily-total kill-switch (across all tenants × all
+    //      endpoints) — last line of defense against multi-tenant
+    //      amplification attacks.
     const gate = checkLimit({ key: slug, limits: PROFILE_SCORE_LIMITS });
     if (!gate.allowed) {
       const retryAfterSec = Math.ceil(gate.retryAfterMs / 1000);
@@ -334,6 +339,21 @@ profileScoreRouter.post(
         error: "rate_limited",
         message: `Too many fresh runs for ${slug} (${gate.label}). Try again in ${retryAfterSec}s.`,
         retry_after_seconds: retryAfterSec,
+      });
+      return;
+    }
+
+    // Reserve budget for this run. Default profile-score config:
+    // 4 trials × ~$0.01 each = $0.04. Reserve $0.08 to stay clear
+    // of edge cases.
+    const RESERVATION_USD = 0.08;
+    const budget = budgetReserve(RESERVATION_USD);
+    if (!budget.allowed) {
+      res.status(503).json({
+        error: "budget_exhausted",
+        message: `Daily AI budget exhausted ($${budget.capUsd.toFixed(2)} cap, $${budget.remainingUsd.toFixed(2)} left). Try again after UTC midnight.`,
+        remaining_usd: budget.remainingUsd,
+        cap_usd: budget.capUsd,
       });
       return;
     }
@@ -383,6 +403,14 @@ profileScoreRouter.post(
         { score: blob.score, cite_rate: blob.cite_rate, run_at: blob.run_at },
       ].slice(-HISTORY_CAP);
 
+      // Record actual spend against the budget. Approximate from the
+      // experiment's reported total_cost (sum of trial costs).
+      const actualCost = (result.summary || []).reduce(
+        (a, s) => a + (s.total_cost_usd || 0),
+        0,
+      );
+      budgetRecord(RESERVATION_USD, actualCost);
+
       res.json({
         slug,
         has_score: true,
@@ -392,6 +420,9 @@ profileScoreRouter.post(
         history: newHistory,
       });
     } catch (err) {
+      // Failure: release the reservation so it doesn't permanently
+      // burn budget for a request that didn't incur cost.
+      budgetRelease(RESERVATION_USD);
       console.error(`[profile-score] ${slug} failed:`, err);
       res.status(500).json({
         error: "score_failed",
