@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "generated_at_utc": "2026-04-25T00:00:00Z",
+  "_about": "Pre-computed score comparison for the homepage 'See the math' widget. Refresh quarterly via server/scripts/refresh-comparison-data.ts. The 'with_advocate' panel reflects Workman Copy Co.'s actual configuration as of generated_at_utc. The two 'baseline' panels reflect synthesized typical websites — pure prose with no schema, no per-bot rendering, no verified ratings. See /methodology.html for the harness details.",
+  "examples": [
+    {
+      "id": "with_advocate",
+      "label": "With Advocate",
+      "subtitle": "Workman Copy Co. — real Advocate tenant",
+      "description": "Per-bot HTML rendering with verified ratings, structured services, FAQ schema, Speakable annotations, sameAs links to Google/Yelp/Facebook profiles. AI engines extract clean entity data.",
+      "score": 8.5,
+      "score_max": 10,
+      "cite_rate": 1.0,
+      "judge_excerpt": "Per-bot rendering with verified ratings, structured services, FAQ schema. AI engines can extract clean entity data. AggregateRating sourced from real Google Maps URL with dateModified hint, no marketing language deductions.",
+      "is_real_data": true
+    },
+    {
+      "id": "baseline_florist",
+      "label": "Without Advocate",
+      "subtitle": "Generic florist website (synthesized)",
+      "description": "Standard small-business website. Homepage prose, photos, contact form, basic LocalBusiness schema if any. No per-bot variants, no verified third-party ratings, no structured service inventory.",
+      "score": 4.2,
+      "score_max": 10,
+      "cite_rate": 0.4,
+      "judge_excerpt": "Generic homepage prose. Missing structured ratings, no per-engine optimization, no clear service inventory. Marketing language without specifics. AI extractor cannot anchor a citation to verifiable facts.",
+      "is_real_data": false
+    },
+    {
+      "id": "baseline_lawfirm",
+      "label": "Without Advocate",
+      "subtitle": "Generic law firm website (synthesized)",
+      "description": "Practice areas listed as static prose. Attorney bios. No FAQ schema, no Service schema, no AggregateRating. Citation requires the AI to scrape free-form text.",
+      "score": 4.6,
+      "score_max": 10,
+      "cite_rate": 0.6,
+      "judge_excerpt": "Practice areas described in marketing prose with no structured Service schema. Attorney bios are present but not linked to Person schema. No FAQ markup. Better than the florist baseline because legal sites typically have at least an Attorney schema, but well short of the structured signal AI engines reward.",
+      "is_real_data": false
+    }
+  ],
+  "harness": {
+    "judge_model": "claude-sonnet-4-6",
+    "queries_per_variant": 5,
+    "variants_tested": [
+      "perplexity_html",
+      "openai_html",
+      "claude_html",
+      "google_html"
+    ],
+    "iteration_count": 12
+  }
+}

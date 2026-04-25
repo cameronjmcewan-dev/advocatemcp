@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How we measure citation-readiness — Advocate</title>
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fbf9f5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141210" media="(prefers-color-scheme: dark)">
+<meta name="description" content="Plain-English explanation of the format-judge harness — how Advocate measures whether AI search engines can cite your business.">
+<link rel="canonical" href="https://advocatemcp.com/methodology.html">
+<meta property="og:title" content="How Advocate measures citation-readiness">
+<meta property="og:description" content="The format-judge harness, explained.">
+<meta property="og:image" content="https://advocatemcp.com/og-image.png">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://advocatemcp.com/methodology.html">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://advocatemcp.com/og-image.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://api.fontshare.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/styles.css">
+<link rel="stylesheet" href="/assets/dashboard.css">
+<style>
+  .meth-prose { max-width: 720px; }
+  .meth-prose p { font-size: 16px; line-height: 1.65; color: var(--ink-2); margin: 0 0 18px; }
+  .meth-prose h2 { font-family: var(--serif); font-weight: 400; font-size: 28px; line-height: 1.2; margin: 40px 0 16px; color: var(--ink); }
+  .meth-prose h3 { font-size: 17px; font-weight: 600; margin: 22px 0 10px; color: var(--ink); }
+  .meth-prose code { background: var(--paper-2); padding: 1px 6px; border-radius: 4px; font-size: 14px; color: var(--maroon); }
+  .meth-prose ul { margin: 0 0 18px; padding-left: 22px; color: var(--ink-2); line-height: 1.65; }
+  .meth-prose li { margin-bottom: 6px; }
+  .meth-prose a { color: var(--maroon); }
+  .meth-block {
+    background: var(--paper-2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px 20px; margin: 18px 0;
+  }
+  .meth-block strong { color: var(--ink); display: block; margin-bottom: 6px; }
+  .meth-table {
+    width: 100%; border-collapse: collapse; margin: 12px 0 24px;
+    font-size: 14px;
+  }
+  .meth-table th, .meth-table td {
+    padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  .meth-table th { color: var(--muted); font-weight: 500; font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; }
+  .meth-table td:first-child { color: var(--ink); font-weight: 500; }
+  .meth-table td:last-child { color: var(--ink-2); }
+  .caveat {
+    background: var(--paper-2); border: 1px solid var(--line); border-left: 3px solid var(--maroon);
+    border-radius: 6px; padding: 14px 18px; font-size: 14px; color: var(--ink-2);
+    line-height: 1.55; margin: 18px 0;
+  }
+  .caveat strong { color: var(--ink); }
+</style>
+</head>
+<body>
+<script src="/assets/shared.js"></script>
+<div id="nav-mount"></div>
+<main>
+  <section class="section">
+    <div class="container meth-prose">
+      <p class="eyebrow">How we measure</p>
+      <h1 style="margin:12px 0 24px">Citation-readiness, measured.</h1>
+      <p style="font-size:18px;">
+        The number you see on your dashboard ("Citation rating: 8.5/10") isn't a count of real
+        ChatGPT citations — we don't have access to OpenAI's logs and neither does anyone else
+        making that claim. It's a <em>predicted</em> score, calibrated against the rubrics AI
+        engines use internally. Here's exactly how we get to it.
+      </p>
+
+      <h2>The format-judge harness</h2>
+      <p>
+        For every business on Advocate, we generate the same HTML + JSON-LD that real AI bots
+        receive when they crawl the site. The renderer dispatches per-engine variants — Perplexity
+        gets a citation-friendly format, ChatGPT gets snippet-optimized output, Claude gets
+        entity-rich blocks, Google AI Overview gets schema-heavy structured data. Same business
+        facts, four different presentations.
+      </p>
+      <p>
+        Then we run a battery of test queries against each variant. The queries are the kinds
+        of questions a real customer would ask: "best plumber in my area", "tell me about
+        [business name]", "compare X to Y". For each query × variant combination, we ask Claude
+        Sonnet (acting as judge) to score the rendered output 1–10 on whether it's citation-worthy
+        and why. The judge produces both a number and a written rationale.
+      </p>
+      <p>
+        We've iterated this harness 12+ times. Every time the judge flagged a deduction
+        ("missing third-party verification", "marketing language without specifics", "no clear
+        service inventory"), we made a corresponding change to the renderer. The current
+        score-vs-baseline numbers we publish reflect that iteration history.
+      </p>
+
+      <h2>What the score is</h2>
+      <table class="meth-table">
+        <thead>
+          <tr><th>Number</th><th>What it actually measures</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Citation rating</td>
+            <td>Average score from the Claude judge across all per-engine variants. Higher = the rendered output AI engines see has the structured signals their citation systems look for.</td>
+          </tr>
+          <tr>
+            <td>Cite rate</td>
+            <td>The percentage of test queries where the judge said "yes, would cite this business" rather than "would skip it for a more authoritative source".</td>
+          </tr>
+          <tr>
+            <td>Per-engine breakdown</td>
+            <td>Same harness run against the per-engine renderer variant. "Perplexity 8.5/10" means the rendered-for-Perplexity HTML scores 8.5/10 — not that Perplexity actually cited the business.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="caveat">
+        <strong>Important caveat.</strong>
+        These numbers are calibrated proxies, not real citations. We can't see inside ChatGPT
+        or Perplexity's retrieval pipelines and neither can any tool that promises to. What
+        we <em>can</em> do is measure whether the data we serve has the structured signals
+        their citation systems are documented to use, and iterate the renderer against an
+        LLM judge that approximates their scoring.
+      </div>
+
+      <h2>Where the real-citation data is</h2>
+      <p>
+        For ground truth — actual times an AI engine cited your business in a real query —
+        Advocate runs <strong>Competitor Radar</strong>: a weekly cron that polls Perplexity's
+        live search API with curated queries for your category, then logs whether your domain
+        appeared in the citations. Wins and losses are tracked over time and shown on the
+        Competitor Radar page in your dashboard. That's a different signal than the citation
+        rating, and they're complementary:
+      </p>
+      <ul>
+        <li><strong>Citation rating</strong> updates immediately when you change your profile,
+        so you can iterate fast and see the predicted impact before any real-world signal
+        catches up.</li>
+        <li><strong>Competitor Radar</strong> updates weekly with real Perplexity citations.
+        Lags by 1-2 weeks but reflects what AI engines actually do.</li>
+      </ul>
+
+      <h2>What we don't claim</h2>
+      <p>
+        We don't claim that 58% of customers ask AI for [your category]. We don't claim
+        "3× more leads" because we have no way to control for the dozens of other variables
+        in your marketing mix. We don't claim that ChatGPT will definitely cite you because
+        ChatGPT doesn't publish its retrieval logic and would change it tomorrow if it wanted
+        to. The whole point of publishing this methodology is so you can decide whether the
+        proxy we measure is one you trust.
+      </p>
+
+      <h2>Want to see it</h2>
+      <div class="meth-block">
+        <strong>The harness is real code.</strong>
+        Every score on every dashboard is generated by
+        <code>server/src/experiments/formatJudge/runner.ts</code> in our codebase, which we'll
+        share with engineering teams who want to verify the methodology before signing up.
+        Email <a href="mailto:hello@advocatemcp.com">hello@advocatemcp.com</a> for a walkthrough.
+      </div>
+
+      <p style="margin-top:32px;">
+        <a href="/" class="btn btn-ghost">← Back to home</a>
+        <a href="/Pricing.html" class="btn btn-primary">See pricing</a>
+      </p>
+    </div>
+  </section>
+</main>
+<div id="footer-mount"></div>
+<script>
+  AdvocateChrome.renderNav('nav-mount');
+  AdvocateChrome.renderFooter('footer-mount');
+  AdvocateChrome.renderTweaks({
+    defaults: /*EDITMODE-BEGIN*/{"theme":"light","density":"comfortable"}/*EDITMODE-END*/
+  });
+</script>
+</body>
+</html>

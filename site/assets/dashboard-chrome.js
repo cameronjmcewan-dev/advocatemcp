@@ -17,7 +17,7 @@
     { id: 'mentions',    href: '/Mentions.html',         g: '✦', label: 'Mentions' },
     { id: 'clicks',      href: '/ClickThroughs.html',    g: '→', label: 'Click-throughs' },
     { id: 'radar',       href: '/CompetitorRadar.html',  g: '△', label: 'Competitor Radar' },
-    { id: 'a2a',         href: '/A2APipeline.html',      g: '⇄', label: 'A2A pipeline' },
+    { id: 'a2a',         href: '/A2APipeline.html',      g: '⇄', label: 'AI bookings' },
     { id: 'activity',    href: '/ActivityFeed.html',     g: '☰', label: 'Activity feed' },
   ];
   const NAV_ACCOUNT = [

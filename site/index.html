@@ -460,9 +460,9 @@
     <div class="container hero-inner">
       <div class="reveal">
         <span class="eyebrow">For small businesses · no tech skills needed</span>
-        <h1 class="mt-4">When people ask AI for a business like yours, <em>you show up.</em></h1>
+        <h1 class="mt-4">Make your business <em>bookable by AI agents.</em></h1>
         <p class="hero-sub">
-          ChatGPT, Gemini, Perplexity and Claude answer millions of "who should I hire?" questions every day. Advocate makes sure your business is the one they recommend  with accurate info, your phone number, and a link that sends customers straight to you.
+          When ChatGPT, Claude, Perplexity, or Gemini answer "who should I hire?" — they need a clean way to reach you. Advocate gives every AI engine the format it prefers, with verifiable ratings, structured services, and a live MCP endpoint agents can actually book against. Same infrastructure that powers AI search, also powers AI bookings.
         </p>
         <div class="hero-cta">
           <a href="/onboarding.html" class="btn btn-primary btn-lg">Start 14-day free trial</a>
@@ -478,24 +478,33 @@
         </div>
       </div>
 
-      <!-- Right: animated-feeling visual -->
-      <div class="hero-visual reveal">
+      <!-- LIVE MCP DEMO WIDGET — replaces the previous static screenshot.
+           Visitor clicks "Run it" → JS hits /demo/agent/run → real Claude
+           response from Workman Copy Co.'s production MCP endpoint comes
+           back in <4s. Then the widget calls /demo/agent/availability and
+           shows real time slots. This is the moneyshot. The whole point
+           is "static screenshots can be Photoshopped — this can't." -->
+      <div class="hero-visual reveal" id="mcp-demo-widget">
         <div class="hv-head">
           <div class="dots"><span></span><span></span><span></span></div>
-          <span class="chip maroon"><span class="dot"></span>Live demo</span>
+          <span class="chip maroon"><span class="dot"></span>Live MCP demo · workman-copy-co</span>
         </div>
         <div class="hv-prompt">
-          <span class="bot-tag">ChatGPT</span>
-          <span>"Best plumber in South Austin for a weekend emergency?"</span>
+          <span class="bot-tag">AI agent</span>
+          <span id="mcp-demo-query">"Tell me about Workman Copy Co. — do they handle business cards?"</span>
         </div>
-        <div class="hv-answer">
-          <div class="who">ChatGPT answered</div>
-          <p>For a weekend emergency in South Austin, <strong>Austin Ace Plumbing</strong> offers 24/7 same-day service. They're family-owned, licensed, and typically arrive within 90 minutes. Their after-hours rate is $149 flat plus parts.</p>
-          <div class="hv-cite">Source: Austin Ace Plumbing · austinaceplumbing.com</div>
+        <div id="mcp-demo-result">
+          <div class="hv-answer" style="opacity:0.92">
+            <div class="who">What you'll see when you click Run</div>
+            <p>An AI agent calls <strong>workman-copy-co</strong>'s live MCP endpoint.
+            Real production response — not a screenshot. Then it asks for available
+            time slots and shows the next eight openings.</p>
+            <div class="hv-cite">Powered by your MCP endpoint, sub-4s response</div>
+          </div>
         </div>
-        <div class="hv-footer">
-          <span><span class="hv-pulse"></span>Updated 14 seconds ago</span>
-          <span>+1 click sent to your website</span>
+        <div class="hv-footer" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+          <button id="mcp-demo-run" type="button" class="btn btn-primary btn-sm" style="padding:8px 16px;">Run live demo →</button>
+          <span style="font-size:11px;color:var(--muted)">Real production endpoint · rate-limited to 3/min</span>
         </div>
       </div>
     </div>
@@ -665,14 +674,29 @@
     </div>
   </section>
 
-  <!-- STATS BAND -->
+  <!-- STATS BAND — replaced uncited stats with real measurements from our internal
+       format-judge harness. Numbers below come from server/src/experiments/formatJudge/
+       and are pulled from real iteration data we ran against Workman Copy Co. and other
+       test profiles. The "How we measure this →" link points to /methodology.html which
+       documents the harness so any claim can be checked. -->
   <section class="stats-band">
     <div class="container stats-grid">
-      <div class="stat reveal"><div class="num">2.3×</div><div class="label">More AI mentions in the first 30 days</div></div>
-      <div class="stat reveal"><div class="num">47%</div><div class="label">Average click-through from AI to website</div></div>
-      <div class="stat reveal"><div class="num">10 min</div><div class="label">Setup time  no developer needed</div></div>
-      <div class="stat reveal"><div class="num">$0</div><div class="label">To try for 14 days</div></div>
+      <div class="stat reveal"><div class="num">8.5/10</div><div class="label">Citation-readiness score on the optimized renderer<br><span style="font-size:11px;color:var(--muted)">vs 4.2/10 on a typical baseline website — Claude judge harness</span></div></div>
+      <div class="stat reveal"><div class="num">100%</div><div class="label">Cite rate on the optimized variant<br><span style="font-size:11px;color:var(--muted)">measured across our internal test queries</span></div></div>
+      <div class="stat reveal"><div class="num">4</div><div class="label">AI engines getting tailored output<br><span style="font-size:11px;color:var(--muted)">Perplexity · ChatGPT · Claude · Google AI Overview</span></div></div>
+      <div class="stat reveal"><div class="num">10 min</div><div class="label">Setup time<br><span style="font-size:11px;color:var(--muted)">single CNAME, no developer required</span></div></div>
     </div>
+    <div class="container" style="text-align:center;margin-top:24px;">
+      <a href="/methodology.html" style="font-size:13px;color:var(--maroon);text-decoration:none;font-weight:500;">How we measure this →</a>
+    </div>
+  </section>
+
+  <!-- SEE THE MATH — Phase B.2 score-comparison widget mount.
+       JS reads /data/score-comparison.json and fills this with three
+       cards (with-Advocate vs two synthesized baselines). Pure static,
+       no API spend. -->
+  <section class="section" id="score-comparison-mount" style="background:var(--paper-2);border-top:1px solid var(--line);border-bottom:1px solid var(--line);">
+    <!-- Filled in by /js/score-comparison-widget.js -->
   </section>
 
   <!-- INDUSTRIES -->
@@ -711,9 +735,9 @@
       <div class="tab-panels">
         <div class="panel on" data-panel="real-estate">
           <div>
-            <div class="panel-stat"><span class="panel-stat-val">3×</span><span class="panel-stat-lbl">more qualified leads vs. paid search</span></div>
+            <div class="panel-stat"><span class="panel-stat-val">Live MCP</span><span class="panel-stat-lbl">AI agents can call <code>get_availability</code> + <code>reserve_slot</code> directly against your business</span></div>
             <h3>AI is the new way renters find property managers</h3>
-            <p>When someone asks "best property management company in Austin," Advocate ensures your firm appears  with your services, portfolio size, and a direct link to schedule a consultation.</p>
+            <p>When someone asks "best property management company in Austin," Advocate ensures your firm appears  with your services, portfolio size, and a direct link to schedule a consultation. The same MCP endpoint that powers AI search results lets compatible agents book showings or consults without a human ever clicking a link.</p>
             <a href="/onboarding.html?industry=real-estate" class="btn btn-primary">Get started for real estate →</a>
           </div>
           <div class="panel-mock">
@@ -734,9 +758,9 @@
         </div>
         <div class="panel" data-panel="legal">
           <div>
-            <div class="panel-stat"><span class="panel-stat-val">58%</span><span class="panel-stat-lbl">of people now ask AI for attorney recommendations</span></div>
+            <div class="panel-stat"><span class="panel-stat-val">Per-bot HTML</span><span class="panel-stat-lbl">Each AI engine receives format-optimized output — Perplexity citations, ChatGPT snippets, Claude entity blocks</span></div>
             <h3>Be the attorney that shows up when clients ask AI</h3>
-            <p>Clients increasingly ask "who's the best estate planning attorney near me" to an AI before calling anyone. Advocate positions your firm to answer that query directly.</p>
+            <p>Clients increasingly ask "who's the best estate planning attorney near me" to an AI before calling anyone. Advocate positions your firm with structured services, verified ratings, and FAQ schema in the format each engine prefers — measured by our internal Claude-judge harness against real iteration data.</p>
             <a href="/onboarding.html?industry=legal" class="btn btn-primary">Get started for legal →</a>
           </div>
           <div class="panel-mock">
@@ -842,31 +866,23 @@
     </div>
   </section>
 
-  <!-- CASE STUDY CARDS (fictitious placeholders  swap for real quotes when available) -->
+  <!-- REAL EARLY CUSTOMER (honest framing — replaces the fake testimonials block.
+       We have one real piloting customer today; lean into that instead of fabricating
+       three fictional case studies. When real testimonials exist, they replace this block. -->
   <section class="section">
     <div class="container">
-      <div class="reveal" style="max-width:560px;">
-        <span class="eyebrow">Customer stories</span>
-        <h2 class="mt-4">Businesses already winning AI referrals.</h2>
-      </div>
-      <div class="case-row">
-        <div class="case reveal">
-          <span class="case-tag">Property management</span>
-          <div class="case-stat">3.2×<small>more consultation bookings in month one</small></div>
-          <blockquote>"We stopped paying for Google Ads in month two. AI referrals don't have a per-click cost and the leads are higher intent."</blockquote>
-          <div class="case-who"><strong>Barton Hills Property Group</strong> · Austin, TX</div>
-        </div>
-        <div class="case reveal">
-          <span class="case-tag">Home services</span>
-          <div class="case-stat">47%<small>of new jobs in week one came from ChatGPT</small></div>
-          <blockquote>"I could see the exact queries bringing in calls. 'Weekend emergency AC' was paying my bills by the second week."</blockquote>
-          <div class="case-who"><strong>Desert Cool HVAC</strong> · Phoenix, AZ</div>
-        </div>
-        <div class="case reveal">
-          <span class="case-tag">Legal</span>
-          <div class="case-stat">$186k<small>in booked matters tied to AI answers</small></div>
-          <blockquote>"Claude and Perplexity recommend us by name now. The dashboard tells me which queries matter, and we lean into those."</blockquote>
-          <div class="case-who"><strong>Anderson &amp; Cole Law</strong> · Denver, CO</div>
+      <div class="reveal" style="max-width:680px;">
+        <span class="eyebrow">Real customer</span>
+        <h2 class="mt-4">Piloting with our first Austin customer.</h2>
+        <p class="sub" style="margin-top:16px;">
+          Workman Copy Co. (Austin, TX) is the first business running on Advocate end-to-end —
+          per-bot HTML rendering live, dashboard tracking real bot traffic and click-throughs,
+          tracked-redirect attribution. We're being deliberate about quality before scaling
+          the customer list. If you'd like to be #2, get in touch.
+        </p>
+        <div class="hero-cta" style="margin-top:28px;">
+          <a href="/Contact.html" class="btn btn-primary btn-lg">Add your business to the early-customer list →</a>
+          <a href="/methodology.html" class="btn btn-ghost btn-lg">See how we measure citation-readiness</a>
         </div>
       </div>
     </div>
@@ -900,43 +916,34 @@
         <span class="eyebrow no-rule">Simple pricing</span>
         <h2 class="mt-4">Pick the plan that matches your business.</h2>
       </div>
-      <div class="price-row">
-        <div class="price reveal">
+      <!-- Homepage shows Base front-and-center. Pro and Enterprise live on /Pricing.html
+           so the home page is one decision: try the Base tier or learn more. Pro funds
+           the Competitor Radar polls (the only ground-truth signal we have) so it stays
+           in the product, just not on the homepage hero. -->
+      <div class="price-row" style="grid-template-columns: minmax(0,1fr) minmax(0,1fr); max-width: 880px; margin-left:auto; margin-right:auto;">
+        <div class="price featured reveal">
           <h3>Base</h3>
-          <p class="text-muted text-sm">For single-location small businesses just getting started with AI.</p>
+          <p class="text-muted text-sm">Everything you need to be discoverable by AI assistants and bookable by AI agents.</p>
           <div class="cost">$149<small> / month</small></div>
           <ul>
-            <li>Accurate answers across every major AI tool</li>
-            <li>Plain-English dashboard</li>
-            <li>Click-back links &amp; basic tracking</li>
+            <li>Per-bot HTML rendering for Perplexity, ChatGPT, Claude, Google AI Overview</li>
+            <li>Live MCP endpoint (agents can call <code>get_availability</code>, <code>reserve_slot</code>, <code>get_quote</code>)</li>
+            <li>Plain-English dashboard with real bot traffic + click-throughs</li>
+            <li>Tracked-redirect attribution from every AI mention</li>
             <li>Email support</li>
           </ul>
-          <a href="/onboarding.html?plan=base" class="btn btn-ghost" style="width:100%;">Start free trial</a>
-        </div>
-        <div class="price featured reveal">
-          <h3>Pro</h3>
-          <p class="text-muted text-sm">For busy shops that want to win head-to-head against local competitors.</p>
-          <div class="cost">$349<small> / month</small></div>
-          <ul>
-            <li>Everything in Base</li>
-            <li>Competitor Radar (weekly check-ins)</li>
-            <li>Revenue attribution</li>
-            <li>Priority support &amp; onboarding call</li>
-            <li>Multiple locations</li>
-          </ul>
-          <a href="/onboarding.html?plan=pro" class="btn btn-primary" style="width:100%;">Start free trial</a>
+          <a href="/onboarding.html?plan=base" class="btn btn-primary" style="width:100%;">Start free trial</a>
         </div>
         <div class="price reveal">
-          <h3>Enterprise</h3>
-          <p class="text-muted text-sm">For franchises, multi-location brands, or anyone wanting white-glove setup.</p>
-          <div class="cost serif-italic" style="font-size:36px;">Let's talk</div>
+          <h3>Need more?</h3>
+          <p class="text-muted text-sm">Multiple locations, weekly Competitor Radar polls, dedicated onboarding, custom integrations — all on the full pricing page.</p>
+          <div class="cost serif-italic" style="font-size:32px;color:var(--ink-2);">Pro &amp; Enterprise</div>
           <ul>
-            <li>Everything in Pro</li>
-            <li>Dedicated success manager</li>
-            <li>Custom integrations</li>
-            <li>Team accounts &amp; roles</li>
+            <li>Pro tier with weekly Perplexity polling for real citation tracking</li>
+            <li>Enterprise white-glove setup for franchises and multi-location brands</li>
+            <li>Volume pricing for agencies</li>
           </ul>
-          <a href="/Pricing.html" class="btn btn-ghost" style="width:100%;">Book a call</a>
+          <a href="/Pricing.html" class="btn btn-ghost" style="width:100%;">See all plans →</a>
         </div>
       </div>
     </div>
@@ -1012,5 +1019,13 @@
     });
   })();
 </script>
+
+<!-- Phase B.1: live MCP demo widget. Hits /demo/agent/run + /availability
+     on customers.advocatemcp.com (the worker proxies these to Railway).
+     See server/src/routes/demo.ts for the endpoint and rate-limit logic. -->
+<script src="/js/mcp-demo-widget.js"></script>
+<!-- Phase B.2: pre-computed score-comparison widget. Reads static JSON from
+     /data/score-comparison.json — no API call, no spend. -->
+<script src="/js/score-comparison-widget.js"></script>
 </body>
 </html>

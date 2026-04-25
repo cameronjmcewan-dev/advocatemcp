@@ -39,7 +39,7 @@
     {
       sels:  ['.sidebar', '.sb-nav'],
       title: 'Your dashboard',
-      body:  'Every section lives in the sidebar — Overview, Bot traffic, Mentions, Click-throughs, Competitor Radar, A2A pipeline, Activity feed.',
+      body:  'Every section lives in the sidebar — Overview, Bot traffic, Mentions, Click-throughs, Competitor Radar, AI bookings, Activity feed.',
     },
     {
       sels:  ['[data-tour="kpis"], .row.kpi-row, .row.kpis, .row:nth-of-type(1)'],

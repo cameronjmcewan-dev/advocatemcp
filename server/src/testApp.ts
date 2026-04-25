@@ -12,6 +12,7 @@ import { adminRouter } from "./routes/admin/index.js";
 import { competitorRadarRouter } from "./routes/competitorRadar.js";
 import { profileScoreRouter } from "./routes/profileScore.js";
 import { digestRouter } from "./routes/digest.js";
+import { demoRouter } from "./routes/demo.js";
 import { decodeRouter } from "./routes/decode.js";
 import { auditRouter } from "./routes/audit.js";
 import { jsonLdRouter } from "./routes/jsonLd.js";
@@ -97,6 +98,7 @@ export function createTestApp(): express.Express {
   app.use(competitorRadarRouter);
   app.use(profileScoreRouter);
   app.use(digestRouter);
+  app.use(demoRouter);
 
   app.get("/health", (_req, res) => {
     const db = getDb();

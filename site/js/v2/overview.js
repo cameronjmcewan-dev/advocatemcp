@@ -9,7 +9,7 @@
  *   Earned $       → REMAPPED to Reservations (count of held+confirmed)
  *   Win rate       → REMAPPED to Citation rate (radar.summary.citation_rate)
  *   Earned column  → REMAPPED to Intent (queries.intent)
- *   Revenue card   → REMAPPED to "Agent transactions" (reservations funnel)
+ *   Revenue card   → REMAPPED to "AI-attributed bookings" (reservations funnel; renamed from "Agent transactions" Apr 25 2026 to make the customer value immediately legible)
  *
  * Exposes three functions on window.AMCP_OVERVIEW:
  *   demo()    → returns a realistic dataset for the preview URL, where
@@ -190,8 +190,19 @@
     const reservations = fmtCount(reservationCount(activity));
     const citation     = fmtPct(citationRate(radar));
 
+    // KPI ordering choice (Apr 25 2026): "AI-attributed bookings" comes
+    // first because it's the single most retention-critical number. A
+    // tenant who sees "0 bookings" for 60 days churns; a tenant who sees
+    // "3 bookings" renews. Mentions/Click-throughs/Citation rate are all
+    // upstream signals — bookings are the outcome.
     return `
       <div class="kpis" data-tour="kpis">
+        <div class="kpi">
+          <div class="head"><div class="k">AI-attributed bookings <span class="info" title="Reservations + handoffs an AI agent made on your behalf via MCP. The closest measurable signal that AI is generating real revenue.">i</span></div></div>
+          <div class="v tabular">${reservations}</div>
+          <div class="d">Held or confirmed</div>
+          <div class="plain">Bookings agents made on your behalf.</div>
+        </div>
         <div class="kpi">
           <div class="head"><div class="k">Mentions <span class="info" title="Total AI queries that referenced your business.">i</span></div></div>
           <div class="v tabular">${mentions}</div>
@@ -203,12 +214,6 @@
           <div class="v tabular">${clicks}</div>
           <div class="d">Last 30 days</div>
           <div class="plain">Visitors who came from an AI citation.</div>
-        </div>
-        <div class="kpi">
-          <div class="head"><div class="k">Reservations <span class="info" title="A2A reserve_slot holds + confirmations.">i</span></div></div>
-          <div class="v tabular">${reservations}</div>
-          <div class="d">Held or confirmed</div>
-          <div class="plain">Bookings agents made on your behalf.</div>
         </div>
         <div class="kpi">
           <div class="head"><div class="k">Citation rate <span class="info" title="% of tracked competitor queries AI named you in.">i</span></div></div>
@@ -324,7 +329,7 @@
     return `
       <div class="card-dash">
         <div class="card-head">
-          <div><h3>Agent transactions</h3><div class="sub">The A2A funnel — calls to confirmed work</div></div>
+          <div><h3>AI-attributed bookings</h3><div class="sub">When an AI agent reaches your business via MCP and books on a real customer's behalf — the closest thing to "AI sent me revenue" you can measure today.</div></div>
           <a href="/A2APipeline.html" class="btn btn-ghost btn-sm">View full →</a>
         </div>
         <div class="rev-main">

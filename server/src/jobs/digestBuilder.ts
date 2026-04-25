@@ -49,6 +49,11 @@ export interface DigestPayload {
     polls:         number;
     cited:         number;
     citation_rate: number;
+    // Apr 25 2026: AI-attributed bookings count for the digest window.
+    // The most retention-critical number in the email — leads the subject
+    // and the body paragraph. Sum of reservations (held + confirmed) plus
+    // handoffs delivered to the tenant during the digest window.
+    bookings:      number;
   };
 }
 
@@ -137,10 +142,34 @@ export function buildDigest(
   if (totalsRow.total === 0) return null;
 
   const cited = totalsRow.cited ?? 0;
+
+  // Bookings query — count reservations (held + confirmed) AND handoffs
+  // delivered in the digest window for this tenant. Defensive try/catch:
+  // if either table is missing (early deploys, fresh DB) we just report
+  // 0 bookings rather than failing the whole digest.
+  let bookings = 0;
+  try {
+    const resRow = db.prepare(
+      `SELECT COUNT(*) AS n FROM reservations
+        WHERE business_slug=? AND status IN ('held', 'confirmed')
+          AND created_at>=? AND created_at<=?`
+    ).get(slug, window.start_iso, window.end_iso) as { n: number };
+    bookings += resRow?.n ?? 0;
+  } catch { /* table missing */ }
+  try {
+    const handoffRow = db.prepare(
+      `SELECT COUNT(*) AS n FROM handoffs
+        WHERE business_slug=? AND delivered_via IS NOT NULL
+          AND created_at>=? AND created_at<=?`
+    ).get(slug, window.start_iso, window.end_iso) as { n: number };
+    bookings += handoffRow?.n ?? 0;
+  } catch { /* table missing */ }
+
   const totals = {
     polls:         totalsRow.total,
     cited,
     citation_rate: totalsRow.total > 0 ? cited / totalsRow.total : 0,
+    bookings,
   };
 
   const byBotRows = db.prepare(
@@ -229,9 +258,16 @@ export function buildDigest(
 
 function renderSubject(
   businessName: string,
-  totals: { polls: number; cited: number; citation_rate: number },
+  totals: { polls: number; cited: number; citation_rate: number; bookings: number },
 ): string {
-  const { polls, cited } = totals;
+  const { polls, cited, bookings } = totals;
+  // Lead with bookings when there are any — that's the retention-
+  // critical number. Fall back to the citation framing when there are
+  // no bookings yet (early-tenant case).
+  if (bookings > 0) {
+    const bookingLabel = bookings === 1 ? "AI booking" : "AI bookings";
+    return `${businessName} — ${bookings} ${bookingLabel} this week (+${cited} of ${polls} AI citations)`;
+  }
   if (cited === 0) {
     return `${businessName} — 0 of ${polls} AI answers cited you this week`;
   }
@@ -240,7 +276,7 @@ function renderSubject(
 
 interface RenderData {
   businessName:   string;
-  totals:         { polls: number; cited: number; citation_rate: number };
+  totals:         { polls: number; cited: number; citation_rate: number; bookings: number };
   byBot:          DigestByBot[];
   topDescriptors: string[];
   losses:         DigestLoss[];
@@ -280,12 +316,26 @@ function renderHtml(d: RenderData): string {
       <tr><td align="center">
         <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
           <tr><td style="padding:28px 32px 16px 32px">
-            <div style="font-size:12px;color:#6b7280;letter-spacing:0.04em;text-transform:uppercase;margin-bottom:8px">AdvocateMCP · Weekly radar</div>
+            <div style="font-size:12px;color:#6b7280;letter-spacing:0.04em;text-transform:uppercase;margin-bottom:8px">AdvocateMCP · Weekly summary</div>
             <h1 style="margin:0;font-size:22px;color:#111827">${escapeHtml(businessName)}</h1>
-            <p style="margin:6px 0 0 0;color:#6b7280;font-size:14px">Here's how AI assistants described your business this week.</p>
+            <p style="margin:6px 0 0 0;color:#6b7280;font-size:14px">${
+              totals.bookings > 0
+                ? `<strong>${totals.bookings} AI ${totals.bookings === 1 ? "booking" : "bookings"} this week.</strong> Plus citation data and lost queries below.`
+                : `Here's how AI assistants described your business this week.`
+            }</p>
           </td></tr>
 
           <tr><td style="padding:8px 32px 0 32px">
+            <!-- Hero card now leads with bookings count when there are any.
+                 Bookings are the retention-critical signal — the closest
+                 measurable proof that AI is generating revenue. Falls back
+                 to citation rate when no bookings yet (early-tenant case). -->
+            ${totals.bookings > 0 ? `
+            <div style="padding:20px 24px;background:#f9fafb;border-radius:8px;border:1px solid #e5e7eb;margin-bottom:12px">
+              <div style="font-size:44px;font-weight:600;color:#0f766e;line-height:1">${totals.bookings}</div>
+              <div style="font-size:14px;color:#374151;margin-top:4px">AI-attributed ${totals.bookings === 1 ? "booking" : "bookings"} — agents reserved or completed work for you</div>
+            </div>
+            ` : ""}
             <div style="padding:20px 24px;background:#f9fafb;border-radius:8px;border:1px solid #e5e7eb">
               <div style="font-size:44px;font-weight:600;color:#111827;line-height:1">${heroRate}</div>
               <div style="font-size:14px;color:#374151;margin-top:4px">cited in ${totals.cited} of ${totals.polls} AI answers</div>
@@ -337,8 +387,12 @@ function renderHtml(d: RenderData): string {
 function renderText(d: RenderData): string {
   const { businessName, totals, byBot, topDescriptors, losses, dashboardUrl, unsubscribeUrl } = d;
   const lines: string[] = [];
-  lines.push(`${businessName} — AdvocateMCP weekly radar`);
+  lines.push(`${businessName} — AdvocateMCP weekly summary`);
   lines.push("");
+  if (totals.bookings > 0) {
+    lines.push(`AI-attributed bookings: ${totals.bookings} ${totals.bookings === 1 ? "booking" : "bookings"} this week (agents reserved or completed work for you)`);
+    lines.push("");
+  }
   lines.push(`Citation rate: ${fmtPct(totals.citation_rate)} (cited in ${totals.cited} of ${totals.polls} AI answers)`);
   lines.push("");
   lines.push("SHARE OF MODEL");

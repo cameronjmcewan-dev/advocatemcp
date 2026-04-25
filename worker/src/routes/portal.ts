@@ -157,6 +157,16 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/contact"           && method === "OPTIONS") return handleContactPreflight(request);
   if (pathname === "/api/contact"           && method === "POST")    return handleContact(request, env);
 
+  // Phase B.1 (Apr 25 2026) — live MCP demo widget on the marketing
+  // homepage. Public, no auth, IP-rate-limited at Railway. Worker just
+  // proxies the request to Railway, forwards X-Forwarded-For so Railway
+  // sees the visitor IP for rate-limit keying. CORS allows the
+  // advocatemcp.com origin since the widget runs there.
+  if (pathname === "/demo/agent/run"          && method === "OPTIONS") return handleDemoPreflight(request);
+  if (pathname === "/demo/agent/run"          && method === "POST")    return handleDemoProxy(request, env, "/demo/agent/run");
+  if (pathname === "/demo/agent/availability" && method === "OPTIONS") return handleDemoPreflight(request);
+  if (pathname === "/demo/agent/availability" && method === "POST")    return handleDemoProxy(request, env, "/demo/agent/availability");
+
   // Admin insights proxy — bridges Pages-side admin console to Railway's
   // Bearer-auth'd /admin/insights/* endpoints (ADMIN_API_KEY injected
   // server-side). Admin-role gate inside handler; allowlisted subpaths only.
@@ -1594,6 +1604,79 @@ async function apiVerifyRating(request: Request, env: Env): Promise<Response> {
     );
   } catch (err) {
     return withCors(jsonErr(502, `Verify-rating backend unreachable: ${String(err)}`), request, { credentials: true });
+  }
+}
+
+// ── Public demo proxy (Phase B.1, Apr 25 2026) ─────────────────────────
+// /demo/agent/run + /demo/agent/availability are unauth public endpoints
+// powering the homepage live-MCP demo widget. The Railway server enforces
+// IP rate limits + budget caps; the worker just passes the request
+// through. CORS allows the advocatemcp.com origin since the widget runs
+// from there.
+//
+// We deliberately do NOT inject X-API-Key here. The Railway routes are
+// already public — that's the design. Adding an admin key would suggest
+// these endpoints are privileged, which they aren't.
+
+function handleDemoPreflight(request: Request): Response {
+  // No credentials needed — the demo is unauth, no cookies cross over.
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin":  request.headers.get("Origin") ?? "*",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Max-Age":       "86400",
+      "Vary":                         "Origin",
+    },
+  });
+}
+
+async function handleDemoProxy(request: Request, env: Env, path: string): Promise<Response> {
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  let body = "{}";
+  try { body = await request.text(); } catch { /* empty */ }
+  if (!body || !body.trim()) body = "{}";
+  // Forward visitor IP so Railway can rate-limit per-IP. The widget runs
+  // in the visitor's browser → CF terminates TLS at the Worker → we get
+  // CF-Connecting-IP. Pass it through as X-Forwarded-For so Railway sees
+  // the visitor IP, not the Worker's IP (which would be the same for all
+  // visitors).
+  const visitorIp =
+    request.headers.get("CF-Connecting-IP") ??
+    request.headers.get("X-Forwarded-For") ??
+    "";
+  try {
+    const r = await fetch(`${base}${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type":    "application/json",
+        ...(visitorIp ? { "X-Forwarded-For": visitorIp } : {}),
+      },
+      body,
+    });
+    const text = await r.text();
+    const origin = request.headers.get("Origin") ?? "*";
+    return new Response(text, {
+      status: r.status,
+      headers: {
+        "Content-Type":                 r.headers.get("content-type") ?? "application/json",
+        "Access-Control-Allow-Origin":  origin,
+        "Vary":                         "Origin",
+      },
+    });
+  } catch (err) {
+    return new Response(
+      JSON.stringify({ error: "demo_backend_unreachable", message: String(err) }),
+      {
+        status: 502,
+        headers: {
+          "Content-Type":                "application/json",
+          "Access-Control-Allow-Origin": request.headers.get("Origin") ?? "*",
+          "Vary":                        "Origin",
+        },
+      },
+    );
   }
 }
 

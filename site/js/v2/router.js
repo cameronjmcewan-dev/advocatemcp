@@ -41,7 +41,7 @@
     { path: /^\/Mentions(\.html)?\/?$/,            script: '/js/v2/mentions.js',     module: 'AMCP_MENTIONS',       activeId: 'mentions',       crumb: 'Dashboard · Mentions',         title: 'Mentions' },
     { path: /^\/ClickThroughs(\.html)?\/?$/,       script: '/js/v2/clicks.js',       module: 'AMCP_CLICKS',         activeId: 'clicks',         crumb: 'Dashboard · Click-throughs',   title: 'Click-throughs' },
     { path: /^\/CompetitorRadar(\.html)?\/?$/,     script: '/js/v2/radar.js',        module: 'AMCP_RADAR',          activeId: 'radar',          crumb: 'Dashboard · Competitor Radar', title: 'Competitor Radar' },
-    { path: /^\/A2APipeline(\.html)?\/?$/,         script: '/js/v2/a2a-pipeline.js', module: 'AMCP_A2A',            activeId: 'a2a',            crumb: 'Dashboard · A2A pipeline',     title: 'A2A pipeline' },
+    { path: /^\/A2APipeline(\.html)?\/?$/,         script: '/js/v2/a2a-pipeline.js', module: 'AMCP_A2A',            activeId: 'a2a',            crumb: 'Dashboard · AI bookings',     title: 'AI-attributed bookings' },
     { path: /^\/ActivityFeed(\.html)?\/?$/,        script: '/js/v2/activity.js',     module: 'AMCP_ACTIVITY',       activeId: 'activity',       crumb: 'Dashboard · Activity',         title: 'Activity feed' },
     { path: /^\/BusinessProfile(\.html)?\/?$/,     script: '/js/v2/profile.js',      module: 'AMCP_PROFILE',        activeId: 'profile',        crumb: 'Account · Business profile',   title: 'Business profile' },
     { path: /^\/Settings(\.html)?\/?$/,            script: '/js/v2/settings.js',     module: 'AMCP_SETTINGS',       activeId: 'settings',       crumb: 'Account · Settings',           title: 'Settings & API' },
