@@ -52,7 +52,13 @@
 
   async function fetchReal() {
     const af = window.AMCP && window.AMCP.authedFetch;
-    const r = await af('/api/client/radar');
+    // Pass through ?as=<slug> as ?slug=<slug> so admin impersonation
+    // hits the correct tenant's radar — without this, the worker falls
+    // back to businesses[0] which is alphabetical, not the impersonated
+    // tenant.
+    const asSlug = new URL(window.location.href).searchParams.get('as');
+    const path = '/api/client/radar' + (asSlug ? `?slug=${encodeURIComponent(asSlug)}` : '');
+    const r = await af(path);
     if (r.ok) return await r.json();
     if (r.status === 402 || r.status === 403) {
       // Plan-gated — surface the gate explicitly so render() shows the

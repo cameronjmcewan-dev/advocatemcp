@@ -984,7 +984,7 @@ async function apiRadar(request: Request, env: Env): Promise<Response> {
       fetch(`${base}/api/competitor-radar/${biz.slug}/summary`, {
         headers: { Authorization: `Bearer ${biz.api_key}` },
       }),
-      fetch(`${base}/api/competitor-radar/${biz.slug}/basket`, {
+      fetch(`${base}/api/competitor-basket/${biz.slug}`, {
         headers: { Authorization: `Bearer ${biz.api_key}` },
       }),
       fetch(`${base}/api/competitor-radar/${biz.slug}/losses`, {
@@ -1029,13 +1029,16 @@ async function apiRadarBasketAdd(request: Request, env: Env): Promise<Response> 
 
   const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
   try {
-    const res = await fetch(`${base}/api/competitor-radar/${biz.slug}/basket`, {
+    // Server route is /api/competitor-basket/:slug/queries with body { query }.
+    // We accept { query_phrasing } from the browser to keep the public proxy
+    // contract stable, and translate to { query } here for the upstream.
+    const res = await fetch(`${base}/api/competitor-basket/${biz.slug}/queries`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${biz.api_key}`,
       },
-      body: JSON.stringify({ query_phrasing: qp }),
+      body: JSON.stringify({ query: qp }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -1062,7 +1065,7 @@ async function apiRadarBasketDelete(request: Request, env: Env, basketId: string
 
   const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
   try {
-    const res = await fetch(`${base}/api/competitor-radar/${biz.slug}/basket/${encodeURIComponent(basketId)}`, {
+    const res = await fetch(`${base}/api/competitor-basket/${biz.slug}/queries/${encodeURIComponent(basketId)}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${biz.api_key}` },
     });

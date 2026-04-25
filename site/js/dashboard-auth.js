@@ -76,7 +76,14 @@
     /* ── authedFetch ────────────────────────────────────────────────────
      * Authenticated wrapper around fetch. Injects Authorization header
      * and always includes credentials for cookie transport.
-     * path is relative to API_BASE (e.g. '/api/client/metrics'). */
+     * path is relative to API_BASE (e.g. '/api/client/metrics').
+     *
+     * Impersonation: when an admin viewing ?as=<slug> calls a per-tenant
+     * endpoint (/api/client/*), inject `slug=<slug>` into the query
+     * string so the worker resolves to the impersonated tenant instead
+     * of falling back to businesses[0]. /api/client/all-metrics is
+     * admin-scoped and never needs slug scoping; everything else does.
+     * Skipped if the caller already set ?slug= explicitly. */
     async authedFetch(path, opts) {
       const options = opts || {};
       const headers = Object.assign(
@@ -84,7 +91,23 @@
         options.headers || {},
         AMCP.token ? { Authorization: `Bearer ${AMCP.token}` } : {}
       );
-      return fetch(`${API_BASE}${path}`, Object.assign({}, options, {
+
+      let resolvedPath = path;
+      if (typeof path === 'string' && path.startsWith('/api/client/') && !path.startsWith('/api/client/all-metrics')) {
+        try {
+          const asSlug = new URL(window.location.href).searchParams.get('as');
+          if (asSlug) {
+            const [base, query] = path.split('?');
+            const params = new URLSearchParams(query || '');
+            if (!params.has('slug')) {
+              params.set('slug', asSlug);
+              resolvedPath = base + '?' + params.toString();
+            }
+          }
+        } catch { /* URL parse failure → fall back to original path */ }
+      }
+
+      return fetch(`${API_BASE}${resolvedPath}`, Object.assign({}, options, {
         credentials: 'include',
         headers,
       }));
@@ -108,7 +131,10 @@
       let storageKey = null;
       try {
         const who = AMCP.token ? AMCP.token.slice(0, 16) : 'anon';
-        storageKey = 'amcp.cache.' + who + '.' + path;
+        // Include ?as=<slug> in the cache key so impersonating tenant A
+        // then tenant B doesn't return A's cached response for B.
+        const asSlug = new URL(window.location.href).searchParams.get('as') || '';
+        storageKey = 'amcp.cache.' + who + '.' + asSlug + '.' + path;
         const cached = sessionStorage.getItem(storageKey);
         if (cached) {
           const { t, body, status } = JSON.parse(cached);

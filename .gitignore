@@ -36,3 +36,7 @@ worker/node_modules/
 .obsidian/
 .obsidian/
 .gitnexus/
+
+# Claude Code operator notes (Obsidian vault, not code)
+claude-sessions/
+.gstack/
