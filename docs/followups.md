@@ -75,17 +75,21 @@ Apr 12 — cleaned 12 pending test tenants from D1, removed orphaned test user c
 ### Activation page styling
 Activation page HTML doesn't match Phase D dashboard visual language. Bug C / Phase D follow-up.
 
-### Dashboard domains section for hosted tenants
-Dashboard should conditionally hide the DNS management UI for hosted tenants (they don't need
-it — their subdomain is managed automatically). Currently shows to everyone.
+### ~~Dashboard domains section for hosted tenants~~ RESOLVED
+**Resolved 2026-04-24.** v2 Settings → Connection card now detects hosted tenants
+(domain ends with `.hosted.advocatemcp.com`) and replaces the "Open DNS wizard"
+button with a friendly "Your subdomain is automatically managed — no DNS setup
+required" note. Pending status chip re-labels from "Pending DNS" → "Provisioning…"
+for hosted tenants so the in-flight state isn't misleading.
 
 ### Dashboard sidebar and breadcrumb
 Max's logo fix (commit 19c73c2) addressed the shared marketing header but not the dashboard
 sidebar and breadcrumb. Dashboard.html still has placeholder treatment.
 
-### Dead js file
-site/js/dashboard-activate.js exists (131 lines) but is never loaded by dashboard.html. Either
-wire it up or delete it.
+### ~~Dead js file~~ FALSE ALARM
+**Audited 2026-04-24.** `site/js/dashboard-activate.js` IS loaded — by `site/activate.html`
+(the email-link account activation flow), not `dashboard.html`. The original followup
+note was looking in the wrong file. No action needed.
 
 ## Research / investigate
 
@@ -110,10 +114,11 @@ per earlier Claude Code investigation. Is it dead? Can it be removed?
 Currently on 3.114.17. Wrangler warns on every command. Upgrade via
 `npm install --save-dev wrangler@4`. Test carefully — wrangler is the deploy tool.
 
-### Admin retry endpoint
-For failed Railway registrations, currently there's no clean way to retry the Railway call
-for a tenant whose Stripe webhook-time registration failed. Worker has the data, just need an
-admin endpoint to trigger the retry.
+### ~~Admin retry endpoint~~ RESOLVED
+**Resolved earlier.** `POST /admin/onboard/retry-railway` (worker/src/routes/stripe.ts:1339)
+exists and replays `registerBusinessOnRailway` using the tenant profile already in KV.
+Body: `{ slug }`. Auth via `X-Admin-Secret` header. Updates D1 `api_key` on success
+the same way the Stripe webhook would.
 
 ### Runbooks
 Before first real paying customer:

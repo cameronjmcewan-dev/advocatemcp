@@ -126,15 +126,30 @@
           <div class="card-head"><div><h3>Connection</h3><div class="sub">How AI crawlers reach your agent</div></div></div>
           <div class="set-row"><div class="l">Domain</div><div class="r">${domain.hostname ? esc(domain.hostname) : '<span style="color:var(--muted)">Not connected yet</span>'}</div></div>
           <div class="set-row"><div class="l">Status</div><div class="r">${
-            domain.status === 'active' ? `<span class="chip sage dot-chip"><span class="dot"></span>Active</span>` :
-            domain.status === 'pending' ? `<span class="chip amber">Pending DNS</span>` :
-            `<span class="chip">Inactive</span>`
+            // Hosted tenants don't run a DNS step — re-label the pending
+            // chip so it doesn't suggest action they can't take.
+            (() => {
+              const isHosted = domain.hostname && /\.hosted\.advocatemcp\.com$/i.test(domain.hostname);
+              if (domain.status === 'active') return `<span class="chip sage dot-chip"><span class="dot"></span>Active</span>`;
+              if (domain.status === 'pending') return `<span class="chip amber">${isHosted ? 'Provisioning…' : 'Pending DNS'}</span>`;
+              return `<span class="chip">Inactive</span>`;
+            })()
           }</div></div>
           <div class="set-row"><div class="l">Last bot hit</div><div class="r">${esc(timeAgo(domain.last_bot_hit))}</div></div>
-          <div class="set-row" style="border-bottom:0;padding-top:16px">
-            <div class="l"></div>
-            <div class="r"><button class="btn btn-ghost btn-sm" id="btn-open-dns-wizard" type="button">Open DNS wizard →</button></div>
-          </div>
+          ${
+            // Hosted tenants get auto-provisioned subdomains. They don't
+            // need (and can't usefully run) the DNS wizard. Show a
+            // friendly note instead so they don't think the page is broken.
+            (domain.hostname && /\.hosted\.advocatemcp\.com$/i.test(domain.hostname))
+              ? `<div class="set-row" style="border-bottom:0;padding-top:16px">
+                  <div class="l"></div>
+                  <div class="r" style="color:var(--muted);font-size:13px">Your subdomain is automatically managed — no DNS setup required.</div>
+                </div>`
+              : `<div class="set-row" style="border-bottom:0;padding-top:16px">
+                  <div class="l"></div>
+                  <div class="r"><button class="btn btn-ghost btn-sm" id="btn-open-dns-wizard" type="button">Open DNS wizard →</button></div>
+                </div>`
+          }
         </div>
       </div>
 
