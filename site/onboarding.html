@@ -24,17 +24,22 @@
  * A prefers-color-scheme: dark override further down restores the
  * original dark palette for users whose OS is in dark mode. */
 :root {
-  --bg:          #fbf9f5;        /* paper */
-  --surface:     #ffffff;        /* cards + inputs */
-  --surface-2:   #f5f1ea;        /* subtle surface variation */
-  --border:      #d8d1c3;        /* hairline */
-  --text:        #141210;        /* ink */
-  --muted:       #766f63;        /* secondary text */
-  --accent:      #5c1a3c;        /* maroon */
-  --accent-dk:   #3d0f26;        /* darker maroon for hover */
-  --accent-dim:  rgba(92,26,60,.08);
-  --accent-ring: rgba(92,26,60,.22);
-  --green:       #2f5c3d;        /* sage green (success) */
+  --bg:          #fbf9f5;         /* paper */
+  --surface:     #ffffff;         /* cards + inputs */
+  --surface-2:   #f5f1ea;         /* subtle surface variation */
+  --border:      #d8d1c3;         /* hairline */
+  --text:        #141210;         /* ink */
+  --muted:       #766f63;         /* secondary text */
+  /* Primary accent uses Max's `--maroon-2` (the darkest tier in the
+   * marketing palette) so the wizard reads as unambiguously dark
+   * oxblood on paper. Using the softer `--maroon` (#5c1a3c) here made
+   * low-alpha tints (selected plan cards, active progress dots) render
+   * as pale pink on the cream bg. */
+  --accent:      #3d0f26;         /* darkest maroon — primary */
+  --accent-dk:   #2a091a;         /* near-black maroon for hover */
+  --accent-dim:  rgba(61,15,38,.06);   /* selected-state wash */
+  --accent-ring: rgba(61,15,38,.16);   /* focus ring */
+  --green:       #2f5c3d;         /* sage green (success) */
   --red:         #b3261e;
   --red-dim:     rgba(179,38,30,.08);
   --font-serif:  'Instrument Serif', Georgia, serif;
