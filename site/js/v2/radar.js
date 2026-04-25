@@ -301,7 +301,11 @@
           const res = await af('/api/client/radar/basket' + slugSuffix, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query }),
+            // Worker expects { query_phrasing }, not { query } — matches
+            // the legacy dashboard-radar.js body shape. Field name is
+            // the only difference; slug override still works through
+            // the ?slug= suffix.
+            body: JSON.stringify({ query_phrasing: query }),
           });
           const body = await res.json().catch(() => ({}));
           if (!res.ok) {
