@@ -31,6 +31,7 @@ adminExperimentsRouter.post(
       queries?: unknown;
       variant_ids?: unknown;
       judges?: unknown;
+      profile_patches?: unknown;
     };
 
     function asStringArray(v: unknown): string[] | undefined {
@@ -39,12 +40,24 @@ adminExperimentsRouter.post(
       return out.length > 0 ? out : undefined;
     }
 
+    function asProfilePatches(v: unknown): Record<string, Record<string, unknown>> | undefined {
+      if (!v || typeof v !== "object" || Array.isArray(v)) return undefined;
+      const out: Record<string, Record<string, unknown>> = {};
+      for (const [slug, patch] of Object.entries(v as Record<string, unknown>)) {
+        if (patch && typeof patch === "object" && !Array.isArray(patch)) {
+          out[slug] = patch as Record<string, unknown>;
+        }
+      }
+      return Object.keys(out).length > 0 ? out : undefined;
+    }
+
     try {
       const result = await runExperiment({
-        profileSlugs: asStringArray(body.profile_slugs),
-        queries:      asStringArray(body.queries),
-        variantIds:   asStringArray(body.variant_ids),
-        judges:       asStringArray(body.judges),
+        profileSlugs:   asStringArray(body.profile_slugs),
+        queries:        asStringArray(body.queries),
+        variantIds:     asStringArray(body.variant_ids),
+        judges:         asStringArray(body.judges),
+        profilePatches: asProfilePatches(body.profile_patches),
       });
       res.json(result);
     } catch (err) {

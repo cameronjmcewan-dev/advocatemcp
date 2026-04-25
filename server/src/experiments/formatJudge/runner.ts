@@ -325,6 +325,19 @@ export async function runExperiment(opts: {
   queries?: string[];        // override default queries
   variantIds?: string[];     // subset of registered variants
   judges?: string[];         // override default judges
+  /**
+   * Profile patches: per-slug overrides applied on top of the loaded
+   * profile (or the WCC fixture). Lets callers test "what would the
+   * score be IF this tenant added X" without mutating their live
+   * profile. Each value gets shallow-merged onto the profile row
+   * before rendering. Field names match BusinessRow columns:
+   *   ratings_json, customer_quotes_json, credentials_json,
+   *   case_stories_json, differentiators_text, guarantee_text, etc.
+   * JSON-blob fields can be passed as either a JSON string or an
+   * object — we stringify objects so the BusinessRow shape stays
+   * consistent.
+   */
+  profilePatches?: Record<string, Record<string, unknown>>;
 }): Promise<{
   cfg: { profiles: Array<{ slug: string; name: string }>; queries: string[]; variants: string[]; judges: string[] };
   trials: ReturnType<typeof summarize> extends Promise<infer _T> ? never : import("./types.js").JudgeTrial[];
@@ -348,6 +361,30 @@ export async function runExperiment(opts: {
     cfg.variants = baseCfg.variants.filter((v) => opts.variantIds!.includes(v.id));
   }
   if (opts.judges?.length) cfg.judges = opts.judges;
+
+  // Apply profile patches (e.g. simulated Google reviews data) — lets
+  // callers measure score lift from a hypothetical addition without
+  // mutating the tenant's live profile.
+  if (opts.profilePatches) {
+    const JSON_FIELDS = new Set([
+      "ratings_json","customer_quotes_json","credentials_json",
+      "case_stories_json","hours_json","pricing_json_v2","lead_routing_json",
+      "services_json_v2",
+    ]);
+    cfg.profiles = cfg.profiles.map((p) => {
+      const patch = opts.profilePatches?.[p.slug];
+      if (!patch) return p;
+      const merged: Record<string, unknown> = { ...p };
+      for (const [k, v] of Object.entries(patch)) {
+        if (JSON_FIELDS.has(k) && v != null && typeof v !== "string") {
+          merged[k] = JSON.stringify(v);
+        } else {
+          merged[k] = v;
+        }
+      }
+      return merged as unknown as BusinessRow;
+    });
+  }
 
   const answerCache = await buildAnswerCache(cfg);
   const trials = await runTrials(cfg, answerCache);
