@@ -4,7 +4,7 @@
  * Downsampled from original 13500×6750 → 2048×1024 for web delivery.
  *
  * ═══════════════════════════════════════════════════════════════════
- * Advocate — Hero scene (rotating Earth at night + arc beams)
+ * Advocate, Hero scene (rotating Earth at night + arc beams)
  * Lazy-loaded only when:
  *   - viewport width >= 900px
  *   - prefers-reduced-motion != reduce
@@ -172,7 +172,7 @@ async function bootHero(canvas, hero) {
 
   // ── City anchors ──
   // Arcs and city dots are all children of this group so they rotate with
-  // the Earth — connections stay pinned to the continents.
+  // the Earth, connections stay pinned to the continents.
   const rotatingGroup = new THREE.Group();
   scene.add(rotatingGroup);
   rotatingGroup.add(earth);
@@ -218,7 +218,7 @@ async function bootHero(canvas, hero) {
   ];
 
   // If bloom wasn't available we goose the emissive look on the arcs to
-  // compensate — brighter colour, higher opacity. Logged above.
+  // compensate, brighter colour, higher opacity. Logged above.
   const arcOpacity = bloomAvailable ? 0.55 : 0.85;
   const beadColor  = bloomAvailable ? 0xffffff : 0xfff0e0;
 
@@ -272,7 +272,7 @@ async function bootHero(canvas, hero) {
       new THREE.Vector2(width, height),
       0.85, // strength
       0.6,  // radius
-      0.0   // threshold — bloom everything that emits
+      0.0   // threshold, bloom everything that emits
     );
     composer.addPass(bloom);
   }
@@ -304,7 +304,7 @@ async function bootHero(canvas, hero) {
     // Slow Earth rotation: 0.04 rad/sec
     rotatingGroup.rotation.y = t * 0.04;
 
-    // Camera breathing — ease in/out between y=0 and y=0.08 over ~12s
+    // Camera breathing, ease in/out between y=0 and y=0.08 over ~12s
     const breath = 0.5 - 0.5 * Math.cos((t / 12) * Math.PI * 2);
     camera.position.y = breath * 0.08;
     camera.lookAt(0, 0, 0);
@@ -338,7 +338,7 @@ async function bootHero(canvas, hero) {
   };
   document.addEventListener('visibilitychange', onVisibility);
 
-  // Dispose — GPU resource cleanup on unmount (SPA-safety).
+  // Dispose, GPU resource cleanup on unmount (SPA-safety).
   const dispose = () => {
     running = false;
     cancelAnimationFrame(rafId);

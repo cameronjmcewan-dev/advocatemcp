@@ -1,6 +1,6 @@
 /*!
- * Public GEO Audit client — posts to api.advocatemcp.com/audit/run,
- * renders results, wires CTA. Zero dependencies. Never throws —
+ * Public GEO Audit client, posts to api.advocatemcp.com/audit/run,
+ * renders results, wires CTA. Zero dependencies. Never throws,
  * every failure path renders a human-readable error instead.
  */
 (function () {
@@ -61,7 +61,7 @@
         var d = bareDomain(c);
         if (!d) return;
         if (d === ownDomain) return;
-        // Skip Google Maps "search shim" URLs — the host is just google.com
+        // Skip Google Maps "search shim" URLs, the host is just google.com
         // and they're not a real competitor surface.
         if (d === "google.com" && /maps\/search\//i.test(c)) return;
         counts[d] = (counts[d] || 0) + 1;
@@ -76,12 +76,12 @@
   }
 
   // Render the leaderboard into the supplied DOM nodes. Self-contained so
-  // r.html can reuse it via copy/paste — the audit site has no module bundler.
+  // r.html can reuse it via copy/paste, the audit site has no module bundler.
   function renderLeaderboard(audit, bodyEl, headEl, cardEl) {
     if (!bodyEl) return;
     var lb = buildLeaderboard(audit, 5);
     if (lb.rows.length === 0) {
-      // Hide the whole card on zero — no competitors means either an empty
+      // Hide the whole card on zero, no competitors means either an empty
       // category response or a 100% citation rate, neither benefits from
       // the leaderboard.
       if (cardEl) cardEl.style.display = "none";
@@ -105,16 +105,16 @@
     }).join("");
   }
 
-  // Expose for r.html (which copies the same logic) — keeps the
+  // Expose for r.html (which copies the same logic), keeps the
   // implementation in one place if both pages load this script. r.html
   // currently inlines its own copy; if we ever consolidate, this works.
   window.__advocateAuditLeaderboard = { buildLeaderboard: buildLeaderboard, renderLeaderboard: renderLeaderboard };
 
-  // ── URL-param prefill — frictionless cold-outreach landing ─────────────
+  // ── URL-param prefill, frictionless cold-outreach landing ─────────────
   // Cameron sends a prospect:
   //   advocatemcp.com/audit?domain=acme.com&category=plumber&location=Boise,TX
   // Fields auto-populate on load. Add ?auto=1 and the audit fires
-  // immediately (no click required) — for the truly hot pitch:
+  // immediately (no click required), for the truly hot pitch:
   //   advocatemcp.com/audit?domain=acme.com&category=plumber&location=Boise,TX&auto=1
   // Strips the params from the URL bar after consuming so a refresh
   // doesn't re-trigger an audit and the URL stays clean for sharing.
@@ -205,7 +205,7 @@
       })
       .catch(function (err) {
         showError("Couldn't reach the audit service. Check your connection and try again.");
-        // Not thrown to console — failure is already shown.
+        // Not thrown to console, failure is already shown.
         void err;
       });
   });
@@ -240,19 +240,19 @@
     // Tailor the CTA to the audit outcome.
     if (cited === 0) {
       ctaTitle.textContent = "You're invisible to AI today";
-      ctaBody.textContent = "AI-driven discovery is already shifting how customers find businesses like yours. An Advocate agent gives every AI a structured, citation-ready answer about you — the difference between scraped guesswork and your real pitch.";
+      ctaBody.textContent = "AI-driven discovery is already shifting how customers find businesses like yours. An Advocate agent gives every AI a structured, citation-ready answer about you, the difference between scraped guesswork and your real pitch.";
     } else if (cited < total) {
       ctaTitle.textContent = "You're showing up, but not consistently";
       ctaBody.textContent = "AI cited you on some queries and missed you on others. An Advocate agent gives every AI the same structured answer about your business, so you stop competing with your own HTML.";
     } else {
-      ctaTitle.textContent = "You're cited — now control what AI says about you";
-      ctaBody.textContent = "You're in the answer set. But AI is building the quote from scraped HTML. An Advocate agent lets you supply the exact structured pitch — the specialty, pricing, credentials, and CTA you want AIs to surface.";
+      ctaTitle.textContent = "You're cited, now control what AI says about you";
+      ctaBody.textContent = "You're in the answer set. But AI is building the quote from scraped HTML. An Advocate agent lets you supply the exact structured pitch, the specialty, pricing, credentials, and CTA you want AIs to surface.";
     }
 
     // Build the competitor leaderboard: aggregate citation counts across
     // every query, exclude the tenant's own domain, surface the top 5.
-    // This is the most actionable single insight in the audit — "here's
-    // who's winning your category in AI" — and computes entirely from
+    // This is the most actionable single insight in the audit, "here's
+    // who's winning your category in AI", and computes entirely from
     // data already in audit.queries[].citations[].
     renderLeaderboard(audit, document.getElementById("leaderboard-body"), document.getElementById("leaderboard-head"), document.getElementById("leaderboard-card"));
 
@@ -273,7 +273,7 @@
     // can pre-fill the business name (derived from domain), website,
     // industry (fuzzy-mapped from category), and city/state (parsed from
     // location). from_audit=1 is the sentinel the onboarding script
-    // checks for — bare /onboarding keeps the empty-form behavior.
+    // checks for, bare /onboarding keeps the empty-form behavior.
     //
     // URL uses /onboarding (not /onboarding.html) because Pages 308-
     // redirects the .html form to the clean URL and strips the query
@@ -344,7 +344,7 @@
             if (r.status === 200 && r.body.ok) {
               followupMsg.textContent = r.body.created
                 ? "✓ You're on the list. We'll re-audit and email you next month."
-                : "✓ Already on the list — you're set.";
+                : "✓ Already on the list, you're set.";
               followupMsg.className = "followup-msg ok";
               followupInput.value = "";
             } else if (r.status === 429) {

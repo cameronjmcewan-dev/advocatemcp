@@ -7,7 +7,7 @@
  *
  * Both routes are unauth, IP-rate-limited (3/min, 10/24h). The visitor
  * sees a real production response, not a screenshot. That's the
- * conversion-leverage: "static screenshots can be Photoshopped — this
+ * conversion-leverage: "static screenshots can be Photoshopped, this
  * can't, and you just watched it work."
  *
  * The API base is determined at boot:
@@ -190,7 +190,7 @@
   }
 
   // Wire on DOM ready. The widget might mount before this script if the
-  // page render is slow — guarded by null check.
+  // page render is slow, guarded by null check.
   function init() {
     const btn = el("mcp-demo-run");
     if (btn) btn.addEventListener("click", runDemo);

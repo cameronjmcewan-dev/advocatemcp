@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>How we measure citation-readiness — Advocate</title>
+<title>How we measure citation-readiness, Advocate</title>
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#fbf9f5" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#141210" media="(prefers-color-scheme: dark)">
-<meta name="description" content="Plain-English explanation of the format-judge harness — how Advocate measures whether AI search engines can cite your business.">
+<meta name="description" content="Plain-English explanation of the format-judge harness, how Advocate measures whether AI search engines can cite your business.">
 <link rel="canonical" href="https://advocatemcp.com/methodology.html">
 <meta property="og:title" content="How Advocate measures citation-readiness">
 <meta property="og:description" content="The format-judge harness, explained.">
@@ -69,7 +69,7 @@
       <h1 style="margin:12px 0 24px">Citation-readiness, measured.</h1>
       <p style="font-size:18px;">
         The number you see on your dashboard ("Citation rating: 8.5/10") isn't a count of real
-        ChatGPT citations — we don't have access to OpenAI's logs and neither does anyone else
+        ChatGPT citations, we don't have access to OpenAI's logs and neither does anyone else
         making that claim. It's a <em>predicted</em> score, calibrated against the rubrics AI
         engines use internally. Here's exactly how we get to it.
       </p>
@@ -77,7 +77,7 @@
       <h2>The format-judge harness</h2>
       <p>
         For every business on Advocate, we generate the same HTML + JSON-LD that real AI bots
-        receive when they crawl the site. The renderer dispatches per-engine variants — Perplexity
+        receive when they crawl the site. The renderer dispatches per-engine variants, Perplexity
         gets a citation-friendly format, ChatGPT gets snippet-optimized output, Claude gets
         entity-rich blocks, Google AI Overview gets schema-heavy structured data. Same business
         facts, four different presentations.
@@ -112,7 +112,7 @@
           </tr>
           <tr>
             <td>Per-engine breakdown</td>
-            <td>Same harness run against the per-engine renderer variant. "Perplexity 8.5/10" means the rendered-for-Perplexity HTML scores 8.5/10 — not that Perplexity actually cited the business.</td>
+            <td>Same harness run against the per-engine renderer variant. "Perplexity 8.5/10" means the rendered-for-Perplexity HTML scores 8.5/10, not that Perplexity actually cited the business.</td>
           </tr>
         </tbody>
       </table>
@@ -128,7 +128,7 @@
 
       <h2>Where the real-citation data is</h2>
       <p>
-        For ground truth — actual times an AI engine cited your business in a real query —
+        For ground truth, actual times an AI engine cited your business in a real query,
         Advocate runs <strong>Competitor Radar</strong>: a weekly cron that polls Perplexity's
         live search API with curated queries for your category, then logs whether your domain
         appeared in the citations. Wins and losses are tracked over time and shown on the

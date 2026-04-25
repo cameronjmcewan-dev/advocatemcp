@@ -9,7 +9,7 @@
 <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
 <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-<title>AdvocateMCP — MCP server for local businesses</title>
+<title>AdvocateMCP, MCP server for local businesses</title>
 <meta name="description" content="AdvocateMCP is a Model Context Protocol server that lets any AI assistant (Claude, ChatGPT, Perplexity, Cursor) search and query AI-ready business agents." />
 <meta name="robots" content="index,follow" />
 <link rel="preconnect" href="https://api.fontshare.com" />
@@ -182,7 +182,7 @@ pre.code-block{
   <div class="doc-eyebrow">MCP server</div>
   <h1 class="doc-h1">AdvocateMCP</h1>
   <p class="doc-lede">
-    A <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener">Model Context Protocol</a> server that lets any AI assistant &mdash; Claude Desktop, Cursor, Perplexity, ChatGPT with MCP enabled &mdash; search a directory of AI-ready local businesses and query each one&rsquo;s canonical agent in real time. Neutral, platform-agnostic, zero setup per AI.
+    A <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener">Model Context Protocol</a> server that lets any AI assistant, Claude Desktop, Cursor, Perplexity, ChatGPT with MCP enabled, search a directory of AI-ready local businesses and query each one&rsquo;s canonical agent in real time. Neutral, platform-agnostic, zero setup per AI.
   </p>
 
   <h2 class="doc-h2">Endpoint</h2>
@@ -204,7 +204,7 @@ pre.code-block{
     When a user asks their AI assistant &ldquo;find me a <em>good</em> plumber in Boise who does 24/7 emergency,&rdquo; the assistant calls <code>search_businesses</code>, then <code>query_business_agent</code> on the top results. The agent answers in the business&rsquo;s own voice, with verified metadata and a trackable referral link. The AI assistant sees citation-ready answers instead of scraping a dozen inconsistent review sites.
   </p>
   <p class="doc-p">
-    For richer interactions, the A2A-style transactional tools (<code>get_availability</code>, <code>get_quote</code>, <code>reserve_slot</code>, <code>initiate_handoff</code>) let the AI assistant take action on behalf of the user &mdash; book a 30-minute window, get a price range, hand the conversation off to a human.
+    For richer interactions, the A2A-style transactional tools (<code>get_availability</code>, <code>get_quote</code>, <code>reserve_slot</code>, <code>initiate_handoff</code>) let the AI assistant take action on behalf of the user, book a 30-minute window, get a price range, hand the conversation off to a human.
   </p>
 
   <h2 class="doc-h2">Tools</h2>
@@ -215,14 +215,14 @@ pre.code-block{
     <tbody>
       <tr><td class="name">search_businesses</td><td>Search for registered businesses by category, name, or location. Returns slugs + agent endpoints.</td></tr>
       <tr><td class="name">query_business_agent</td><td>Query a specific business&rsquo;s AI advocate agent. Returns a citation-ready answer with referral link.</td></tr>
-      <tr><td class="name">get_availability</td><td>30-minute slot windows derived from the business&rsquo;s <code>hours_json</code>. v1 synthetic &mdash; real-calendar integration on the roadmap.</td></tr>
+      <tr><td class="name">get_availability</td><td>30-minute slot windows derived from the business&rsquo;s <code>hours_json</code>. v1 synthetic, real-calendar integration on the roadmap.</td></tr>
       <tr><td class="name">get_quote</td><td>Service price quote from <code>pricing_json_v2</code>. Returns an exact, range, or estimate label.</td></tr>
       <tr><td class="name">reserve_slot</td><td>Create a 15-minute HELD reservation; returns a signed <code>confirmation_token</code> the agent posts back to <code>/a2a/confirm</code>.</td></tr>
       <tr><td class="name">initiate_handoff</td><td>Start a handoff to a human (SMS/email via tenant routing) or another agent (signed continuation URL).</td></tr>
     </tbody>
   </table>
   <p class="doc-p">
-    The full machine-readable capability manifest &mdash; including input schemas, rate-limit declarations, and the list of business slugs &mdash; is published at <a href="https://api.advocatemcp.com/.well-known/mcp.json"><code>/.well-known/mcp.json</code></a>.
+    The full machine-readable capability manifest, including input schemas, rate-limit declarations, and the list of business slugs, is published at <a href="https://api.advocatemcp.com/.well-known/mcp.json"><code>/.well-known/mcp.json</code></a>.
   </p>
 
   <h2 class="doc-h2">Quick start</h2>

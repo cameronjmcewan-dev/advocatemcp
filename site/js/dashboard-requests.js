@@ -1,4 +1,4 @@
-/* AI Requests section — trend chart, top queries list, intent bars,
+/* AI Requests section, trend chart, top queries list, intent bars,
  * and a Recent Queries table that opens a drawer with the full Claude
  * response for each row. Registers as window.AMCP_SECTIONS['ai-requests']. */
 (function () {
@@ -31,7 +31,7 @@
   function botLabel(raw) { return BOT_LABELS[raw] || raw; }
 
   function fmtNum(n) {
-    if (n === undefined || n === null) return '—';
+    if (n === undefined || n === null) return ',';
     if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
     return String(n);
   }
@@ -142,8 +142,8 @@
 
   function rowHtml(q, idx) {
     var crawler  = botLabel(q.crawler_agent || 'unknown');
-    var intent   = q.intent ? (INTENT_LABELS[q.intent] || q.intent) : '—';
-    var clicked  = q.referral_clicked ? '<span style="color:var(--accent);font-weight:600">✓</span>' : '<span style="color:var(--muted)">—</span>';
+    var intent   = q.intent ? (INTENT_LABELS[q.intent] || q.intent) : ',';
+    var clicked  = q.referral_clicked ? '<span style="color:var(--accent);font-weight:600">✓</span>' : '<span style="color:var(--muted)">,</span>';
     var when     = AMCP_UI.fmtTs(q.timestamp);
     var queryTxt = truncate(q.query_text || '', 80);
     return '<div class="amcp-activity-row" role="button" tabindex="0" data-recent-id="' + esc(idx) + '" ' +
@@ -192,7 +192,7 @@
     if (!q) return;
 
     var crawler  = botLabel(q.crawler_agent || 'unknown');
-    var intent   = q.intent ? (INTENT_LABELS[q.intent] || q.intent) : '—';
+    var intent   = q.intent ? (INTENT_LABELS[q.intent] || q.intent) : ',';
     var clicked  = q.referral_clicked ? 'Yes' : 'No';
     var when     = AMCP_UI.fmtTs(q.timestamp);
     var response = q.response_text || '';

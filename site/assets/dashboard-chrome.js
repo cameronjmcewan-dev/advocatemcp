@@ -1,5 +1,5 @@
 /* ============================================================
-   Advocate — Dashboard chrome renderer
+   Advocate, Dashboard chrome renderer
    Renders sidebar, topbar, FAB help button + menu on every page.
    ============================================================ */
 
@@ -31,7 +31,7 @@
     { id: 'faqs',        href: '/FAQs.html',             g: '?', label: 'FAQs' },
   ];
 
-  // Admin-only nav — rendered only when window.AMCP_DATA.user_role === 'admin'.
+  // Admin-only nav, rendered only when window.AMCP_DATA.user_role === 'admin'.
   // Order follows the "operator console" pattern: Mission Control first (single-
   // page overview), then drill-downs (tenant list, cross-tenant queries). Paths
   // are /admin/* so they feel like one surface, not scattered files.
@@ -45,7 +45,7 @@
   /* Reads the current tenant from window.AMCP_DATA (populated after /api/
      client/me + /api/client/metrics resolve) and falls back to generic
      placeholders if the boot code hasn't finished yet. Never returns the
-     design-mockup florist persona — that would leak "Bloom & Stem" copy
+     design-mockup florist persona, that would leak "Bloom & Stem" copy
      to real users.
 
      Admin flavouring: when the session role is admin AND we aren't
@@ -86,7 +86,7 @@
   }
 
   /* Admin-only section. Rendered ONLY when the current session is an
-     admin — gated on window.AMCP_DATA.user_role (populated by shell.js
+     admin, gated on window.AMCP_DATA.user_role (populated by shell.js
      from the /api/client/me response). For regular users / preview mode
      this returns an empty string so the Main / Account sections stay
      flush against the business block. */
@@ -232,7 +232,7 @@
 
   /* Auto-load the client-side SPA router on every v2 page so sidebar
      clicks swap main content in-place instead of full-reloading. Not
-     gated on admin — every logged-in user gets seamless nav. */
+     gated on admin, every logged-in user gets seamless nav. */
   function loadRouter() {
     if (window.AMCP_ROUTER) return;
     if (document.getElementById('amcp-router-script')) return;
@@ -246,7 +246,7 @@
   /* Let the SPA router re-run speculation rules after a client-side
      navigation so the browser prerenders the siblings of the new
      page. Replaces the current <script type=speculationrules> block
-     wholesale — browsers treat re-inserted rules idempotently. */
+     wholesale, browsers treat re-inserted rules idempotently. */
   window.AdvocateChrome._reapplySpeculationRules = function () {
     const existing = document.getElementById('amcp-speculation-rules');
     if (existing) existing.remove();
@@ -255,7 +255,7 @@
 
   /* Load /js/v2/commandPalette.js on-demand when the current session is
      an admin. Avoids making every section page list the script tag
-     individually — admins get ⌘K everywhere, regular users don't fetch
+     individually, admins get ⌘K everywhere, regular users don't fetch
      the script at all.
      The palette module is self-contained (IIFE + global Cmd+K listener)
      so once it lands, it just works. Guard against double-load via the
@@ -273,7 +273,7 @@
 
   window.AdvocateChrome.getContentRoot = () => document.getElementById('page-content');
 
-  /* Speculation Rules — tell Chromium-based browsers to prerender the
+  /* Speculation Rules, tell Chromium-based browsers to prerender the
      sidebar nav targets the moment a user hovers (moderate eagerness) so
      the next click lands near-instantly and the #boot-splash doesn't
      flash between sections. Firefox and Safari ignore the tag; the
@@ -281,7 +281,7 @@
      page, which already prevents the black flash that was most jarring.
 
      Eagerness "moderate" means the browser only prefetches after a brief
-     hover / touch — not every link on page load — which keeps bandwidth
+     hover / touch, not every link on page load, which keeps bandwidth
      sane on low-end connections. */
   function injectSpeculationRules() {
     if (document.getElementById('amcp-speculation-rules')) return;
@@ -293,7 +293,7 @@
     } catch { return; }
 
     const isAdmin = (window.AMCP_DATA || {}).user_role === 'admin';
-    // Regular tenant pages: moderate eagerness (hover-triggered) — 7+ pages,
+    // Regular tenant pages: moderate eagerness (hover-triggered), 7+ pages,
     // prerendering them all on page load would waste bandwidth.
     // Admin pages: only 3 URLs, and admins almost certainly click between
     // them repeatedly, so use eager eagerness to prerender on page load.

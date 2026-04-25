@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#fbf9f5" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#141210" media="(prefers-color-scheme: dark)">
 <meta name="robots" content="noindex, nofollow">
-<title>Dashboard — Advocate</title>
+<title>Dashboard, Advocate</title>
 <link rel="icon" type="image/png" sizes="32x32"  href="/favicon-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
@@ -20,7 +20,7 @@
 <link rel="stylesheet" href="/assets/dashboard.css">
 <style>
   /* Hardcoded fallbacks so the splash paints Max's paper shade the
-     instant the HTML lands — before /assets/styles.css loads and the
+     instant the HTML lands, before /assets/styles.css loads and the
      CSS variables resolve. Without this, a dark-mode OS flashes the
      browser-default black on every sidebar click. */
   #boot-splash {
@@ -33,7 +33,7 @@
     #boot-splash { background: #141210; color: #8a7c78; }
   }
 
-  /* Preview-state card on the Phase 2 Overview — marks the dashboard as
+  /* Preview-state card on the Phase 2 Overview, marks the dashboard as
      a work-in-progress so users aren't misled by the incomplete section
      wiring. Phase 3 replaces this with real KPI cards wired to
      /api/client/metrics. */
@@ -58,7 +58,7 @@
   }
   .db-preview-meta strong { color: var(--ink-2); font-weight: 500; }
 
-  /* Sidebar brand-mark star + badge color — enforce the site-wide oxblood
+  /* Sidebar brand-mark star + badge color, enforce the site-wide oxblood
      rule inside the dashboard chrome. .sb-nav badge is white on maroon so
      it doesn't invert to dark-on-maroon in OS dark mode. */
   .sb-nav a .badge { color: #fff; }
@@ -74,7 +74,7 @@
 <!-- Onboarding state machine + dependencies. Loaded on /app.html
      specifically because that's where the inline Get Started panel
      and the welcome-tour bridge fire. Other v2 pages don't need
-     these — they only render data, not onboarding flows. -->
+     these, they only render data, not onboarding flows. -->
 <script src="/js/dashboard-ui.js"></script>
 <script src="/js/dashboard-onboarding.js"></script>
 <script src="/js/dashboard-dns-wizard.js"></script>

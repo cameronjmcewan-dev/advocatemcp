@@ -64,7 +64,7 @@
    *
    * Section modules cache `rendered = true` after first paint, so partial
    * in-place swaps leave stale data in AI Requests / Referral Clicks / Bot
-   * Activity. A full page reload with `?slug=X` is the reliable path — the
+   * Activity. A full page reload with `?slug=X` is the reliable path, the
    * shell's initial metrics fetch picks up the param and every section
    * renders fresh. */
   function loadSingleBusiness(slug) {
@@ -82,7 +82,7 @@
     return tail.map(function (d) { return Number(d.count) || 0; });
   }
 
-  // Most recent query timestamp — scan recent_queries for max.
+  // Most recent query timestamp, scan recent_queries for max.
   function lastActiveTs(a) {
     var recents = (a && a.recent_queries) || [];
     if (!recents.length) return null;
@@ -95,10 +95,10 @@
     return max;
   }
 
-  // Alert pill — catches zero-traffic and no-data states.
+  // Alert pill, catches zero-traffic and no-data states.
   function alertPill(b) {
     if (!b.analytics) {
-      return '<span class="badge badge-red" title="No analytics response — likely api_key divergence or backend down"><span class="badge-dot"></span>No data</span>';
+      return '<span class="badge badge-red" title="No analytics response, likely api_key divergence or backend down"><span class="badge-dot"></span>No data</span>';
     }
     var queries30d = 0;
     var days = (b.analytics.queries_last_30_days) || [];
@@ -106,7 +106,7 @@
     if (queries30d === 0 && (b.analytics.total_queries || 0) === 0) {
       return '<span class="badge badge-yellow" title="Zero queries in last 30 days"><span class="badge-dot"></span>No traffic</span>';
     }
-    return '<span style="color:var(--muted);font-size:var(--tx-xs)">—</span>';
+    return '<span style="color:var(--muted);font-size:var(--tx-xs)">,</span>';
   }
 
   function sortKey(b) {
@@ -227,7 +227,7 @@
 
       var lastTs = lastActiveTs(a);
       var lastLabel = lastTs ? (window.AMCP_UI ? AMCP_UI.fmtTs(lastTs) : String(lastTs))
-                             : '<span style="color:var(--muted)">—</span>';
+                             : '<span style="color:var(--muted)">,</span>';
 
       var sparkId = 'admin-spark-' + b.slug;
 
@@ -303,7 +303,7 @@
     var tableWrap = document.getElementById('admin-overview-table');
     if (!tableWrap || !adminData) return;
     var newBody = renderTableBody(adminData.businesses);
-    // Replace only the table portion — keep the tbl-head controls so the
+    // Replace only the table portion, keep the tbl-head controls so the
     // inputs don't get re-rendered mid-keystroke.
     var existingTable = tableWrap.querySelector('table');
     var existingEmpty = tableWrap.querySelector('.empty-desc');
@@ -341,7 +341,7 @@
     init: function (user) {
       if (user.role !== 'admin') return;
 
-      // If the URL has ?slug=X, we're in single-business mode — inject the
+      // If the URL has ?slug=X, we're in single-business mode, inject the
       // switcher pre-selected to that slug but skip the aggregate render.
       var urlSlug = new URLSearchParams(window.location.search).get('slug');
 
@@ -352,12 +352,12 @@
           injectSwitcher(data.businesses);
 
           if (urlSlug) {
-            // Single-business mode — pre-select dropdown, leave sections rendering from AMCP_DATA
+            // Single-business mode, pre-select dropdown, leave sections rendering from AMCP_DATA
             var sel = document.getElementById('biz-select');
             if (sel) sel.value = urlSlug;
             currentSlug = urlSlug;
           } else {
-            // Aggregate mode — flag for section modules (Activity) that support
+            // Aggregate mode, flag for section modules (Activity) that support
             // scope=all fetches, unlock the Radar sidebar item for admin
             // inspection of any tenant's radar, then render the aggregate view.
             window.AMCP_ADMIN_MODE = 'all';

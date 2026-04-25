@@ -1,4 +1,4 @@
-/* Activity section — reservations, handoffs, agent_requests, agent_reputation,
+/* Activity section, reservations, handoffs, agent_requests, agent_reputation,
  * competitor radar polls for the current business (single-biz mode) or an
  * aggregate cross-business feed (admin scope=all).
  *
@@ -24,7 +24,7 @@
   }
 
   function fmtTs(ts) {
-    if (!ts) return '—';
+    if (!ts) return ',';
     try {
       var d = new Date(ts);
       return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -45,7 +45,7 @@
   }
 
   function outcomeBadge(outcome) {
-    if (!outcome || outcome === 'none') return '<span style="color:var(--muted)">—</span>';
+    if (!outcome || outcome === 'none') return '<span style="color:var(--muted)">,</span>';
     var cls = 'badge-accent';
     if (outcome === 'reservation_confirmed' || outcome === 'handoff_completed') cls = 'badge-green';
     if (outcome === 'error') cls = 'badge-yellow';
@@ -69,7 +69,7 @@
       '</tr></thead><tbody>' + rows.join('') + '</tbody></table>';
   }
 
-  // Pretty-printed JSON for drawer bodies — already-escaped via a <pre> wrapper.
+  // Pretty-printed JSON for drawer bodies, already-escaped via a <pre> wrapper.
   function jsonBlock(label, obj) {
     var body;
     try {
@@ -86,7 +86,7 @@
   function kvRow(k, v) {
     return '<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--border);font-size:var(--tx-sm)">' +
       '<span style="color:var(--muted)">' + esc(k) + '</span>' +
-      '<span style="text-align:right;word-break:break-word">' + (v == null ? '<span style="color:var(--muted)">—</span>' : v) + '</span>' +
+      '<span style="text-align:right;word-break:break-word">' + (v == null ? '<span style="color:var(--muted)">,</span>' : v) + '</span>' +
       '</div>';
   }
 
@@ -121,7 +121,7 @@
     var body =
       kvRow('Tool', '<code>' + esc(a.tool_called) + '</code>') +
       kvRow('Agent', '<code>' + esc(a.agent_id) + '</code>') +
-      kvRow('Identity source', srcBadge(a.agent_id_source || '—')) +
+      kvRow('Identity source', srcBadge(a.agent_id_source || ',')) +
       kvRow('Outcome', outcomeBadge(a.outcome_signal)) +
       kvRow('Latency', a.latency_ms != null ? esc(a.latency_ms + ' ms') : null) +
       kvRow('Cost', a.cost_cents != null ? esc('¢' + a.cost_cents) : null) +
@@ -177,7 +177,7 @@
       });
     }
 
-    // Agent requests (key is composite since there's no server id in the client payload — use index)
+    // Agent requests (key is composite since there's no server id in the client payload, use index)
     var agWrap = document.getElementById('activity-agents-wrap');
     if (agWrap && !agWrap.dataset.bound) {
       agWrap.dataset.bound = '1';
@@ -211,7 +211,7 @@
     var h = t.handoffs || {};
     var held       = Number(r.held || 0) + Number(r.confirmed || 0) + Number(r.expired || 0);
     var confirmed  = Number(r.confirmed || 0);
-    // Approximate handoff-completed as total handoffs — server-side outcome_signal
+    // Approximate handoff-completed as total handoffs, server-side outcome_signal
     // rollup isn't in the totals envelope yet; agent_requests totals won't carry
     // it either, so we use total handoffs as a reasonable proxy.
     var completed  = Number(h.total || 0);
@@ -246,7 +246,7 @@
   }
 
   // ── Aggregate-mode renderer (admin scope=all) ────────────────────────────
-  // Mini sparkline buckets — we don't receive per-day counts in the aggregate
+  // Mini sparkline buckets, we don't receive per-day counts in the aggregate
   // payload so derive a synthetic 7-slot sparkline from the most recent items'
   // timestamps to give each business row a shape-at-a-glance.
   function syntheticSparkBuckets(items, slots) {
@@ -275,7 +275,7 @@
     var content = document.getElementById('content');
     if (!content) return;
 
-    // KPI header — 4 aggregate metrics
+    // KPI header, 4 aggregate metrics
     var agg = data.aggregate_totals || {};
     var r = agg.reservations || {};
     var h = agg.handoffs || {};
@@ -371,7 +371,7 @@
         ? '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:20px">' + bizCards + '</div>'
         : '') +
       '<div class="tbl-wrap">' +
-        '<div class="tbl-head"><div class="tbl-head-title">Recent activity — all tenants</div></div>' +
+        '<div class="tbl-head"><div class="tbl-head-title">Recent activity, all tenants</div></div>' +
         '<div style="max-height:500px;overflow:auto">' + feedHtml + '</div>' +
       '</div>';
 
@@ -406,14 +406,14 @@
   function renderTables(data) {
     var anyData = false;
 
-    // Reservations — rows are clickable drawer triggers.
+    // Reservations, rows are clickable drawer triggers.
     if (data.reservations && data.reservations.length > 0) {
       anyData = true;
       var resRows = data.reservations.map(function (r) {
         return '<tr data-kind="reservation" data-id="' + esc(r.id) + '" role="button" tabindex="0" style="cursor:pointer">' +
           '<td style="font-family:var(--font-mono);font-size:var(--tx-xs)">' + esc(r.id) + '</td>' +
           '<td>' + statusBadge(r.status) + '</td>' +
-          '<td style="font-size:var(--tx-xs)">' + esc(r.agent_id || '—') + '</td>' +
+          '<td style="font-size:var(--tx-xs)">' + esc(r.agent_id || ',') + '</td>' +
           '<td style="font-size:var(--tx-xs)">' + fmtTs(r.window_start) + ' → ' + fmtTs(r.window_end) + '</td>' +
           '<td style="font-size:var(--tx-xs);color:var(--muted)">' + fmtTs(r.requested_at) + '</td>' +
           '</tr>';
@@ -423,15 +423,15 @@
       document.getElementById('activity-reservations-wrap').style.display = '';
     }
 
-    // Handoffs — clickable drawer triggers.
+    // Handoffs, clickable drawer triggers.
     if (data.handoffs && data.handoffs.length > 0) {
       anyData = true;
       var hoRows = data.handoffs.map(function (h) {
         return '<tr data-kind="handoff" data-id="' + esc(h.id) + '" role="button" tabindex="0" style="cursor:pointer">' +
           '<td style="font-family:var(--font-mono);font-size:var(--tx-xs)">' + esc(h.id) + '</td>' +
           '<td>' + modeBadge(h.mode) + '</td>' +
-          '<td style="font-size:var(--tx-xs)">' + esc(h.delivered_via || '—') + '</td>' +
-          '<td style="font-size:var(--tx-xs)">' + esc(h.agent_id || '—') + '</td>' +
+          '<td style="font-size:var(--tx-xs)">' + esc(h.delivered_via || ',') + '</td>' +
+          '<td style="font-size:var(--tx-xs)">' + esc(h.agent_id || ',') + '</td>' +
           '<td style="font-size:var(--tx-xs);color:var(--muted)">' + fmtTs(h.created_at) + '</td>' +
           '</tr>';
       });
@@ -440,7 +440,7 @@
       document.getElementById('activity-handoffs-wrap').style.display = '';
     }
 
-    // Agent requests — clickable drawer triggers. Use index because the
+    // Agent requests, clickable drawer triggers. Use index because the
     // Railway payload doesn't expose a stable request id client-side.
     if (data.agent_requests && data.agent_requests.length > 0) {
       anyData = true;
@@ -449,8 +449,8 @@
           '<td style="font-family:var(--font-mono);font-size:var(--tx-xs)">' + esc(a.tool_called) + '</td>' +
           '<td style="font-size:var(--tx-xs)">' + esc(a.agent_id) + ' ' + srcBadge('(' + a.agent_id_source + ')') + '</td>' +
           '<td>' + outcomeBadge(a.outcome_signal) + '</td>' +
-          '<td style="font-size:var(--tx-xs)">' + (a.latency_ms != null ? a.latency_ms + 'ms' : '—') + '</td>' +
-          '<td style="font-size:var(--tx-xs)">' + (a.cost_cents != null ? '¢' + a.cost_cents : '—') + '</td>' +
+          '<td style="font-size:var(--tx-xs)">' + (a.latency_ms != null ? a.latency_ms + 'ms' : ',') + '</td>' +
+          '<td style="font-size:var(--tx-xs)">' + (a.cost_cents != null ? '¢' + a.cost_cents : ',') + '</td>' +
           '<td style="font-size:var(--tx-xs);color:var(--muted)">' + fmtTs(a.timestamp) + '</td>' +
           '</tr>';
       });
@@ -459,7 +459,7 @@
       document.getElementById('activity-agents-wrap').style.display = '';
     }
 
-    // Agent reputation — progress ring cell shows quality_score * 100%.
+    // Agent reputation, progress ring cell shows quality_score * 100%.
     if (data.agent_reputation && data.agent_reputation.length > 0) {
       anyData = true;
       var repRows = data.agent_reputation.map(function (r, i) {
@@ -496,7 +496,7 @@
     if (data.competitor_polls && data.competitor_polls.length > 0) {
       anyData = true;
       var pollRows = data.competitor_polls.map(function (p) {
-        var cited = p.tenant_cited ? '✓' : (p.citation_count > 0 ? '—' : 'no result');
+        var cited = p.tenant_cited ? '✓' : (p.citation_count > 0 ? ',' : 'no result');
         var cls = p.tenant_cited ? 'color:var(--green);font-weight:600' : 'color:var(--muted)';
         return '<tr>' +
           '<td style="font-size:var(--tx-sm)">' + esc(p.query_phrasing) + '</td>' +
@@ -551,7 +551,7 @@
         renderTables(data);
       })
       .catch(function (err) {
-        // AbortError is benign — skip reporting.
+        // AbortError is benign, skip reporting.
         if (err && err.name === 'AbortError') return;
         var errEl = document.getElementById('activity-error');
         if (errEl) {

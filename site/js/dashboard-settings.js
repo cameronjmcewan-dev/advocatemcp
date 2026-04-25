@@ -1,10 +1,10 @@
-/* Settings section — account info, API key rotate, profile edit, and a
+/* Settings section, account info, API key rotate, profile edit, and a
  * minimal account activity card.
  *
  * D6 upgrade:
  *  - Plan badge reads real AMCP_DATA.plan ('free'|'base'|'pro'), not role.
  *  - Profile form fetches /agents/:slug/profile via the Worker proxy
- *    (piggy-backed on /api/client/recommendations' fetchProfile path —
+ *    (piggy-backed on /api/client/recommendations' fetchProfile path,
  *    see the new /api/client/profile endpoint for writes).
  *  - Account activity card surfaces last sign-in + last rotation when
  *    we have them; falls back to "Unknown" otherwise.
@@ -27,7 +27,7 @@
 
   function setText(id, val) {
     var el = document.getElementById(id);
-    if (el) el.textContent = val || '—';
+    if (el) el.textContent = val || ',';
   }
 
   function planLabel(plan) {
@@ -52,10 +52,10 @@
       if (slugEl) slugEl.textContent = window.AMCP_DATA.slug;
     }
 
-    // Account activity — we don't yet have a last_login_at field from
+    // Account activity, we don't yet have a last_login_at field from
     // /api/client/me, so show an em-dash instead of a cosmetic "This session"
     // placeholder. Flip to a real value once the endpoint exposes it.
-    setText('account-last-login', '—');
+    setText('account-last-login', ',');
 
     var lastRotate = null;
     try { lastRotate = localStorage.getItem(LAST_ROTATE_KEY); } catch (_) { /* ignore */ }
@@ -139,7 +139,7 @@
         profileCache = profile;
       })
       .catch(function (err) {
-        // AbortError is benign; other failures are non-fatal — the form
+        // AbortError is benign; other failures are non-fatal, the form
         // stays with the fallback defaults.
         if (err && err.name === 'AbortError') return;
       });
@@ -448,7 +448,7 @@
           if (data && data.details && data.details.fieldErrors) {
             var firstField = Object.keys(data.details.fieldErrors)[0];
             var firstMsg   = data.details.fieldErrors[firstField] && data.details.fieldErrors[firstField][0];
-            if (firstField && firstMsg) detail += ' — ' + firstField + ': ' + firstMsg;
+            if (firstField && firstMsg) detail += ', ' + firstField + ': ' + firstMsg;
           }
           setOpsStatus(String(detail), 'error');
         } else {
@@ -525,7 +525,7 @@
               });
             };
           }
-          setRotateStatus('New key generated. Copy it now — it won\'t be shown again.', false);
+          setRotateStatus('New key generated. Copy it now, it won\'t be shown again.', false);
           AMCP_UI.toast('API key rotated', 'success');
           var nowIso = new Date().toISOString();
           try { localStorage.setItem(LAST_ROTATE_KEY, nowIso); } catch (_) { /* ignore */ }
@@ -568,7 +568,7 @@
 
   // Reveal the Get Started nav item (hidden by default once onboarded_at is
   // set) and navigate there. Checklist items that were already completed
-  // remain checked — the user can click into any specific one to re-run it.
+  // remain checked, the user can click into any specific one to re-run it.
   var openGsBtn = document.getElementById('btn-open-get-started');
   if (openGsBtn) {
     openGsBtn.addEventListener('click', function () {

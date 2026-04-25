@@ -1,4 +1,4 @@
-/* Spotlight tutorial — lives on /app.html only */
+/* Spotlight tutorial, lives on /app.html only */
 (function () {
   const STEPS = [
     { sels: ['.sb-biz', '.tb-left'], title: 'Your business',

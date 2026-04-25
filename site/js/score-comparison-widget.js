@@ -1,4 +1,4 @@
-/* Homepage "See the math" widget — predicted citation rating
+/* Homepage "See the math" widget, predicted citation rating
  * comparison: with-Advocate vs baseline.
  *
  * Reads pre-computed JSON from /data/score-comparison.json. Pure
@@ -22,7 +22,7 @@
   }
 
   function pctRate(rate) {
-    if (typeof rate !== "number" || !isFinite(rate)) return "—";
+    if (typeof rate !== "number" || !isFinite(rate)) return ",";
     return `${Math.round(rate * 100)}%`;
   }
 
@@ -117,7 +117,7 @@
       // Soft-fail: hide the mount entirely if the JSON is missing /
       // malformed. Better to show no widget than a broken one.
       mount.style.display = "none";
-      // Surface for debugging in dev — silent in prod.
+      // Surface for debugging in dev, silent in prod.
       if (typeof console !== "undefined" && console.warn) {
         console.warn("[score-comparison] failed to load:", err);
       }

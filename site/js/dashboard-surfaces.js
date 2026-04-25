@@ -1,4 +1,4 @@
-/* AI Surfaces section — shows every AI platform the tenant's agent is
+/* AI Surfaces section, shows every AI platform the tenant's agent is
  * syndicated onto (some live, some pending directory submission), and
  * provides a copy-paste schema.org JSON-LD block for their website `<head>`
  * so Google SGE / Bing Copilot can ingest their profile.
@@ -52,7 +52,7 @@
   //   - Surfaces that are ALWAYS live (our own MCP, the JSON-LD endpoint,
   //     crawler interception when on a custom domain).
   //   - Surfaces that are pending directory submission (Smithery, PulseMCP,
-  //     Anthropic's MCP registry) — static rows while we work through
+  //     Anthropic's MCP registry), static rows while we work through
   //     outreach.
   //   - Surfaces derived from the radar summary when available (Perplexity,
   //     ChatGPT) so the tenant sees real "you were cited X/Y times" counts.
@@ -84,7 +84,7 @@
     var rows = [
       {
         name: 'AdvocateMCP central',
-        hint: 'api.advocatemcp.com/mcp &mdash; any AI assistant that speaks MCP can connect',
+        hint: 'api.advocatemcp.com/mcp, any AI assistant that speaks MCP can connect',
         status: badge('live', 'Live'),
       },
       {
@@ -96,7 +96,7 @@
       },
       {
         name: 'Google SGE / Bing Copilot',
-        hint: 'Schema.org JSON-LD &mdash; paste the snippet below into your site &lt;head&gt;',
+        hint: 'Schema.org JSON-LD, paste the snippet below into your site &lt;head&gt;',
         status: badge('install', 'Install snippet'),
       },
       {
@@ -126,7 +126,7 @@
       },
       {
         name: 'Google Agent2Agent (A2A)',
-        hint: 'A2A protocol registry &mdash; infrastructure in place, listing pending',
+        hint: 'A2A protocol registry, infrastructure in place, listing pending',
         status: badge('pending', 'Coming soon'),
       },
     ];
@@ -172,7 +172,7 @@
 
         copy.onclick = function () {
           if (!navigator.clipboard) {
-            if (stat) stat.textContent = 'Clipboard not available — select manually.';
+            if (stat) stat.textContent = 'Clipboard not available, select manually.';
             return;
           }
           navigator.clipboard.writeText(snippet)
@@ -181,7 +181,7 @@
               setTimeout(function () { if (stat) stat.textContent = ''; }, 4000);
             })
             .catch(function () {
-              if (stat) stat.textContent = 'Copy failed — please select and copy manually.';
+              if (stat) stat.textContent = 'Copy failed, please select and copy manually.';
             });
         };
       })
@@ -201,7 +201,7 @@
       return;
     }
 
-    // Table paint 1 — no radar data yet, surfaces that don't depend on it
+    // Table paint 1, no radar data yet, surfaces that don't depend on it
     // render immediately so the section isn't blank while the radar fetch
     // is in flight.
     renderTable(null);
@@ -216,7 +216,7 @@
         .then(function (data) {
           if (data && data.summary) renderTable(data.summary);
         })
-        .catch(function () { /* silent — table already rendered */ });
+        .catch(function () { /* silent, table already rendered */ });
     }
   }
 

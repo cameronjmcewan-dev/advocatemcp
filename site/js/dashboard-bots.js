@@ -1,4 +1,4 @@
-/* Bot Activity section — crawler table, intent bars, 7×24 heatmap.
+/* Bot Activity section, crawler table, intent bars, 7×24 heatmap.
  * D4 upgrade: adds a UTC / Local time toggle (persisted in localStorage),
  * a 6-stop color legend, exact tooltips on every cell, and a "Last seen"
  * column derived from recent_queries grouped by crawler.
@@ -31,7 +31,7 @@
   };
 
   var DOW_LABELS_UTC = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  // Local labels are the same — only the content of the grid shifts.
+  // Local labels are the same, only the content of the grid shifts.
   var DOW_LABELS_LOCAL = DOW_LABELS_UTC;
 
   var TZ_KEY = 'amcp-bot-tz'; // 'utc' | 'local'
@@ -47,7 +47,7 @@
   function botLabel(raw) { return BOT_LABELS[raw] || raw; }
 
   function fmtNum(n) {
-    if (n === undefined || n === null) return '—';
+    if (n === undefined || n === null) return ',';
     return String(n);
   }
 
@@ -84,7 +84,7 @@
         '<td>' + esc(botLabel(pair[0])) + '</td>' +
         '<td style="text-align:right;font-variant-numeric:tabular-nums">' + fmtNum(pair[1]) + '</td>' +
         '<td style="text-align:right;color:var(--muted)">' + pct + '%</td>' +
-        '<td style="text-align:right;color:var(--muted);white-space:nowrap">' + (ts ? esc(AMCP_UI.fmtTs(ts)) : '—') + '</td>' +
+        '<td style="text-align:right;color:var(--muted);white-space:nowrap">' + (ts ? esc(AMCP_UI.fmtTs(ts)) : ',') + '</td>' +
         '</tr>';
     }).join('');
 
@@ -121,11 +121,11 @@
   }
 
   // Shift a UTC dow/hour pair to local time using the browser's offset.
-  // Server always emits UTC — we reconstruct a "last Sunday at hour:00 UTC"
+  // Server always emits UTC, we reconstruct a "last Sunday at hour:00 UTC"
   // instant, apply the offset, and re-read dow/hour in local time.
   function shiftCell(dow, hour) {
     // Synthetic UTC moment: pick any Sunday and add (dow*24 + hour) hours.
-    // The anchor is arbitrary — we only care about the weekday + hour.
+    // The anchor is arbitrary, we only care about the weekday + hour.
     var base = Date.UTC(2024, 0, 7, 0, 0, 0); // Jan 7 2024 was a Sunday
     var t = base + ((dow * 24 + hour) * 3600 * 1000);
     var d = new Date(t);
@@ -170,7 +170,7 @@
       return 'hm-5';
     }
 
-    // Toggle bar — UTC / Local with aria-pressed + keyboard handler.
+    // Toggle bar, UTC / Local with aria-pressed + keyboard handler.
     var toggleBar =
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px">' +
         '<div style="font-size:var(--tx-xs);color:var(--muted)">Showing: ' + esc(tzSuffix) + ' time</div>' +
@@ -199,7 +199,7 @@
       }
     }
 
-    // Color legend — 6 stops None → High
+    // Color legend, 6 stops None → High
     var legend =
       '<div style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:var(--tx-xs);color:var(--muted)">' +
         '<span>None</span>' +
@@ -216,7 +216,7 @@
 
     wrap.innerHTML = toggleBar + '<div class="heatmap">' + hourLabels + dayRows + '</div>' + legend;
 
-    // Wire the toggle buttons — rebuild the heatmap in place when switched.
+    // Wire the toggle buttons, rebuild the heatmap in place when switched.
     wrap.querySelectorAll('.amcp-tz-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var next = btn.dataset.tz;

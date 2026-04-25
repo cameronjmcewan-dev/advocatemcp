@@ -103,7 +103,7 @@
               </div>
               <div class="form-field"><label for="cf-message">Tell us more</label>
                 <textarea id="cf-message" name="message" required minlength="5" maxlength="4000"
-                          placeholder="The more detail, the better — screenshots welcome (reply to our confirmation email to attach)."></textarea>
+                          placeholder="The more detail, the better, screenshots welcome (reply to our confirmation email to attach)."></textarea>
               </div>
               <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
                 <span id="cf-status" aria-live="polite" style="font-size:13px;color:var(--muted);min-height:18px"></span>
@@ -152,7 +152,7 @@
                 if (res.ok && data.ok) {
                   form.reset();
                   status.style.color = 'var(--sage, #2f5c3d)';
-                  status.textContent = 'Message sent — we\'ll reply to ' + payload.email + ' shortly.';
+                  status.textContent = 'Message sent, we\'ll reply to ' + payload.email + ' shortly.';
                 } else {
                   status.style.color = 'var(--red, #b3261e)';
                   status.textContent = (data && data.detail) || 'Send failed. Email hello@advocatemcp.com directly?';

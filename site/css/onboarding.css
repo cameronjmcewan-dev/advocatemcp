@@ -1,5 +1,5 @@
 /* ═════════════════════════════════════════════════════════════════
-   Advocate — Onboarding (welcome + checklist + DNS wizard + tour)
+   Advocate, Onboarding (welcome + checklist + DNS wizard + tour)
    Loaded after redesign.css on the dashboard only. All rules scoped
    under dedicated class names so they can't bleed into other sections.
    All colors use tokens from /css/tokens.css.

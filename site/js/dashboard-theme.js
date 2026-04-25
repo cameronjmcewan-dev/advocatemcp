@@ -1,4 +1,4 @@
-// dashboard-theme.js — tiny runtime-theme helper exposed as window.AMCP_THEME.
+// dashboard-theme.js, tiny runtime-theme helper exposed as window.AMCP_THEME.
 // All section modules read accent colors through this shim instead of hardcoding
 // hex values; keeps the brand palette swappable from a single CSS :root block.
 (function () {

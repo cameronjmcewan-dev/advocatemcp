@@ -1,5 +1,5 @@
 /* ============================================================
-   Advocate — Shared styles
+   Advocate, Shared styles
    Warm light theme, maroon accent, plain-English friendly.
    ============================================================ */
 
@@ -15,7 +15,7 @@
   --line: #e4ddd0;
   --line-2: #d3c9b6;
 
-  /* Brand — locked deeper per request. Rule: every text surface is either
+  /* Brand, locked deeper per request. Rule: every text surface is either
      white on oxblood OR oxblood on cream; no light-pink text anywhere. */
   --maroon:    #5c1a3c;  /* primary oxblood, used for brand + text on cream */
   --maroon-2:  #3d0f26;  /* deepest, for hover + strong emphasis */
@@ -47,7 +47,7 @@
   --shadow-lg: 0 24px 48px -16px rgba(26,24,22,.18), 0 0 0 1px rgba(26,24,22,.05);
 }
 
-/* Dark mode — respect the user's OS preference by default.
+/* Dark mode, respect the user's OS preference by default.
    The [data-theme="dark"] selector is retained so a future toggle (or the
    dashboard chrome) can force dark independently of the system setting.
    The :not([data-theme="light"]) guard inside the media query lets an
@@ -185,7 +185,7 @@ p { margin: 0; line-height: 1.55; color: var(--ink-2); text-wrap: pretty; }
    Rule locked by the user: where the background is paper (cream), text is
    oxblood/maroon; where the background is maroon, text is paper. The nav bar
    stays cream in both light and OS-dark modes (it reads like a letterhead),
-   so everything inside it is explicitly maroon — overriding whatever the
+   so everything inside it is explicitly maroon, overriding whatever the
    page-level --ink tokens happen to be. */
 .nav {
   position: sticky; top: 0; z-index: 30;
@@ -205,7 +205,7 @@ p { margin: 0; line-height: 1.55; color: var(--ink-2); text-wrap: pretty; }
 }
 .brand-mark {
   width: 28px; height: 28px; border-radius: 8px;
-  /* Real star wordmark lives at /icon-192.png — solid maroon fill is a
+  /* Real star wordmark lives at /icon-192.png, solid maroon fill is a
      render fallback for the split-second before the image decodes and for
      environments that block the PNG. The "A" text inside is hidden
      visually but kept in the DOM as an accessible label. */
@@ -238,7 +238,7 @@ p { margin: 0; line-height: 1.55; color: var(--ink-2); text-wrap: pretty; }
   border-color: var(--maroon);
   color: var(--maroon-2);
 }
-/* The primary CTA in the nav (maroon bg) keeps white text — already true
+/* The primary CTA in the nav (maroon bg) keeps white text, already true
    via the global .btn-primary rule, but we override any inherited colors
    explicitly so the dark-mode --ink doesn't leak in. */
 .nav-cta .btn-primary { color: #fff; }

@@ -1,4 +1,4 @@
-/* Competitor Radar section — Pro-only (admin always sees it).
+/* Competitor Radar section, Pro-only (admin always sees it).
  *
  * Fetches GET /api/client/radar (which combines summary, basket, losses) and
  * renders 3 KPI sparklines, a recent polls table, a weekly trend, and a
@@ -19,7 +19,7 @@
   }
 
   function fmtTs(ts) {
-    if (!ts) return '—';
+    if (!ts) return ',';
     try {
       var d = new Date(ts);
       return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -104,7 +104,7 @@
 
     var rateSpark = weekly.map(function (w) { return Math.round(w.rate * 100); });
     var winsSpark = weekly.map(function (w) { return w.wins; });
-    var sizeSpark = [basketSize]; // static — no history for basket size
+    var sizeSpark = [basketSize]; // static, no history for basket size
 
     grid.innerHTML =
       kpi('Basket size',        basketSize,                                                  'Queries we poll weekly', sizeSpark) +
@@ -157,7 +157,7 @@
         '<polyline points="' + pts + '" fill="none" stroke="' + accent + '" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>' +
       '</svg>' +
       '<div style="display:flex;margin-top:6px">' + labels + '</div>';
-    // Silence linter — totals kept for future reuse.
+    // Silence linter, totals kept for future reuse.
     void totals;
   }
 
@@ -166,13 +166,13 @@
     if (!wrap) return;
     var rows = (summary && Array.isArray(summary.by_bot)) ? summary.by_bot : [];
     if (rows.length === 0) {
-      wrap.innerHTML = '<div class="empty-desc" style="font-size:var(--tx-sm);color:var(--muted);padding:8px 0">No polls yet — wait for the next weekly run.</div>';
+      wrap.innerHTML = '<div class="empty-desc" style="font-size:var(--tx-sm);color:var(--muted);padding:8px 0">No polls yet, wait for the next weekly run.</div>';
       return;
     }
     var cells = rows.map(function (r) {
       var label = r.bot === 'perplexity' ? 'Perplexity' : (r.bot === 'openai' ? 'ChatGPT (OpenAI)' : esc(r.bot));
-      var rate  = typeof r.citation_rate === 'number' ? (r.citation_rate * 100).toFixed(1) + '%' : '—';
-      var rank  = typeof r.avg_rank === 'number' && r.avg_rank ? r.avg_rank.toFixed(1) : '—';
+      var rate  = typeof r.citation_rate === 'number' ? (r.citation_rate * 100).toFixed(1) + '%' : ',';
+      var rank  = typeof r.avg_rank === 'number' && r.avg_rank ? r.avg_rank.toFixed(1) : ',';
       return '<div class="kpi-card" style="flex:1">' +
         '<div class="kpi-label">' + label + '</div>' +
         '<div class="kpi-val">' + rate + '</div>' +
@@ -206,21 +206,21 @@
     if (!wrap) return;
     var rows = (authority && Array.isArray(authority.authorities)) ? authority.authorities : [];
     if (rows.length === 0) {
-      wrap.innerHTML = '<div class="empty-desc" style="font-size:var(--tx-sm);color:var(--muted);padding:8px 0">No polls yet &mdash; wait for the next weekly run, then this lists the sites AI reaches for when answering about your category.</div>';
+      wrap.innerHTML = '<div class="empty-desc" style="font-size:var(--tx-sm);color:var(--muted);padding:8px 0">No polls yet, wait for the next weekly run, then this lists the sites AI reaches for when answering about your category.</div>';
       return;
     }
     var top = rows.slice(0, 12);
     var tRows = top.map(function (a) {
       var share = typeof a.share_of_polls === 'number'
         ? (a.share_of_polls * 100).toFixed(0) + '%'
-        : '—';
+        : ',';
       var bots = Array.isArray(a.by_bot) && a.by_bot.length > 0
         ? a.by_bot.map(function (b) {
             var label = b.bot === 'perplexity' ? 'PPX' : (b.bot === 'openai' ? 'GPT' : esc(b.bot));
             return '<span style="display:inline-block;padding:1px 6px;margin-right:4px;border:1px solid var(--border);border-radius:4px;font-size:var(--tx-xs);color:var(--muted)">' +
               label + ' ' + b.count + '</span>';
           }).join('')
-        : '<span style="color:var(--muted);font-size:var(--tx-xs)">—</span>';
+        : '<span style="color:var(--muted);font-size:var(--tx-xs)">,</span>';
       return '<tr>' +
         '<td style="font-size:var(--tx-sm);font-family:var(--mono)">' + esc(a.domain) + '</td>' +
         '<td style="font-size:var(--tx-sm);text-align:right;white-space:nowrap">' + a.polls_cited_in + '</td>' +
@@ -241,7 +241,7 @@
     var wrap = document.getElementById('radar-polls');
     if (!wrap) return;
     if (!Array.isArray(polls) || polls.length === 0) {
-      wrap.innerHTML = '<div class="empty-desc" style="font-size:var(--tx-sm);color:var(--muted);padding:12px 20px">No polls yet — Perplexity runs on a weekly cadence.</div>';
+      wrap.innerHTML = '<div class="empty-desc" style="font-size:var(--tx-sm);color:var(--muted);padding:12px 20px">No polls yet, Perplexity runs on a weekly cadence.</div>';
       return;
     }
     var rows = polls.slice(0, 50).map(function (p) {
@@ -251,9 +251,9 @@
       var competitors = Array.isArray(p.competitor_domains)
         ? p.competitor_domains.slice(0, 3).map(esc).join(', ') +
           (p.competitor_domains.length > 3 ? ' +' + (p.competitor_domains.length - 3) + ' more' : '')
-        : '—';
+        : ',';
       return '<tr>' +
-        '<td style="font-size:var(--tx-sm)">' + esc(p.query_phrasing || '—') + '</td>' +
+        '<td style="font-size:var(--tx-sm)">' + esc(p.query_phrasing || ',') + '</td>' +
         '<td>' + cited + '</td>' +
         '<td style="font-size:var(--tx-xs);color:var(--muted)">' + competitors + '</td>' +
         '<td style="font-size:var(--tx-xs);color:var(--muted);white-space:nowrap">' + esc(fmtTs(p.polled_at)) + '</td>' +
@@ -276,7 +276,7 @@
     }
     wrap.innerHTML = items.map(function (q) {
       var id  = esc(q.id != null ? q.id : q.basket_id);
-      var txt = esc(q.query_phrasing || q.query || '—');
+      var txt = esc(q.query_phrasing || q.query || ',');
       var src = q.is_auto_seeded ? '<span style="font-size:var(--tx-xs);color:var(--muted);margin-left:6px">auto</span>' : '';
       return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 10px;border-bottom:1px solid var(--border)">' +
         '<div style="font-size:var(--tx-sm)">' + txt + src + '</div>' +
@@ -285,7 +285,7 @@
     }).join('');
   }
 
-  // Basket CRUD handlers — wired once via delegation.
+  // Basket CRUD handlers, wired once via delegation.
   function wireBasketHandlers() {
     var list = document.getElementById('radar-basket-list');
     if (list && !list.dataset.bound) {
@@ -376,7 +376,7 @@
     document.getElementById('radar-content').style.display = '';
     clearError();
 
-    // In admin aggregate mode we don't have a slug baked into AMCP_DATA —
+    // In admin aggregate mode we don't have a slug baked into AMCP_DATA,
     // the user must pick a business first from the switcher. Fall back to an
     // empty state with a hint.
     var slug = currentSlug();

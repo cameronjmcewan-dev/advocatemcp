@@ -1,4 +1,4 @@
-/* Domains section — renders real CF SaaS hostname + Worker Route status.
+/* Domains section, renders real CF SaaS hostname + Worker Route status.
  *
  * Fetches GET /api/client/domain-info (session-authed) and surfaces:
  *   - Business header (name + domain)
@@ -62,7 +62,7 @@
       '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">' +
         '<div>' +
           '<div style="font-size:var(--tx-md);font-weight:600">' + esc(info.business_name || info.slug) + '</div>' +
-          '<div style="font-size:var(--tx-sm);color:var(--muted);font-family:var(--font-mono)">' + esc(info.domain || '— no domain registered') + '</div>' +
+          '<div style="font-size:var(--tx-sm);color:var(--muted);font-family:var(--font-mono)">' + esc(info.domain || ', no domain registered') + '</div>' +
         '</div>' +
         '<div style="font-size:var(--tx-xs);color:var(--muted)">' + lastHit + '</div>' +
       '</div>';
@@ -154,7 +154,7 @@
                       : 'badge-red';
         result.innerHTML =
           '<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">' +
-            '<span class="badge ' + statusCls + '"><span class="badge-dot"></span>' + esc(String(data.status || '—')) + ' ' + esc(data.status_text || '') + '</span>' +
+            '<span class="badge ' + statusCls + '"><span class="badge-dot"></span>' + esc(String(data.status || ',')) + ' ' + esc(data.status_text || '') + '</span>' +
             '<span style="font-family:var(--font-mono);font-size:var(--tx-xs);color:var(--muted)">' + esc(data.url || '') + '</span>' +
           '</div>' +
           '<pre style="background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-family:var(--font-mono);font-size:var(--tx-xs);white-space:pre-wrap;word-break:break-word;max-height:180px;overflow:auto;margin:0">' +
@@ -170,7 +170,7 @@
       });
   }
 
-  // Admin rotate-key flow — pops the drawer with a form for the ADMIN_SECRET
+  // Admin rotate-key flow, pops the drawer with a form for the ADMIN_SECRET
   // bearer token, confirms, then calls the Worker endpoint.
   function openAdminRotateDrawer() {
     var slug = currentSlug();
@@ -180,7 +180,7 @@
           'This rotates the api_key on Railway and resyncs it into D1. The previous key will stop working immediately.' +
         '</div>' +
         '<div style="padding:10px 12px;background:rgba(210,153,34,.08);border:1px solid rgba(210,153,34,.2);border-radius:6px;color:var(--yellow);font-size:var(--tx-xs)">' +
-          'This endpoint requires the ADMIN_SECRET bearer token. It is NOT the same as your session — paste it below.' +
+          'This endpoint requires the ADMIN_SECRET bearer token. It is NOT the same as your session, paste it below.' +
         '</div>' +
         '<label style="display:flex;flex-direction:column;gap:4px;font-size:var(--tx-xs);color:var(--muted)">' +
           'Admin secret' +
@@ -210,7 +210,7 @@
         status.textContent = 'Rotating…';
         status.style.color = 'var(--muted)';
 
-        // Call the Worker admin endpoint directly — it's on the same origin
+        // Call the Worker admin endpoint directly, it's on the same origin
         // the session-authed API uses, so AMCP.API_BASE works.
         fetch(window.AMCP.API_BASE + '/admin/businesses/' + encodeURIComponent(slug) + '/resync-api-key', {
           method: 'POST',
@@ -264,7 +264,7 @@
     if (adminCard && isAdmin) adminCard.style.display = '';
 
     // Hosted (wizard-signup) tenants have *.hosted.advocatemcp.com managed
-    // for them — no DNS to configure. If a non-admin somehow lands on this
+    // for them, no DNS to configure. If a non-admin somehow lands on this
     // section (direct URL, anchor click before the nav hide applied), show a
     // short message instead of fetching CF hostname status they can't act on.
     var isHosted = !!(window.AMCP_DATA && window.AMCP_DATA.is_hosted);
@@ -276,7 +276,7 @@
           '<div style="font-size:var(--tx-sm);color:var(--muted)">' +
             'Your agent lives at <span style="font-family:var(--font-mono)">' +
             esc((window.AMCP_DATA && window.AMCP_DATA.domain) || '') +
-            '</span>. DNS is managed for you — nothing to configure here.' +
+            '</span>. DNS is managed for you, nothing to configure here.' +
           '</div>';
       }
       // Hide the cards below the header so the section stays compact.

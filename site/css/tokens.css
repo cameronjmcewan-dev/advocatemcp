@@ -1,11 +1,11 @@
 /* ═════════════════════════════════════════════════════════════════
-   Advocate — Design tokens
+   Advocate, Design tokens
    Single source of truth for color, typography, and radius.
    Import at top of <head> on every public page, BEFORE other sheets.
    ═════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* Color — dark mode (default) */
+  /* Color, dark mode (default) */
   --bg:             #050202;
   --surface:        #0d0507;
   --surface-2:      #140a0c;

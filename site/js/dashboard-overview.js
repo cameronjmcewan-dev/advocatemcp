@@ -1,4 +1,4 @@
-/* Overview section — wires AMCP_DATA into the Overview section DOM.
+/* Overview section, wires AMCP_DATA into the Overview section DOM.
  * Reads from window.AMCP_DATA (set by dashboard.html after metrics fetch).
  * Registers as window.AMCP_SECTIONS.overview.
  *
@@ -27,7 +27,7 @@
   function botLabel(raw) { return BOT_LABELS[raw] || raw; }
 
   function fmtNum(n) {
-    if (n === undefined || n === null) return '—';
+    if (n === undefined || n === null) return ',';
     if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
     return String(n);
   }
@@ -57,7 +57,7 @@
   /* ── Real insight: pick the strongest signal, not a template ── */
   function buildInsight(data) {
     if (!data || !data.total_queries) {
-      return 'Your site isn\'t showing up in AI results yet — verify your Worker Route is active and /.well-known/ai-agent.json is reachable.';
+      return 'Your site isn\'t showing up in AI results yet, verify your Worker Route is active and /.well-known/ai-agent.json is reachable.';
     }
     var crawlers = data.queries_by_crawler || {};
     var entries  = Object.entries(crawlers).sort(function (a, b) { return b[1] - a[1]; });
@@ -65,7 +65,7 @@
       var top = entries[0];
       var share = data.total_queries > 0 ? Math.round((top[1] / data.total_queries) * 100) : 0;
       if (share >= 60) {
-        return botLabel(top[0]) + ' accounts for ' + share + '% of your traffic — diversifying across crawlers will reduce single-source risk.';
+        return botLabel(top[0]) + ' accounts for ' + share + '% of your traffic, diversifying across crawlers will reduce single-source risk.';
       }
     }
     var ctr = data.total_queries > 0 ? (data.referral_clicks / data.total_queries) : 0;
@@ -78,7 +78,7 @@
       var prior  = sumSlice(days, days.length - 14, days.length - 7);
       if (prior > 0 && recent > prior * 1.2) {
         var pct = Math.round(((recent - prior) / prior) * 100);
-        return 'AI query volume is up ' + pct + '% this week vs last — momentum is building.';
+        return 'AI query volume is up ' + pct + '% this week vs last, momentum is building.';
       }
     }
     var intentLabel = {
@@ -97,7 +97,7 @@
   function kpiCardHtml(id, label, hint) {
     return '<div class="kpi-card" data-kpi-id="' + id + '">' +
       '<div class="kpi-label">' + esc(label) + '</div>' +
-      '<div class="kpi-val" id="kpi-' + id + '-val">—</div>' +
+      '<div class="kpi-val" id="kpi-' + id + '-val">,</div>' +
       '<div class="kpi-spark" id="kpi-' + id + '-spark" style="margin-top:6px;height:20px"></div>' +
       '<div class="kpi-hint">' +
         '<span id="kpi-' + id + '-hint">' + esc(hint) + '</span>' +
@@ -134,7 +134,7 @@
     if (qDelta) qDelta.innerHTML = AMCP_UI.deltaChip(queriesCur, queriesPrev);
 
     // ── Clicks card ──
-    // No per-day clicks series exposed yet — reuse queries trend as a proxy
+    // No per-day clicks series exposed yet, reuse queries trend as a proxy
     // so the spark shows *something* meaningful; hint makes it clear this is
     // the 30d click bucket, not the daily series.
     var cVal = document.getElementById('kpi-clicks-val');
@@ -147,8 +147,8 @@
 
     // ── Top Bot card ──
     var bVal = document.getElementById('kpi-top-bot-val');
-    if (bVal) bVal.textContent = topBot ? botLabel(topBot) : '—';
-    // Sparkline of the top bot's daily share — we don't have per-bot per-day
+    if (bVal) bVal.textContent = topBot ? botLabel(topBot) : ',';
+    // Sparkline of the top bot's daily share, we don't have per-bot per-day
     // breakdown server-side, so use total daily counts scaled by the bot's
     // share. Directionally correct, avoids a new endpoint.
     var botShare = (topBot && data.total_queries > 0)
@@ -159,7 +159,7 @@
 
     // ── Top Intent card ──
     var iVal = document.getElementById('kpi-intent-val');
-    if (iVal) iVal.textContent = topIntent ? fmtIntent(topIntent) : '—';
+    if (iVal) iVal.textContent = topIntent ? fmtIntent(topIntent) : ',';
     AMCP_UI.sparkline(document.getElementById('kpi-intent-spark'), dayCounts);
   }
 
@@ -247,7 +247,7 @@
 
     ['queries', 'clicks', 'top-bot', 'intent'].forEach(function (id) {
       var v = document.getElementById('kpi-' + id + '-val');
-      if (v) v.textContent = id === 'top-bot' || id === 'intent' ? '—' : '0';
+      if (v) v.textContent = id === 'top-bot' || id === 'intent' ? ',' : '0';
     });
 
     /* Replace trend chart canvas with empty-state message */

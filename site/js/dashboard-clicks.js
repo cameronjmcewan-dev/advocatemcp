@@ -1,4 +1,4 @@
-/* Referral Clicks section — pulls real click_events from
+/* Referral Clicks section, pulls real click_events from
  * /api/client/clicks (Worker → Railway proxy) instead of proxying
  * queries_by_crawler as a misleading stand-in for click sources.
  *
@@ -25,7 +25,7 @@
   function botLabel(raw) { return BOT_LABELS[raw] || raw || 'unknown'; }
 
   function fmtNum(n) {
-    if (n === undefined || n === null) return '—';
+    if (n === undefined || n === null) return ',';
     if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
     return String(n);
   }
@@ -269,7 +269,7 @@
         renderRecentClicks(clicks);
       })
       .catch(function (err) {
-        // AbortError is benign — skip reporting.
+        // AbortError is benign, skip reporting.
         if (err && err.name === 'AbortError') return;
         // Preserve the KPIs but surface a soft failure in the slots that
         // depend on the clicks payload.

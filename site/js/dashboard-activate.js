@@ -53,7 +53,7 @@
     if (dnsEl) {
       var cards = dnsCard(data.cname_record) + dnsCard(data.txt_record);
       dnsEl.innerHTML = cards ||
-        '<p style="font-size:var(--tx-sm);color:var(--muted)">DNS setup complete — no additional records needed.</p>';
+        '<p style="font-size:var(--tx-sm);color:var(--muted)">DNS setup complete, no additional records needed.</p>';
     }
 
     setState('success');

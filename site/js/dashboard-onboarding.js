@@ -1,37 +1,37 @@
-/* Onboarding — welcome overlay, Get Started checklist, product tour.
+/* Onboarding, welcome overlay, Get Started checklist, product tour.
  *
  * Public API (window.AMCP_ONBOARDING):
- *   loadState(snapshot)   — call from the dashboard boot handler after
+ *   loadState(snapshot) , call from the dashboard boot handler after
  *                           AMCP_DATA is populated. Caches the snapshot
  *                           for subsequent getState() / isFirstLogin()
  *                           calls. Accepts null (admins, missing data).
- *   isFirstLogin()        — true iff state is present and the welcome
+ *   isFirstLogin()      , true iff state is present and the welcome
  *                           flow has not been completed yet. The boot
  *                           handler AND's this with user.role !== 'admin'
  *                           to decide whether to auto-open the overlay.
- *   openWelcome()         — show the 4-slide welcome overlay (also
+ *   openWelcome()       , show the 4-slide welcome overlay (also
  *                           callable from a "Restart welcome" link).
- *   openChecklistSection() — programmatically switch to the getting-
+ *   openChecklistSection(), programmatically switch to the getting-
  *                           started section (used by welcome → finish).
- *   startTour()           — begin the 5-stop dashboard tour.
- *   restart()             — alias for startTour(); intended for a
+ *   startTour()         , begin the 5-stop dashboard tour.
+ *   restart()           , alias for startTour(); intended for a
  *                           "Restart tour" footer link.
- *   markStep(key, value?) — POST /api/client/onboarding/step. Used
+ *   markStep(key, value?), POST /api/client/onboarding/step. Used
  *                           internally but also exposed for integrations
  *                           that want to tick arbitrary keys.
- *   getState()            — returns the cached OnboardingState blob
+ *   getState()          , returns the cached OnboardingState blob
  *                           or null.
  *
  * Registers:
- *   window.AMCP_SECTIONS['getting-started'] — renders the checklist
+ *   window.AMCP_SECTIONS['getting-started'], renders the checklist
  *                           section when the sidebar nav item is clicked.
  *
  * Depends on:
  *   window.AMCP.authedFetch  (dashboard-auth.js)
  *   window.AMCP_UI.openDrawer / toast  (dashboard-ui.js)
- *   window.AMCP_DATA         — populated by metrics fetch in dashboard shell
- *   window.AMCP_SECTIONS     — section registry in dashboard.html
- *   window.AMCP_DNS_WIZARD   — optional; enables the dns_configured
+ *   window.AMCP_DATA       , populated by metrics fetch in dashboard shell
+ *   window.AMCP_SECTIONS   , section registry in dashboard.html
+ *   window.AMCP_DNS_WIZARD , optional; enables the dns_configured
  *                           checklist action (dashboard-dns-wizard.js)
  */
 (function () {
@@ -78,7 +78,7 @@
     return !w.completed_at;
   }
 
-  /* "Restart tour" alias — same as startTour(). Named so that a footer
+  /* "Restart tour" alias, same as startTour(). Named so that a footer
    * link reads naturally ("Restart tour" → AMCP_ONBOARDING.restart()). */
   function restart() {
     startTour();
@@ -141,12 +141,12 @@
     {
       eyebrow: 'Welcome to Advocate',
       title:   'You built an agent.',
-      copy:    'Every AI assistant that asks about your business gets a direct, accurate answer — straight from you.',
+      copy:    'Every AI assistant that asks about your business gets a direct, accurate answer, straight from you.',
     },
     {
       eyebrow: 'What Advocate does',
       title:   'AI assistants ask about your business.',
-      copy:    'ChatGPT, Claude, Perplexity — they crawl the web for answers. Advocate intercepts them before they guess.',
+      copy:    'ChatGPT, Claude, Perplexity, they crawl the web for answers. Advocate intercepts them before they guess.',
     },
     {
       eyebrow: 'The setup',
@@ -156,7 +156,7 @@
     {
       eyebrow: 'You\'re almost set',
       title:   'Explore your dashboard.',
-      copy:    'Overview, AI Requests, Competitor Radar — your Get Started checklist walks you through each one.',
+      copy:    'Overview, AI Requests, Competitor Radar, your Get Started checklist walks you through each one.',
     },
   ];
 
@@ -177,7 +177,7 @@
     _stopSlideTimer();
     if (markComplete || _slideIdx >= SLIDE_COUNT - 1) {
       // Chain, don't parallelise. markOnboardingStep on the server does a
-      // read-modify-write that isn't atomic across Worker invocations —
+      // read-modify-write that isn't atomic across Worker invocations,
       // firing these in parallel means the later write overwrites the
       // earlier one, so welcome.completed_at gets wiped by
       // checklist.watched_welcome and the welcome re-opens on next login.
@@ -299,7 +299,7 @@
     return _scene1() + _scene2() + _scene3() + _scene4();
   }
 
-  /* Scene 1 — "You built an agent."
+  /* Scene 1, "You built an agent."
    *
    * A single hero composition: the Advocate mark, large and centered, with
    * concentric ripple circles expanding outward. No cartoon storefront.
@@ -308,7 +308,7 @@
    * Shared design language across scenes:
    *   - One accent color (burgundy). No oranges, teals, greys.
    *   - Radial gradient background: glow at center, fading to surface.
-   *   - Cubic-bezier(0.22, 1, 0.36, 1) for entries (out-quint — smooth
+   *   - Cubic-bezier(0.22, 1, 0.36, 1) for entries (out-quint, smooth
    *     deceleration, no bounce).
    *   - Drop shadows via feGaussianBlur + feOffset instead of fake offset
    *     rectangles.
@@ -375,10 +375,10 @@
     '</div>';
   }
 
-  /* Scene 2 — "AI assistants ask about your business."
+  /* Scene 2, "AI assistants ask about your business."
    *
    * Left column: three name pills (just a coloured dot + service name). The
-   * hand-drawn swirl/asterisk/atom marks are gone — the pills read instantly
+   * hand-drawn swirl/asterisk/atom marks are gone, the pills read instantly
    * as "AI platforms" without pretending to be real brand logos.
    *
    * Right: the Advocate shield again (same lockup as scene 1, smaller).
@@ -429,7 +429,7 @@
       '<rect width="640" height="360" fill="#050202"/>' +
       '<rect width="640" height="360" fill="url(#s2-bg)"/>' +
 
-      /* Three name pills — dot + label */
+      /* Three name pills, dot + label */
       '<g transform="translate(60,96)">' +
         '<g class="s2-p s2-p1">' +
           '<rect x="0" y="0" width="178" height="42" rx="21" fill="#140a0c" stroke="#2a1418" stroke-width="1"/>' +
@@ -452,7 +452,7 @@
         '</g>' +
       '</g>' +
 
-      /* Connecting curves — solid stroke with gradient */
+      /* Connecting curves, solid stroke with gradient */
       '<path class="s2-wire s2-w1" d="M238,117 C 340,117 380,168 478,180" fill="none" stroke="url(#s2-wire)" stroke-width="1.5"/>' +
       '<path class="s2-wire s2-w2" d="M238,179 C 340,179 380,180 478,180" fill="none" stroke="url(#s2-wire)" stroke-width="1.5"/>' +
       '<path class="s2-wire s2-w3" d="M238,241 C 340,241 380,192 478,180" fill="none" stroke="url(#s2-wire)" stroke-width="1.5"/>' +
@@ -471,12 +471,12 @@
     '</div>';
   }
 
-  /* Scene 3 — "Three steps to go live."
+  /* Scene 3, "Three steps to go live."
    *
    * Three horizontal cards, side by side. Each card: a large serif number
    * (01 / 02 / 03), a thin divider, a bold title, a short description.
    * Cards cascade in from below with a smooth deceleration; no pop, no
-   * bounce. Checkmarks were too juvenile — the numbers carry the order.
+   * bounce. Checkmarks were too juvenile, the numbers carry the order.
    */
   function _scene3() {
     return '<div class="amcp-welcome-scene">' +
@@ -524,7 +524,7 @@
         '<text x="20" y="70" font-size="44" font-weight="400" fill="#5c1532" font-family="\'Instrument Serif\',Georgia,serif">02</text>' +
         '<line x1="20" y1="92" x2="60" y2="92" stroke="#5c1532" stroke-width="1"/>' +
         '<text x="20" y="128" font-size="16" font-weight="600" fill="#e8e3e0" font-family="\'General Sans\',system-ui,sans-serif">Agent responds</text>' +
-        '<text x="20" y="158" font-size="12" fill="#8a7c78" font-family="\'General Sans\',system-ui,sans-serif"><tspan x="20" dy="0">Crawlers get canonical</tspan><tspan x="20" dy="16">answers — from you.</tspan></text>' +
+        '<text x="20" y="158" font-size="12" fill="#8a7c78" font-family="\'General Sans\',system-ui,sans-serif"><tspan x="20" dy="0">Crawlers get canonical</tspan><tspan x="20" dy="16">answers, from you.</tspan></text>' +
       '</g>' +
 
       /* Card 3 */
@@ -540,10 +540,10 @@
     '</div>';
   }
 
-  /* Scene 4 — "Your dashboard, explained."
+  /* Scene 4, "Your dashboard, explained."
    *
    * A single refined browser mock, centered, with real drop shadow via SVG
-   * filter. Two labels (not three) — fewer is cleaner. Label lines are thin
+   * filter. Two labels (not three), fewer is cleaner. Label lines are thin
    * solid strokes, not busy dashes. Chart line is a smooth spline.
    */
   function _scene4() {
@@ -710,7 +710,7 @@
    * allDone after each step and stamps onboarded_at on the final one, which
    * keeps the nav hidden on future logins. Triggered by the "Skip" button. */
   function _skipAll() {
-    // DNS is the one step that materially matters — without it, AI
+    // DNS is the one step that materially matters, without it, AI
     // crawlers can't reach the tenant's agent. Never let skip bypass it.
     var dnsPending = checklistKeys().indexOf('dns_configured') !== -1 && !isStepDone('dns_configured');
 
@@ -768,14 +768,14 @@
         '<div class="amcp-onb-intro-mark"><i data-lucide="sparkles"></i></div>' +
         '<div>' +
           '<div class="amcp-onb-intro-title">Welcome, ' + escHtml(name) + '</div>' +
-          '<div class="amcp-onb-intro-copy">Most customers are live in under 10 minutes. Pick up where you left off — progress saves automatically.</div>' +
+          '<div class="amcp-onb-intro-copy">Most customers are live in under 10 minutes. Pick up where you left off, progress saves automatically.</div>' +
         '</div>' +
       '</div>' +
       '<div class="amcp-onb-progress"><div class="amcp-onb-progress-fill" id="amcp-onb-progress-fill"></div></div>' +
       '<div class="amcp-onb-list" id="amcp-onb-list"></div>' +
       '<div style="display:flex;justify-content:flex-end;margin-top:16px">' +
         '<button type="button" class="btn-sm btn-ghost" id="amcp-onb-skip-all">' +
-          'Skip — I\u2019ll explore on my own' +
+          'Skip, I\u2019ll explore on my own' +
         '</button>' +
       '</div>'
     );
@@ -817,7 +817,7 @@
         if (window.AMCP_DNS_WIZARD && typeof window.AMCP_DNS_WIZARD.open === 'function') {
           window.AMCP_DNS_WIZARD.open();
         } else {
-          window.AMCP_UI && window.AMCP_UI.toast && window.AMCP_UI.toast('DNS wizard not available — reload the page.', 'error');
+          window.AMCP_UI && window.AMCP_UI.toast && window.AMCP_UI.toast('DNS wizard not available, reload the page.', 'error');
         }
         break;
       case 'previewed_voice':
@@ -835,20 +835,20 @@
     }
   }
 
-  /* Mock voice preview — pulls business_name out of AMCP_DATA and shows a
+  /* Mock voice preview, pulls business_name out of AMCP_DATA and shows a
    * representative sample answer in the drawer. No API call; this is a tour
    * stop, not a live render. Marking it complete unblocks the checklist. */
   function _openVoicePreview() {
     var name   = (window.AMCP_DATA && window.AMCP_DATA.business_name) || 'your business';
     var sample =
-      'Sure — ' + name + ' is a local business you can reach directly. ' +
+      'Sure, ' + name + ' is a local business you can reach directly. ' +
       'They\u2019re open most weekdays and handle inquiries through their booking page. ' +
       'For pricing, hours, or to schedule, tap through to their site.';
     var html =
       '<div class="amcp-dns-step">' +
         '<p class="amcp-dns-step-copy">' +
           'Here\u2019s roughly what your agent returns when ChatGPT or Perplexity asks about your business. ' +
-          'Your profile data (hours, services, pricing, credentials) shapes the tone — tune it in Settings.' +
+          'Your profile data (hours, services, pricing, credentials) shapes the tone, tune it in Settings.' +
         '</p>' +
         '<div style="padding:16px;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;line-height:1.55;font-size:var(--tx-sm);color:var(--text)">' +
           '<span style="font-size:var(--tx-xs);font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--accent-bright)">Sample answer</span><br/><br/>' +
@@ -916,7 +916,7 @@
       section:  'overview',
       step:     'Step 1 of 5',
       title:    'Overview',
-      copy:     'Your 30-day snapshot — AI requests, referral clicks, bot activity. This is the first thing to check each week.',
+      copy:     'Your 30-day snapshot, AI requests, referral clicks, bot activity. This is the first thing to check each week.',
     },
     {
       selector: '[data-section="ai-requests"]',
@@ -930,7 +930,7 @@
       section:  'radar',
       step:     'Step 3 of 5',
       title:    'Competitor Radar',
-      copy:     'Weekly polls against Perplexity + OpenAI. See your Share of Model — when an AI recommends someone in your category, how often is it you?',
+      copy:     'Weekly polls against Perplexity + OpenAI. See your Share of Model, when an AI recommends someone in your category, how often is it you?',
       skipIf: function () {
         var el = document.querySelector('[data-section="radar"]');
         return !el || el.offsetParent === null;

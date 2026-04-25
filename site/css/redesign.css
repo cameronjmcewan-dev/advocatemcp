@@ -1,5 +1,5 @@
 /* ═════════════════════════════════════════════════════════════════
-   Advocate — Redesign layer
+   Advocate, Redesign layer
    Sits on top of existing inline styles. No copy changes. Pure visuals.
    See /advocate-website-design.md for rationale + tokens.
    ═════════════════════════════════════════════════════════════════ */
@@ -177,7 +177,7 @@ body > * { position: relative; z-index: 1; }
 .ln-ticker::after  { right: 0; background: linear-gradient(270deg, var(--surface) 0%, transparent 100%); }
 .ticker-track { animation-duration: 42s !important; }
 
-/* ── 7. Feature rows — wider breathing room ───────────────────── */
+/* ── 7. Feature rows, wider breathing room ───────────────────── */
 .ln-feat-row {
   max-width: var(--container-w) !important;
   gap: 96px !important;
@@ -262,7 +262,7 @@ body > * { position: relative; z-index: 1; }
   box-shadow: 0 0 24px var(--accent-glow-2);
 }
 
-/* ── 8. Capabilities grid — hover glow-lift + top-edge accent ── */
+/* ── 8. Capabilities grid, hover glow-lift + top-edge accent ── */
 .ln-caps-inner { max-width: var(--container-w) !important; }
 .ln-cap {
   position: relative;
@@ -291,10 +291,10 @@ body > * { position: relative; z-index: 1; }
 }
 .ln-cap-icon { transition: box-shadow .25s, transform .25s; }
 
-/* ── 9. Trust band — wider ──────────────────────────────────── */
+/* ── 9. Trust band, wider ──────────────────────────────────── */
 .ln-trust-inner { max-width: var(--container-w) !important; }
 
-/* ── 10. Outcomes / Industries — pill tabs + cross-fade ─────── */
+/* ── 10. Outcomes / Industries, pill tabs + cross-fade ─────── */
 .ln-outcomes-inner { max-width: var(--container-w) !important; }
 .ln-tab-bar {
   border-bottom: 1px solid var(--border-accent) !important;
@@ -336,7 +336,7 @@ body > * { position: relative; z-index: 1; }
     0 0 32px var(--accent-glow-2) !important;
 }
 
-/* ── 11. Customer stories — glass + gradient numbers ────────── */
+/* ── 11. Customer stories, glass + gradient numbers ────────── */
 .ln-cases-hd { max-width: var(--container-w) !important; }
 .ln-case {
   background: var(--glass-bg) !important;
@@ -367,7 +367,7 @@ body > * { position: relative; z-index: 1; }
   50%      { filter: brightness(1.2);  }
 }
 
-/* ── 12. Pricing — Pro card elevated + glow ─────────────────── */
+/* ── 12. Pricing, Pro card elevated + glow ─────────────────── */
 .ln-price-inner { max-width: var(--container-w) !important; }
 .ln-price {
   position: relative;
@@ -414,7 +414,7 @@ body > * { position: relative; z-index: 1; }
   box-shadow: 0 10px 32px var(--accent-glow), 0 0 0 1px var(--accent-bright);
 }
 
-/* ── 13. Final CTA — background network echo ────────────────── */
+/* ── 13. Final CTA, background network echo ────────────────── */
 .ln-final-cta {
   position: relative;
   isolation: isolate;
@@ -443,7 +443,7 @@ body > * { position: relative; z-index: 1; }
   to { transform: rotate(360deg); }
 }
 
-/* ── 14. Footer — wordmark halo + hairline ──────────────────── */
+/* ── 14. Footer, wordmark halo + hairline ──────────────────── */
 .ln-footer {
   position: relative;
   border-top: 1px solid var(--border-accent) !important;
@@ -594,7 +594,7 @@ body > * { position: relative; z-index: 1; }
   color: #f0e7d4;
 }
 
-/* ── 17.B Smart Lead Routing mock card (feature row 3) — shadow parity ── */
+/* ── 17.B Smart Lead Routing mock card (feature row 3), shadow parity ── */
 /* Feature rows 1 and 2 have explicit dark+glow shadow treatments; row 3
    was falling through to only the base .ln-mock style which is nearly
    invisible in light mode. Match the treatment. */
@@ -614,7 +614,7 @@ body > * { position: relative; z-index: 1; }
     0 4px 12px rgba(61,10,34,0.06);
 }
 
-/* ── 17.C Final CTA halo — subdue in light mode ── */
+/* ── 17.C Final CTA halo, subdue in light mode ── */
 /* The rotating conic gradient reads as a faint glow in dark mode but as a
    pink blob against a light background. Dial opacity way down in light. */
 [data-theme="light"] .ln-final-cta::before {

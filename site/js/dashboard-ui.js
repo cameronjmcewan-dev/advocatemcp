@@ -1,4 +1,4 @@
-// dashboard-ui.js — shared UI primitives for the dashboard.
+// dashboard-ui.js, shared UI primitives for the dashboard.
 // All section modules consume helpers through window.AMCP_UI so visual
 // language stays consistent (sparklines, count-ups, delta chips, the
 // single drawer, and the single toast stack).
@@ -285,11 +285,11 @@
    * timestamp appeared 5 hours ahead).
    *
    * ISO 8601 with a timezone suffix ("2026-04-16T23:30:00Z" or +offset)
-   * is parsed correctly — pass those through unchanged.
+   * is parsed correctly, pass those through unchanged.
    */
   function parseServerTs(ts) {
     if (typeof ts === 'string' && /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$/.test(ts)) {
-      // SQLite datetime() shape — treat as UTC.
+      // SQLite datetime() shape, treat as UTC.
       return new Date(ts.replace(' ', 'T') + 'Z');
     }
     return new Date(ts);
@@ -304,7 +304,7 @@
     // Clock-drift safety: if the server's clock is a few seconds ahead
     // of ours, or if rounding pushes into the negative, treat as "just
     // now" rather than rendering "-4s ago". Beyond ~2 minutes of drift
-    // we surface the raw date — signals a real problem worth noticing.
+    // we surface the raw date, signals a real problem worth noticing.
     if (diff < 0) {
       if (diff > -120) return 'just now';
       return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });

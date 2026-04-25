@@ -1,4 +1,4 @@
-/* Recommendations section — lives-data rec cards + optimization checklist,
+/* Recommendations section, lives-data rec cards + optimization checklist,
  * fetched from GET /api/client/recommendations (Worker-side rules over
  * analytics + /agents/:slug/profile). Replaces the previous static
  * template-based cards.
@@ -29,7 +29,7 @@
       grid.innerHTML = '<div class="db-card" style="grid-column:1/-1">' +
         '<div class="empty">' +
           '<div class="empty-icon"><i data-lucide="check-circle"></i></div>' +
-          '<div class="empty-title">Everything looks good — no active recommendations.</div>' +
+          '<div class="empty-title">Everything looks good, no active recommendations.</div>' +
           '<div class="empty-desc">Keep monitoring your dashboard as traffic grows.</div>' +
         '</div></div>';
       if (window.lucide) lucide.createIcons();
@@ -97,7 +97,7 @@
       '</div></div>';
     var wrap = document.getElementById('checklist');
     if (wrap) wrap.innerHTML =
-      '<div class="empty-desc" style="font-size:var(--tx-sm);color:var(--muted)">—</div>';
+      '<div class="empty-desc" style="font-size:var(--tx-sm);color:var(--muted)">,</div>';
   }
 
   function render() {
@@ -124,7 +124,7 @@
         if (window.lucide) lucide.createIcons();
       })
       .catch(function (err) {
-        // AbortError is benign — skip reporting.
+        // AbortError is benign, skip reporting.
         if (err && err.name === 'AbortError') return;
         showError(String(err && err.message || err));
       });

@@ -1,28 +1,28 @@
-/* DNS wizard — guided CNAME/TXT setup for custom-domain tenants.
+/* DNS wizard, guided CNAME/TXT setup for custom-domain tenants.
  *
  * Opens the right-side drawer (AMCP_UI.openDrawer) and walks the user
  * through three stages:
  *
- *   1. Provider picker  — pick DNS host (GoDaddy, Namecheap, Cloudflare).
+ *   1. Provider picker, pick DNS host (GoDaddy, Namecheap, Cloudflare).
  *      Selection cached in localStorage so return visits skip this stage.
- *   2. Instructions     — schematic SVG diagram + copyable CNAME/TXT
+ *   2. Instructions   , schematic SVG diagram + copyable CNAME/TXT
  *                         record values specific to the chosen provider.
- *   3. Verification     — four live status lights (DoH probe, CF hostname
+ *   3. Verification   , four live status lights (DoH probe, CF hostname
  *                         active, SSL active, Worker Route present),
  *                         polling /api/client/domain-info every 10s until
  *                         all four go green, then marks
  *                         checklist.dns_configured complete.
  *
  * Public API (window.AMCP_DNS_WIZARD):
- *   open(initialProvider?) — open the drawer at the appropriate stage.
+ *   open(initialProvider?), open the drawer at the appropriate stage.
  *                            Passes through to AMCP_UI.openDrawer.
- *   close()                — programmatic close (stops polling too).
+ *   close()              , programmatic close (stops polling too).
  *
  * Depends on:
  *   window.AMCP.authedFetch (dashboard-auth.js)
  *   window.AMCP_UI.openDrawer / closeDrawer / toast (dashboard-ui.js)
- *   window.AMCP_DATA (slug, domain) — metrics fetch in dashboard shell
- *   window.AMCP_ONBOARDING.markStep (dashboard-onboarding.js) — to tick
+ *   window.AMCP_DATA (slug, domain), metrics fetch in dashboard shell
+ *   window.AMCP_ONBOARDING.markStep (dashboard-onboarding.js), to tick
  *                            checklist.dns_configured on first all-green.
  */
 (function () {
@@ -226,7 +226,7 @@
     return id || '';
   }
 
-  /* Generic DNS records table mock — shown above the real instructions as
+  /* Generic DNS records table mock, shown above the real instructions as
    * a visual anchor ("this is what the UI you're looking for looks like").
    * Provider-agnostic on purpose: most DNS dashboards share this layout. */
   function _schematicSVG() {
@@ -346,7 +346,7 @@
 
   /* Fetch /api/client/domain-info and, if cf_hostname.ownership_verification
    * is present, swap the TXT placeholder for a real record card. Silent on
-   * failure — the CNAME alone is enough to get started. */
+   * failure, the CNAME alone is enough to get started. */
   function _loadTxtRecord() {
     var slug = currentSlug();
     if (!slug || !window.AMCP || typeof window.AMCP.authedFetch !== 'function') return;
@@ -407,11 +407,11 @@
   /* ── Stage 3: verification ──────────────────────────────────────────────── */
   /*
    * Four live status lights:
-   *   1. DNS lookup         — DoH probe to cloudflare-dns.com/dns-query.
+   *   1. DNS lookup       , DoH probe to cloudflare-dns.com/dns-query.
    *                           Fastest signal; confirms the CNAME resolves.
-   *   2. Cloudflare hostname — cf_hostname.status === 'active'
-   *   3. SSL certificate    — cf_hostname.ssl_status === 'active'
-   *   4. Crawler route      — worker_route.present === true
+   *   2. Cloudflare hostname, cf_hostname.status === 'active'
+   *   3. SSL certificate  , cf_hostname.ssl_status === 'active'
+   *   4. Crawler route    , worker_route.present === true
    *
    * Poll /api/client/domain-info every 10s. First check fires immediately
    * on stage entry so the user sees progress without waiting.
@@ -506,7 +506,7 @@
 
   /* Query cloudflare-dns.com/dns-query for a CNAME record on the host. Short
    * timeout; returns false on any error. Resolving to any Answer counts as
-   * success — we don't check the target value because DoH sees the chain
+   * success, we don't check the target value because DoH sees the chain
    * before it follows it. */
   function _probeDoh(host) {
     if (!host) return Promise.resolve(false);

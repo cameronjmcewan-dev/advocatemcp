@@ -1,5 +1,5 @@
 /*!
- * AdvocateMCP context script — Session 5 (AI Handoff).
+ * AdvocateMCP context script, Session 5 (AI Handoff).
  *
  * Drop-in `<script src="https://advocatemcp.com/advocate-context.js">` tag
  * for customer landing pages. When a visitor arrives via an AI-referred
@@ -14,7 +14,7 @@
  * history.replaceState after the decode resolves so it does not linger in
  * browser history or leak via document.referrer on subsequent navigation.
  *
- * Zero dependencies. Zero tracking. The script never throws — a failed
+ * Zero dependencies. Zero tracking. The script never throws, a failed
  * decode quietly leaves window.advocateContext = null and the customer's
  * page renders its default experience.
  *
@@ -33,7 +33,7 @@
   var DEFAULT_API_BASE  = "https://api.advocatemcp.com";
   var DEFAULT_PARAM     = "amcp_t";
 
-  // Feature detection — don't run on very old browsers.
+  // Feature detection, don't run on very old browsers.
   if (typeof window === "undefined" || typeof fetch !== "function" || !window.URL) {
     return;
   }
@@ -117,7 +117,7 @@
     })
     .then(function (data) {
       if (!isValidContext(data)) {
-        // Keep the URL dirty if decode failed — the token might be valid
+        // Keep the URL dirty if decode failed, the token might be valid
         // for a retry from a different script version, and stripping it
         // silently would make debugging harder.
         return;
@@ -126,7 +126,7 @@
       stripTokenFromUrl();
     })
     .catch(function () {
-      // Network hiccup, CORS miss, whatever — the customer's page renders
+      // Network hiccup, CORS miss, whatever, the customer's page renders
       // its default experience. No error surfaced to the user or console.
     });
 })();

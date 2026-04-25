@@ -1,4 +1,4 @@
-/* window.AMCP — shared auth module for advocatemcp.com dashboard pages
+/* window.AMCP, shared auth module for advocatemcp.com dashboard pages
  *
  * Auth state lives in JS memory only. Tokens never touch localStorage or
  * sessionStorage. The amcp_refresh cookie (HttpOnly, SameSite=Strict,
@@ -17,7 +17,7 @@
     /* ── login ──────────────────────────────────────────────────────────
      * POST /api/auth/login
      * Sets AMCP.token on success.
-     * Throws the raw error response body on failure — callers inspect
+     * Throws the raw error response body on failure, callers inspect
      * err.error_code for: invalid_credentials | rate_limited |
      * platform_error | invalid_body */
     async login(email, password) {
@@ -45,7 +45,7 @@
           headers: AMCP.token ? { Authorization: `Bearer ${AMCP.token}` } : {},
         });
       } catch (_) {
-        // network error — fall through to clear state
+        // network error, fall through to clear state
       }
       AMCP.token = null;
       window.location.href = '/login.html';
@@ -115,7 +115,7 @@
 
     /* ── cachedFetch ────────────────────────────────────────────────────
      * Session-scoped memoisation for idempotent GETs. Key is the path +
-     * query string. Default TTL is 60s — tuned for the admin console
+     * query string. Default TTL is 60s, tuned for the admin console
      * workflow where the same /api/client/all-metrics is consumed by
      * Mission Control, Tenants, and Queries pages inside the same
      * 5–10-second user session. Returns a Response-shaped object so
@@ -146,7 +146,7 @@
             };
           }
         }
-      } catch { /* sessionStorage blocked — fall through */ }
+      } catch { /* sessionStorage blocked, fall through */ }
 
       const res = await AMCP.authedFetch(path);
       // Only cache 2xx responses; errors must always re-fetch.
@@ -158,7 +158,7 @@
             body:   body,
             status: res.status,
           }));
-        } catch { /* quota exceeded or serialisation failed — ignore */ }
+        } catch { /* quota exceeded or serialisation failed, ignore */ }
       }
       return res;
     },

@@ -1,4 +1,4 @@
-// Advocate theme tokens — mirrors /css/tokens.css for JS scenes.
+// Advocate theme tokens, mirrors /css/tokens.css for JS scenes.
 // Import from this file so a palette change is a one-file edit.
 export const theme = {
   accent:       '#3d0a22',
