@@ -5,6 +5,13 @@ import { queryAgent } from "../agent/query.js";
 import { requireApiKey } from "../middleware/auth.js";
 import { buildToken } from "../lib/tracked-url.js";
 import { resolveAgentId } from "../lib/agentIdentity.js";
+import { verifyGoogleRating } from "../lib/googlePlaces.js";
+import { checkLimit } from "../middleware/costRateLimit.js";
+import {
+  reserve as budgetReserve,
+  record as budgetRecord,
+  release as budgetRelease,
+} from "../middleware/budgetKillSwitch.js";
 import crypto from "crypto";
 import { z } from "zod";
 import {
@@ -304,6 +311,202 @@ agentRouter.post("/agents/:slug/rotate-key", (req: Request, res: Response) => {
   const newKey = crypto.randomUUID();
   db.prepare("UPDATE businesses SET api_key = ? WHERE slug = ?").run(newKey, slug);
   res.json({ ok: true, slug, new_api_key: newKey });
+});
+
+/* Per-slug rate limit on POST /agents/:slug/profile/verify-rating.
+ *
+ * Each verify call costs us a real Places API charge ($0.005-$0.02
+ * depending on field mask SKU). Tenants pasting the same URL repeatedly
+ * (or a misbehaving frontend retry loop) can rack up cost without
+ * adding any product value. Cap to:
+ *   - burst:  3 calls per minute   (allows accidental double-clicks)
+ *   - daily: 24 calls per 24 hours (a tenant doesn't need to verify
+ *           more than once a day per platform)
+ *
+ * Bucket key is the slug so each tenant has its own quota — admin
+ * impersonation uses the tenant's key here too. */
+const VERIFY_RATING_LIMITS = [
+  { label: "verify-rating:burst", cfg: { max: 3,  windowMs: 60_000 } },
+  { label: "verify-rating:daily", cfg: { max: 24, windowMs: 24 * 60 * 60_000 } },
+];
+
+const VerifyRatingBody = z.object({
+  platform: z.enum(["google"]),
+  url: z.string().trim().min(1).max(2000),
+});
+
+/**
+ * POST /agents/:slug/profile/verify-rating
+ *
+ * Body: { platform: "google", url: <maps URL or place_id> }
+ * Auth: Bearer api_key for the slug.
+ *
+ * Returns the live Google rating + count + recent review snippets so
+ * the BusinessProfile UI can populate ratings_json.google.{value,count,
+ * url,verified_at} and offer to import customer_quotes_json.
+ *
+ * Cost: ~$0.005-$0.02 per call (Places API New, Atomic field mask).
+ * Daily budget kill-switch reserves $0.05 per call (5x headroom for
+ * SKU upgrades). Per-slug rate limit caps abuse. Read-only — the
+ * endpoint never writes to businesses; the frontend separately PATCHes
+ * once the user confirms the values.
+ */
+agentRouter.post("/agents/:slug/profile/verify-rating", async (req: Request, res: Response) => {
+  const { slug } = req.params;
+
+  // Bearer auth against the slug's api_key. Same shape as PATCH profile
+  // so admin impersonation (worker forwards the impersonated tenant's
+  // key) works without further code.
+  const authHeader = req.headers.authorization ?? "";
+  if (!authHeader.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Missing Authorization header" });
+    return;
+  }
+  const apiKey = authHeader.slice(7).trim();
+  const db = getDb();
+  const biz = db
+    .prepare("SELECT id FROM businesses WHERE slug = ? AND api_key = ?")
+    .get(slug, apiKey) as { id: number } | undefined;
+  if (!biz) {
+    res.status(401).json({ error: "Invalid API key for this slug" });
+    return;
+  }
+
+  // Validate body shape before touching the limit/budget gates so a
+  // malformed request doesn't burn through the per-tenant bucket.
+  const parsed = VerifyRatingBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "invalid_body", details: parsed.error.flatten() });
+    return;
+  }
+  const { platform, url } = parsed.data;
+
+  // Per-slug rate limit (defense-in-depth).
+  const gate = checkLimit({ key: `verify-rating:${slug}`, limits: VERIFY_RATING_LIMITS });
+  if (!gate.allowed) {
+    const retryAfterSec = Math.ceil(gate.retryAfterMs / 1000);
+    res.setHeader("Retry-After", String(retryAfterSec));
+    res.status(429).json({
+      error: "rate_limited",
+      message: `Too many verify attempts (${gate.label}). Try again in ${retryAfterSec}s.`,
+      retry_after_seconds: retryAfterSec,
+    });
+    return;
+  }
+
+  // Daily-total kill switch — protects the global account from runaway
+  // verification storms across all tenants. $0.05 reservation gives 5x
+  // headroom over actual Places API atomic-tier cost.
+  const VERIFY_MAX_USD = 0.05;
+  const budget = budgetReserve(VERIFY_MAX_USD);
+  if (!budget.allowed) {
+    res.status(503).json({
+      error: "budget_exhausted",
+      message: `Daily AI budget exhausted ($${budget.capUsd.toFixed(2)} cap, $${budget.remainingUsd.toFixed(2)} left). Try again after UTC midnight.`,
+      remaining_usd: budget.remainingUsd,
+      cap_usd: budget.capUsd,
+    });
+    return;
+  }
+
+  if (platform !== "google") {
+    // Defensive — zod already enforces this, but in case the enum gains
+    // values later, fail closed rather than silently no-op.
+    budgetRelease(VERIFY_MAX_USD);
+    res.status(400).json({ error: "unsupported_platform", platform });
+    return;
+  }
+
+  const apiKeyEnv = process.env.GOOGLE_PLACES_API_KEY ?? "";
+  try {
+    const result = await verifyGoogleRating(url, apiKeyEnv);
+    if (!result.ok) {
+      // No spend incurred when our own pre-checks reject; only count
+      // budget when we actually hit Places API. The lib distinguishes
+      // these by reason — invalid_url and no_api_key never call out.
+      const incurredSpend =
+        result.reason === "place_not_found" || result.reason === "places_api_error";
+      if (incurredSpend) {
+        // Estimate atomic-tier cost ($0.005); Places New atomic SKU.
+        budgetRecord(VERIFY_MAX_USD, 0.005);
+      } else {
+        budgetRelease(VERIFY_MAX_USD);
+      }
+      const status =
+        result.reason === "no_api_key" ? 503 :
+        result.reason === "place_not_found" ? 404 :
+        result.reason === "redirect_failed" || result.reason === "invalid_url" ? 422 :
+        502;
+      res.status(status).json({
+        ok: false,
+        reason: result.reason,
+        message: result.message,
+      });
+      return;
+    }
+
+    // Successful Places call — record the actual atomic-tier spend.
+    budgetRecord(VERIFY_MAX_USD, 0.005);
+
+    // Audit-log the verification (separately from PATCH writes since
+    // verify is read-only — but we still want a forensic trail of who
+    // queried what URL when).
+    try {
+      const dbAudit = getDb();
+      dbAudit.prepare(`
+        CREATE TABLE IF NOT EXISTS audit_logs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          ts TEXT NOT NULL,
+          action TEXT NOT NULL,
+          slug TEXT,
+          actor_hint TEXT,
+          ip TEXT,
+          fields TEXT,
+          meta TEXT
+        )
+      `).run();
+      dbAudit.prepare(
+        `INSERT INTO audit_logs (ts, action, slug, actor_hint, ip, fields, meta) VALUES (?,?,?,?,?,?,?)`,
+      ).run(
+        new Date().toISOString(),
+        "profile.verify-rating",
+        slug,
+        apiKey.slice(0, 12) + "…",
+        String(req.headers["x-forwarded-for"] ?? req.socket?.remoteAddress ?? "—"),
+        JSON.stringify(["google"]),
+        JSON.stringify({ place_id: result.placeId, url_pasted: url.slice(0, 200) }),
+      );
+    } catch (auditErr) {
+      console.warn("[verify-rating] audit insert failed (non-fatal):", auditErr);
+    }
+
+    // Shape the response for the UI: rating + count for the platform
+    // row, plus quotes[] the user can import into customer_quotes_json.
+    const verifiedAt = new Date().toISOString();
+    res.json({
+      ok: true,
+      platform,
+      place_id: result.placeId,
+      verified_at: verifiedAt,
+      rating: result.details.rating,
+      count: result.details.userRatingCount,
+      url: result.details.googleMapsUri,
+      display_name: result.details.displayName,
+      formatted_address: result.details.formattedAddress,
+      quotes: result.details.reviews.map((r) => ({
+        platform: "google",
+        rating: r.rating,
+        text: r.text,
+        author: r.author,
+        date: r.publishTime,
+        relative_time: r.relativeTime,
+      })),
+    });
+  } catch (err) {
+    budgetRelease(VERIFY_MAX_USD);
+    console.error("[verify-rating] unexpected error:", err);
+    res.status(500).json({ error: "internal_error", message: err instanceof Error ? err.message : String(err) });
+  }
 });
 
 agentRouter.post("/agents/:slug/query", requireApiKey, async (req: Request, res: Response) => {

@@ -85,12 +85,23 @@ export function buildBusinessJsonLd(
     // If no platform data, fall back to legacy star_rating + review_count.
     const aggregate = computePlatformAggregate(business);
     if (aggregate) {
+      const ratingsForVerified = parseRatingsJson(business);
+      // Use the most-recent verified_at across platforms — gives the
+      // crawler a single dateModified to anchor on. Self-reported
+      // ratings have no verified_at and emit no date.
+      let mostRecentVerifiedAt: string | null = null;
+      for (const r of Object.values(ratingsForVerified)) {
+        if (r && r.verified_at && (!mostRecentVerifiedAt || r.verified_at > mostRecentVerifiedAt)) {
+          mostRecentVerifiedAt = r.verified_at;
+        }
+      }
       ld.aggregateRating = {
         "@type": "AggregateRating",
         ratingValue: aggregate.value,
         reviewCount: aggregate.count,
         bestRating: 5,
         worstRating: 1,
+        ...(mostRecentVerifiedAt ? { dateModified: mostRecentVerifiedAt } : {}),
       };
     } else if (business.star_rating != null) {
       ld.aggregateRating = {
@@ -215,6 +226,13 @@ interface RatingSourceWithUrl {
   rating: number;
   count: number;
   url?: string;
+  // Verification metadata stamped by POST /agents/:slug/profile/verify-rating
+  // when the source has a public read API (Google only, today). When
+  // both fields are present, the JSON-LD renderer adds a `dateModified`
+  // hint on the AggregateRating so AI judges can distinguish a
+  // live-pulled rating from a self-reported one.
+  place_id?: string;
+  verified_at?: string;
 }
 
 interface ParsedRatings {

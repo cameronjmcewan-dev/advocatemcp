@@ -84,6 +84,12 @@
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
+  // Capitalize first letter — used to build camelCase dataset keys
+  // matching kebab-case data-* HTML attrs:
+  //   data-verified-place-id-google → dataset.verifiedPlaceIdGoogle
+  // Both render-seed and verify-handler write/read through this helper
+  // so a typo on one side fails fast at runtime.
+  function cap(s) { return s ? s[0].toUpperCase() + s.slice(1) : s; }
   function csvJoin(v) { return Array.isArray(v) ? v.join(', ') : (v == null ? '' : String(v)); }
   function num(v) {
     const n = Number(v); return Number.isFinite(n) ? n : '';
@@ -342,6 +348,23 @@
       { key: "facebook", label: "Facebook",         placeholder: "https://www.facebook.com/..." },
       { key: "bbb",      label: "Better Business Bureau", placeholder: "https://www.bbb.org/..." },
     ];
+    // Pre-seed dataset attrs for any platform that was already verified
+    // on the server. Without this, a second save would lose the
+    // place_id + verified_at because collectRatings reads them off the
+    // form's dataset (the verify handler writes them there).
+    //
+    // HTML kebab-case `data-verified-place-id-google` maps to JS camelCase
+    // `dataset.verifiedPlaceIdGoogle` per the spec — see the dsKey helper
+    // in collectRatings + the click handler below for the matching read
+    // side. Keeping this in lockstep with dsKey() is critical.
+    const datasetSeed = platforms
+      .map((plat) => {
+        const r = ratings[plat.key] || {};
+        const a = r.place_id ? ` data-verified-place-id-${plat.key}="${esc(r.place_id)}"` : "";
+        const b = r.verified_at ? ` data-verified-at-${plat.key}="${esc(r.verified_at)}"` : "";
+        return a + b;
+      })
+      .join("");
     return `
       <div class="card-dash" data-form="ratings">
         <div class="card-head">
@@ -350,12 +373,22 @@
             <div class="sub">Add the platforms you have a real listing on. AI search engines treat these as third-party verification — the single biggest lift to your citation score (~+1 to +2 points per platform on the format-judge harness).</div>
           </div>
         </div>
-        <form id="form-ratings" class="prof-form">
+        <form id="form-ratings" class="prof-form"${datasetSeed}>
+
           ${platforms.map(plat => {
             const r = ratings[plat.key] || {};
+            // Google gets an inline "Verify" button — paste the Maps URL,
+            // click verify, server hits Places API (New) and populates
+            // rating + count + offers to import recent review snippets.
+            // Other platforms have no public read API yet, so users
+            // self-report (existing path).
+            const showVerify = plat.key === "google";
+            const verifiedBadge = (r.verified_at && r.place_id)
+              ? `<span class="rating-verified" title="Verified via Google Places on ${esc(r.verified_at)}">✓ Verified</span>`
+              : "";
             return `
               <fieldset class="ops-group">
-                <legend>${esc(plat.label)}</legend>
+                <legend>${esc(plat.label)} ${verifiedBadge}</legend>
                 <div class="prof-row-3">
                   <label>Rating
                     <input type="number" min="0" max="5" step="0.1" name="${plat.key}_rating" value="${r.rating != null ? r.rating : ''}" placeholder="4.8">
@@ -367,6 +400,14 @@
                     <input type="url" name="${plat.key}_url" value="${esc(r.url || '')}" placeholder="${esc(plat.placeholder)}">
                   </label>
                 </div>
+                ${showVerify ? `
+                  <div class="rating-verify-row">
+                    <button type="button" class="btn btn-ghost btn-sm" data-verify-platform="${plat.key}">
+                      Verify with Google
+                    </button>
+                    <span class="rating-verify-status" data-verify-status="${plat.key}"></span>
+                  </div>
+                ` : ""}
               </fieldset>
             `;
           }).join('')}
@@ -687,6 +728,140 @@
         list.appendChild(div.firstElementChild);
       });
     }
+
+    // ── "Verify with Google" handler ────────────────────────────────────
+    // The rating card's per-platform fieldsets carry an optional verify
+    // button (currently only Google has a public read API). Click flow:
+    //
+    //   1. Read the URL field value (Maps share link or pasted URL)
+    //   2. POST /api/client/verify-rating { platform, url }
+    //   3. On 200: write rating + count + url back into the fieldset
+    //      inputs, stamp place_id + verified_at on the form (so the
+    //      next save persists them), refresh the badge, and offer to
+    //      import recent review snippets into the customer-quotes card.
+    //   4. On error: show an inline message ON THE FIELDSET, never a
+    //      browser alert (alerts break the keyboard flow).
+    //
+    // Verified metadata (place_id, verified_at) lives on the form
+    // element via dataset so collectRatings can read it without a
+    // separate state object.
+    const ratingsForm = document.getElementById('form-ratings');
+    if (ratingsForm) {
+      ratingsForm.addEventListener('click', async (ev) => {
+        const btn = ev.target.closest('[data-verify-platform]');
+        if (!btn) return;
+        ev.preventDefault();
+        const platform = btn.getAttribute('data-verify-platform');
+        const af = window.AMCP && window.AMCP.authedFetch;
+        if (!af) { return; }
+        const urlInput = ratingsForm.elements[`${platform}_url`];
+        const ratingInput = ratingsForm.elements[`${platform}_rating`];
+        const countInput = ratingsForm.elements[`${platform}_count`];
+        const status = ratingsForm.querySelector(`[data-verify-status="${platform}"]`);
+        const url = (urlInput?.value || "").trim();
+        if (!url) {
+          if (status) status.textContent = "Paste your Google Maps URL above first.";
+          if (status) status.style.color = "var(--red)";
+          return;
+        }
+        btn.disabled = true;
+        if (status) {
+          status.textContent = "Checking with Google…";
+          status.style.color = "var(--ink-2)";
+        }
+        try {
+          const res = await af('/api/client/verify-rating', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ platform, url }),
+          });
+          const body = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            const msg = body.message || body.error || `HTTP ${res.status}`;
+            if (status) {
+              status.textContent = msg.length > 200 ? msg.slice(0, 200) + "…" : msg;
+              status.style.color = "var(--red)";
+            }
+            return;
+          }
+          // Populate fields with verified values. We do NOT auto-save —
+          // the user clicks "Save ratings" to commit, matching the
+          // explicit-save pattern of every other card.
+          if (typeof body.rating === "number" && ratingInput) ratingInput.value = body.rating;
+          if (typeof body.count === "number" && countInput) countInput.value = body.count;
+          if (body.url && urlInput) urlInput.value = body.url;
+          // Stash place_id + verified_at on the form for collectRatings
+          // to pick up on the next save. Match the dsKey() naming used
+          // on render seed + collectRatings.
+          ratingsForm.dataset[`verifiedPlaceId${cap(platform)}`] = body.place_id || "";
+          ratingsForm.dataset[`verifiedAt${cap(platform)}`] = body.verified_at || "";
+          if (status) {
+            status.style.color = "var(--maroon)";
+            const name = body.display_name ? ` (${body.display_name})` : "";
+            status.textContent = `✓ Verified${name} — ${body.rating}★ from ${body.count} reviews. Click "Save ratings" to commit.`;
+          }
+
+          // Offer to import the returned review quotes. We don't auto-
+          // append because the customer-quotes card has explicit save +
+          // editing — silently mutating it would surprise the user.
+          if (Array.isArray(body.quotes) && body.quotes.length > 0) {
+            offerQuoteImport(body.quotes);
+          }
+        } catch (err) {
+          if (status) {
+            status.textContent = `Network error: ${(err && err.message) || err}`;
+            status.style.color = "var(--red)";
+          }
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    }
+  }
+
+  /* Append imported Google reviews into the customer-quotes card.
+   * Behaviour: we pick the top 3 reviews (by Google's order, which is
+   * relevance), convert to our quote shape, and append as new entries.
+   * Empty trailing rows in the card stay where they are. */
+  function offerQuoteImport(quotes) {
+    if (!Array.isArray(quotes) || quotes.length === 0) return;
+    const list = document.getElementById('quotes-list');
+    if (!list) return;
+    const sources = ["direct", "google", "yelp", "facebook", "bbb"];
+    const top = quotes.slice(0, 3);
+    const ok = window.confirm(
+      `Import the top ${top.length} review${top.length === 1 ? "" : "s"} from Google as customer quotes? You can edit or remove them after import.`,
+    );
+    if (!ok) return;
+    let i = list.querySelectorAll('[data-quote-idx]').length;
+    for (const q of top) {
+      const text = (q.text || "").trim().slice(0, 500);
+      const author = (q.author || "Verified Google reviewer").slice(0, 120);
+      if (!text) continue;
+      const div = document.createElement('div');
+      div.innerHTML = `
+        <fieldset class="ops-group" data-quote-idx="${i}">
+          <legend>Quote ${i + 1}</legend>
+          <div class="prof-row">
+            <label>Quote
+              <textarea name="quote_${i}" rows="2" maxlength="500">${esc(text)}</textarea>
+            </label>
+          </div>
+          <div class="prof-row-2">
+            <label>Author
+              <input type="text" name="author_${i}" maxlength="120" value="${esc(author)}">
+            </label>
+            <label>Source
+              <select name="source_${i}">
+                ${sources.map(s => `<option value="${s}" ${s === "google" ? "selected" : ""}>${s === 'direct' ? 'Direct (uploaded by you)' : s[0].toUpperCase() + s.slice(1)}</option>`).join('')}
+              </select>
+            </label>
+          </div>
+        </fieldset>
+      `;
+      list.appendChild(div.firstElementChild);
+      i += 1;
+    }
   }
 
   function collectBasics() {
@@ -735,6 +910,14 @@
       if (!isNaN(rating) && !isNaN(count) && rating >= 0 && rating <= 5 && count >= 0) {
         ratings_json[key] = { rating, count };
         if (url) ratings_json[key].url = url;
+        // Carry verification metadata forward across saves. The verify
+        // handler writes these to the form's dataset; if the user has
+        // never clicked Verify, both stay undefined and the schema
+        // accepts the row without them.
+        const placeId = f.dataset[`verifiedPlaceId${cap(key)}`];
+        const verifiedAt = f.dataset[`verifiedAt${cap(key)}`];
+        if (placeId) ratings_json[key].place_id = placeId;
+        if (verifiedAt) ratings_json[key].verified_at = verifiedAt;
       }
     }
     return {
@@ -913,6 +1096,15 @@
         .ops-group legend {
           font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
           color: var(--muted); padding: 0 8px;
+        }
+        .rating-verify-row {
+          display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+          margin-top: 4px;
+        }
+        .rating-verify-status { font-size: 12.5px; color: var(--ink-2); }
+        .rating-verified {
+          font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
+          color: var(--maroon); margin-left: 8px;
         }
         .hrs-row {
           display: grid; grid-template-columns: 44px 24px 1fr 1fr; gap: 10px; align-items: center;

@@ -81,6 +81,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/preview-voice"   && method === "POST") return apiPreviewVoice(request, env);
   if (pathname === "/api/client/profile-score"   && method === "GET")  return apiProfileScore(request, env);
   if (pathname === "/api/client/profile-score"   && method === "POST") return apiProfileScore(request, env);
+  if (pathname === "/api/client/verify-rating"   && method === "POST") return apiVerifyRating(request, env);
   if (pathname === "/admin/create-client"      && method === "POST") return adminCreateClient(request, env);
   const resyncMatch = pathname.match(/^\/admin\/businesses\/([^/]+)\/resync-api-key$/);
   if (resyncMatch && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
@@ -142,6 +143,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/onboarding/step" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/preview-voice"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/profile-score"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/verify-rating"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
 
   // ── Stripe / new onboarding API ──────────────────────────────────────────
   if (pathname === "/api/onboard/basic"     && method === "POST") return handleBasicOnboard(request, env);
@@ -1531,6 +1533,67 @@ async function apiProfileScore(request: Request, env: Env): Promise<Response> {
     );
   } catch (err) {
     return withCors(jsonErr(502, `Profile score backend unreachable: ${String(err)}`), request, { credentials: true });
+  }
+}
+
+// ── POST /api/client/verify-rating ────────────────────────────────────────
+// Server-side proxy for Google Places verification. Calls Railway
+// POST /agents/:slug/profile/verify-rating, which hits the Places API
+// (New) and returns the live rating + count + recent review snippets.
+//
+// Same auth shape as profile-score: customer session bearer (or admin
+// session impersonating via ?slug=). The api_key the worker forwards
+// is read from D1 server-side; never exposed to the browser. The X-API-Key
+// header is also injected so direct-Railway access with a leaked tenant
+// key alone is rejected (matches the require-server-key pattern used on
+// profile-score).
+//
+// Body (forwarded as-is): { platform: "google", url: <maps URL> }
+// Returns: { ok, rating, count, url, place_id, quotes[], verified_at }
+//          or { ok:false, reason, message } on failure.
+async function apiVerifyRating(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  if (!biz.api_key || biz.api_key === "pending") {
+    return withCors(
+      jsonErr(409, "Tenant has no usable api_key (Stripe webhook may still be in flight). Try again in a minute."),
+      request, { credentials: true },
+    );
+  }
+
+  let body = "{}";
+  try { body = await request.text(); } catch { /* empty body falls through */ }
+  if (!body || !body.trim()) body = "{}";
+
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  try {
+    const r = await fetch(`${base}/agents/${biz.slug}/profile/verify-rating`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${biz.api_key}`,
+        ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}),
+      },
+      body,
+    });
+    const text = await r.text();
+    return withCors(
+      new Response(text, {
+        status: r.status,
+        headers: { "Content-Type": r.headers.get("content-type") ?? "application/json" },
+      }),
+      request, { credentials: true },
+    );
+  } catch (err) {
+    return withCors(jsonErr(502, `Verify-rating backend unreachable: ${String(err)}`), request, { credentials: true });
   }
 }
 

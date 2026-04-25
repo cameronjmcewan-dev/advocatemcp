@@ -3,7 +3,26 @@
 Items captured from development sessions that need attention in future focused work.
 Sorted by urgency: blockers first, then real bugs, then polish, then research.
 
-Last updated: 2026-04-13 (Sunday night sprint)
+Last updated: 2026-04-25
+
+## Operator action required
+
+### `GOOGLE_PLACES_API_KEY` env var (Railway)
+**Added 2026-04-25.** The new Verify-with-Google button on the BusinessProfile
+Verified Ratings card hits Places API (New) to pull live rating, count, and the
+top 5 review snippets so tenants can replace self-reported ratings with verified
+ones. The endpoint `POST /agents/:slug/profile/verify-rating` returns a graceful
+503 with `reason: "no_api_key"` when the env var is missing — no crash, just no
+verify capability — so the deploy is safe to ship without it.
+
+**To enable:** Provision a Google Maps Platform key with **Places API (New)**
+turned on at https://console.cloud.google.com/google/maps-apis/, then
+`railway variables set GOOGLE_PLACES_API_KEY=<key>` from the `server/` directory.
+
+**Cost:** Atomic field mask SKU is ~$0.005 per call. Per-slug rate limit
+(3/min, 24/day) + daily budget kill-switch reservation ($0.05/call, 5x headroom)
+already in place. Pay-as-you-go credit on Google's free tier covers thousands
+of verifications/month.
 
 ## Blockers — ship before the next real paying customer
 

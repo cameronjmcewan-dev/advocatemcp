@@ -63,6 +63,14 @@ export const SourceRatingSchema = z.object({
   // -1 to -2 deduction across all variants — this field unlocks the
   // path to 9-10.
   url: z.string().url().optional(),
+  // Verification metadata stamped by POST /agents/:slug/profile/verify-rating
+  // when the source has a public read API (currently Google only).
+  // Renderer reads `verified_at` to add a "verified <date>" hint into
+  // JSON-LD, distinguishing live-pulled ratings from self-reported ones.
+  // place_id is opaque to us — we just round-trip it so a future
+  // re-verify can skip URL re-parsing.
+  place_id: z.string().min(1).max(200).optional(),
+  verified_at: z.string().datetime().optional(),
 });
 
 export const RatingsSchema = z.object({
