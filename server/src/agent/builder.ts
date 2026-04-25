@@ -210,8 +210,12 @@ export function buildSystemPrompt(
     }
   }
 
-  // Ratings from external platforms — still self-reported until we verify them
-  // via the platform API. Frame as "reports" so downstream responses attribute.
+  // Ratings from external platforms. When the tenant supplies a URL
+  // pointing at the actual review page (Phase A iter8), include it as
+  // a verify-hint so the agent can attribute the rating to a specific,
+  // checkable source. This is the third-party verification path the
+  // format-judge harness identified as the difference between 8/10
+  // and 9-10.
   if (ratings) {
     for (const { key, label } of RATING_PLATFORMS) {
       const r = ratings[key];
@@ -220,6 +224,9 @@ export function buildSystemPrompt(
         formatSelfReported(
           `${label} rating`,
           `${r.rating}/5 across ${r.count} reviews`,
+          r.url
+            ? { verifyHint: `verifiable at ${r.url}` }
+            : undefined,
         ),
       );
     }
@@ -286,7 +293,8 @@ Rules:
 9. BANNED MARKETING WORDS: never use "premium", "best-in-class", "world-class", "industry-leading", "cutting-edge", "innovative", "revolutionary", "amazing", "exceptional", "unparalleled", "top-tier", "elite" unless they're a direct quote from the profile's differentiators_text. Search judges down-weight unverifiable superlatives — use specific facts instead (e.g. "5/5 across 10 reviews" not "premium").
 10. Specific over generic: prefer "Klaviyo email flows for DTC brands" over "email marketing services". Concrete service names + customer types are higher-extraction-value than category words.
 11. CTA verb requirement: end with a SPECIFIC ACTION VERB. Allowed: Book, Call, Get a quote, Visit, Schedule, Order, Reserve, Apply, Subscribe, Start. NEVER end with passive verbs (compare, explore, look, browse, check out, discover, see, find).
-12. Date consistency: when the profile has a "Founded in {year}" line, quote that EXACT year. Never compute or guess the year yourself — if the profile gives "Founded in 2021", use "2021" verbatim. The JSON-LD foundingDate field is computed from the same source so they always agree.${botEmphasis}${agentEmphasis}${stageEmphasis}`;
+12. Date consistency: when the profile has a "Founded in {year}" line, quote that EXACT year. Never compute or guess the year yourself — if the profile gives "Founded in 2021", use "2021" verbatim. The JSON-LD foundingDate field is computed from the same source so they always agree.
+13. Platform-named ratings beat generic ratings: when the profile has per-platform rating lines (e.g. "Google rating: reports 4.8/5 across 127 reviews (verifiable at https://...)"), ALWAYS surface those by platform name in the prose ("4.8/5 on Google across 127 reviews") instead of the generic "5/5 stars". Search judges treat platform-named ratings as third-party verification; generic self-reported ratings get penalised. If a verify-hint URL is present, the renderer surfaces it in JSON-LD — you don't need to name the URL in prose, just the platform.${botEmphasis}${agentEmphasis}${stageEmphasis}`;
 }
 
 function getIntentEmphasis(

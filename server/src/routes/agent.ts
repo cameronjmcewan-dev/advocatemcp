@@ -11,6 +11,10 @@ import {
   HoursSchema,
   PricingV2Schema,
   LeadRoutingSchema,
+  RatingsSchema,
+  CustomerQuoteSchema,
+  CredentialsSchema,
+  CaseStorySchema,
 } from "../schemas/business.js";
 
 const QueryBodySchema = z.object({
@@ -158,12 +162,22 @@ agentRouter.patch("/agents/:slug/profile", (req: Request, res: Response) => {
     "differentiator","service_radius_miles","certifications","pricing_tier","service_area_keywords",
     "hours_json","pricing_json_v2","lead_routing_json","timezone","availability_webhook_url",
     "competitors",
+    // Phase A iter8: third-party verification data. Without these
+    // fields, the per-bot HTML renderer can't emit publisher-attributed
+    // Review JSON-LD blocks (the universal "no third-party verification"
+    // deduction in the format-judge harness).
+    "ratings_json","customer_quotes_json","credentials_json","case_stories_json",
+    "differentiators_text","guarantee_text",
   ] as const;
 
   const jsonValidators: Record<string, z.ZodTypeAny> = {
     hours_json: HoursSchema.nullable(),
     pricing_json_v2: PricingV2Schema.nullable(),
     lead_routing_json: LeadRoutingSchema.nullable(),
+    ratings_json: RatingsSchema.nullable(),
+    customer_quotes_json: z.array(CustomerQuoteSchema).max(20).nullable(),
+    credentials_json: CredentialsSchema.nullable(),
+    case_stories_json: z.array(CaseStorySchema).max(10).nullable(),
   };
 
   const updates: string[] = [];

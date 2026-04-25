@@ -942,6 +942,10 @@ async function apiUpdateProfile(request: Request, env: Env): Promise<Response> {
     "service_area_keywords",
     "hours_json", "pricing_json_v2", "lead_routing_json", "timezone",
     "availability_webhook_url",
+    // Phase A iter8: third-party verification data so the per-bot
+    // HTML renderer can emit publisher-attributed Review JSON-LD.
+    "ratings_json", "customer_quotes_json", "credentials_json",
+    "case_stories_json", "differentiators_text", "guarantee_text",
   ] as const;
 
   const payload: Record<string, unknown> = {};
