@@ -460,9 +460,9 @@
     <div class="container hero-inner">
       <div class="reveal">
         <span class="eyebrow">For small businesses · no tech skills needed</span>
-        <h1 class="mt-4">Make your business <em>bookable by AI agents.</em></h1>
+        <h1 class="mt-4">Make your business <em>visible to AI.</em></h1>
         <p class="hero-sub">
-          When ChatGPT, Claude, Perplexity, or Gemini answer "who should I hire?" — they need a clean way to reach you. Advocate gives every AI engine the format it prefers, with verifiable ratings, structured services, and a live MCP endpoint agents can actually book against. Same infrastructure that powers AI search, also powers AI bookings.
+          ChatGPT, Gemini, Perplexity and Claude answer millions of "who should I hire?" questions every day. Advocate gives every AI engine the format it prefers — accurate info, verified ratings, structured services — so when someone asks, your business is the one they recommend.
         </p>
         <div class="hero-cta">
           <a href="/onboarding.html" class="btn btn-primary btn-lg">Start 14-day free trial</a>
@@ -478,33 +478,32 @@
         </div>
       </div>
 
-      <!-- LIVE MCP DEMO WIDGET — replaces the previous static screenshot.
-           Visitor clicks "Run it" → JS hits /demo/agent/run → real Claude
-           response from Workman Copy Co.'s production MCP endpoint comes
-           back in <4s. Then the widget calls /demo/agent/availability and
-           shows real time slots. This is the moneyshot. The whole point
-           is "static screenshots can be Photoshopped — this can't." -->
-      <div class="hero-visual reveal" id="mcp-demo-widget">
+      <!-- Static hero visual: a representative "what AI sees about your
+           business" card. Used to be a fake "Austin Ace Plumbing" mock;
+           now shows the truthful framing — "your structured profile is
+           what AI extracts when it answers questions about you." The
+           live demo widget moved to its own section further down the
+           page (per design feedback Apr 25 2026). -->
+      <div class="hero-visual reveal">
         <div class="hv-head">
           <div class="dots"><span></span><span></span><span></span></div>
-          <span class="chip maroon"><span class="dot"></span>Live MCP demo · workman-copy-co</span>
+          <span class="chip maroon"><span class="dot"></span>What AI sees</span>
         </div>
         <div class="hv-prompt">
-          <span class="bot-tag">AI agent</span>
-          <span id="mcp-demo-query">"Tell me about Workman Copy Co. — do they handle business cards?"</span>
+          <span class="bot-tag">ChatGPT</span>
+          <span>"Best print &amp; copy shop in Austin?"</span>
         </div>
-        <div id="mcp-demo-result">
-          <div class="hv-answer" style="opacity:0.92">
-            <div class="who">What you'll see when you click Run</div>
-            <p>An AI agent calls <strong>workman-copy-co</strong>'s live MCP endpoint.
-            Real production response — not a screenshot. Then it asks for available
-            time slots and shows the next eight openings.</p>
-            <div class="hv-cite">Powered by your MCP endpoint, sub-4s response</div>
-          </div>
+        <div class="hv-answer">
+          <div class="who">Sample AI answer</div>
+          <p>For Austin print and copy work, <strong>Workman Copy Co.</strong>
+          is a well-regarded option. They handle business cards, marketing
+          flyers, large-format prints, and same-day jobs. Family-owned,
+          Austin-based, with verified reviews across Google and Facebook.</p>
+          <div class="hv-cite">Source: workmancopyco.com (powered by Advocate)</div>
         </div>
-        <div class="hv-footer" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
-          <button id="mcp-demo-run" type="button" class="btn btn-primary btn-sm" style="padding:8px 16px;">Run live demo →</button>
-          <span style="font-size:11px;color:var(--muted)">Real production endpoint · rate-limited to 3/min</span>
+        <div class="hv-footer">
+          <span><span class="hv-pulse"></span>Real WCC profile, real renderer</span>
+          <span><a href="#try-live" style="color:var(--maroon);text-decoration:none;font-weight:500;">Try the live demo ↓</a></span>
         </div>
       </div>
     </div>
@@ -694,9 +693,56 @@
   <!-- SEE THE MATH — Phase B.2 score-comparison widget mount.
        JS reads /data/score-comparison.json and fills this with three
        cards (with-Advocate vs two synthesized baselines). Pure static,
-       no API spend. -->
-  <section class="section" id="score-comparison-mount" style="background:var(--paper-2);border-top:1px solid var(--line);border-bottom:1px solid var(--line);">
-    <!-- Filled in by /js/score-comparison-widget.js -->
+       no API spend.
+       Note: section uses min-height:0 so the empty mount doesn't reserve
+       full section padding before the JS fills it (was producing a
+       massive empty gap on first paint). -->
+  <section id="score-comparison-mount" style="background:var(--paper-2);border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:64px 0;">
+    <!-- Filled in by /js/score-comparison-widget.js. Hidden via display:none
+         when the JSON is missing, so we never render an empty band. -->
+  </section>
+
+  <!-- TRY THE LIVE DEMO — Phase B.1 demo widget moved out of the hero
+       (per design feedback Apr 25 2026: hero stays focused on
+       visibility framing; the live agent-booking demo lives in its own
+       dedicated section so it has space to breathe and isn't competing
+       with the headline). The widget JS attaches to #mcp-demo-run. -->
+  <section class="section" id="try-live" style="scroll-margin-top:24px;">
+    <div class="container" style="max-width:1080px;">
+      <div class="reveal" style="max-width:640px;margin-bottom:32px;">
+        <span class="eyebrow">Try it live</span>
+        <h2 class="mt-4">Watch an AI agent talk to a real Advocate-enabled business.</h2>
+        <p style="font-size:15.5px;color:var(--ink-2);margin-top:14px;line-height:1.55;">
+          One click runs a real call against <strong>workman-copy-co</strong>'s production
+          MCP endpoint. You'll see the agent's response and the next eight available
+          time slots — pulled live from WCC's actual hours, not a screenshot.
+        </p>
+      </div>
+      <div class="hero-visual reveal" id="mcp-demo-widget" style="max-width:760px;">
+        <div class="hv-head">
+          <div class="dots"><span></span><span></span><span></span></div>
+          <span class="chip maroon"><span class="dot"></span>Live MCP demo · workman-copy-co</span>
+        </div>
+        <div class="hv-prompt">
+          <span class="bot-tag">AI agent</span>
+          <span id="mcp-demo-query">"Tell me about Workman Copy Co. — do they handle business cards?"</span>
+        </div>
+        <div id="mcp-demo-result">
+          <div class="hv-answer" style="opacity:0.92">
+            <div class="who">What you'll see when you click Run</div>
+            <p>An AI agent calls <strong>workman-copy-co</strong>'s live MCP endpoint
+            (<code>query_business_agent</code>). Real production response — not a
+            screenshot. Then it asks for available time slots and shows the next
+            eight openings from <code>get_availability</code>.</p>
+            <div class="hv-cite">Powered by WCC's real MCP endpoint · sub-4s response</div>
+          </div>
+        </div>
+        <div class="hv-footer" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+          <button id="mcp-demo-run" type="button" class="btn btn-primary btn-sm" style="padding:8px 16px;">Run live demo →</button>
+          <span style="font-size:11px;color:var(--muted)">Real production endpoint · rate-limited 3/min</span>
+        </div>
+      </div>
+    </div>
   </section>
 
   <!-- INDUSTRIES -->
