@@ -137,6 +137,22 @@
       return false;
     }
 
+    // Preserve ?as=<slug> across navigations so admin impersonation
+    // survives sidebar clicks. Without this, every nav strips the
+    // query string and the next page reloads as the admin's own
+    // (empty) tenant context — exactly what was happening on
+    // /CompetitorRadar.html → empty radar, banner gone.
+    //
+    // Exception: clicking an admin sidebar item (Mission Control,
+    // Tenants, Queries) is the canonical "exit impersonation" path,
+    // so we explicitly drop ?as= there. The impersonation banner's
+    // Exit link points to /admin and behaves the same way.
+    const isAdminTarget = route.activeId.startsWith('admin-');
+    const currentAs = new URL(location.href).searchParams.get('as');
+    if (currentAs && !isAdminTarget && !u.searchParams.has('as')) {
+      u.searchParams.set('as', currentAs);
+    }
+
     inFlight++;
     const myFlight = inFlight;
 
