@@ -477,13 +477,33 @@
         a.textContent = body.error || `Preview failed (HTTP ${res.status})`;
         return;
       }
-      a.textContent = body.answer || '(empty answer)';
-      // Mark complete after the answer renders so the checklist
-      // updates. Server short-circuits markStep for admins so preview
-      // mode doesn't accidentally stamp anything.
-      const ob = window.AMCP_ONBOARDING;
-      if (ob && typeof ob.markStep === 'function') {
-        ob.markStep('checklist.previewed_voice').then(update);
+      const answer = (body.answer || '').trim();
+      if (answer && answer !== '(no answer returned)') {
+        a.textContent = answer;
+        // Mark complete after the answer renders so the checklist
+        // updates. Server short-circuits markStep for admins so preview
+        // mode doesn't accidentally stamp anything.
+        const ob = window.AMCP_ONBOARDING;
+        if (ob && typeof ob.markStep === 'function') {
+          ob.markStep('checklist.previewed_voice').then(update);
+        }
+        return;
+      }
+      // Empty answer — usually means admin is previewing without an
+      // impersonation target so we hit the alphabetical-first business
+      // (sparse profile). Tell them how to see a real answer instead
+      // of leaving "(no answer returned)" hanging.
+      const role = (window.AMCP_DATA && window.AMCP_DATA.user_role) || null;
+      const asSlug = new URL(window.location.href).searchParams.get('as') || null;
+      if (role === 'admin' && !asSlug) {
+        a.classList.add('error');
+        a.innerHTML =
+          'No answer came back. You\'re signed in as <strong>admin</strong> without an impersonation target, so the preview hit the alphabetically-first business — usually a test row with no profile data.<br><br>' +
+          'To see a real answer, append <code>&amp;as=workman-copy-co</code> (or any real tenant slug) to the URL, or pick one from <a href="/admin/tenants" style="color:var(--maroon, #7d2550);font-weight:500">Tenants</a> and click Replay tutorial after impersonating.';
+      } else {
+        a.classList.add('error');
+        a.innerHTML =
+          'Your agent didn\'t return any text. This usually means your <strong>profile is empty</strong>. Add a description, services, or hours in <a href="/BusinessProfile.html" style="color:var(--maroon, #7d2550);font-weight:500">Business profile</a> and try again.';
       }
     } catch (err) {
       a.classList.add('error');
