@@ -16,6 +16,7 @@ import {
   buildWebsiteJsonLd,
   escapeHtml,
   jsonLdScript,
+  mdBulletsToHtml,
 } from "./shared.js";
 
 export const claudeHtml: FormatVariant = {
@@ -37,7 +38,15 @@ export const claudeHtml: FormatVariant = {
     const platformRatingsJsonLd = buildPlatformRatingsJsonLd(business);
 
     // Convert markdown bullets into a <dl> when each line has a "Label: value"
-    // shape. Otherwise fall through to a normal <ul>.
+    // shape. When the agent produces narrative prose (no colon-lists), the
+    // older v1 of this code collapsed the whole body to a single escaped
+    // <p> — losing structure, bold, links. THAT was the ±1.50 stddev source
+    // in iter12: queries that elicited prose answers tanked claude_html
+    // while queries that elicited "Label:" bullets scored 8/10.
+    //
+    // Fix: try dl extraction first; if it fails, fall back to
+    // mdBulletsToHtml (which handles bullets → <ul>, bold → <strong>,
+    // markdown links → <a>). Either path yields a structured body.
     const lines = answerText.split("\n").map((l) => l.trim()).filter(Boolean);
     const dlEntries = lines
       .map((l) => l.replace(/^[-*]\s+/, ""))
@@ -52,7 +61,7 @@ export const claudeHtml: FormatVariant = {
                 `  <dt>${escapeHtml(m[1].trim())}</dt>\n  <dd>${escapeHtml(m[2].trim())}</dd>`,
             )
             .join("\n")}\n</dl>`
-        : `<p>${escapeHtml(answerText)}</p>`;
+        : mdBulletsToHtml(answerText);
 
     const title = `${business.name}`;
     const desc = (business.description ?? "").slice(0, 200);

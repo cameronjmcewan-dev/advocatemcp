@@ -47,8 +47,20 @@ const DEFAULT_QUERIES = [
   "compare email marketing services for small DTC brands",
 ];
 
+/* Default judge panel: Sonnet (primary, deepest reasoning) + Haiku
+ * (cheap diversity check). Two judges per trial doubles cost (~$0.08
+ * per trial × 30 trials = $0.24 per default run) but cross-validates
+ * single-model bias. If the two judges disagree by more than 2 points
+ * on a variant, that's a signal worth surfacing.
+ *
+ * Override via opts.judges — caller can run single-judge for cheap
+ * iterations or expand to GPT-4o-mini if OPENAI_API_KEY is wired.
+ *
+ * MODEL env var (set on Railway per CLAUDE.md) overrides the Sonnet
+ * model name for prod-agent parity. */
 const DEFAULT_JUDGES = [
-  process.env.MODEL ?? "claude-sonnet-4-6", // Sonnet primary; matches production agent model per CLAUDE.md
+  process.env.MODEL ?? "claude-sonnet-4-6",
+  "claude-haiku-4-5",
 ];
 
 // ── Profile loading ────────────────────────────────────────────────────────

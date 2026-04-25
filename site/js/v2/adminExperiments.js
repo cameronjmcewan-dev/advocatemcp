@@ -118,6 +118,63 @@
     `;
   }
 
+  /* Per-query × per-variant heatmap. Surfaces the existing per-trial
+   * data in a compact grid so high-variance variants (e.g. claude_html
+   * ±1.50 in iter12) are immediately visible — the bad cell stands out
+   * red while the good ones are green. Click any cell to expand the
+   * judge's reasoning for that specific (query × variant) pair. */
+  function renderQueryMatrix(trials, queries, variants) {
+    if (!trials || !trials.length) return '';
+    // Build a lookup: trials[query][variant] = trial
+    const cell = new Map();
+    for (const t of trials) {
+      cell.set(`${t.query}|${t.variant_id}`, t);
+    }
+    const colorFor = (s) => {
+      if (s >= 8) return '#2c5d3a';        // green
+      if (s >= 6) return '#7a6014';        // amber
+      if (s >= 4) return '#7d2550';        // maroon
+      return '#5c1c30';                    // dark red
+    };
+    const fadeFor = (s) => {
+      if (s >= 8) return 'rgba(44,93,58,.15)';
+      if (s >= 6) return 'rgba(122,96,20,.15)';
+      if (s >= 4) return 'rgba(125,37,80,.18)';
+      return 'rgba(92,28,48,.25)';
+    };
+    const variantHeaders = variants.map((v) => `<th class="t" style="font-size:11px"><code>${esc(v)}</code></th>`).join('');
+    const rows = queries.map((q) => {
+      const cells = variants.map((v) => {
+        const t = cell.get(`${q}|${v}`);
+        if (!t) return `<td class="t" style="color:var(--muted)">—</td>`;
+        const score = t.citability_score;
+        return `
+          <td class="t exp-cell" style="background:${fadeFor(score)};color:${colorFor(score)};font-weight:600" title="${esc(t.reasoning).slice(0, 220)}">
+            ${score}
+          </td>
+        `;
+      }).join('');
+      return `
+        <tr>
+          <td style="font-size:12.5px;color:var(--ink-2);max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(q)}">${esc(q.slice(0, 56))}</td>
+          ${cells}
+        </tr>
+      `;
+    }).join('');
+    return `
+      <table class="exp-summary-table">
+        <thead>
+          <tr>
+            <th>Query</th>
+            ${variantHeaders}
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div style="margin-top:8px;font-size:11.5px;color:var(--muted)">Hover a cell for the judge's reasoning. <span style="color:#2c5d3a">●</span> ≥ 8 · <span style="color:#7a6014">●</span> 6-7 · <span style="color:#7d2550">●</span> 4-5 · <span style="color:#5c1c30">●</span> ≤ 3</div>
+    `;
+  }
+
   function renderTrialDetails(trials) {
     if (!trials || !trials.length) return '';
     const byVariant = new Map();
@@ -126,14 +183,24 @@
       byVariant.get(t.variant_id).push(t);
     }
     const blocks = Array.from(byVariant.entries()).map(([vid, ts]) => {
-      const sample = ts[0];
+      // Surface the WORST trial (lowest score) instead of trial[0] —
+      // that's where the actionable deduction lives. iter12 showed
+      // claude_html had 8s and 5s in the same variant; trial[0] hid
+      // the 5's reasoning behind a single-trial sample view.
+      const worst = ts.slice().sort((a, b) => a.citability_score - b.citability_score)[0];
+      const best = ts.slice().sort((a, b) => b.citability_score - a.citability_score)[0];
+      const allScores = ts.map((t) => t.citability_score).join(', ');
+      const variance = ts.length > 1 ? `range ${best.citability_score - worst.citability_score}` : 'single trial';
       return `
         <details class="exp-details">
-          <summary><code>${esc(vid)}</code> — ${ts.length} trials, sample reasoning</summary>
+          <summary><code>${esc(vid)}</code> — ${ts.length} trials, ${variance}, scores: ${allScores}</summary>
           <div style="padding:8px 16px;font-size:13px;color:var(--ink-2);line-height:1.5">
-            <strong>Score ${sample.citability_score}/10 · would_cite=${sample.would_cite}</strong>
-            <p style="margin:8px 0 0">${esc(sample.reasoning)}</p>
-            <div style="margin-top:10px;font-size:12px;color:var(--muted)">All scores: ${ts.map((t) => t.citability_score).join(', ')}</div>
+            <strong style="color:#7d2550">Worst trial · score ${worst.citability_score}/10 · query "${esc(worst.query.slice(0, 60))}"</strong>
+            <p style="margin:8px 0 12px">${esc(worst.reasoning)}</p>
+            ${best.citability_score !== worst.citability_score ? `
+              <strong style="color:#2c5d3a">Best trial · score ${best.citability_score}/10 · query "${esc(best.query.slice(0, 60))}"</strong>
+              <p style="margin:8px 0 0">${esc(best.reasoning)}</p>
+            ` : ''}
           </div>
         </details>
       `;
@@ -157,8 +224,16 @@
           <div style="margin-top:14px">
             ${renderSummaryTable(result.summary)}
           </div>
+          ${(cfg.queries || []).length > 1 ? `
+            <div style="margin-top:22px">
+              <strong style="font-size:13px">Per-query × per-variant scores</strong>
+              <div style="margin-top:6px">
+                ${renderQueryMatrix(result.trials || [], cfg.queries || [], cfg.variants || [])}
+              </div>
+            </div>
+          ` : ''}
           <div style="margin-top:18px">
-            <strong style="font-size:13px">Sample reasoning per variant</strong>
+            <strong style="font-size:13px">Per-variant reasoning (worst + best trial)</strong>
             <div style="margin-top:6px">
               ${renderTrialDetails(result.trials)}
             </div>
