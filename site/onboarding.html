@@ -1,8 +1,11 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" content="#fbf9f5" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#141210" media="(prefers-color-scheme: dark)" />
 <title>Set Up Your Profile — Advocate</title>
 <link rel="stylesheet" href="/css/tokens.css" />
 <link rel="preconnect" href="https://api.fontshare.com" />
@@ -14,23 +17,47 @@
 /* ── Reset & Variables ─────────────────────────────────────────────────── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
+/* Paper/ink/maroon palette matching the marketing site (Max's design).
+ * Variable names (`--bg`, `--surface`, `--accent`, etc.) are preserved
+ * so the 2300 lines of step-specific styling below work unchanged —
+ * each variable just resolves to a lighter, paper-mode value.
+ * A prefers-color-scheme: dark override further down restores the
+ * original dark palette for users whose OS is in dark mode. */
 :root {
-  --bg:          #050202;
-  --surface:     #0d0507;
-  --surface-2:   #222120;
-  --border:      #393836;
-  --text:        #e8e3e0;
-  --muted:       #7a7875;
-  --accent:      #3d0a22;
-  --accent-dk:   #8f2d5d;
-  --accent-dim:  rgba(61,10,34,.1);
-  --accent-ring: rgba(61,10,34,.24);
-  --green:       #3fb950;
-  --red:         #f85149;
-  --red-dim:     rgba(248,81,73,.1);
+  --bg:          #fbf9f5;        /* paper */
+  --surface:     #ffffff;        /* cards + inputs */
+  --surface-2:   #f5f1ea;        /* subtle surface variation */
+  --border:      #d8d1c3;        /* hairline */
+  --text:        #141210;        /* ink */
+  --muted:       #766f63;        /* secondary text */
+  --accent:      #5c1a3c;        /* maroon */
+  --accent-dk:   #3d0f26;        /* darker maroon for hover */
+  --accent-dim:  rgba(92,26,60,.08);
+  --accent-ring: rgba(92,26,60,.22);
+  --green:       #2f5c3d;        /* sage green (success) */
+  --red:         #b3261e;
+  --red-dim:     rgba(179,38,30,.08);
   --font-serif:  'Instrument Serif', Georgia, serif;
   --font-body:   'General Sans','Inter',system-ui,-apple-system,sans-serif;
   --r-sm:4px; --r-md:8px; --r-lg:12px; --r-xl:16px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:          #141210;
+    --surface:     #1c1a17;
+    --surface-2:   #24211d;
+    --border:      #3a342c;
+    --text:        #e8e3e0;
+    --muted:       #a39b8f;
+    --accent:      #a0356a;      /* brighter maroon for dark-mode contrast */
+    --accent-dk:   #5c1a3c;
+    --accent-dim:  rgba(160,53,105,.14);
+    --accent-ring: rgba(160,53,105,.28);
+    --green:       #5fa879;
+    --red:         #f27873;
+    --red-dim:     rgba(242,120,115,.12);
+  }
 }
 
 html{font-size:16px;-webkit-font-smoothing:antialiased}
