@@ -167,6 +167,85 @@
     `;
   }
 
+  // Default queries used when the textarea is left blank — kept in sync
+  // with server/src/experiments/formatJudge/runner.ts DEFAULT_QUERIES.
+  const DEFAULT_QUERIES = [
+    'best email marketing agency for DTC ecommerce',
+    'Klaviyo specialist agencies near me',
+    'tell me about Workman Copy Co',
+    'email agency for shopify stores',
+    'compare email marketing services for small DTC brands',
+  ];
+
+  // Cloudflare's edge proxy times out at ~100s for any single subrequest.
+  // 30 trials × 5s each = 150s = 524. So we chunk client-side: split the
+  // query list into batches of 2 (≈12 trials × 5s = 60s per batch, well
+  // under the limit), run them sequentially, and merge the results
+  // before rendering.
+  const QUERIES_PER_BATCH = 2;
+
+  function chunk(arr, size) {
+    const out = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+  }
+
+  function mergeResults(batches) {
+    const merged = {
+      cfg: { profiles: [], queries: [], variants: [], judges: [] },
+      trials: [],
+      summary: [],
+      report_md: '',
+    };
+    for (const r of batches) {
+      if (r.cfg) {
+        for (const p of r.cfg.profiles || []) {
+          if (!merged.cfg.profiles.find((x) => x.slug === p.slug)) merged.cfg.profiles.push(p);
+        }
+        for (const q of r.cfg.queries || []) {
+          if (!merged.cfg.queries.includes(q)) merged.cfg.queries.push(q);
+        }
+        for (const v of r.cfg.variants || []) {
+          if (!merged.cfg.variants.includes(v)) merged.cfg.variants.push(v);
+        }
+        for (const j of r.cfg.judges || []) {
+          if (!merged.cfg.judges.includes(j)) merged.cfg.judges.push(j);
+        }
+      }
+      merged.trials.push(...(r.trials || []));
+    }
+    // Re-aggregate summary across all trials.
+    const byVariant = new Map();
+    for (const t of merged.trials) {
+      if (!byVariant.has(t.variant_id)) byVariant.set(t.variant_id, []);
+      byVariant.get(t.variant_id).push(t);
+    }
+    merged.summary = Array.from(byVariant.entries()).map(([variant_id, ts]) => {
+      const scores = ts.map((t) => t.citability_score).filter((s) => s > 0);
+      const mean = scores.reduce((a, b) => a + b, 0) / Math.max(1, scores.length);
+      const variance = scores.reduce((a, b) => a + (b - mean) ** 2, 0) / Math.max(1, scores.length);
+      const cites = ts.filter((t) => t.would_cite).length;
+      // Cost approximation: each trial logs its own cost via judge model
+      // pricing, but we don't have it inline — fall back to summing the
+      // per-batch summary's reported cost.
+      let cost = 0;
+      for (const r of batches) {
+        for (const s of r.summary || []) {
+          if (s.variant_id === variant_id) cost += (s.total_cost_usd || 0);
+        }
+      }
+      return {
+        variant_id,
+        trial_count: ts.length,
+        mean_citability: Number(mean.toFixed(2)),
+        stddev_citability: Number(Math.sqrt(variance).toFixed(2)),
+        cite_rate: Number((cites / Math.max(1, ts.length)).toFixed(2)),
+        total_cost_usd: Number(cost.toFixed(4)),
+      };
+    }).sort((a, b) => b.mean_citability - a.mean_citability);
+    return merged;
+  }
+
   async function runExperiment() {
     const slugInput = document.getElementById('exp-slug');
     const queriesInput = document.getElementById('exp-queries');
@@ -175,50 +254,65 @@
     if (!btn || !resultsEl) return;
 
     const slug = (slugInput && slugInput.value || '').trim();
-    const queries = (queriesInput && queriesInput.value || '')
+    const customQueries = (queriesInput && queriesInput.value || '')
       .split('\n').map((s) => s.trim()).filter(Boolean);
+    const queries = customQueries.length ? customQueries : DEFAULT_QUERIES;
+    const batches = chunk(queries, QUERIES_PER_BATCH);
 
     btn.disabled = true;
     const started = Date.now();
-    setStatus('Running experiment — this takes ~2-3 minutes (one Claude call per trial)…');
+    setStatus(`Running ${batches.length} batch(es) of ${QUERIES_PER_BATCH} queries to stay under Cloudflare's 100s edge timeout…`);
 
-    // Status ticker so the user sees something is happening.
     const ticker = setInterval(() => {
       const elapsed = Math.round((Date.now() - started) / 1000);
-      setStatus(`Running… ${elapsed}s elapsed (~150-180s typical)`);
+      setStatus(`Running… ${elapsed}s elapsed`);
     }, 2000);
 
     try {
       const af = window.AMCP && window.AMCP.authedFetch;
       if (!af) { setStatus('Auth wrapper missing.', 'error'); return; }
-      const body = {};
-      if (slug) body.profile_slugs = [slug];
-      if (queries.length) body.queries = queries;
 
-      const res = await af('/api/admin/experiments/format-judge', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      clearInterval(ticker);
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        if (res.status === 503) {
-          setStatus(
-            'Worker missing ADMIN_API_KEY secret. Run on terminal: cd worker && npx wrangler secret put ADMIN_API_KEY (paste the same key Railway uses).',
-            'error',
-          );
-        } else {
-          setStatus('Experiment failed: ' + (err.error || `HTTP ${res.status}`), 'error');
+      const results = [];
+      for (let i = 0; i < batches.length; i++) {
+        const batch = batches[i];
+        const elapsed = Math.round((Date.now() - started) / 1000);
+        setStatus(`Batch ${i + 1}/${batches.length} (${batch.length} queries × 6 variants = ~${batch.length * 6 * 5}s)… ${elapsed}s elapsed`);
+        const body = { queries: batch };
+        if (slug) body.profile_slugs = [slug];
+        const res = await af('/api/admin/experiments/format-judge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          if (res.status === 503) {
+            clearInterval(ticker);
+            setStatus(
+              'Worker missing ADMIN_API_KEY secret. Run on terminal: cd worker && npx wrangler secret put ADMIN_API_KEY (paste the same key Railway uses).',
+              'error',
+            );
+            return;
+          }
+          if (res.status === 524) {
+            clearInterval(ticker);
+            setStatus(
+              `Cloudflare edge timeout on batch ${i + 1}. Try fewer queries (${QUERIES_PER_BATCH} per batch should work).`,
+              'error',
+            );
+            return;
+          }
+          clearInterval(ticker);
+          setStatus(`Batch ${i + 1} failed: ${err.error || 'HTTP ' + res.status}`, 'error');
+          return;
         }
-        return;
+        results.push(await res.json());
       }
-      const result = await res.json();
+      clearInterval(ticker);
+      const merged = mergeResults(results);
       const elapsed = Math.round((Date.now() - started) / 1000);
-      const trials = (result.trials || []).length;
-      setStatus(`Done — ${trials} trials in ${elapsed}s.`, 'ok');
-      resultsEl.innerHTML = renderResults(result);
+      setStatus(`Done — ${merged.trials.length} trials across ${batches.length} batch(es) in ${elapsed}s.`, 'ok');
+      resultsEl.innerHTML = renderResults(merged);
     } catch (err) {
       clearInterval(ticker);
       setStatus('Network error: ' + String((err && err.message) || err), 'error');
