@@ -30,11 +30,13 @@ import {
   trendsByIndustry,
   topClusters,
   embeddingsHealth,
+  topCompetitors,
   type OverviewStats,
   type TopCluster,
   type ProfileGap,
   type IndustryTrend,
   type EmbeddingsHealth,
+  type CompetitorMention,
 } from "../../jobs/insights.js";
 
 export const adminInsightsRouter = Router();
@@ -136,6 +138,16 @@ adminInsightsRouter.get(
   },
 );
 
+adminInsightsRouter.get(
+  "/admin/insights/top-competitors",
+  requireAdminBasicOrBearer,
+  (req, res) => {
+    const days  = parseInt(String(req.query.days  ?? "30"), 10);
+    const limit = parseInt(String(req.query.limit ?? "25"), 10);
+    res.json(topCompetitors(getDb(), { days, limit }));
+  },
+);
+
 // ── HTML dashboard ────────────────────────────────────────────────────────
 
 adminInsightsRouter.get(
@@ -143,14 +155,15 @@ adminInsightsRouter.get(
   requireAdminBasicOrBearer,
   (_req, res) => {
     const db = getDb();
-    const overview = overviewStats(db);
-    const clusters = topClusters(db, { limit: 25, days: 30 });
-    const health   = embeddingsHealth(db);
-    const gaps     = profileGaps(db, { limit: 20 });
-    const trends   = trendsByIndustry(db, { days: 14 });
+    const overview    = overviewStats(db);
+    const clusters    = topClusters(db, { limit: 25, days: 30 });
+    const health      = embeddingsHealth(db);
+    const gaps        = profileGaps(db, { limit: 20 });
+    const trends      = trendsByIndustry(db, { days: 14 });
+    const competitors = topCompetitors(db, { limit: 20, days: 30 });
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.send(renderInsightsHtml({ overview, clusters, health, gaps, trends }));
+    res.send(renderInsightsHtml({ overview, clusters, health, gaps, trends, competitors }));
   },
 );
 
@@ -176,15 +189,16 @@ function fmtPct(num: number, den: number): string {
 }
 
 interface RenderInput {
-  overview: OverviewStats;
-  clusters: TopCluster[];
-  health:   EmbeddingsHealth;
-  gaps:     ProfileGap[];
-  trends:   IndustryTrend[];
+  overview:    OverviewStats;
+  clusters:    TopCluster[];
+  health:      EmbeddingsHealth;
+  gaps:        ProfileGap[];
+  trends:      IndustryTrend[];
+  competitors: CompetitorMention[];
 }
 
 function renderInsightsHtml(data: RenderInput): string {
-  const { overview: o, clusters, health, gaps, trends } = data;
+  const { overview: o, clusters, health, gaps, trends, competitors } = data;
 
   const clusterRows = clusters.length === 0
     ? `<tr><td colspan="5" class="empty">No clusters yet. Coverage = ${Math.round(health.coverage_last_30d_pct * 100)}% of last-30d queries have embeddings. Clusters build as backfill completes.</td></tr>`
@@ -207,6 +221,16 @@ function renderInsightsHtml(data: RenderInput): string {
         <td>${esc(g.top_missing_intent)}</td>
         <td class="num">${g.missing_count.toLocaleString()}</td>
         <td><code>${esc(g.missing_field)}</code></td>
+      </tr>`).join("");
+
+  // Top competitor mentions across every tenant.
+  const competitorRows = competitors.length === 0
+    ? `<tr><td colspan="4" class="empty">No competitor mentions logged yet. Set a tenant's <code>businesses.competitors</code> column to a comma-separated list; new queries will be scanned automatically.</td></tr>`
+    : competitors.map((c, i) => `<tr>
+        <td class="num">${i + 1}</td>
+        <td><strong>${esc(c.competitor)}</strong></td>
+        <td class="num">${c.mention_count.toLocaleString()}</td>
+        <td class="num">${c.unique_tenants.toLocaleString()}</td>
       </tr>`).join("");
 
   // Trends: pivot (industry × day) for the 14-day view. Limit to top 8
@@ -346,6 +370,13 @@ ${o.total_queries === 0 ? `<div class="warn">No queries in the database yet. Thi
 <table>
   <thead><tr><th>Tenant</th><th style="width:140px">Industry</th><th style="width:90px">30d queries</th><th style="width:110px">Gap intent</th><th style="width:90px">Gap count</th><th style="width:240px">Missing field</th></tr></thead>
   <tbody>${gapRows}</tbody>
+</table>
+
+<h2>Top competitor mentions (cross-tenant, last 30 days)</h2>
+<p class="tagline">Names extracted from query text against each tenant's <code>businesses.competitors</code> list. Aggregate across every tenant — the internal preview of the Tier 2 data-product "who are AI users asking about in your category".</p>
+<table>
+  <thead><tr><th style="width:40px">#</th><th>Competitor</th><th style="width:120px">Mentions</th><th style="width:120px">Tenants</th></tr></thead>
+  <tbody>${competitorRows}</tbody>
 </table>
 
 <h2>Industry trends (last 14 days)</h2>

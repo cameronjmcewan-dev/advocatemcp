@@ -10,6 +10,7 @@ import { getDb, type BusinessRow } from "../db.js";
 import type { QueryStage } from "../prompts/types.js";
 import { classifyAndPersist } from "./classify.js";
 import { embedAndPersist } from "./embeddings.js";
+import { extractAndPersist as extractCompetitorsAndPersist } from "./competitors.js";
 import { classifyIndustry, computeCostCents } from "./taxonomy.js";
 
 const anthropic = new Anthropic({
@@ -198,6 +199,12 @@ export async function queryAgent(
   // queries.query_embedding when it resolves; the primary response has
   // already been sent to the caller by the time this lands.
   embedAndPersist(queryId, query);
+
+  // Fire-and-forget competitor co-mention extraction. Pure-regex scan
+  // against the tenant's businesses.competitors list — cheap, zero
+  // API calls. Updates queries.competitors_mentioned with a JSON
+  // array (or '[]' if the tenant hasn't configured competitors).
+  extractCompetitorsAndPersist(queryId, business.slug, query);
 
   return {
     response: responseText,

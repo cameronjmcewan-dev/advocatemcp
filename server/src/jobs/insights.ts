@@ -422,3 +422,87 @@ export function embeddingsHealth(db: Database): EmbeddingsHealth {
     backfill_remaining:      remaining,
   };
 }
+
+// ── Cross-tenant competitor co-mentions (migration 022) ──────────────────
+//
+// Aggregates competitors_mentioned across every tenant over the last N
+// days. For the admin Queries page + future Tier 2 data-product view:
+// "which competitor names do AI-search users ask about most when asking
+// about businesses in our panel?".
+//
+// competitors_mentioned is a JSON array of strings per-row. SQLite's
+// JSON1 extension is compiled in on better-sqlite3 by default, so we
+// can use json_each() to explode the array and GROUP BY the element.
+// If json_each fails on an older SQLite build, the fallback is to
+// parse in JS — kept simple because JSON1 is effectively universal
+// for better-sqlite3 these days.
+
+export interface CompetitorMention {
+  competitor:     string;
+  mention_count:  number;
+  unique_tenants: number;
+  last_seen:      string;
+}
+
+export function topCompetitors(
+  db: Database,
+  opts?: { limit?: number; days?: number },
+): CompetitorMention[] {
+  const limit = opts?.limit ?? 25;
+  const days  = opts?.days  ?? 30;
+
+  try {
+    return db.prepare(
+      `SELECT
+         je.value                      AS competitor,
+         COUNT(*)                      AS mention_count,
+         COUNT(DISTINCT q.business_slug) AS unique_tenants,
+         MAX(q.timestamp)              AS last_seen
+       FROM queries q, json_each(q.competitors_mentioned) je
+      WHERE q.timestamp >= datetime('now', '-' || ? || ' days')
+        AND q.competitors_mentioned IS NOT NULL
+        AND q.competitors_mentioned != '[]'
+      GROUP BY je.value
+      ORDER BY mention_count DESC, last_seen DESC
+      LIMIT ?`,
+    ).all(days, limit) as CompetitorMention[];
+  } catch (err) {
+    // json_each unsupported or another SQL surprise — fall back to a
+    // JS-side aggregation. Rare enough that we accept the slower path.
+    console.error(JSON.stringify({
+      event: "top_competitors_fallback",
+      error: String(err instanceof Error ? err.message : err),
+    }));
+    const rows = db.prepare(
+      `SELECT business_slug, competitors_mentioned, timestamp
+         FROM queries
+        WHERE timestamp >= datetime('now', '-' || ? || ' days')
+          AND competitors_mentioned IS NOT NULL
+          AND competitors_mentioned != '[]'`,
+    ).all(days) as { business_slug: string; competitors_mentioned: string; timestamp: string }[];
+
+    const agg = new Map<string, { count: number; tenants: Set<string>; last: string }>();
+    for (const r of rows) {
+      let list: unknown;
+      try { list = JSON.parse(r.competitors_mentioned); } catch { continue; }
+      if (!Array.isArray(list)) continue;
+      for (const raw of list) {
+        const competitor = typeof raw === "string" ? raw : String(raw);
+        const entry = agg.get(competitor) ?? { count: 0, tenants: new Set<string>(), last: r.timestamp };
+        entry.count += 1;
+        entry.tenants.add(r.business_slug);
+        if (r.timestamp > entry.last) entry.last = r.timestamp;
+        agg.set(competitor, entry);
+      }
+    }
+    return [...agg.entries()]
+      .map(([competitor, v]) => ({
+        competitor,
+        mention_count:  v.count,
+        unique_tenants: v.tenants.size,
+        last_seen:      v.last,
+      }))
+      .sort((a, b) => b.mention_count - a.mention_count || b.last_seen.localeCompare(a.last_seen))
+      .slice(0, limit);
+  }
+}

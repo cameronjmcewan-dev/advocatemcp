@@ -8,6 +8,7 @@ import {
   trendsByIndustry,
   topClusters,
   embeddingsHealth,
+  topCompetitors,
 } from "./insights.js";
 
 /* Seed helper — inserts a handful of businesses and queries at varied
@@ -250,6 +251,60 @@ describe("insights SQL helpers", () => {
       expect(h.coverage_last_7d_pct).toBeCloseTo(0.5, 2);
       expect(h.total_clusters_active).toBe(0);
       expect(h.backfill_remaining).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe("topCompetitors", () => {
+    it("aggregates mentions across tenants, sorted by count desc", () => {
+      // Seed a clean set. seed() already inserted 15 queries; add 5
+      // competitor-mention rows on top. Want: Scrunch AI = 3 (2
+      // tenants), Profound = 2 (2 tenants), BrightEdge = 1 (1 tenant).
+      const now = "datetime('now')";
+      const ins = (slug: string, hits: string[]) =>
+        db.prepare(
+          `INSERT INTO queries (business_slug, query_text, response_text, competitors_mentioned, timestamp)
+           VALUES (?, 'q', 'r', ?, ${now})`,
+        ).run(slug, JSON.stringify(hits));
+      ins("dental1", ["Scrunch AI", "Profound"]);
+      ins("dental1", ["Scrunch AI"]);
+      ins("plumb1",  ["Scrunch AI", "BrightEdge"]);
+      ins("plumb1",  ["Profound"]);
+
+      const top = topCompetitors(db, { limit: 10, days: 30 });
+      const byName = Object.fromEntries(top.map((r) => [r.competitor, r]));
+      expect(byName["Scrunch AI"].mention_count).toBe(3);
+      expect(byName["Scrunch AI"].unique_tenants).toBe(2);
+      expect(byName["Profound"].mention_count).toBe(2);
+      expect(byName["Profound"].unique_tenants).toBe(2);
+      expect(byName["BrightEdge"].mention_count).toBe(1);
+      expect(byName["BrightEdge"].unique_tenants).toBe(1);
+      // Order is by count desc
+      expect(top[0].competitor).toBe("Scrunch AI");
+    });
+
+    it("ignores rows with '[]' or NULL competitors_mentioned", () => {
+      db.prepare(
+        `INSERT INTO queries (business_slug, query_text, response_text, competitors_mentioned, timestamp)
+         VALUES ('dental1', 'q', 'r', '[]', datetime('now'))`,
+      ).run();
+      db.prepare(
+        `INSERT INTO queries (business_slug, query_text, response_text, competitors_mentioned, timestamp)
+         VALUES ('dental1', 'q', 'r', NULL, datetime('now'))`,
+      ).run();
+      const top = topCompetitors(db, { limit: 10, days: 30 });
+      // These rows shouldn't produce mention entries.
+      expect(top.every((r) => r.competitor !== "")).toBe(true);
+    });
+
+    it("respects the days window (40-day-old mentions excluded from 30d)", () => {
+      db.prepare(
+        `INSERT INTO queries (business_slug, query_text, response_text, competitors_mentioned, timestamp)
+         VALUES ('dental1', 'q', 'r', '["OldCompetitor"]', datetime('now', '-40 days'))`,
+      ).run();
+      const top30 = topCompetitors(db, { limit: 50, days: 30 });
+      expect(top30.find((r) => r.competitor === "OldCompetitor")).toBeUndefined();
+      const top60 = topCompetitors(db, { limit: 50, days: 60 });
+      expect(top60.find((r) => r.competitor === "OldCompetitor")).toBeDefined();
     });
   });
 });

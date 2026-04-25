@@ -52,19 +52,21 @@
       ? window.AMCP.cachedFetch
       : window.AMCP && window.AMCP.authedFetch;
     const base = '/api/admin/insights-proxy';
-    const [health, clusters, trends] = await Promise.all([
+    const [health, clusters, trends, competitors] = await Promise.all([
       cf(`${base}/embeddings-health`).catch(() => null),
       cf(`${base}/top-clusters?limit=25&days=30`).catch(() => null),
       cf(`${base}/trends?days=14`).catch(() => null),
+      cf(`${base}/top-competitors?limit=20&days=30`).catch(() => null),
     ]);
     // 403 from any of them = non-admin; 503 = ADMIN_API_KEY not set.
     if (health && health.status === 403) return { __forbidden: true };
     if (health && health.status === 503) return { __not_configured: true };
     const data = {};
-    try { if (health   && health.ok)   data.health   = await health.json();   } catch {}
-    try { if (clusters && clusters.ok) data.clusters = await clusters.json(); } catch {}
-    try { if (trends   && trends.ok)   data.trends   = await trends.json();   } catch {}
-    if (!data.health && !data.clusters && !data.trends) {
+    try { if (health      && health.ok)      data.health      = await health.json();      } catch {}
+    try { if (clusters    && clusters.ok)    data.clusters    = await clusters.json();    } catch {}
+    try { if (trends      && trends.ok)      data.trends      = await trends.json();      } catch {}
+    try { if (competitors && competitors.ok) data.competitors = await competitors.json(); } catch {}
+    if (!data.health && !data.clusters && !data.trends && !data.competitors) {
       return { __error: 'Insights endpoints returned nothing — check Worker logs for `admin_insights_proxy_error`.' };
     }
     return data;
@@ -123,8 +125,9 @@ npx wrangler secret put ADMIN_API_KEY</pre>
     }
 
     const health  = data?.health   || {};
-    const clusters = Array.isArray(data?.clusters) ? data.clusters : [];
-    const trends  = Array.isArray(data?.trends)    ? data.trends    : [];
+    const clusters    = Array.isArray(data?.clusters)    ? data.clusters    : [];
+    const trends      = Array.isArray(data?.trends)      ? data.trends      : [];
+    const competitors = Array.isArray(data?.competitors) ? data.competitors : [];
 
     const lastUpdate = health.last_cluster_update_at
       ? new Date(health.last_cluster_update_at).toLocaleString()
@@ -204,6 +207,25 @@ npx wrangler secret put ADMIN_API_KEY</pre>
           <table class="tbl">
             <thead><tr><th style="width:40px">#</th><th>Topic · representative queries</th><th class="t">Mentions</th><th class="t">Tenants</th></tr></thead>
             <tbody>${clusterRows}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="row single">
+        <div class="card-dash">
+          <div class="card-head"><div><h3>Top competitor co-mentions</h3><div class="sub">Names extracted from query text against each tenant's competitors list — aggregate across every tenant in the panel. The row a hedge fund / agency would pay for.</div></div></div>
+          <table class="tbl">
+            <thead><tr><th style="width:40px">#</th><th>Competitor</th><th class="t">Mentions</th><th class="t">Tenants</th></tr></thead>
+            <tbody>${
+              competitors.length === 0
+                ? `<tr><td colspan="4" style="padding:20px;color:var(--muted);font-size:13.5px;text-align:center">No co-mentions yet. Set a tenant's <code>businesses.competitors</code> to a comma-separated list; new queries are scanned automatically.</td></tr>`
+                : competitors.map((c, i) => `<tr>
+                    <td class="num">${i + 1}</td>
+                    <td><strong>${esc(c.competitor)}</strong></td>
+                    <td class="num">${fmtCount(c.mention_count)}</td>
+                    <td class="num">${fmtCount(c.unique_tenants)}</td>
+                  </tr>`).join('')
+            }</tbody>
           </table>
         </div>
       </div>

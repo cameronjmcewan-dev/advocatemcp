@@ -28,6 +28,7 @@ const ALLOWED_INSIGHTS_PATHS = new Set<string>([
   "overview",
   "top-queries",
   "top-clusters",
+  "top-competitors",
   "profile-gaps",
   "trends",
   "embeddings-health",

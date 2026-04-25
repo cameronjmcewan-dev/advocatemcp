@@ -63,7 +63,7 @@ agentRouter.get("/agents/:slug/profile", requireApiKey, (req: Request, res: Resp
               years_in_business, top_services, availability, differentiator,
               service_radius_miles, certifications, pricing_tier, service_area_keywords,
               hours_json, pricing_json_v2, lead_routing_json, timezone,
-              availability_webhook_url
+              availability_webhook_url, competitors
        FROM businesses WHERE slug = ?`
     )
     .get(slug) as (BusinessRow & {
@@ -72,6 +72,7 @@ agentRouter.get("/agents/:slug/profile", requireApiKey, (req: Request, res: Resp
       lead_routing_json: string | null;
       timezone: string | null;
       availability_webhook_url: string | null;
+      competitors: string | null;
     }) | undefined;
 
   if (!row) {
@@ -118,6 +119,7 @@ agentRouter.get("/agents/:slug/profile", requireApiKey, (req: Request, res: Resp
     lead_routing_json: parseObj(row.lead_routing_json),
     timezone: row.timezone,
     availability_webhook_url: row.availability_webhook_url,
+    competitors: parseCSV(row.competitors),
     created_at: row.created_at,
   });
 });
@@ -151,6 +153,7 @@ agentRouter.patch("/agents/:slug/profile", (req: Request, res: Response) => {
     "category","star_rating","review_count","years_in_business","top_services","availability",
     "differentiator","service_radius_miles","certifications","pricing_tier","service_area_keywords",
     "hours_json","pricing_json_v2","lead_routing_json","timezone","availability_webhook_url",
+    "competitors",
   ] as const;
 
   const jsonValidators: Record<string, z.ZodTypeAny> = {
@@ -171,6 +174,7 @@ agentRouter.patch("/agents/:slug/profile", (req: Request, res: Response) => {
     if (field === "top_services" && Array.isArray(val)) val = (val as string[]).join(", ");
     if (field === "certifications" && Array.isArray(val)) val = (val as string[]).join(", ");
     if (field === "service_area_keywords" && Array.isArray(val)) val = (val as string[]).join(", ");
+    if (field === "competitors" && Array.isArray(val)) val = (val as string[]).join(", ");
 
     // JSON columns: validate shape, then stringify (or null).
     if (field in jsonValidators) {
