@@ -190,7 +190,7 @@
 
       <div class="row single">
         <div class="card-dash">
-          <div class="card-head"><div><h3>AI citation scores · all tenants</h3><div class="sub">Cached scores from /api/client/profile-score (no API spend on this view).</div></div></div>
+          <div class="card-head"><div><h3>Citation ratings · all tenants</h3><div class="sub">Cached predicted-citation scores from the format-judge harness. Click a tenant to drill into improvements; real-citation tracking lives on Competitor Radar.</div></div></div>
           <div id="score-fleet">
             <div style="padding:14px 0;font-size:13px;color:var(--muted)">Loading scores…</div>
           </div>

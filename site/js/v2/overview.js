@@ -488,24 +488,30 @@
     `;
   }
 
-  /* AI citation score card on the Overview. The customer-facing
+  /* Citation rating card on the Overview. The customer-facing
    * scoring tool lives on /BusinessProfile.html (full UI with
-   * improvements list); this card is the at-a-glance summary +
-   * one-click "Run a fresh check" surface that lives on the page
-   * the customer hits on every login. By default it shows a
-   * "no score yet" prompt so we don't burn API budget on every
-   * page load — customer chooses when to run a check. */
+   * improvements list + the explainer panel); this card is the
+   * at-a-glance summary + one-click "Run a fresh check" surface
+   * that lives on the page the customer hits on every login.
+   *
+   * Naming: see profile.js renderScoreCard() for the rationale —
+   * this is a calibrated proxy, not a count of real citations.
+   * Real citation tracking lives on Competitor Radar. */
   function renderScoreOverviewCard() {
     return `
       <div class="row single">
         <div class="card-dash" id="score-overview-card">
           <div class="card-head">
             <div>
-              <h3>AI citation score</h3>
-              <div class="sub">How likely AI search engines (Perplexity, ChatGPT, Claude, Google) are to cite your business when someone asks about you. Run a check to see the number + what to improve.</div>
+              <h3 style="display:inline-flex;align-items:center;gap:8px">Citation rating
+                <a href="/BusinessProfile.html"
+                   title="Learn how this is calculated on Business Profile"
+                   style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:999px;background:var(--paper-2);color:var(--ink-2);border:1px solid var(--line);font-size:11px;font-weight:600;text-decoration:none;line-height:1">?</a>
+              </h3>
+              <div class="sub">A predicted score for how citation-ready your profile is when AI search engines build their answers. Calibrated against the per-engine rendering each bot receives. Real citations from live polls live on <a href="/CompetitorRadar.html" style="color:var(--maroon)">Competitor Radar</a>.</div>
             </div>
             <div>
-              <button id="btn-run-overview-score" type="button" class="btn btn-primary btn-sm">Run AI score check →</button>
+              <button id="btn-run-overview-score" type="button" class="btn btn-primary btn-sm">Run citation check →</button>
             </div>
           </div>
           <div id="score-overview-result" style="margin-top:14px"></div>
@@ -595,7 +601,7 @@
           } else if (body.has_score) {
             scoreBtn.textContent = 'Re-run check →';
           } else {
-            scoreBtn.textContent = 'Run AI score check →';
+            scoreBtn.textContent = 'Run citation check →';
           }
         } catch { /* silent — show "Run check" button */ }
       }
@@ -604,7 +610,7 @@
         if (!af) { scoreResultEl.innerHTML = '<p style="color:var(--red)">Not signed in.</p>'; return; }
         scoreBtn.disabled = true;
         const started = Date.now();
-        scoreResultEl.innerHTML = '<div class="ov-score-loading"><span class="ov-score-spinner"></span><span class="ov-score-loading-text">Scoring how 4 AI engines would cite you right now… ~30-45s</span></div>';
+        scoreResultEl.innerHTML = '<div class="ov-score-loading"><span class="ov-score-spinner"></span><span class="ov-score-loading-text">Scoring how citation-ready each AI engine\'s rendered output looks… ~30-45s</span></div>';
         const ticker = setInterval(() => {
           const elapsed = Math.round((Date.now() - started) / 1000);
           const span = scoreResultEl.querySelector('.ov-score-loading-text');

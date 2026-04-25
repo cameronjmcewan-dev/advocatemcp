@@ -103,25 +103,40 @@
   ];
   const UNITS = ['job', 'hour', 'visit', 'sqft'];
 
-  /* AI citation score card. Calls POST /api/client/profile-score on
+  /* Citation rating card. Calls POST /api/client/profile-score on
    * demand — runs the format-judge harness against THIS tenant's
    * profile and returns a 0-10 score plus actionable improvements
-   * mapped from the judge's deductions. The same harness used in
-   * /admin/experiments.html for ops-side measurement, but scoped to
-   * the calling tenant only and surfacing customer-friendly UX.
+   * mapped from the judge's deductions. Same harness used in
+   * /admin/experiments.html for ops-side measurement, scoped to the
+   * calling tenant.
    *
-   * Cost per click: ~$0.04. The "Run check" button is disabled
-   * during the ~30-45s call so a tenant can't click it 100x. */
+   * Naming note: previously called "AI citation score", but that
+   * implied we were measuring real citations from ChatGPT / Perplexity
+   * / etc. We're not — this is a calibrated proxy where Claude
+   * (acting as judge) scores how citation-worthy our rendered HTML +
+   * JSON-LD looks. Real-world citation tracking lives in Competitor
+   * Radar (weekly Perplexity poll). The "How it works" tooltip below
+   * spells this out so customers don't conflate the two.
+   *
+   * Cost per click: ~$0.04. Button is disabled during the ~30-45s
+   * call so a tenant can't click it 100x. */
   function renderScoreCard(p) {
     return `
       <div class="card-dash" id="score-card">
         <div class="card-head">
           <div>
-            <h3>AI citation score</h3>
-            <div class="sub">How likely are AI search engines to cite your business when someone asks about you? We measure this against the same models AI engines run.</div>
+            <h3>Citation rating
+              <span class="score-info-badge" data-score-info-toggle aria-label="How is this calculated?" tabindex="0">?</span>
+            </h3>
+            <div class="sub">A predicted score for how citation-ready your business profile is when AI search engines build their answers. Higher = the rendered output an AI bot sees from your domain has all the structured signals citation systems look for.</div>
+            <div class="score-info-panel" id="score-info-panel" hidden>
+              <strong>How this is calculated.</strong>
+              <p>This is a <em>predicted</em> rating, not a count of real citations. We render the same HTML + JSON-LD that real AI bots receive when they crawl your site, then have a Claude judge score it against the rubrics those AI engines use internally. The per-engine breakdown shows how the rendered-for-Perplexity (etc.) variant scores — same content, different format optimized for each engine.</p>
+              <p>Real-world citation data — actual times Perplexity cited you in a real query — lives on the <a href="/CompetitorRadar.html">Competitor Radar</a> page. That runs a weekly poll against Perplexity's live API and tracks wins/losses. Different signal, complementary to this one.</p>
+            </div>
           </div>
           <div>
-            <button id="btn-run-score" type="button" class="btn btn-primary btn-sm">Run AI score check →</button>
+            <button id="btn-run-score" type="button" class="btn btn-primary btn-sm">Run citation check →</button>
           </div>
         </div>
         <div id="score-result" style="margin-top:14px"></div>
@@ -370,7 +385,7 @@
         <div class="card-head">
           <div>
             <h3>Verified ratings</h3>
-            <div class="sub">Add the platforms you have a real listing on. AI search engines treat these as third-party verification — the single biggest lift to your citation score (~+1 to +2 points per platform on the format-judge harness).</div>
+            <div class="sub">Add the platforms you have a real listing on. AI search engines treat these as third-party verification — the single biggest lift to your citation rating (~+1 to +2 points per platform in our internal harness).</div>
           </div>
         </div>
         <form id="form-ratings" class="prof-form"${datasetSeed}>
@@ -665,7 +680,7 @@
         scoreBtn.disabled = true;
         const started = Date.now();
         lastScoreRunAt = started;
-        scoreResult.innerHTML = `<div class="score-loading"><div class="score-spinner"></div><span>${opts.fromSave ? 'Profile saved — re-running AI score…' : 'Running AI score check…'} ~30-45s</span></div>`;
+        scoreResult.innerHTML = `<div class="score-loading"><div class="score-spinner"></div><span>${opts.fromSave ? 'Profile saved — re-running citation check…' : 'Running citation check…'} ~30-45s</span></div>`;
         const ticker = setInterval(() => {
           const elapsed = Math.round((Date.now() - started) / 1000);
           const span = scoreResult.querySelector('.score-loading span');
@@ -695,6 +710,23 @@
 
       scoreBtn.addEventListener('click', () => window.AMCP_PROFILE_RUN_SCORE());
       loadCachedScore();
+    }
+
+    // "?" badge next to the Citation rating heading toggles the
+    // explainer panel. Click + Enter/Space both open it. Honest
+    // disclosure that the rating is a calibrated proxy, not a real
+    // citation count — see the renderScoreCard() comment for context.
+    const scoreInfoBadge = document.querySelector('[data-score-info-toggle]');
+    const scoreInfoPanel = document.getElementById('score-info-panel');
+    if (scoreInfoBadge && scoreInfoPanel) {
+      const toggle = () => {
+        scoreInfoPanel.hidden = !scoreInfoPanel.hidden;
+        scoreInfoBadge.setAttribute('aria-expanded', String(!scoreInfoPanel.hidden));
+      };
+      scoreInfoBadge.addEventListener('click', toggle);
+      scoreInfoBadge.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(); }
+      });
     }
 
     const addQuoteBtn = document.getElementById('btn-add-quote');
@@ -1124,8 +1156,33 @@
           border-radius: 4px; font-size: 12.5px; color: var(--maroon);
         }
 
-        /* AI citation score card */
+        /* Citation rating card */
         #score-card .card-head { gap: 16px; }
+        #score-card h3 { display: inline-flex; align-items: center; gap: 8px; }
+        .score-info-badge {
+          display: inline-flex; align-items: center; justify-content: center;
+          width: 18px; height: 18px; border-radius: 999px;
+          background: var(--paper-2); color: var(--ink-2);
+          border: 1px solid var(--line);
+          font-size: 11px; font-weight: 600; cursor: pointer;
+          font-family: var(--sans, "General Sans", system-ui, sans-serif);
+          user-select: none;
+          transition: background-color .15s ease, color .15s ease;
+        }
+        .score-info-badge:hover, .score-info-badge:focus {
+          background: var(--maroon); color: #fff; border-color: var(--maroon);
+          outline: none;
+        }
+        .score-info-panel {
+          margin-top: 10px; padding: 14px 16px;
+          background: var(--paper-2); border: 1px solid var(--line);
+          border-radius: 10px; font-size: 13.5px; color: var(--ink-2);
+          line-height: 1.55; max-width: 720px;
+        }
+        .score-info-panel strong { color: var(--ink); display: block; margin-bottom: 6px; }
+        .score-info-panel p { margin: 0 0 8px; }
+        .score-info-panel p:last-child { margin: 0; }
+        .score-info-panel a { color: var(--maroon); }
         .score-loading {
           display: flex; align-items: center; gap: 10px;
           padding: 16px; color: var(--muted); font-size: 13.5px;
