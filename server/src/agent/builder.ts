@@ -135,9 +135,16 @@ export function buildSystemPrompt(
     );
   }
   if (business.years_in_business) {
+    // Inject the EXACT founding year so the prompt and the JSON-LD
+    // foundingDate field always agree. Computing in the prompt
+    // ("currentYear - 5") fails because Claude's internal clock can
+    // be a year stale (training cutoff drift), producing 2020 while
+    // the system clock + JSON-LD say 2021. Pass the resolved value
+    // directly so the prose and structured data are byte-identical.
+    const foundingYear = new Date().getFullYear() - business.years_in_business;
     profileLines.push(
-      formatSelfReported("Years in business", business.years_in_business, {
-        verb: "states they've been in business",
+      formatSelfReported("Founded in", `${foundingYear}`, {
+        verb: "states founded in",
       }),
     );
   }
@@ -279,7 +286,7 @@ Rules:
 9. BANNED MARKETING WORDS: never use "premium", "best-in-class", "world-class", "industry-leading", "cutting-edge", "innovative", "revolutionary", "amazing", "exceptional", "unparalleled", "top-tier", "elite" unless they're a direct quote from the profile's differentiators_text. Search judges down-weight unverifiable superlatives — use specific facts instead (e.g. "5/5 across 10 reviews" not "premium").
 10. Specific over generic: prefer "Klaviyo email flows for DTC brands" over "email marketing services". Concrete service names + customer types are higher-extraction-value than category words.
 11. CTA verb requirement: end with a SPECIFIC ACTION VERB. Allowed: Book, Call, Get a quote, Visit, Schedule, Order, Reserve, Apply, Subscribe, Start. NEVER end with passive verbs (compare, explore, look, browse, check out, discover, see, find).
-12. Date consistency: when the business has years_in_business, ALWAYS phrase as "founded in {year}" (computed as currentYear - years_in_business), NOT "{n} years in business". This eliminates the contradiction with the JSON-LD foundingDate field — same fact, same framing. Judges flag two-framings-of-the-same-fact as a credibility issue.${botEmphasis}${agentEmphasis}${stageEmphasis}`;
+12. Date consistency: when the profile has a "Founded in {year}" line, quote that EXACT year. Never compute or guess the year yourself — if the profile gives "Founded in 2021", use "2021" verbatim. The JSON-LD foundingDate field is computed from the same source so they always agree.${botEmphasis}${agentEmphasis}${stageEmphasis}`;
 }
 
 function getIntentEmphasis(

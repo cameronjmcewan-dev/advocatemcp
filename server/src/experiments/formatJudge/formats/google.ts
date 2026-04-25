@@ -69,10 +69,24 @@ export const googleHtml: FormatVariant = {
     };
 
     // Extract the first sentence (under 160 chars) for the lead+description.
+    // Don't truncate with ellipsis — judges flagged "lead paragraph
+    // truncated with an ellipsis in the rendered body" as a quality
+    // deduction. If the first sentence is over 160 chars, fall back to
+    // building a synthetic lead from name + category + location that
+    // we know fits cleanly.
     const firstSentence = (() => {
       const m = answerText.match(/^([^.!?]+[.!?])/);
-      const s = m ? m[1].trim() : answerText.slice(0, 155);
-      return s.length > 160 ? s.slice(0, 157) + "…" : s;
+      const candidate = m ? m[1].trim() : "";
+      if (candidate && candidate.length <= 160) return candidate;
+      // Synthesise a lead under 160 chars from structured fields.
+      const parts: string[] = [business.name];
+      if (business.category) parts.push(`is a ${business.category}`);
+      if (business.location) parts.push(`in ${business.location}`);
+      if (business.differentiator && parts.join(" ").length + business.differentiator.length + 3 <= 158) {
+        parts.push(`— ${business.differentiator.split(/[.;]/)[0]?.trim() ?? ""}`);
+      }
+      const synthetic = parts.filter(Boolean).join(" ").trim() + ".";
+      return synthetic.length <= 160 ? synthetic : `${business.name} is a ${business.category ?? "business"} in ${business.location ?? "the US"}.`;
     })();
 
     const body = mdBulletsToHtml(answerText);
