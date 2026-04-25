@@ -188,22 +188,79 @@
         <div class="score-bigwheel">
           <div class="score-num">${score}<span class="score-num-max">/${max}</span></div>
           <div class="score-num-label">${cite}% cite rate</div>
+          <div class="score-num-foot">predicted</div>
         </div>
         <div class="score-table-wrap">
           <table class="score-table">
-            <thead><tr><th>AI engine</th><th></th><th class="t">Score</th></tr></thead>
+            <thead><tr><th>Per-engine rendering</th><th></th><th class="t">Score</th></tr></thead>
             <tbody>${variantRows}</tbody>
           </table>
+          <div class="score-table-foot">Each row = how citation-ready the rendered-for-that-engine HTML scores in the internal Claude-judge harness.</div>
         </div>
       </div>
       <div class="score-improvements">
         <strong>Top opportunities to improve</strong>
         ${improvementsHtml}
       </div>
+      <div class="score-real-signals" id="score-real-signals">
+        <span class="score-real-signals-loading">Loading real-world signals…</span>
+      </div>
       <div class="score-meta">
         Last run: ${esc(new Date(data.run_at || Date.now()).toLocaleString())} · Re-run anytime · ~30s · ~$0.04/run
       </div>
     `;
+  }
+
+  /* Fetch the live /api/client/metrics for this tenant and render the
+   * "real signals" strip — the side-by-side answer to the predicted
+   * Citation rating above. We deliberately fire this AFTER renderScoreResult
+   * paints (not as part of the same blocking call) so the score lands
+   * instantly on cache hits and the signal strip fills in async.
+   *
+   * Empty/zero values render as "—" not "0" so a brand-new tenant with
+   * no traffic yet doesn't see a row of demoralizing zeros. The "Open
+   * <page>" links flow naturally to the per-area dashboards. */
+  async function loadRealSignals() {
+    const slot = document.getElementById('score-real-signals');
+    if (!slot) return;
+    const af = window.AMCP && window.AMCP.authedFetch;
+    if (!af) { slot.textContent = ''; return; }
+    try {
+      const res = await af('/api/client/metrics');
+      if (!res.ok) { slot.textContent = ''; return; }
+      const m = (await res.json().catch(() => ({}))) || {};
+      const botVisits = (m.queries_last_30_days || []).reduce(
+        (a, d) => a + (d.count || 0), 0,
+      );
+      const clicks = m.referral_clicks_last_30_days != null
+        ? m.referral_clicks_last_30_days
+        : (m.referral_clicks_total || 0);
+      const recent = (m.recent_queries || []).length;
+      const fmt = (n) => (n > 0 ? n.toLocaleString() : '—');
+      slot.innerHTML = `
+        <strong class="score-real-signals-h">Real signals · last 30 days</strong>
+        <div class="score-real-signals-grid">
+          <div class="score-real-cell">
+            <div class="score-real-num">${fmt(botVisits)}</div>
+            <div class="score-real-lbl">AI bot visits</div>
+            <a class="score-real-link" href="/BotTraffic.html">Open Bot Traffic →</a>
+          </div>
+          <div class="score-real-cell">
+            <div class="score-real-num">${fmt(clicks)}</div>
+            <div class="score-real-lbl">Click-throughs from AI answers</div>
+            <a class="score-real-link" href="/ClickThroughs.html">Open Click-throughs →</a>
+          </div>
+          <div class="score-real-cell">
+            <div class="score-real-num">${fmt(recent)}</div>
+            <div class="score-real-lbl">Queries logged recently</div>
+            <a class="score-real-link" href="/Mentions.html">Open Mentions →</a>
+          </div>
+        </div>
+        <div class="score-real-foot">These are <em>actual</em> events on your tenant — not predictions. The score above is a calibrated estimate; this is the ground truth. <a href="/CompetitorRadar.html">Live citation polls live on Competitor Radar →</a></div>
+      `;
+    } catch {
+      slot.textContent = '';
+    }
   }
 
   /* Pretty label for an internal profile field name. Used in the
@@ -663,6 +720,8 @@
           if (res.ok && body.has_score) {
             scoreResult.innerHTML = renderScoreResult(body);
             scoreBtn.textContent = body.is_stale ? 'Profile changed — re-run check →' : 'Re-run check →';
+            // Async — paint score instantly, fill signals strip when ready
+            loadRealSignals();
           }
         } catch { /* silent */ }
       }
@@ -700,6 +759,8 @@
           }
           scoreResult.innerHTML = renderScoreResult(body);
           scoreBtn.textContent = 'Re-run check →';
+          // Async — paint signals strip after the score lands
+          loadRealSignals();
         } catch (err) {
           clearInterval(ticker);
           scoreResult.innerHTML = `<p style="color:var(--red);font-size:13.5px">Network error: ${esc(String((err && err.message) || err))}</p>`;
@@ -1183,6 +1244,47 @@
         .score-info-panel p { margin: 0 0 8px; }
         .score-info-panel p:last-child { margin: 0; }
         .score-info-panel a { color: var(--maroon); }
+        .score-num-foot {
+          font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
+          color: var(--muted); margin-top: 4px;
+        }
+        .score-table-foot {
+          font-size: 11.5px; color: var(--muted); margin-top: 6px; line-height: 1.45;
+          padding-left: 2px;
+        }
+        .score-real-signals {
+          margin-top: 18px; padding: 14px 16px;
+          background: var(--paper-2); border: 1px solid var(--line);
+          border-radius: 10px;
+        }
+        .score-real-signals-loading {
+          font-size: 12.5px; color: var(--muted); font-style: italic;
+        }
+        .score-real-signals-h {
+          font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+          color: var(--ink-2); display: block; margin-bottom: 10px;
+        }
+        .score-real-signals-grid {
+          display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+        }
+        @media (max-width: 720px) { .score-real-signals-grid { grid-template-columns: 1fr; } }
+        .score-real-cell {
+          display: flex; flex-direction: column; gap: 4px;
+        }
+        .score-real-num {
+          font-family: var(--serif); font-size: 28px; line-height: 1;
+          color: var(--ink); font-weight: 400;
+        }
+        .score-real-lbl { font-size: 12px; color: var(--ink-2); }
+        .score-real-link {
+          font-size: 11.5px; color: var(--maroon); margin-top: 2px;
+          font-weight: 500;
+        }
+        .score-real-foot {
+          font-size: 11.5px; color: var(--muted); margin-top: 12px;
+          padding-top: 10px; border-top: 1px solid var(--line); line-height: 1.5;
+        }
+        .score-real-foot a { color: var(--maroon); }
         .score-loading {
           display: flex; align-items: center; gap: 10px;
           padding: 16px; color: var(--muted); font-size: 13.5px;
