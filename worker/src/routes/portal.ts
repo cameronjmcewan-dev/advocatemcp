@@ -23,7 +23,7 @@ import {
 } from "./onboard";
 import { handleOnboardPage } from "./onboardPage";
 import { handleActivatePage } from "./activatePage";
-import { handleActivate, handleActivateHosted, handleActivationToken, handleGetActivation, handleResendActivation } from "./activate";
+import { handleActivate, handleActivateHosted, handleActivatePreview, handleActivationToken, handleGetActivation, handleResendActivation } from "./activate";
 import {
   getSessionFromRequest,
   handleAuthLogin,
@@ -105,6 +105,8 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   // Separate flow from the existing /onboard wizard. See feat(worker):
   // phase 3 spine commit for the full design rationale.
   if (pathname === "/activate"                 && method === "GET")  return handleActivatePage(request, env);
+  if (pathname === "/api/activate/preview"     && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/activate/preview"     && method === "GET")     return handleActivatePreview(request, env);
   if (pathname === "/api/activate"             && method === "OPTIONS") return handleCorsPreflight(request);
   if (pathname === "/api/activate"             && method === "POST")    return handleActivate(request, env);
   if (pathname === "/api/activate/hosted"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });

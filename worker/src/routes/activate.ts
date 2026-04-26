@@ -301,9 +301,132 @@ async function handleActivateInner(request: Request, env: Env): Promise<Response
     origin_url_source: result.body.origin_url_source,
   }));
 
+  // Enrich the response with per-variant DCV records from the tenant
+  // record. The Stripe webhook fans out across apex+www variants and
+  // populates `tenant.cloudflare.variants[]`; activateDomain only
+  // re-registers the single typed hostname, so its result body has
+  // just one CNAME + TXT pair. To show the customer DNS records for
+  // BOTH variants, we look up the tenant after activateDomain succeeds
+  // and merge variants[] into the response. (Apr 26 2026.)
+  //
+  // Tenant lookup is by typed domain first; if customer typed the
+  // non-signup variant (apex when they signed up with www, or vice
+  // versa), fall back to D1 to find the canonical signup domain.
+  let tenant = await getTenant(env, domain);
+  if (!tenant) {
+    try {
+      const row = await env.DB
+        .prepare("SELECT domain FROM businesses WHERE slug = ? LIMIT 1")
+        .bind(slug)
+        .first<{ domain: string | null }>();
+      if (row?.domain) tenant = await getTenant(env, row.domain.toLowerCase());
+    } catch (err) {
+      // D1 lookup is best-effort. Failing here just means the response
+      // omits variants[]; the legacy cname_record + txt_record stay
+      // populated from activateDomain, so the page still renders.
+      console.warn(JSON.stringify({
+        activate: true,
+        event: "tenant_canonical_lookup_failed",
+        slug,
+        error: String(err),
+      }));
+    }
+  }
+
+  // Per-variant DCV records (apex + www). When variants[] is absent
+  // (older tenants, or tenant lookup failed) we omit the field; the
+  // dashboard-activate.js renderer falls back to cname_record +
+  // txt_record in that case.
+  const variants = tenant?.cloudflare.variants
+    ? tenant.cloudflare.variants.map((v) => ({
+        hostname: v.hostname,
+        is_apex: !v.hostname.startsWith("www.")
+                  && v.hostname.split(".").length <= 3
+                  && !v.hostname.endsWith(".hosted.advocatemcp.com"),
+        verification_status: v.verificationStatus,
+        ssl_status: v.sslStatus,
+        records: [
+          // SSL DCV TXT (CF-issued, customer-added).
+          ...(v.txtName && v.txtValue
+            ? [{ type: "TXT", host: v.txtName, value: v.txtValue, purpose: "SSL validation" }]
+            : []),
+          // Domain ownership TXT (CF-issued, customer-added).
+          ...(v.ownershipTxtName && v.ownershipTxtValue
+            ? [{ type: "TXT", host: v.ownershipTxtName, value: v.ownershipTxtValue, purpose: "Domain ownership" }]
+            : []),
+        ],
+      }))
+    : undefined;
+
   return jsonOk({
     ...result.body,
+    ...(variants ? { variants } : {}),
+    skip_dns: tenant?.skipDns === true,
     customer_message: SUCCESS_CUSTOMER_MESSAGE,
+  });
+}
+
+/* GET /api/activate/preview
+ *
+ * Lightweight pre-flight for the activate page. Verifies the activation
+ * token (so we don't leak tenant state to anyone who hits the URL) and
+ * returns just enough to decide which UI state to render:
+ *
+ *   - skipDns tenants (free tier / hosted-subdomain wizard signups) get
+ *     `skip_dns: true` + their hosted_domain so the activate page can
+ *     auto-redirect to /dashboard without ever showing the "enter your
+ *     domain" form. Pre-Apr-26-2026, every tenant landed on the same
+ *     domain-entry form, including hosted tenants who don't own a
+ *     custom domain.
+ *
+ *   - Custom-domain tenants get `skip_dns: false`, and the page renders
+ *     the regular domain-entry flow.
+ *
+ * No state mutation. Read-only. Failures fall back to skip_dns: false
+ * so the customer at least sees the manual form rather than a blank
+ * page.
+ */
+export async function handleActivatePreview(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const token = request.headers.get("X-Activation-Token") ?? url.searchParams.get("t");
+
+  if (!token) return jsonErr(401, "missing_token");
+  if (!env.ACTIVATION_SIGNING_KEY) return jsonErr(500, "platform_error");
+
+  let payload: ActivationTokenPayload;
+  try {
+    payload = await verifyActivationToken(token, env.ACTIVATION_SIGNING_KEY);
+  } catch (err) {
+    const reason = err as ActivationTokenError;
+    const code = reason === "expired" ? "token_expired" : "token_invalid";
+    return jsonErr(401, code);
+  }
+
+  const slug = payload.slug;
+  // Look up the canonical signup domain via D1 → tenant via KV.
+  let skipDns = false;
+  let hostedDomain: string | null = null;
+  try {
+    const row = await env.DB
+      .prepare("SELECT domain FROM businesses WHERE slug = ? LIMIT 1")
+      .bind(slug)
+      .first<{ domain: string | null }>();
+    if (row?.domain) {
+      const tenant = await getTenant(env, row.domain.toLowerCase());
+      if (tenant?.skipDns === true) {
+        skipDns = true;
+        hostedDomain = tenant.domain;
+      }
+    }
+  } catch {
+    // Fail-open: best path is the customer seeing the manual domain
+    // form even if our preview lookup fails. They can still proceed.
+  }
+
+  return jsonOk({
+    slug,
+    skip_dns: skipDns,
+    ...(hostedDomain ? { hosted_domain: hostedDomain } : {}),
   });
 }
 
