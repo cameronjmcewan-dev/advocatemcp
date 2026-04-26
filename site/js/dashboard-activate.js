@@ -149,14 +149,19 @@
     }
   }
 
-  /* Render the auto-DNS section that lets the customer paste a
-   * scoped API token instead of adding records by hand. Currently
-   * supported for Cloudflare-hosted DNS only (Phase D-Cloudflare).
-   * Other providers fall through to the manual guide. */
+  /* Render the auto-DNS section. Provider-specific because the form
+   * shape differs (Cloudflare = single token, GoDaddy = key+secret).
+   * Each provider has its own validate + apply endpoints. Other
+   * providers fall through to the manual guide. */
   function renderAutoDnsSection(providerId, activateData) {
-    if (providerId !== 'cloudflare') return '';
+    if (providerId === 'cloudflare') return renderCloudflareAutoDns();
+    if (providerId === 'godaddy')    return renderGoDaddyAutoDns();
+    return '';
+  }
+
+  function renderCloudflareAutoDns() {
     return '' +
-      '<div id="auto-dns-block" style="margin-top:18px;padding:14px 16px;background:var(--paper);border:1px dashed var(--maroon-tint);border-radius:var(--r-md)">' +
+      '<div id="auto-dns-block" data-provider="cloudflare" style="margin-top:18px;padding:14px 16px;background:var(--paper);border:1px dashed var(--maroon-tint);border-radius:var(--r-md)">' +
         '<div style="font-size:.6875rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--maroon);margin-bottom:6px">⚡ Or do it automatically</div>' +
         '<p style="margin:0 0 12px 0;font-size:.8125rem;color:var(--ink-2);line-height:1.55">' +
           "Paste a scoped Cloudflare API token and we'll add the records for you. " +
@@ -176,14 +181,39 @@
       '</div>';
   }
 
-  /* Wire up the auto-DNS form. Called after the guide renders so the
-   * form elements exist in the DOM. Idempotent — re-running is OK. */
+  function renderGoDaddyAutoDns() {
+    return '' +
+      '<div id="auto-dns-block" data-provider="godaddy" style="margin-top:18px;padding:14px 16px;background:var(--paper);border:1px dashed var(--maroon-tint);border-radius:var(--r-md)">' +
+        '<div style="font-size:.6875rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--maroon);margin-bottom:6px">⚡ Or do it automatically</div>' +
+        '<p style="margin:0 0 10px 0;font-size:.8125rem;color:var(--ink-2);line-height:1.55">' +
+          "Paste your GoDaddy API key + secret and we'll add the DNS records and set up apex forwarding for you. " +
+          'Credentials used once, never stored. Need them? ' +
+          '<a href="https://developer.godaddy.com/keys" target="_blank" rel="noopener" style="color:var(--maroon)">Create a GoDaddy API key →</a>' +
+        '</p>' +
+        '<p style="margin:0 0 10px 0;font-size:.75rem;color:var(--muted);line-height:1.5">' +
+          'Pick "Production" environment when creating the key. We use it once to write your records, then drop the credential.' +
+        '</p>' +
+        '<input type="text"     id="auto-dns-key"    placeholder="API Key"    autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="width:100%;padding:9px 12px;background:var(--paper);border:1px solid var(--line);border-radius:var(--r-md);color:var(--ink);font-family:var(--mono);font-size:.75rem;margin-bottom:8px">' +
+        '<input type="password" id="auto-dns-secret" placeholder="API Secret" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="width:100%;padding:9px 12px;background:var(--paper);border:1px solid var(--line);border-radius:var(--r-md);color:var(--ink);font-family:var(--mono);font-size:.75rem;margin-bottom:10px">' +
+        '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
+          '<button type="button" id="btn-auto-dns-validate" class="btn-submit" style="width:auto;padding:9px 16px;font-size:.8125rem">Validate key</button>' +
+          '<button type="button" id="btn-auto-dns-apply" class="btn-submit" style="width:auto;padding:9px 16px;font-size:.8125rem;display:none">Add records + set up apex forwarding</button>' +
+          '<span id="auto-dns-status" style="font-size:.75rem;color:var(--muted)"></span>' +
+        '</div>' +
+      '</div>';
+  }
+
+  /* Wire up the auto-DNS form. Provider-specific paths because the
+   * credential shape differs (CF = single token, GoDaddy = key+secret).
+   * Idempotent — re-running is OK. */
   function wireAutoDnsHandlers() {
+    var block = document.getElementById('auto-dns-block');
+    if (!block) return;
+    var provider = block.getAttribute('data-provider') || 'cloudflare';
     var validateBtn = document.getElementById('btn-auto-dns-validate');
     var applyBtn = document.getElementById('btn-auto-dns-apply');
-    var tokenInput = document.getElementById('auto-dns-token');
     var statusEl = document.getElementById('auto-dns-status');
-    if (!validateBtn || !tokenInput || !statusEl) return;
+    if (!validateBtn || !statusEl) return;
 
     function setStatus(text, kind) {
       statusEl.textContent = text;
@@ -192,24 +222,56 @@
       else statusEl.style.color = 'var(--muted)';
     }
 
+    /* Per-provider credential reader. Returns null + sets status on
+     * missing input, otherwise returns the request body shape the
+     * worker expects. */
+    function readCreds() {
+      if (provider === 'godaddy') {
+        var keyEl = document.getElementById('auto-dns-key');
+        var secEl = document.getElementById('auto-dns-secret');
+        var k = keyEl ? keyEl.value.trim() : '';
+        var s = secEl ? secEl.value.trim() : '';
+        if (!k || !s) { setStatus('Paste your API key and secret first.', 'err'); return null; }
+        return { key: k, secret: s };
+      }
+      // Cloudflare default
+      var tEl = document.getElementById('auto-dns-token');
+      var t = tEl ? tEl.value.trim() : '';
+      if (!t) { setStatus('Paste a token first.', 'err'); return null; }
+      return { token: t };
+    }
+
+    function clearCreds() {
+      var ids = ['auto-dns-token', 'auto-dns-key', 'auto-dns-secret'];
+      for (var i = 0; i < ids.length; i++) {
+        var el = document.getElementById(ids[i]);
+        if (el) el.value = '';
+      }
+    }
+
+    function endpointFor(action) {
+      return API_BASE + '/api/dns-auto/' + provider + '/' + action + '?t=' + encodeURIComponent(token);
+    }
+
     validateBtn.addEventListener('click', async function () {
-      var t = tokenInput.value.trim();
-      if (!t) { setStatus('Paste a token first.', 'err'); return; }
+      var creds = readCreds();
+      if (!creds) return;
       validateBtn.disabled = true;
       setStatus('Checking…', 'muted');
       try {
-        var res = await fetch(API_BASE + '/api/dns-auto/cloudflare/validate?t=' + encodeURIComponent(token), {
+        var res = await fetch(endpointFor('validate'), {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: t }),
+          body: JSON.stringify(creds),
         });
         var data = await res.json();
         if (!res.ok || !data.ok) {
-          setStatus(prettyAutoDnsReason(data.reason || 'token_validation_failed'), 'err');
+          setStatus(prettyAutoDnsReason(data.reason || 'credential_validation_failed'), 'err');
           return;
         }
-        setStatus('✓ Valid token for ' + (data.zone_name || 'your zone') + '.', 'ok');
+        var domainLabel = data.zone_name || data.domain || 'your domain';
+        setStatus('✓ Valid for ' + domainLabel + '.', 'ok');
         if (applyBtn) applyBtn.style.display = '';
       } catch (_) {
         setStatus("Couldn't reach our server. Try again.", 'err');
@@ -220,35 +282,38 @@
 
     if (applyBtn) {
       applyBtn.addEventListener('click', async function () {
-        var t = tokenInput.value.trim();
-        if (!t) { setStatus('Paste a token first.', 'err'); return; }
+        var creds = readCreds();
+        if (!creds) return;
         applyBtn.disabled = true;
         validateBtn.disabled = true;
         setStatus('Adding records…', 'muted');
         try {
-          var res = await fetch(API_BASE + '/api/dns-auto/cloudflare/apply?t=' + encodeURIComponent(token), {
+          var res = await fetch(endpointFor('apply'), {
             method: 'POST',
             credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: t }),
+            body: JSON.stringify(creds),
           });
           var data = await res.json();
           if (!res.ok || !data.ok) {
-            // Per-record outcomes available in data.results — surface
-            // the first failure verbatim so the customer can fix.
             var firstFail = (data.results || []).find(function (r) { return !r.ok; });
-            var why = firstFail ? prettyAutoDnsReason(firstFail.reason) : prettyAutoDnsReason(data.reason || 'apply_failed');
-            setStatus('Some records failed: ' + why, 'err');
+            var why = firstFail
+              ? prettyAutoDnsReason(firstFail.reason)
+              : (data.forwarding && !data.forwarding.ok
+                ? prettyAutoDnsReason(data.forwarding.reason)
+                : prettyAutoDnsReason(data.reason || 'apply_failed'));
+            setStatus('Some steps failed: ' + why, 'err');
             applyBtn.disabled = false;
             validateBtn.disabled = false;
             return;
           }
-          setStatus('✓ Records added. Cloudflare is now validating SSL — usually under a minute.', 'ok');
-          // Clear the token from the DOM aggressively.
-          tokenInput.value = '';
+          var msg = provider === 'godaddy'
+            ? '✓ Records added and apex forwarding set up. AI bots crawling either variant will land on your Advocate intercept once DNS propagates (usually under 5 minutes).'
+            : '✓ Records added. Cloudflare is now validating SSL — usually under a minute.';
+          setStatus(msg, 'ok');
+          clearCreds();
           // Polling (Phase B) is already running — it will flip the
-          // per-variant pills as Cloudflare propagates and CF SaaS
-          // sees the records.
+          // per-variant pills as records propagate.
         } catch (_) {
           setStatus("Couldn't reach our server. Try again.", 'err');
           applyBtn.disabled = false;
@@ -261,19 +326,29 @@
   function prettyAutoDnsReason(reason) {
     // Map worker-side reason codes to human-friendly copy.
     var MAP = {
-      token_format_invalid:        "That doesn't look like a valid Cloudflare API token. Double-check what you pasted.",
-      token_invalid_or_revoked:    "Cloudflare doesn't recognize this token, or it was revoked. Create a fresh one.",
-      token_inactive:              "This token isn't active in Cloudflare. Make a new one.",
-      zone_not_found_for_token:    "This token doesn't have access to your domain's zone. Check that the token's zone scope matches.",
-      zone_not_active:             "Your Cloudflare zone isn't active yet. Activate it in Cloudflare first, then retry.",
-      permission_denied:           "The token isn't allowed to edit DNS in this zone. Add 'Zone:DNS:Edit' to the token.",
-      record_create_failed:        "Cloudflare rejected one of the record creations. Open Cloudflare and check for conflicts.",
-      hosted_tenant_no_dns_needed: "Your account is hosted on our subdomain — no DNS records needed. You're already live.",
-      missing_provider_token:      "Token field was empty.",
-      no_records_to_add:           "Nothing to add — your records may already be in place.",
+      // Cloudflare-specific
+      token_format_invalid:           "That doesn't look like a valid Cloudflare API token. Double-check what you pasted.",
+      token_invalid_or_revoked:       "Cloudflare doesn't recognize this token, or it was revoked. Create a fresh one.",
+      token_inactive:                 "This token isn't active in Cloudflare. Make a new one.",
+      zone_not_found_for_token:       "This token doesn't have access to your domain's zone. Check that the token's zone scope matches.",
+      zone_not_active:                "Your Cloudflare zone isn't active yet. Activate it in Cloudflare first, then retry.",
+      // GoDaddy-specific
+      credential_format_invalid:      "Your API key or secret looks malformed. Check that you copied each one fully.",
+      credential_invalid_or_revoked:  "GoDaddy doesn't recognize this key/secret pair. Create a fresh one in the GoDaddy developer console.",
+      domain_not_found_for_credential:"This credential can't manage the domain we have on file. Make sure the API key has access to it.",
+      domain_not_active:              "Your domain isn't active in GoDaddy yet (still pending transfer or registration). Try again once it's active.",
+      forwarding_not_available:       "GoDaddy domain forwarding isn't available for this domain (sometimes happens when DNS is delegated elsewhere). Records were still added — apex traffic needs manual A records or a redirect.",
+      forwarding_setup_failed:        "Couldn't set up apex forwarding. Records were added — set up a 301 redirect from apex to www manually.",
+      // Shared
+      permission_denied:              "The credential isn't allowed to edit DNS in this zone. Re-create it with the 'Edit DNS' permission.",
+      record_create_failed:           "Your DNS provider rejected one of the record creations. Open the DNS UI and check for conflicts.",
+      hosted_tenant_no_dns_needed:    "Your account is hosted on our subdomain — no DNS records needed. You're already live.",
+      missing_provider_token:         "Token field was empty.",
+      missing_provider_credentials:   "API key or secret was empty.",
+      no_records_to_add:              "Nothing to add — your records may already be in place.",
     };
     if (typeof reason === 'string' && /^record_conflict_/.test(reason)) {
-      return "A different DNS record already exists at one of the spots we'd write to. Resolve the conflict in Cloudflare, then retry.";
+      return "A different DNS record already exists at one of the spots we'd write to. Resolve the conflict in your DNS panel, then retry.";
     }
     return MAP[reason] || ('Something went wrong (' + (reason || 'unknown') + '). Try again or fall back to manual records.');
   }

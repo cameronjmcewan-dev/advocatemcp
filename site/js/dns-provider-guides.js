@@ -40,7 +40,7 @@
       name: "GoDaddy",
       login_url: "https://dcc.godaddy.com/control/dnsmanagement",
       apex_strategy: "forwarding",
-      auto_dns: false,
+      auto_dns: true,
       www_steps: [
         { type: "do",  text: "Sign in at godaddy.com." },
         { type: "do",  text: "Click the avatar in the top right → 'My Products'." },
@@ -236,7 +236,8 @@
         { type: "do",  text: "Option 1 — ANAME / ALIAS / CNAME-flattening: if your DNS provider supports any of these record types, add one at @ (apex) pointing to {{cname_target}}. Cleanest." },
         { type: "do",  text: "Option 2 — Domain forwarding: if your provider has a 'Domain Forwarding' or 'URL Redirect' feature, set apex → https://{{www}} as a Permanent (301) redirect. AI bots follow the redirect to the www variant which goes through us." },
         { type: "do",  text: "Option 3 — Cloudflare nameservers: sign up at cloudflare.com (free), add your domain, switch your registrar's nameservers to Cloudflare's. Inside Cloudflare, you get apex CNAME flattening for free." },
-        { type: "do",  text: "Option 4 — Static A records: contact us and we'll give you the current edge IPs to point your apex A records at. Least flexible — anycast IPs can change." },
+        { type: "do",  text: "Option 4 — Static A records: in your DNS panel, add two A records at @ (apex) pointing to 104.21.44.57 and 172.67.195.220. These are the same anycast IPs that {{cname_target}} resolves to, so apex traffic lands on our edge the same way www does." },
+        { type: "warning", text: "Static A records work today but Cloudflare anycast IPs can rotate. Re-check this guide every few months, or use options 1-3 for long-term stability." },
       ],
       txt_steps: [
         { type: "do",  text: "Add a TXT record. Host / Name: {{txt_host_name}}. Value: {{txt_value}}. TTL: default. Save." },

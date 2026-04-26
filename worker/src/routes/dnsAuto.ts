@@ -37,6 +37,10 @@ import {
   validateCloudflareToken,
   applyCloudflareRecords,
 } from "../lib/dnsClients/cloudflare";
+import {
+  validateGoDaddyCredential,
+  applyGoDaddyRecords,
+} from "../lib/dnsClients/godaddy";
 
 const CNAME_TARGET = "customers.advocatemcp.com";
 
@@ -225,5 +229,128 @@ export async function handleCloudflareApply(request: Request, env: Env): Promise
       already_exists: r.already_exists ?? false,
       reason: r.reason,
     })),
+  });
+}
+
+// ── GoDaddy ─────────────────────────────────────────────────────────────────
+//
+// Same shape as the Cloudflare endpoints but using the GoDaddy
+// API key + secret pair. Body shape on both endpoints is
+// { key: string, secret: string }.
+
+async function parseGoDaddyBody(request: Request): Promise<{ key: string; secret: string } | Response> {
+  let body: { key?: unknown; secret?: unknown };
+  try {
+    body = (await request.json()) as { key?: unknown; secret?: unknown };
+  } catch {
+    return jsonErr(400, "invalid_json");
+  }
+  const key = typeof body.key === "string" ? body.key.trim() : "";
+  const secret = typeof body.secret === "string" ? body.secret.trim() : "";
+  if (!key || !secret) return jsonErr(400, "missing_provider_credentials");
+  return { key, secret };
+}
+
+/* GoDaddy expects "www" or "@" in the record name slot, NOT a FQDN.
+ * Translate from the variants[]-style hostnames our worker stores. */
+function godaddyRecordsForTenant(
+  tenant: NonNullable<Awaited<ReturnType<typeof getTenant>>>,
+  apex: string,
+) {
+  const records: Array<{ type: "CNAME" | "TXT"; name: string; data: string; ttl?: number }> = [];
+  const variants = tenant.cloudflare.variants ?? [];
+
+  for (const v of variants) {
+    if (!v.hostname) continue;
+    const isApex = v.hostname === apex;
+    // CNAME at apex isn't supported on GoDaddy DNS — apex routing
+    // happens via Domain Forwarding, set up separately below in
+    // applyGoDaddyRecords. So we only emit a CNAME for the www
+    // variant here.
+    if (!isApex) {
+      const sub = v.hostname.replace(`.${apex}`, "");
+      records.push({ type: "CNAME", name: sub, data: CNAME_TARGET, ttl: 600 });
+    }
+    // TXT records are added under the apex zone for both variants.
+    // Strip the trailing apex suffix so GoDaddy gets the relative name.
+    if (v.txtName && v.txtValue) {
+      const relName = v.txtName.endsWith(`.${apex}`)
+        ? v.txtName.slice(0, -(`.${apex}`.length))
+        : v.txtName;
+      records.push({ type: "TXT", name: relName, data: v.txtValue, ttl: 600 });
+    }
+    if (v.ownershipTxtName && v.ownershipTxtValue) {
+      const relName = v.ownershipTxtName.endsWith(`.${apex}`)
+        ? v.ownershipTxtName.slice(0, -(`.${apex}`.length))
+        : v.ownershipTxtName;
+      records.push({ type: "TXT", name: relName, data: v.ownershipTxtValue, ttl: 600 });
+    }
+  }
+  return records;
+}
+
+export async function handleGoDaddyValidate(request: Request, env: Env): Promise<Response> {
+  const auth = await authenticate(request, env);
+  if (auth instanceof Response) return auth;
+  const parsed = await parseGoDaddyBody(request);
+  if (parsed instanceof Response) return parsed;
+
+  const result = await validateGoDaddyCredential(parsed, auth.canonicalDomain);
+  if (!result.ok) return jsonErr(400, result.reason ?? "credential_validation_failed");
+  return jsonOk({
+    ok: true,
+    domain: result.domain,
+    forwarding_supported: result.forwarding_supported ?? false,
+  });
+}
+
+export async function handleGoDaddyApply(request: Request, env: Env): Promise<Response> {
+  const auth = await authenticate(request, env);
+  if (auth instanceof Response) return auth;
+  const parsed = await parseGoDaddyBody(request);
+  if (parsed instanceof Response) return parsed;
+
+  // Re-validate to confirm the credentials are still good and pull
+  // canonical domain spelling from GoDaddy.
+  const info = await validateGoDaddyCredential(parsed, auth.canonicalDomain);
+  if (!info.ok || !info.domain) {
+    return jsonErr(400, info.reason ?? "credential_validation_failed");
+  }
+  const apex = info.domain.toLowerCase();
+
+  if (!auth.tenant) return jsonErr(404, "tenant_not_found");
+  const records = godaddyRecordsForTenant(auth.tenant, apex);
+
+  // Apex routing on GoDaddy goes through Domain Forwarding (HTTP 301
+  // to https://www.<domain>) — bots follow the redirect to the www
+  // variant which goes through Advocate's intercept. Same outcome as
+  // ANAME/ALIAS, just one HTTP hop earlier.
+  const forwardingTarget = `https://www.${apex}`;
+
+  const result = await applyGoDaddyRecords(parsed, apex, records, forwardingTarget);
+
+  console.log(JSON.stringify({
+    dns_auto: true,
+    provider: "godaddy",
+    slug: auth.slug,
+    domain: auth.canonicalDomain,
+    overall_ok: result.overall_ok,
+    record_count: result.results.length,
+    success_count: result.results.filter((r) => r.ok).length,
+    forwarding_set: result.forwarding?.ok ?? false,
+    failure_reasons: result.results.filter((r) => !r.ok).map((r) => r.reason),
+    forwarding_reason: result.forwarding && !result.forwarding.ok ? result.forwarding.reason : undefined,
+  }));
+
+  return jsonOk({
+    ok: result.overall_ok,
+    results: result.results.map((r) => ({
+      type: r.spec.type,
+      name: r.spec.name,
+      ok: r.ok,
+      already_exists: r.already_exists ?? false,
+      reason: r.reason,
+    })),
+    forwarding: result.forwarding,
   });
 }
