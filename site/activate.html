@@ -1,125 +1,87 @@
-<!DOCTYPE html>
-<html lang="en" data-theme="dark" style="background:#050202">
+<!doctype html>
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="color-scheme" content="dark light" />
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" content="#fbf9f5" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#141210" media="(prefers-color-scheme: dark)" />
 <title>Activate your domain, Advocate</title>
-<link rel="preconnect" href="https://api.fontshare.com" />
-<link rel="stylesheet" href="/css/tokens.css" />
-<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="preconnect" href="https://api.fontshare.com" />
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/assets/styles.css" />
 <style>
-/* ── Reset & Variables ── */
+/* Activation page — focused single-card flow. Migrated to the new
+   warm-paper design system (Apr 26 2026). All element IDs preserved
+   so /js/dashboard-activate.js continues to work unchanged. */
+
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-
-:root {
-  --bg:          #050202;
-  --surface:     #0d0507;
-  --surface-2:   #140a0c;
-  --border:      #2a1418;
-  --text:        #e8e3e0;
-  --muted:       #8a7c78;
-  --accent:      #3d0a22;
-  --accent-dk:   #2a0617;
-  --accent-dim:  rgba(61,10,34,.12);
-  --accent-ring: rgba(61,10,34,.25);
-  --green:       #3fb950;
-  --yellow:      #d29922;
-  --red:         #f85149;
-
-  --font-serif: 'Instrument Serif', Georgia, serif;
-  --font-body:  'General Sans','Inter',system-ui,-apple-system,sans-serif;
-  --font-mono:  'SF Mono','Fira Code','Cascadia Code',Consolas,monospace;
-
-  --tx-xs:   .6875rem;
-  --tx-sm:   .875rem;
-  --tx-base: 1rem;
-  --tx-md:   1.0625rem;
-  --tx-lg:   1.25rem;
-
-  --r-sm:4px; --r-md:8px; --r-lg:12px; --r-xl:16px;
-}
-
-[data-theme="light"] {
-  --bg:         #faf8f7;
-  --surface:    #ffffff;
-  --surface-2:  #f0ecea;
-  --border:     #d8d1ce;
-  --text:       #1a0a0e;
-  --muted:      #6b6360;
-  --accent:     #3d0a22;
-  --accent-dk:  #2a0617;
-  --accent-dim: rgba(61,10,34,.08);
-  --accent-ring:rgba(61,10,34,.22);
-}
-
-html{font-size:16px;-webkit-font-smoothing:antialiased;color-scheme:dark light;background:#050202}
 body{
-  background:var(--bg);color:var(--text);
-  font-family:var(--font-body);font-size:var(--tx-base);line-height:1.6;
+  background:var(--paper);color:var(--ink);
+  font-family:var(--sans);font-size:1rem;line-height:1.6;
   min-height:100vh;
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   padding:24px;
 }
-a{color:inherit;text-decoration:none}
+a{color:var(--maroon);text-decoration:none}
+a:hover{text-decoration:underline}
 button{font-family:inherit;cursor:pointer;border:none;background:none}
-
-::-webkit-scrollbar{width:5px;height:5px}
-::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 
 /* ── Card ── */
 .act-card{
   width:100%;max-width:520px;
-  background:var(--surface);border:1px solid var(--border);
-  border-radius:var(--r-xl);padding:36px 32px;
+  background:var(--paper-2);border:1px solid var(--line);
+  border-radius:var(--r-lg);padding:36px 32px;
+  box-shadow:var(--shadow-md);
 }
 
 /* ── Logo ── */
 .act-logo{
   display:flex;align-items:center;gap:8px;
-  font-size:var(--tx-sm);font-weight:600;letter-spacing:-.01em;
-  margin-bottom:28px;
+  font-size:.875rem;font-weight:600;letter-spacing:-.01em;
+  margin-bottom:28px;color:var(--ink);
 }
 
 /* ── Heading ── */
 .act-h{
-  font-family:var(--font-serif);
-  font-size:1.75rem;line-height:1.1;letter-spacing:-.02em;
-  margin-bottom:8px;
+  font-family:var(--serif);font-weight:400;
+  font-size:1.875rem;line-height:1.1;letter-spacing:-.02em;
+  margin-bottom:8px;color:var(--ink);
 }
-.act-sub{font-size:var(--tx-sm);color:var(--muted);margin-bottom:28px;line-height:1.6}
+.act-sub{font-size:.875rem;color:var(--ink-2);margin-bottom:28px;line-height:1.6}
 
 /* ── Form ── */
 .fg{margin-bottom:16px}
-.fl{display:block;font-size:var(--tx-sm);font-weight:500;margin-bottom:6px}
+.fl{display:block;font-size:.875rem;font-weight:500;margin-bottom:6px;color:var(--ink)}
 .fi{
-  width:100%;padding:9px 12px;
-  background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md);
-  color:var(--text);font-family:var(--font-body);font-size:var(--tx-sm);
-  transition:border-color .15s;
+  width:100%;padding:10px 12px;
+  background:var(--paper);border:1px solid var(--line);border-radius:var(--r-md);
+  color:var(--ink);font-family:var(--sans);font-size:.875rem;
+  transition:border-color .15s, box-shadow .15s;
 }
-.fi:focus{outline:none;border-color:var(--accent)}
-.fi::placeholder{color:var(--muted)}
-.fi-hint{font-size:var(--tx-xs);color:var(--muted);margin-top:5px}
+.fi:focus{outline:none;border-color:var(--maroon);box-shadow:0 0 0 3px var(--maroon-tint)}
+.fi::placeholder{color:var(--muted-2)}
+.fi-hint{font-size:.75rem;color:var(--muted);margin-top:6px}
 
 /* ── Buttons ── */
 .btn-submit{
   display:flex;align-items:center;justify-content:center;gap:6px;
-  width:100%;padding:11px 20px;
-  font-size:var(--tx-sm);font-weight:500;
-  background:var(--accent);color:#fff;
-  border:1px solid var(--accent);border-radius:var(--r-md);
+  width:100%;padding:12px 20px;
+  font-size:.9375rem;font-weight:500;
+  background:var(--maroon);color:#fff;
+  border:1px solid var(--maroon);border-radius:var(--r-md);
   transition:background .15s,border-color .15s;line-height:1;
 }
-.btn-submit:hover{background:var(--accent-dk);border-color:var(--accent-dk)}
+.btn-submit:hover{background:var(--maroon-2);border-color:var(--maroon-2)}
 .btn-submit:disabled{opacity:.55;cursor:not-allowed}
 .btn-link{
   display:inline;background:none;border:none;padding:0;
-  color:var(--accent);font-size:var(--tx-sm);font-family:inherit;
+  color:var(--maroon);font-size:.875rem;font-family:inherit;
   text-decoration:underline;cursor:pointer;
 }
 
@@ -130,8 +92,8 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 .spinner{
   width:32px;height:32px;
-  border:2px solid var(--border);
-  border-top-color:var(--accent);
+  border:2px solid var(--line);
+  border-top-color:var(--maroon);
   border-radius:50%;
   animation:spin .7s linear infinite;
   margin:0 auto 16px;
@@ -140,57 +102,67 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 /* ── Success state ── */
 .success-badge{
   display:flex;align-items:center;gap:8px;
-  font-size:var(--tx-sm);font-weight:600;color:var(--green);
+  font-size:.875rem;font-weight:600;color:var(--sage);
   margin-bottom:16px;
 }
 .success-badge svg{width:18px;height:18px}
 
 /* ── DNS blocks ── */
 .dns-block{
-  background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md);
+  background:var(--paper);border:1px solid var(--line);border-radius:var(--r-md);
   padding:14px;margin-bottom:10px;
-  font-family:var(--font-mono);font-size:.6875rem;line-height:1.85;
+  font-family:var(--mono);font-size:.6875rem;line-height:1.85;
 }
 .dns-type-tag{
-  display:inline-block;padding:2px 7px;margin-bottom:8px;
-  background:var(--accent-dim);color:var(--accent);
-  border-radius:var(--r-sm);font-size:var(--tx-xs);font-weight:600;
-  font-family:var(--font-body);
+  display:inline-block;padding:3px 8px;margin-bottom:8px;
+  background:var(--maroon-tint);color:var(--maroon);
+  border-radius:var(--r-sm);font-size:.6875rem;font-weight:600;
+  font-family:var(--sans);text-transform:uppercase;letter-spacing:.04em;
 }
 .dns-row-item{display:flex;gap:12px}
 .dns-k{color:var(--muted);min-width:58px}
-.dns-v{color:var(--text);word-break:break-all}
+.dns-v{color:var(--ink);word-break:break-all}
 
 /* ── No-token / error states ── */
 .warn-icon{
   width:48px;height:48px;
-  background:rgba(210,153,34,.1);border:1px solid rgba(210,153,34,.2);
+  background:var(--amber-tint);border:1px solid var(--amber);
   border-radius:var(--r-lg);
-  display:flex;align-items:center;justify-content:center;color:var(--yellow);
+  display:flex;align-items:center;justify-content:center;color:var(--amber);
   margin-bottom:16px;
 }
 .warn-icon svg{width:24px;height:24px}
 .err-icon{
   width:48px;height:48px;
-  background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.2);
+  background:var(--maroon-wash);border:1px solid var(--maroon-tint);
   border-radius:var(--r-lg);
-  display:flex;align-items:center;justify-content:center;color:var(--red);
+  display:flex;align-items:center;justify-content:center;color:var(--maroon);
   margin-bottom:16px;
 }
 .err-icon svg{width:24px;height:24px}
 
 /* ── Divider ── */
-.act-divider{border:none;border-top:1px solid var(--border);margin:24px 0 18px}
+.act-divider{border:none;border-top:1px solid var(--line);margin:24px 0 18px}
 
 /* ── Footer ── */
 .act-foot{
-  text-align:center;font-size:var(--tx-sm);color:var(--muted);
+  text-align:center;font-size:.875rem;color:var(--muted);
   margin-top:20px;
 }
-.act-foot a{color:var(--accent)}
+.act-foot a{color:var(--maroon)}
 .act-foot a:hover{text-decoration:underline}
+
+/* ── Dashboard CTA — solid maroon, white text on both modes (per
+   sharedLayout exception list, hex on solid backgrounds is allowed). */
+.dash-cta{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:10px 18px;
+  background:var(--maroon);color:#fff;border-radius:var(--r-md);
+  font-size:.875rem;font-weight:500;text-decoration:none;
+  transition:background .15s;
+}
+.dash-cta:hover{background:var(--maroon-2);text-decoration:none}
 </style>
-<link rel="stylesheet" href="/css/redesign.css" />
 </head>
 <body>
 
@@ -215,8 +187,8 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
       we send you an email with your personal activation link. Please check your inbox (and spam folder)
       for an email from Advocate.
     </p>
-    <p style="font-size:var(--tx-sm);color:var(--muted)">
-      If you can't find it, <a href="mailto:support@advocatemcp.com" style="color:var(--accent)">contact support</a>
+    <p style="font-size:.875rem;color:var(--muted)">
+      If you can't find it, <a href="mailto:support@advocatemcp.com">contact support</a>
       and we'll send a new one.
     </p>
   </div>
@@ -238,7 +210,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
         <div class="fi-hint">Just the domain, no https://, no www, no path.</div>
       </div>
       <button type="submit" class="btn-submit" id="activate-btn">
-        Activate domain →
+        Activate domain &rarr;
       </button>
     </form>
   </div>
@@ -246,7 +218,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
   <!-- ── State: loading ── -->
   <div id="state-loading" class="state-panel" style="text-align:center;padding:24px 0">
     <div class="spinner"></div>
-    <p style="font-size:var(--tx-sm);color:var(--muted)">Verifying your domain and setting up routing…</p>
+    <p style="font-size:.875rem;color:var(--muted)">Verifying your domain and setting up routing&hellip;</p>
   </div>
 
   <!-- ── State: success ── -->
@@ -259,21 +231,18 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
       Domain activated: <span id="success-domain"></span>
     </div>
 
-    <p id="success-message" style="font-size:var(--tx-sm);color:var(--muted);line-height:1.7;margin-bottom:20px"></p>
+    <p id="success-message" style="font-size:.875rem;color:var(--ink-2);line-height:1.7;margin-bottom:20px"></p>
 
-    <p style="font-size:var(--tx-sm);font-weight:600;margin-bottom:12px">Add these DNS records:</p>
+    <p style="font-size:.875rem;font-weight:600;margin-bottom:12px;color:var(--ink)">Add these DNS records:</p>
     <div id="dns-records"></div>
 
     <hr class="act-divider" />
 
-    <p style="font-size:var(--tx-sm);color:var(--muted);margin-bottom:16px">
-      Once your DNS records are active (usually 5–15 minutes), sign in to monitor your AI traffic.
+    <p style="font-size:.875rem;color:var(--muted);margin-bottom:16px">
+      Once your DNS records are active (usually 5&ndash;15 minutes), sign in to monitor your AI traffic.
     </p>
-    <a href="/login.html"
-       style="display:inline-flex;align-items:center;gap:6px;padding:9px 18px;
-              background:var(--accent);color:#fff;border-radius:var(--r-md);
-              font-size:var(--tx-sm);font-weight:500;">
-      Go to dashboard →
+    <a href="/login.html" class="dash-cta">
+      Go to dashboard &rarr;
     </a>
   </div>
 
@@ -286,14 +255,14 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
       </svg>
     </div>
     <h1 class="act-h" style="margin-bottom:12px">Something went wrong</h1>
-    <p id="error-message" style="font-size:var(--tx-sm);color:var(--muted);line-height:1.7;margin-bottom:20px"></p>
-    <button id="btn-retry" class="btn-submit" style="width:auto;padding:9px 20px">
+    <p id="error-message" style="font-size:.875rem;color:var(--ink-2);line-height:1.7;margin-bottom:20px"></p>
+    <button id="btn-retry" class="btn-submit" style="width:auto;padding:10px 20px">
       Try again
     </button>
   </div>
 
   <p class="act-foot" id="act-foot-link" style="display:none">
-    Already activated? <a href="/login.html">Sign in →</a>
+    Already activated? <a href="/login.html">Sign in &rarr;</a>
   </p>
 
 </div>

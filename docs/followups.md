@@ -143,8 +143,14 @@ Apr 12 — cleaned 12 pending test tenants from D1, removed orphaned test user c
 
 ## Polish — affects customer experience but not blocking
 
-### Activation page styling
-Activation page HTML doesn't match Phase D dashboard visual language. Bug C / Phase D follow-up.
+### ~~Activation page styling~~ RESOLVED
+**Resolved 2026-04-26.** `site/activate.html` and `site/login.html` migrated
+to the warm-paper design system (`/assets/styles.css`, `prefers-color-scheme`
+auto-toggle, maroon accent, serif headings). Both pages preserve every
+element ID so `/js/dashboard-activate.js` and `/js/dashboard-auth.js`
+continue working unchanged. Customer's first three screens after Stripe
+checkout — activation email link → activate.html → login.html → dashboard
+— all share one visual system now.
 
 ### ~~Dashboard domains section for hosted tenants~~ RESOLVED
 **Resolved 2026-04-24.** v2 Settings → Connection card now detects hosted tenants

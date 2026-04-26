@@ -1,143 +1,105 @@
-<!DOCTYPE html>
-<html lang="en" data-theme="dark" style="background:#050202">
+<!doctype html>
+<html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<meta name="color-scheme" content="dark light" />
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" content="#fbf9f5" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#141210" media="(prefers-color-scheme: dark)" />
 <title>Sign in, Advocate</title>
-<link rel="preconnect" href="https://api.fontshare.com" />
-<link rel="stylesheet" href="/css/tokens.css" />
-<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="preconnect" href="https://api.fontshare.com" />
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/assets/styles.css" />
 <style>
-/* ── Reset & Variables ── */
+/* Login page — focused single-card flow. Migrated to the new
+   warm-paper design system (Apr 26 2026). All element IDs preserved
+   so /js/dashboard-auth.js + the inline submit handler still work. */
+
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-
-:root {
-  --bg:          #050202;
-  --surface:     #0d0507;
-  --surface-2:   #140a0c;
-  --border:      #2a1418;
-  --text:        #e8e3e0;
-  --muted:       #8a7c78;
-  --accent:      #3d0a22;
-  --accent-dk:   #2a0617;
-  --accent-dim:  rgba(61,10,34,.12);
-  --accent-ring: rgba(61,10,34,.25);
-  --green:       #3fb950;
-  --yellow:      #d29922;
-  --red:         #f85149;
-
-  --font-serif: 'Instrument Serif', Georgia, serif;
-  --font-body:  'General Sans','Inter',system-ui,-apple-system,sans-serif;
-
-  --tx-xs:   .6875rem;
-  --tx-sm:   .875rem;
-  --tx-base: 1rem;
-  --tx-md:   1.0625rem;
-  --tx-lg:   1.25rem;
-
-  --r-sm:4px; --r-md:8px; --r-lg:12px; --r-xl:16px;
-}
-
-[data-theme="light"] {
-  --bg:         #faf8f7;
-  --surface:    #ffffff;
-  --surface-2:  #f0ecea;
-  --border:     #d8d1ce;
-  --text:       #1a0a0e;
-  --muted:      #6b6360;
-  --accent:     #3d0a22;
-  --accent-dk:  #2a0617;
-  --accent-dim: rgba(61,10,34,.08);
-  --accent-ring:rgba(61,10,34,.22);
-}
-
-html{font-size:16px;-webkit-font-smoothing:antialiased;color-scheme:dark light;background:#050202}
 body{
-  background:var(--bg);color:var(--text);
-  font-family:var(--font-body);font-size:var(--tx-base);line-height:1.6;
+  background:var(--paper);color:var(--ink);
+  font-family:var(--sans);font-size:1rem;line-height:1.6;
   min-height:100vh;
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   padding:24px;
 }
-a{color:inherit;text-decoration:none}
+a{color:var(--maroon);text-decoration:none}
+a:hover{text-decoration:underline}
 button{font-family:inherit;cursor:pointer;border:none;background:none}
-
-::-webkit-scrollbar{width:5px;height:5px}
-::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 
 /* ── Card ── */
 .login-card{
   width:100%;max-width:400px;
-  background:var(--surface);border:1px solid var(--border);
-  border-radius:var(--r-xl);padding:36px 32px;
+  background:var(--paper-2);border:1px solid var(--line);
+  border-radius:var(--r-lg);padding:36px 32px;
+  box-shadow:var(--shadow-md);
 }
 
 /* ── Logo ── */
 .login-logo{
   display:flex;align-items:center;gap:8px;
-  font-size:var(--tx-sm);font-weight:600;letter-spacing:-.01em;
-  margin-bottom:28px;
+  font-size:.875rem;font-weight:600;letter-spacing:-.01em;
+  margin-bottom:28px;color:var(--ink);
 }
 
 /* ── Heading ── */
 .login-h{
-  font-family:var(--font-serif);
-  font-size:1.75rem;line-height:1.1;letter-spacing:-.02em;
-  margin-bottom:6px;
+  font-family:var(--serif);font-weight:400;
+  font-size:1.875rem;line-height:1.1;letter-spacing:-.02em;
+  margin-bottom:6px;color:var(--ink);
 }
-.login-sub{font-size:var(--tx-sm);color:var(--muted);margin-bottom:28px}
+.login-sub{font-size:.875rem;color:var(--ink-2);margin-bottom:28px}
 
 /* ── Form ── */
 .fg{margin-bottom:16px}
-.fl{display:block;font-size:var(--tx-sm);font-weight:500;margin-bottom:6px}
+.fl{display:block;font-size:.875rem;font-weight:500;margin-bottom:6px;color:var(--ink)}
 .fi{
-  width:100%;padding:9px 12px;
-  background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md);
-  color:var(--text);font-family:var(--font-body);font-size:var(--tx-sm);
-  transition:border-color .15s;
+  width:100%;padding:10px 12px;
+  background:var(--paper);border:1px solid var(--line);border-radius:var(--r-md);
+  color:var(--ink);font-family:var(--sans);font-size:.875rem;
+  transition:border-color .15s, box-shadow .15s;
 }
-.fi:focus{outline:none;border-color:var(--accent)}
-.fi::placeholder{color:var(--muted)}
+.fi:focus{outline:none;border-color:var(--maroon);box-shadow:0 0 0 3px var(--maroon-tint)}
+.fi::placeholder{color:var(--muted-2)}
 
 /* ── Submit button ── */
 .btn-submit{
   display:flex;align-items:center;justify-content:center;gap:6px;
-  width:100%;padding:11px 20px;
-  font-size:var(--tx-sm);font-weight:500;
-  background:var(--accent);color:#fff;
-  border:1px solid var(--accent);border-radius:var(--r-md);
+  width:100%;padding:12px 20px;
+  font-size:.9375rem;font-weight:500;
+  background:var(--maroon);color:#fff;
+  border:1px solid var(--maroon);border-radius:var(--r-md);
   transition:background .15s,border-color .15s;line-height:1;
 }
-.btn-submit:hover{background:var(--accent-dk);border-color:var(--accent-dk)}
+.btn-submit:hover{background:var(--maroon-2);border-color:var(--maroon-2)}
 .btn-submit:disabled{opacity:.55;cursor:not-allowed}
 
 /* ── Error banner ── */
 .login-error{
   display:none;
   padding:10px 14px;margin-bottom:20px;
-  background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.2);
+  background:var(--maroon-wash);border:1px solid var(--maroon-tint);
   border-radius:var(--r-md);
-  font-size:var(--tx-sm);color:var(--red);line-height:1.5;
+  font-size:.875rem;color:var(--maroon);line-height:1.5;
 }
 .login-error.show{display:block}
 
 /* ── Divider ── */
-.login-divider{border:none;border-top:1px solid var(--border);margin:24px 0 18px}
+.login-divider{border:none;border-top:1px solid var(--line);margin:24px 0 18px}
 
 /* ── Footer ── */
 .login-foot{
-  text-align:center;font-size:var(--tx-sm);color:var(--muted);
+  text-align:center;font-size:.875rem;color:var(--muted);
   margin-top:20px;
 }
-.login-foot a{color:var(--accent)}
+.login-foot a{color:var(--maroon)}
 .login-foot a:hover{text-decoration:underline}
 </style>
-<link rel="stylesheet" href="/css/redesign.css" />
 </head>
 <body>
 
@@ -162,7 +124,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
     <div class="fg" style="margin-bottom:20px">
       <label class="fl" for="password">Password</label>
       <input class="fi" id="password" name="password" type="password"
-             autocomplete="current-password" placeholder="••••••••" required />
+             autocomplete="current-password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;" required />
     </div>
 
     <button type="submit" class="btn-submit" id="submit-btn">
@@ -173,7 +135,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
   <hr class="login-divider" />
 
   <p class="login-foot">
-    Need an account? <a href="/onboarding.html">Get started →</a>
+    Need an account? <a href="/onboarding.html">Get started &rarr;</a>
   </p>
 
 </div>
@@ -205,7 +167,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
   function setLoading(loading) {
     var btn = document.getElementById('submit-btn');
     btn.disabled = loading;
-    btn.textContent = loading ? 'Signing in\u2026' : 'Sign in';
+    btn.textContent = loading ? 'Signing in…' : 'Sign in';
   }
 
   document.getElementById('login-form').addEventListener('submit', async function (e) {
