@@ -655,6 +655,13 @@ export async function handlePublicOnboard(
     "metadata[plan]": plan,
     "metadata[skip_dns]": "true",
     customer_email: email,
+    // Beta testers paste a Stripe Promotion Code (BETA → coupon TAuIQlgr,
+    // 100% off for 2 months) at checkout. Without this flag the "Add
+    // promotion code" link is hidden in Stripe's hosted UI, so the wizard
+    // path silently breaks beta onboarding even though the coupon exists.
+    // The webhook below detects the applied coupon ID against
+    // BETA_COUPON_IDS and stamps beta_started_at / beta_ends_at on D1.
+    allow_promotion_codes: "true",
   });
 
   if (!stripeResult.ok) {
