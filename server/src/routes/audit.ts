@@ -79,6 +79,23 @@ auditRouter.options("/audit/run", (_req, res) => {
   res.setHeader("Access-Control-Max-Age",       "600");
   res.status(204).end();
 });
+// IMPORTANT: this OPTIONS handler MUST be registered before the
+// /audit/:id wildcard handler below, otherwise Express matches
+// "/audit/citation-readiness" against the :id pattern first and
+// responds with Allow-Methods: GET, OPTIONS — which fails the
+// browser's CORS preflight (the actual call is POST). Found and
+// fixed Apr 26 2026 after the audit page widget threw "TypeError:
+// Failed to fetch" with /audit/citation-readiness preflight returning
+// the wrong Allow-Methods. The matching POST handler is at the
+// bottom of this file and is fine there since there's no POST
+// /:id route to shadow it.
+auditRouter.options("/audit/citation-readiness", (_req: Request, res: Response) => {
+  res.setHeader("Access-Control-Allow-Origin",  "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Max-Age",       "600");
+  res.status(204).end();
+});
 auditRouter.options("/audit/:id", (_req, res) => {
   res.setHeader("Access-Control-Allow-Origin",  "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
@@ -449,14 +466,11 @@ auditRouter.post("/audit/:id/follow-up", (req: Request, res: Response) => {
 const READINESS_PER_IP_DAILY_CAP = 5;
 const READINESS_RESERVATION_USD  = 0.10;
 
-auditRouter.options("/audit/citation-readiness", (_req: Request, res: Response) => {
-  res.setHeader("Access-Control-Allow-Origin",  "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  res.setHeader("Access-Control-Max-Age",       "600");
-  res.status(204).end();
-});
-
+// NOTE: the OPTIONS preflight handler for this route is registered
+// at the top of this file (alongside the other /audit/* OPTIONS
+// handlers) so it wins over the /audit/:id wildcard. Don't add a
+// second one here — Express would match the first by registration
+// order and the second would never fire.
 auditRouter.post("/audit/citation-readiness", async (req: Request, res: Response) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
 
