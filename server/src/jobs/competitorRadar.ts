@@ -272,10 +272,32 @@ export async function pollAll(): Promise<void> {
           // specific to extract when they're not mentioned. Empty arrays
           // are stored as NULL to match the migration comment and keep the
           // "non-empty means extraction ran" semantic.
+          //
+          // If t.name is empty (data-integrity edge case: tenant name
+          // accidentally cleared during onboarding or admin action),
+          // fall back to t.slug so extraction still runs. Slugs are
+          // typically derived from the name (e.g. "workman-copy-co"),
+          // so the regex match will still hit reasonable sentence
+          // boundaries. Log a structured warning so ops can detect
+          // and repair the underlying data issue — silent skipping
+          // was the bug. (Audit followup, Apr 26 2026.)
           let descriptorsJson: string | null = null;
-          if (citedRank !== null && answerText && t.name) {
-            const descriptors = extractSentiment(answerText, t.name);
-            if (descriptors.length > 0) descriptorsJson = JSON.stringify(descriptors);
+          if (citedRank !== null && answerText) {
+            const brandToken = t.name && t.name.trim().length > 0
+              ? t.name
+              : (t.slug || "").replace(/-/g, " ");
+            if (!t.name || t.name.trim().length === 0) {
+              console.warn(JSON.stringify({
+                metric: "radar_tenant_name_missing",
+                slug:   t.slug,
+                using:  "slug_fallback",
+                hint:   "Tenant has empty name field; sentiment extraction is using slug as fallback. Repair the businesses.name column to restore proper extraction.",
+              }));
+            }
+            if (brandToken) {
+              const descriptors = extractSentiment(answerText, brandToken);
+              if (descriptors.length > 0) descriptorsJson = JSON.stringify(descriptors);
+            }
           }
 
           const info = pollInsert.run(
