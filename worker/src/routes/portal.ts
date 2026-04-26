@@ -24,6 +24,7 @@ import {
 import { handleOnboardPage } from "./onboardPage";
 import { handleActivatePage } from "./activatePage";
 import { handleActivate, handleActivateHosted, handleActivatePreview, handleActivateStatus, handleActivateDnsProvider, handleActivationToken, handleGetActivation, handleResendActivation } from "./activate";
+import { handleCloudflareValidate, handleCloudflareApply } from "./dnsAuto";
 import {
   getSessionFromRequest,
   handleAuthLogin,
@@ -111,6 +112,10 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/activate/status"      && method === "GET")     return handleActivateStatus(request, env);
   if (pathname === "/api/activate/dns-provider" && method === "OPTIONS") return handleCorsPreflight(request);
   if (pathname === "/api/activate/dns-provider" && method === "GET")     return handleActivateDnsProvider(request, env);
+  if (pathname === "/api/dns-auto/cloudflare/validate" && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/dns-auto/cloudflare/validate" && method === "POST")    return handleCloudflareValidate(request, env);
+  if (pathname === "/api/dns-auto/cloudflare/apply"    && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/dns-auto/cloudflare/apply"    && method === "POST")    return handleCloudflareApply(request, env);
   if (pathname === "/api/activate"             && method === "OPTIONS") return handleCorsPreflight(request);
   if (pathname === "/api/activate"             && method === "POST")    return handleActivate(request, env);
   if (pathname === "/api/activate/hosted"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });

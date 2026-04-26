@@ -149,6 +149,135 @@
     }
   }
 
+  /* Render the auto-DNS section that lets the customer paste a
+   * scoped API token instead of adding records by hand. Currently
+   * supported for Cloudflare-hosted DNS only (Phase D-Cloudflare).
+   * Other providers fall through to the manual guide. */
+  function renderAutoDnsSection(providerId, activateData) {
+    if (providerId !== 'cloudflare') return '';
+    return '' +
+      '<div id="auto-dns-block" style="margin-top:18px;padding:14px 16px;background:var(--paper);border:1px dashed var(--maroon-tint);border-radius:var(--r-md)">' +
+        '<div style="font-size:.6875rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--maroon);margin-bottom:6px">⚡ Or do it automatically</div>' +
+        '<p style="margin:0 0 12px 0;font-size:.8125rem;color:var(--ink-2);line-height:1.55">' +
+          "Paste a scoped Cloudflare API token and we'll add the records for you. " +
+          'Token is used once, never stored. Need to make one? ' +
+          '<a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener" style="color:var(--maroon)">Create a Cloudflare API token →</a>' +
+        '</p>' +
+        '<p style="margin:0 0 10px 0;font-size:.75rem;color:var(--muted);line-height:1.5">' +
+          'When creating the token: pick "Edit zone DNS" template, scope to your zone only. ' +
+          'We never receive any other permissions or zones.' +
+        '</p>' +
+        '<input type="password" id="auto-dns-token" placeholder="paste your CF API token here" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="width:100%;padding:9px 12px;background:var(--paper);border:1px solid var(--line);border-radius:var(--r-md);color:var(--ink);font-family:var(--mono);font-size:.75rem;margin-bottom:10px">' +
+        '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
+          '<button type="button" id="btn-auto-dns-validate" class="btn-submit" style="width:auto;padding:9px 16px;font-size:.8125rem">Validate token</button>' +
+          '<button type="button" id="btn-auto-dns-apply" class="btn-submit" style="width:auto;padding:9px 16px;font-size:.8125rem;display:none">Add records to my Cloudflare zone</button>' +
+          '<span id="auto-dns-status" style="font-size:.75rem;color:var(--muted)"></span>' +
+        '</div>' +
+      '</div>';
+  }
+
+  /* Wire up the auto-DNS form. Called after the guide renders so the
+   * form elements exist in the DOM. Idempotent — re-running is OK. */
+  function wireAutoDnsHandlers() {
+    var validateBtn = document.getElementById('btn-auto-dns-validate');
+    var applyBtn = document.getElementById('btn-auto-dns-apply');
+    var tokenInput = document.getElementById('auto-dns-token');
+    var statusEl = document.getElementById('auto-dns-status');
+    if (!validateBtn || !tokenInput || !statusEl) return;
+
+    function setStatus(text, kind) {
+      statusEl.textContent = text;
+      if (kind === 'ok')   statusEl.style.color = 'var(--sage)';
+      else if (kind === 'err') statusEl.style.color = 'var(--maroon)';
+      else statusEl.style.color = 'var(--muted)';
+    }
+
+    validateBtn.addEventListener('click', async function () {
+      var t = tokenInput.value.trim();
+      if (!t) { setStatus('Paste a token first.', 'err'); return; }
+      validateBtn.disabled = true;
+      setStatus('Checking…', 'muted');
+      try {
+        var res = await fetch(API_BASE + '/api/dns-auto/cloudflare/validate?t=' + encodeURIComponent(token), {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: t }),
+        });
+        var data = await res.json();
+        if (!res.ok || !data.ok) {
+          setStatus(prettyAutoDnsReason(data.reason || 'token_validation_failed'), 'err');
+          return;
+        }
+        setStatus('✓ Valid token for ' + (data.zone_name || 'your zone') + '.', 'ok');
+        if (applyBtn) applyBtn.style.display = '';
+      } catch (_) {
+        setStatus("Couldn't reach our server. Try again.", 'err');
+      } finally {
+        validateBtn.disabled = false;
+      }
+    });
+
+    if (applyBtn) {
+      applyBtn.addEventListener('click', async function () {
+        var t = tokenInput.value.trim();
+        if (!t) { setStatus('Paste a token first.', 'err'); return; }
+        applyBtn.disabled = true;
+        validateBtn.disabled = true;
+        setStatus('Adding records…', 'muted');
+        try {
+          var res = await fetch(API_BASE + '/api/dns-auto/cloudflare/apply?t=' + encodeURIComponent(token), {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: t }),
+          });
+          var data = await res.json();
+          if (!res.ok || !data.ok) {
+            // Per-record outcomes available in data.results — surface
+            // the first failure verbatim so the customer can fix.
+            var firstFail = (data.results || []).find(function (r) { return !r.ok; });
+            var why = firstFail ? prettyAutoDnsReason(firstFail.reason) : prettyAutoDnsReason(data.reason || 'apply_failed');
+            setStatus('Some records failed: ' + why, 'err');
+            applyBtn.disabled = false;
+            validateBtn.disabled = false;
+            return;
+          }
+          setStatus('✓ Records added. Cloudflare is now validating SSL — usually under a minute.', 'ok');
+          // Clear the token from the DOM aggressively.
+          tokenInput.value = '';
+          // Polling (Phase B) is already running — it will flip the
+          // per-variant pills as Cloudflare propagates and CF SaaS
+          // sees the records.
+        } catch (_) {
+          setStatus("Couldn't reach our server. Try again.", 'err');
+          applyBtn.disabled = false;
+          validateBtn.disabled = false;
+        }
+      });
+    }
+  }
+
+  function prettyAutoDnsReason(reason) {
+    // Map worker-side reason codes to human-friendly copy.
+    var MAP = {
+      token_format_invalid:        "That doesn't look like a valid Cloudflare API token. Double-check what you pasted.",
+      token_invalid_or_revoked:    "Cloudflare doesn't recognize this token, or it was revoked. Create a fresh one.",
+      token_inactive:              "This token isn't active in Cloudflare. Make a new one.",
+      zone_not_found_for_token:    "This token doesn't have access to your domain's zone. Check that the token's zone scope matches.",
+      zone_not_active:             "Your Cloudflare zone isn't active yet. Activate it in Cloudflare first, then retry.",
+      permission_denied:           "The token isn't allowed to edit DNS in this zone. Add 'Zone:DNS:Edit' to the token.",
+      record_create_failed:        "Cloudflare rejected one of the record creations. Open Cloudflare and check for conflicts.",
+      hosted_tenant_no_dns_needed: "Your account is hosted on our subdomain — no DNS records needed. You're already live.",
+      missing_provider_token:      "Token field was empty.",
+      no_records_to_add:           "Nothing to add — your records may already be in place.",
+    };
+    if (typeof reason === 'string' && /^record_conflict_/.test(reason)) {
+      return "A different DNS record already exists at one of the spots we'd write to. Resolve the conflict in Cloudflare, then retry.";
+    }
+    return MAP[reason] || ('Something went wrong (' + (reason || 'unknown') + '). Try again or fall back to manual records.');
+  }
+
   /* Render the provider-specific section above the generic record
    * cards. Steps reference {{placeholders}} that interpolate from the
    * activate response data. */
@@ -249,6 +378,10 @@
         '</div>' +
         '<button type="button" class="btn-link" id="hide-provider-guide" style="background:none;border:0;color:var(--maroon);font-size:.75rem;cursor:pointer;text-decoration:underline">Hide</button>' +
       '</div>' +
+      // Auto-DNS section (Phase D) — only renders for providers we
+      // support programmatically. Lets the customer skip the manual
+      // steps below by pasting a scoped API token.
+      renderAutoDnsSection(providerId, activateData) +
       renderSection('Step 1: add the www CNAME record', guide.www_steps) +
       renderSection('Step 2: route apex traffic to us', guide.apex_steps) +
       renderSection('Step 3: add the SSL verification TXT record', guide.txt_steps) +
@@ -266,6 +399,10 @@
         if (el) el.style.display = 'none';
       });
     }
+
+    // Auto-DNS form (Phase D) — wire the validate / apply handlers if
+    // the section was rendered for this provider.
+    wireAutoDnsHandlers();
   }
 
   function renderSuccess(data) {
