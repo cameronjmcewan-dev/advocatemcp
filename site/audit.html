@@ -242,6 +242,38 @@
     <button type="submit" id="submit-btn" class="btn btn-primary submit-btn">Run my audit</button>
   </form>
 
+  <!-- ── Citation-readiness score (Apr 25 2026) ─────────────────────
+       Companion tool to the visibility audit. Visitor pastes their
+       URL, server fetches their homepage HTML, runs our format-judge
+       harness against it, returns a 1-10 score + signal breakdown +
+       improvement suggestions. Same prompt + rubric we publish on
+       /methodology.html — so any sophisticated visitor can verify
+       the methodology is identical to what we use internally.
+       Backend: POST /audit/citation-readiness on Railway. -->
+  <div class="card" id="readiness-card" style="margin-top:24px;">
+    <div style="margin-bottom:18px;">
+      <div style="font-size:var(--tx-xs);letter-spacing:.08em;text-transform:uppercase;color:var(--accent-bright);font-weight:600;margin-bottom:6px;">Score breakdown</div>
+      <h2 style="font-family:var(--font-serif);font-weight:400;font-size:1.6rem;line-height:1.2;color:var(--text);margin-bottom:8px;">Or score your homepage's citation-readiness.</h2>
+      <p style="font-size:var(--tx-sm);color:var(--muted);line-height:1.55;margin:0;">
+        We fetch your homepage and run it through the same Claude judge harness we use internally. You'll see your score on the same 1-10 distribution as the homepage comparison, plus a checklist of what you have and what you're missing. Same prompt, same rubric, fully published on <a href="/methodology.html" style="color:var(--accent-bright);">/methodology.html</a>.
+      </p>
+    </div>
+    <form id="readiness-form" class="readiness-form" style="display:flex;gap:12px;flex-wrap:wrap;">
+      <input
+        type="url" id="readiness-url" name="url" required
+        placeholder="https://yourbusiness.com"
+        style="flex:1;min-width:260px;padding:12px 14px;font-size:var(--tx-sm);background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);color:var(--text);"
+      />
+      <button type="submit" id="readiness-btn" class="btn btn-primary">Score my homepage</button>
+    </form>
+    <div id="readiness-loading" style="display:none;margin-top:18px;padding:14px 16px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);font-size:var(--tx-sm);color:var(--muted);">
+      <span class="spinner" style="display:inline-block;vertical-align:middle;margin-right:10px;"></span>
+      Fetching your homepage and running the judge… ~10-15 seconds.
+    </div>
+    <div id="readiness-error" style="display:none;margin-top:18px;padding:14px 16px;background:var(--surface-2);border:1px solid var(--border);border-left:3px solid var(--accent-bright);border-radius:var(--r-md);font-size:var(--tx-sm);color:var(--text);"></div>
+    <div id="readiness-result" style="display:none;margin-top:24px;"></div>
+  </div>
+
   <div id="loading">
     <div class="spinner"></div>
     <div>Asking AI about your category… this takes ~20 seconds.</div>

@@ -369,4 +369,150 @@
 
     results.classList.add("show");
   }
+
+  // ── Citation-readiness widget (Apr 25 2026) ────────────────────────
+  // Standalone form on the audit page. Hits POST /audit/citation-readiness
+  // (Railway via api.advocatemcp.com, same base as the visibility audit).
+  // Renders score + signals breakdown + improvements. Independent of the
+  // visibility check; visitor can run either or both.
+  (function readinessWidget() {
+    var rForm    = document.getElementById("readiness-form");
+    var rUrl     = document.getElementById("readiness-url");
+    var rBtn     = document.getElementById("readiness-btn");
+    var rLoading = document.getElementById("readiness-loading");
+    var rError   = document.getElementById("readiness-error");
+    var rResult  = document.getElementById("readiness-result");
+    if (!rForm || !rUrl || !rBtn || !rLoading || !rError || !rResult) return;
+
+    rForm.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var url = (rUrl.value || "").trim();
+      if (!url) return;
+      rBtn.disabled = true;
+      rBtn.textContent = "Scoring...";
+      rError.style.display = "none";
+      rError.textContent = "";
+      rResult.style.display = "none";
+      rResult.innerHTML = "";
+      rLoading.style.display = "block";
+
+      fetch(API_BASE + "/audit/citation-readiness", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: url }),
+      })
+        .then(function (res) {
+          return res.json().then(function (body) { return { status: res.status, body: body }; });
+        })
+        .then(function (out) {
+          rLoading.style.display = "none";
+          rBtn.disabled = false;
+          rBtn.textContent = "Score my homepage";
+
+          if (!out.body.ok) {
+            var msg = out.body.message || "Something went wrong.";
+            var hint = "";
+            if (out.body.reason === "non_https")               hint = "Make sure the URL starts with https://";
+            else if (out.body.reason === "private_address")    hint = "We only accept public, internet-reachable URLs.";
+            else if (out.body.reason === "ip_rate_limited")    hint = "You've hit the daily limit (5 per IP). Try again tomorrow.";
+            else if (out.body.reason === "budget_exhausted")   hint = "Our daily AI budget is exhausted. Resets after UTC midnight.";
+            else if (out.body.reason === "wrong_content_type") hint = "The URL did not return HTML, make sure it is a public homepage.";
+            else if (out.body.reason === "too_large")          hint = "Page is too large (over 500kb). Try a more focused page.";
+            else if (out.body.reason === "timeout")            hint = "The site took too long to respond.";
+            else if (out.body.reason === "no_api_key")         hint = "Server config is missing the API key, let us know.";
+            rError.innerHTML =
+              '<strong style="color:var(--text);display:block;margin-bottom:6px;">Could not score that URL</strong>' +
+              '<span style="color:var(--muted);">' + escapeHtml(msg) + (hint ? ' ' + escapeHtml(hint) : '') + '</span>';
+            rError.style.display = "block";
+            return;
+          }
+
+          renderReadinessResult(out.body);
+        })
+        .catch(function (err) {
+          rLoading.style.display = "none";
+          rBtn.disabled = false;
+          rBtn.textContent = "Score my homepage";
+          rError.innerHTML =
+            '<strong style="color:var(--text);display:block;margin-bottom:6px;">Network error</strong>' +
+            '<span style="color:var(--muted);">' + escapeHtml(String(err && err.message ? err.message : err)) + '</span>';
+          rError.style.display = "block";
+        });
+    });
+
+    /* Render the result panel: score wheel + signals checklist +
+     * improvements list + judge reasoning + how-it-compares note. */
+    function renderReadinessResult(body) {
+      var pct = Math.max(0, Math.min(100, (body.score / body.score_max) * 100));
+      var wouldCiteText = body.would_cite
+        ? '<span style="color:var(--green,#3fb950);">would likely cite</span>'
+        : '<span style="color:var(--accent-bright);">unlikely to cite as-is</span>';
+
+      var presentList = (body.signals_present || []).map(function (s) {
+        return '<li style="padding:5px 0;color:var(--text);">'
+             + '<span style="color:var(--green,#3fb950);margin-right:8px;">&#10003;</span>'
+             + escapeHtml(s) + '</li>';
+      }).join("") || '<li style="color:var(--muted);">No structured signals detected.</li>';
+
+      var missingList = (body.signals_missing || []).map(function (s) {
+        return '<li style="padding:5px 0;color:var(--muted);">'
+             + '<span style="color:var(--accent-bright);margin-right:8px;">&#10007;</span>'
+             + escapeHtml(s) + '</li>';
+      }).join("") || '<li style="color:var(--muted);">All checked signals present.</li>';
+
+      var improvementsList = (body.improvements || []).map(function (i) {
+        return '<div style="padding:14px 16px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);margin-bottom:10px;display:flex;gap:14px;align-items:flex-start;">'
+             + '<div style="font-family:var(--font-serif);font-size:24px;color:var(--accent-bright);min-width:48px;text-align:center;line-height:1;">+' + i.expected_lift.toFixed(1) + '</div>'
+             + '<div style="flex:1;font-size:var(--tx-sm);line-height:1.55;color:var(--text);">' + escapeHtml(i.reason) + '</div>'
+             + '</div>';
+      }).join("") || '<p style="color:var(--muted);font-size:var(--tx-sm);">No specific improvements suggested, your homepage scored well.</p>';
+
+      rResult.innerHTML =
+        '<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:24px;">' +
+          '<div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;margin-bottom:18px;">' +
+            '<div style="display:flex;align-items:baseline;gap:8px;">' +
+              '<div style="font-family:var(--font-serif);font-size:64px;font-weight:400;line-height:1;color:var(--accent-bright);">' + body.score.toFixed(1) + '</div>' +
+              '<div style="font-size:24px;color:var(--muted);">/ ' + body.score_max + '</div>' +
+            '</div>' +
+            '<div style="flex:1;min-width:200px;">' +
+              '<div style="font-size:var(--tx-sm);color:var(--muted);margin-bottom:6px;">Citation-readiness, the judge ' + wouldCiteText + ' your page.</div>' +
+              '<div style="height:8px;background:var(--surface-2);border-radius:999px;overflow:hidden;border:1px solid var(--border);">' +
+                '<div style="height:100%;width:' + pct + '%;background:var(--accent-bright);"></div>' +
+              '</div>' +
+              '<div style="margin-top:8px;font-size:var(--tx-xs);color:var(--muted);">For comparison: WCC (Advocate-enabled) scores 8.5; the lowest archetype on our homepage scores 3.8.</div>' +
+            '</div>' +
+          '</div>' +
+
+          '<div style="padding:16px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r-md);margin-bottom:18px;font-size:var(--tx-sm);line-height:1.55;color:var(--text);font-style:italic;">' +
+            '<strong style="font-style:normal;color:var(--muted);font-size:var(--tx-xs);letter-spacing:.06em;text-transform:uppercase;display:block;margin-bottom:6px;">Claude judge reasoning</strong>' +
+            '"' + escapeHtml(body.reasoning) + '"' +
+          '</div>' +
+
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px;">' +
+            '<div>' +
+              '<div style="font-size:var(--tx-xs);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">What you have</div>' +
+              '<ul style="list-style:none;padding:0;margin:0;font-size:var(--tx-sm);">' + presentList + '</ul>' +
+            '</div>' +
+            '<div>' +
+              '<div style="font-size:var(--tx-xs);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">What is missing</div>' +
+              '<ul style="list-style:none;padding:0;margin:0;font-size:var(--tx-sm);">' + missingList + '</ul>' +
+            '</div>' +
+          '</div>' +
+
+          '<div>' +
+            '<div style="font-size:var(--tx-xs);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">Top improvements (sorted by predicted lift)</div>' +
+            improvementsList +
+          '</div>' +
+
+          '<div style="margin-top:20px;padding-top:18px;border-top:1px solid var(--border);font-size:var(--tx-xs);color:var(--muted);line-height:1.5;">' +
+            'Reproduce this score yourself: <a href="/methodology.html" style="color:var(--accent-bright);">methodology.html</a> publishes the full judge prompt + rubric. Page fetched ' + new Date(body.fetched_at).toLocaleString() + ' (' + Math.round(body.byte_length / 1024) + 'kb).' +
+          '</div>' +
+        '</div>';
+
+      rResult.style.display = "block";
+      // Smooth scroll to result so the visitor sees it without manual scroll
+      var top = rResult.getBoundingClientRect().top + window.pageYOffset - 80;
+      window.scrollTo({ top: top, behavior: "smooth" });
+    }
+  })();
 })();

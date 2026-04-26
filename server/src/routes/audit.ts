@@ -32,6 +32,12 @@ import { perplexitySearch } from "../lib/perplexity.js";
 import { openaiSearch }     from "../lib/openai.js";
 import { canonicalDomain, isCitationOfTenant } from "../lib/domainMatch.js";
 import { generateAutoQueries } from "../jobs/competitorRadar.js";
+import { scoreCitationReadiness } from "../lib/citationReadiness.js";
+import {
+  reserve as budgetReserve,
+  record as budgetRecord,
+  release as budgetRelease,
+} from "../middleware/budgetKillSwitch.js";
 
 /**
  * Audit provider abstraction. Perplexity first (~$0.005/call), OpenAI
@@ -414,4 +420,167 @@ auditRouter.post("/audit/:id/follow-up", (req: Request, res: Response) => {
   ).run(auditId, email, ipHash, new Date().toISOString());
 
   res.json({ ok: true, audit_id: auditId, email, created: info.changes > 0 });
+});
+
+/**
+ * POST /audit/citation-readiness
+ *
+ * Public, unauth, IP-rate-limited. Visitor pastes their site URL,
+ * we fetch their homepage HTML server-side (SSRF-safe), run our
+ * format-judge harness against it, and return the citability
+ * score + signals breakdown + improvement suggestions.
+ *
+ * Body: { url: string }
+ * Returns:
+ *   { ok: true, score, would_cite, reasoning, signals_present[],
+ *     signals_missing[], improvements[], cost_usd }
+ *   { ok: false, reason, message, status? } on error
+ *
+ * Cost: ~$0.01-0.04 per call (judge call + token-priced inputs).
+ * Reservation: $0.10 per call to give 2-3x headroom against pricing
+ * surprises on large pages near the 500kb cap.
+ *
+ * Rate limits:
+ *   - Per-IP: 5 per UTC day (twice the visibility-audit cap, since
+ *     visitors are more likely to retry the readiness check after
+ *     making site changes — we want them to come back).
+ *   - Global: $25/day kill-switch (existing budget module).
+ */
+const READINESS_PER_IP_DAILY_CAP = 5;
+const READINESS_RESERVATION_USD  = 0.10;
+
+auditRouter.options("/audit/citation-readiness", (_req: Request, res: Response) => {
+  res.setHeader("Access-Control-Allow-Origin",  "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Max-Age",       "600");
+  res.status(204).end();
+});
+
+auditRouter.post("/audit/citation-readiness", async (req: Request, res: Response) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+
+  const rawUrl = typeof req.body?.url === "string" ? req.body.url.trim() : "";
+  if (!rawUrl || rawUrl.length > 2000) {
+    res.status(400).json({ ok: false, reason: "invalid_url", message: "Provide a `url` field (https only)." });
+    return;
+  }
+
+  const ip = clientIp(req);
+  const ipHash = ip ? hashIp(ip) : "";
+
+  // Per-IP cap: count today's readiness calls from this IP. Stored in
+  // the same audit_followups table is the wrong place; we need a
+  // dedicated counter. Quick approach: use the existing `public_audits`
+  // table's ip_hash column with a synthetic category="__readiness__"
+  // marker so cap counting reuses the existing index. Cleaner long-
+  // term: separate `audit_readiness_results` table (proposal in chat,
+  // not built yet — needs disclosure decision).
+  if (ipHash) {
+    const db = getDb();
+    const cutoff = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    const { count } = db
+      .prepare(
+        `SELECT COUNT(*) AS count FROM public_audits
+          WHERE ip_hash = ? AND category = '__readiness__' AND created_at > ?`,
+      )
+      .get(ipHash, cutoff) as { count: number };
+    if (count >= READINESS_PER_IP_DAILY_CAP) {
+      res.status(429).json({
+        ok: false, reason: "ip_rate_limited",
+        message: `Daily limit of ${READINESS_PER_IP_DAILY_CAP} readiness checks reached for your IP. Resets in 24h.`,
+        meta: { limit: READINESS_PER_IP_DAILY_CAP },
+      });
+      return;
+    }
+  }
+
+  // Global daily kill-switch reservation. Releases on error, records
+  // actual cost on success.
+  const budget = budgetReserve(READINESS_RESERVATION_USD);
+  if (!budget.allowed) {
+    res.status(503).json({
+      ok: false, reason: "budget_exhausted",
+      message: `Daily AI budget exhausted ($${budget.capUsd.toFixed(2)} cap, $${budget.remainingUsd.toFixed(2)} left). Try again after UTC midnight.`,
+    });
+    return;
+  }
+
+  let result;
+  try {
+    result = await scoreCitationReadiness(rawUrl);
+  } catch (err) {
+    budgetRelease(READINESS_RESERVATION_USD);
+    console.error("[audit/citation-readiness] unexpected:", err);
+    res.status(500).json({ ok: false, reason: "internal_error", message: err instanceof Error ? err.message : String(err) });
+    return;
+  }
+
+  if (!result.ok) {
+    // No spend incurred when the failure was at fetch / DNS / private-IP.
+    // Only spend incurred if we got far enough to call the judge.
+    if (result.reason === "judge_failed") {
+      budgetRecord(READINESS_RESERVATION_USD, 0.04);
+    } else {
+      budgetRelease(READINESS_RESERVATION_USD);
+    }
+    const status = result.status
+      ?? (result.reason === "no_api_key" ? 503
+      : result.reason === "private_address" || result.reason === "non_https" || result.reason === "invalid_url" ? 400
+      : result.reason === "wrong_content_type" || result.reason === "too_large" || result.reason === "too_many_redirects" ? 422
+      : result.reason === "timeout" || result.reason === "dns_lookup_failed" || result.reason === "network_error" ? 502
+      : 500);
+    res.status(status).json({ ok: false, reason: result.reason, message: result.message });
+    return;
+  }
+
+  // Successful judge call — record the actual cost (or our best
+  // estimate when input/output token counts are absent).
+  budgetRecord(READINESS_RESERVATION_USD, result.cost_usd || 0.04);
+
+  // Stamp a counter row so per-IP rate-limit lookup works on the next
+  // call. Minimal data — id, ip_hash, created_at, category=__readiness__.
+  // We deliberately do NOT persist the URL or score here; the disclosure
+  // story is "we scored your site, no per-result retention." The data-
+  // capture proposal in chat is a separate, opt-in decision.
+  if (ipHash) {
+    try {
+      const db = getDb();
+      db.prepare(
+        `INSERT INTO public_audits
+          (id, domain, category, location, ip_hash,
+           queries_json, cited_count, total_queries, error,
+           cost_usd, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        crypto.randomUUID(),
+        "__readiness__",          // synthetic domain (not the visitor's URL)
+        "__readiness__",          // marker for the per-IP counter
+        null,
+        ipHash,
+        "[]",
+        0, 0, null,
+        result.cost_usd || 0.04,
+        new Date().toISOString(),
+      );
+    } catch (err) {
+      // Cap-counter write is best-effort. If it fails we still return
+      // the readiness result; the cap just gets one extra slip-through.
+      console.warn("[audit/citation-readiness] cap-counter write failed:", err);
+    }
+  }
+
+  res.json({
+    ok:               true,
+    url:              result.url,
+    score:            result.score,
+    score_max:        10,
+    would_cite:       result.would_cite,
+    reasoning:        result.reasoning,
+    signals_present:  result.signals_present,
+    signals_missing:  result.signals_missing,
+    improvements:     result.improvements,
+    fetched_at:       result.fetched_at,
+    byte_length:      result.byte_length,
+  });
 });
