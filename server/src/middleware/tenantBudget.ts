@@ -103,23 +103,13 @@ function rehydrateFromDb(slug: string, dateKey: string): TenantBudgetState {
   }
 }
 
-/* Best-effort write-through. Never raises out of the caller's hot
- * path — durability is best-effort, in-memory still works. */
-function persistState(s: TenantBudgetState): void {
-  try {
-    const db = getDb();
-    db.prepare(`
-      INSERT INTO tenant_budget_state (slug, date_key, spent_usd, reserved_usd, updated_at)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(slug, date_key) DO UPDATE SET
-        spent_usd    = excluded.spent_usd,
-        reserved_usd = excluded.reserved_usd,
-        updated_at   = excluded.updated_at
-    `).run(s.slug, s.dateKey, s.spentUsd, s.reservedUsd, new Date().toISOString());
-  } catch {
-    /* swallow */
-  }
-}
+/* persistState was the pre-Bug-2 write-through path. It computed the
+ * new state in JS and wrote the whole row back via UPSERT, which was
+ * not safe under multi-instance concurrency. The new mutators
+ * (reserve/record/release) use atomic conditional UPDATEs against the
+ * existing row instead. We keep this helper out of the codepath
+ * entirely now so a future contributor doesn't accidentally
+ * reintroduce the race by calling it. */
 
 function getState(slug: string): TenantBudgetState {
   const today = utcDateKey();
@@ -140,39 +130,130 @@ function perTenantCap(): number {
 /* Reserve room in the per-tenant budget for an upcoming spend.
  * Returns { allowed: true } if the reservation fits, or
  * { allowed: false, ... } with the cap + remaining headroom for
- * the response body. Caller MUST call release()/record() to close. */
+ * the response body. Caller MUST call release()/record() to close.
+ *
+ * Concurrency (Bug 2): pre-fix, the check-then-increment was split
+ * into two statements via the in-memory cache:
+ *   const projected = s.spentUsd + s.reservedUsd + maxUsd;
+ *   if (projected > cap) ...
+ *   s.reservedUsd += maxUsd;
+ *   persistState(s);
+ * Single-process Node serializes all of this synchronously, so a
+ * single-instance deploy was safe. Multi-instance (or multi-process,
+ * or just two requests landing on different Railway replicas in the
+ * same second) was not: each instance had its own cache, both
+ * instances passed the cap check, both wrote, last-write-to-SQLite
+ * wins, and the actual reserved_usd in SQLite was lower than the sum
+ * of what the two instances "thought" they had reserved.
+ *
+ * Fix: do the check + increment in a single conditional UPDATE so
+ * SQLite serializes the operation. The WHERE clause includes the cap
+ * predicate; if the row would exceed the cap, the UPDATE matches zero
+ * rows and we report "not allowed." After the UPDATE, we sync the
+ * in-memory cache from the now-authoritative DB row.
+ */
 export function reserveForSlug(
   slug: string,
   maxUsd: number,
 ): { allowed: true } | { allowed: false; remainingUsd: number; capUsd: number } {
-  const s = getState(slug);
+  const today = utcDateKey();
   const cap = perTenantCap();
-  const projected = s.spentUsd + s.reservedUsd + maxUsd;
-  if (projected > cap) {
+  // Make sure the row exists. rehydrateFromDb is idempotent — INSERTs a
+  // zero row if missing, otherwise no-op — and primes the in-memory
+  // cache for fast reads.
+  const cached = getState(slug);
+  try {
+    const db = getDb();
+    const result = db
+      .prepare(
+        `UPDATE tenant_budget_state
+            SET reserved_usd = reserved_usd + ?,
+                updated_at   = ?
+          WHERE slug = ? AND date_key = ?
+            AND spent_usd + reserved_usd + ? <= ?`,
+      )
+      .run(maxUsd, new Date().toISOString(), slug, today, maxUsd, cap);
+    if (result.changes === 1) {
+      // SQL accepted; refresh in-memory cache from the new row so
+      // snapshotForSlug() reflects it without a follow-up SELECT.
+      cached.reservedUsd += maxUsd;
+      return { allowed: true };
+    }
+    // SQL rejected — read the actual current state to compute the
+    // remaining headroom for the caller's error response.
+    const row = db
+      .prepare(
+        "SELECT spent_usd, reserved_usd FROM tenant_budget_state WHERE slug = ? AND date_key = ?",
+      )
+      .get(slug, today) as { spent_usd: number; reserved_usd: number } | undefined;
+    const spent = row?.spent_usd ?? cached.spentUsd;
+    const reserved = row?.reserved_usd ?? cached.reservedUsd;
+    // Sync cache so subsequent reads aren't stale.
+    cached.spentUsd = spent;
+    cached.reservedUsd = reserved;
     return {
       allowed: false,
-      remainingUsd: Math.max(0, cap - s.spentUsd - s.reservedUsd),
+      remainingUsd: Math.max(0, cap - spent - reserved),
       capUsd: cap,
     };
+  } catch {
+    // DB unavailable: fall back to single-process in-memory check.
+    // Loses cross-instance protection but keeps single-instance
+    // production / tests working when the DB is mid-bootstrap.
+    const projected = cached.spentUsd + cached.reservedUsd + maxUsd;
+    if (projected > cap) {
+      return {
+        allowed: false,
+        remainingUsd: Math.max(0, cap - cached.spentUsd - cached.reservedUsd),
+        capUsd: cap,
+      };
+    }
+    cached.reservedUsd += maxUsd;
+    return { allowed: true };
   }
-  s.reservedUsd += maxUsd;
-  persistState(s);
-  return { allowed: true };
 }
 
-/* Close a reservation with the actual spend amount. */
+/* Close a reservation with the actual spend amount. Atomic UPDATE so
+ * concurrent record() calls accumulate spend correctly (the previous
+ * read-modify-write pattern lost increments under multi-instance load
+ * in the same way reserve did — see Bug 2 jsdoc above). */
 export function recordForSlug(slug: string, reservationMaxUsd: number, actualUsd: number): void {
-  const s = getState(slug);
-  s.reservedUsd = Math.max(0, s.reservedUsd - reservationMaxUsd);
-  s.spentUsd += actualUsd;
-  persistState(s);
+  const today = utcDateKey();
+  const cached = getState(slug);
+  try {
+    const db = getDb();
+    db.prepare(
+      `UPDATE tenant_budget_state
+          SET reserved_usd = MAX(0, reserved_usd - ?),
+              spent_usd    = spent_usd + ?,
+              updated_at   = ?
+        WHERE slug = ? AND date_key = ?`,
+    ).run(reservationMaxUsd, actualUsd, new Date().toISOString(), slug, today);
+    cached.reservedUsd = Math.max(0, cached.reservedUsd - reservationMaxUsd);
+    cached.spentUsd += actualUsd;
+  } catch {
+    cached.reservedUsd = Math.max(0, cached.reservedUsd - reservationMaxUsd);
+    cached.spentUsd += actualUsd;
+  }
 }
 
-/* Release a reservation without recording any spend. */
+/* Release a reservation without recording any spend. Atomic UPDATE
+ * (see Bug 2 jsdoc on reserveForSlug). */
 export function releaseForSlug(slug: string, reservationMaxUsd: number): void {
-  const s = getState(slug);
-  s.reservedUsd = Math.max(0, s.reservedUsd - reservationMaxUsd);
-  persistState(s);
+  const today = utcDateKey();
+  const cached = getState(slug);
+  try {
+    const db = getDb();
+    db.prepare(
+      `UPDATE tenant_budget_state
+          SET reserved_usd = MAX(0, reserved_usd - ?),
+              updated_at   = ?
+        WHERE slug = ? AND date_key = ?`,
+    ).run(reservationMaxUsd, new Date().toISOString(), slug, today);
+    cached.reservedUsd = Math.max(0, cached.reservedUsd - reservationMaxUsd);
+  } catch {
+    cached.reservedUsd = Math.max(0, cached.reservedUsd - reservationMaxUsd);
+  }
 }
 
 /* Read-only snapshot for admin dashboards. */

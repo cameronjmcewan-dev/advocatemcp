@@ -128,4 +128,42 @@ describe("budgetKillSwitch", () => {
     expect(snap.reserved_usd).toBe(5);
     expect(snap.remaining_usd).toBe(5);
   });
+
+  /* (Bug 2) Multi-instance race protection: simulate another Railway
+   * replica writing to SQLite after we hydrated our cache. Pre-fix,
+   * reserve() trusted its in-memory snapshot and would happily allow a
+   * reservation the live DB row could not actually accept. Post-fix,
+   * the conditional UPDATE evaluates the cap predicate against the
+   * authoritative row; the stale cache cannot smuggle a reservation
+   * past the cap. */
+  it("rejects when another writer raced ahead in SQLite (Bug 2)", () => {
+    // Test cap is $10 (set in beforeEach via env). Hydrate cache:
+    // spent $0, reserved $3.
+    expect(reserve(3).allowed).toBe(true);
+    expect(snapshot().reserved_usd).toBe(3);
+
+    // Another instance writes: spent $0, reserved jumps to $9.
+    const today = new Date().toISOString().slice(0, 10);
+    db.prepare(
+      "UPDATE budget_state SET reserved_usd = ? WHERE date_key = ?",
+    ).run(9, today);
+
+    // Our cache thinks $3 reserved, $7 remaining; pre-Bug-2 would allow
+    // a $5 reserve. Post-fix the SQL sees $9 + $5 = $14 > $10 cap and
+    // rejects.
+    const r = reserve(5);
+    expect(r.allowed).toBe(false);
+    if (!r.allowed) {
+      expect(r.capUsd).toBe(10);
+      // After the rejection, cache is refreshed from the live row.
+      expect(snapshot().reserved_usd).toBe(9);
+    }
+  });
+
+  it("allows reservation that exactly hits the cap, rejects the next (Bug 2)", () => {
+    // Test cap is $10. $10 fits exactly, $0.01 more does not.
+    expect(reserve(10).allowed).toBe(true);
+    const r = reserve(0.01);
+    expect(r.allowed).toBe(false);
+  });
 });
