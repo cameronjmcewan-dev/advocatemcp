@@ -37,6 +37,23 @@ import type {
   VariantSummary,
 } from "./types.js";
 
+/**
+ * Profile row with secrets stripped. The runner returns these from
+ * `runExperiment().loadedProfiles` so callers can compute a profile
+ * hash without ever holding the raw `api_key` or PII-bearing
+ * `lead_routing_json`. Add new sensitive BusinessRow fields to the
+ * Omit<> as they appear; the redactSafeProfile() helper below mirrors
+ * this list at the value level.
+ */
+type SafeBusinessRow = Omit<BusinessRow, "api_key" | "lead_routing_json">;
+
+function redactSafeProfile(p: BusinessRow): SafeBusinessRow {
+  // Explicit destructure rather than `delete` so the typecheck enforces
+  // the omit list against future BusinessRow additions.
+  const { api_key: _apiKey, lead_routing_json: _leadRouting, ...safe } = p;
+  return safe;
+}
+
 // ── Config knobs ───────────────────────────────────────────────────────────
 
 const DEFAULT_QUERIES = [
@@ -393,8 +410,15 @@ export async function runExperiment(opts: {
    * `profile_hash`. Otherwise a user update mid-run produces a hash that
    * doesn't match what we scored, marking the cache stale on every
    * subsequent read. Order-aligned with `cfg.profiles`.
+   *
+   * Type-safety note: this is `SafeBusinessRow`, not `BusinessRow`,
+   * specifically to keep `api_key` and `lead_routing_json` (PII —
+   * phone/email recipients) out of any caller's response surface. The
+   * admin /admin/experiments/format-judge route does `res.json(result)`,
+   * so a future BusinessRow field marked sensitive needs to land in
+   * the Omit<> below or the runner's redact step. Found by code review.
    */
-  loadedProfiles: BusinessRow[];
+  loadedProfiles: SafeBusinessRow[];
 }> {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error("ANTHROPIC_API_KEY not set");
@@ -453,8 +477,10 @@ export async function runExperiment(opts: {
     summary,
     report_md,
     // Snapshot the post-merge profiles so callers can hash exactly what
-    // we rendered. See the `loadedProfiles` jsdoc above for why.
-    loadedProfiles: cfg.profiles,
+    // we rendered, with `api_key` + `lead_routing_json` stripped so the
+    // admin route's `res.json(result)` can't accidentally leak secrets.
+    // See the `loadedProfiles` jsdoc above for why.
+    loadedProfiles: cfg.profiles.map(redactSafeProfile),
   };
 }
 

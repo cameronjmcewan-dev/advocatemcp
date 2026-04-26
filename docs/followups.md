@@ -20,6 +20,22 @@ message; global cap stays untouched and other tenants unaffected. See
 
 ## Real bugs / known gaps
 
+### Profile-score partial-failure visibility
+**Tracked 2026-04-25.** Bug 3 made `parseJudgeOutput` throw on bad
+judge output instead of returning a silent zero. The `runTrials`
+all-trials-failed guard catches the case where every trial errors,
+but a partial-failure case is still silent: if 3 of 4 variants throw
+parse errors and 1 succeeds, the user gets a "score" derived from
+that single trial with no indication their result is low-confidence.
+
+Fix candidates: surface `failed_trial_count` on `VariantSummary` and
+have `profileScore.ts` flag the response (e.g. `{ confidence: "low",
+failed_count: 3 }`) when failures cross some threshold. Or threshold
+the all-failed guard at e.g. `trials.length < attempted * 0.5` so
+high-failure batches throw rather than serve thin data. Decision
+deferred — current behavior is strictly better than the pre-Bug-3
+silent zero, just not yet ideal.
+
 ### Bot-query graceful-degrade (deferred design call)
 **Tracked 2026-04-25.** `POST /agents/:slug/query` (the production
 hot-path that fires every time an AI bot crawls a tenant's site) is

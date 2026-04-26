@@ -202,8 +202,13 @@ export function reserveForSlug(
       )
       .run(maxUsd, new Date().toISOString(), slug, today, maxUsd, cap);
     if (result.changes === 1) {
-      // SQL accepted; refresh in-memory cache from the new row so
-      // snapshotForSlug() reflects it without a follow-up SELECT.
+      // Best-effort cache update: reflect OUR delta. If another
+      // instance raced ahead and our atomic UPDATE landed on top of
+      // that, the in-memory cache will lag the live row until the
+      // next rejection (which re-syncs from SQLite) or rollover. cap
+      // enforcement itself is unaffected because every subsequent
+      // reserve()'s SQL re-evaluates the predicate against the
+      // live row, not the cache.
       cached.reservedUsd += maxUsd;
       return { allowed: true };
     }

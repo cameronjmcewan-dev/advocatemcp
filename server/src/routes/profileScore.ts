@@ -85,7 +85,16 @@ const HASH_FIELDS = [
   "case_stories_json", "differentiators_text", "guarantee_text",
 ] as const;
 
-function computeProfileHash(business: BusinessRow): string {
+/**
+ * Computes the cache-invalidation hash from a tenant's profile fields.
+ * Accepts a `Partial<BusinessRow>` (rather than the full row) so the
+ * runner can pass back a `SafeBusinessRow` — same shape minus the
+ * `api_key` and `lead_routing_json` columns we strip to keep secrets
+ * out of any caller's response surface. None of HASH_FIELDS overlaps
+ * the redacted columns, so the computed hash is byte-identical to the
+ * pre-redaction value.
+ */
+function computeProfileHash(business: Partial<BusinessRow>): string {
   const subset: Record<string, unknown> = {};
   for (const k of HASH_FIELDS) {
     subset[k] = (business as unknown as Record<string, unknown>)[k] ?? null;

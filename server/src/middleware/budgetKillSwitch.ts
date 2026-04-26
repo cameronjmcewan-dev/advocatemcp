@@ -164,6 +164,13 @@ export function reserve(maxUsd: number): { allowed: true; reservationId: string 
       )
       .run(maxUsd, new Date().toISOString(), today, maxUsd, cap);
     if (result.changes === 1) {
+      // Best-effort cache update: reflect OUR delta. If another instance
+      // raced ahead, our cached.reservedUsd will lag behind reality
+      // until the next mutator hits this code path (which re-syncs from
+      // the live row on rejection) or until rehydrateFromDb runs at
+      // rollover. snapshot() readers may see slightly-stale numbers
+      // during that window — the cap enforcement itself is unaffected
+      // because the next reserve()'s SQL re-evaluates the predicate.
       cached.reservedUsd += maxUsd;
       return {
         allowed: true,
