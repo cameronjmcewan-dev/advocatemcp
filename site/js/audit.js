@@ -192,7 +192,16 @@
       .then(function (res) {
         return res.json().then(function (body) { return { status: res.status, body: body }; });
       })
-      .catch(function (err) { return { status: 0, body: { error: "network_error", _err: err } }; });
+      .catch(function (err) {
+        // Surface the actual error so it's diagnosable. "Failed to fetch"
+        // typically means CORS blocked, network blocked, or browser
+        // extension blocked; the console message is the only way to tell
+        // them apart from the user side.
+        if (typeof console !== "undefined" && console.warn) {
+          console.warn("[audit/visibility] fetch failed:", err);
+        }
+        return { status: 0, body: { error: "network_error", _err: String(err) } };
+      });
 
     // Citation-readiness needs a full URL. The form's `domain` field is
     // a URL input so it should already be a complete URL — but we
@@ -206,7 +215,12 @@
       .then(function (res) {
         return res.json().then(function (body) { return { status: res.status, body: body }; });
       })
-      .catch(function (err) { return { status: 0, body: { ok: false, reason: "network_error", message: String(err) } }; });
+      .catch(function (err) {
+        if (typeof console !== "undefined" && console.warn) {
+          console.warn("[audit/readiness] fetch failed:", err);
+        }
+        return { status: 0, body: { ok: false, reason: "network_error", message: String(err) } };
+      });
 
     Promise.all([visibilityPromise, readinessPromise]).then(function (parts) {
       var v = parts[0]; // visibility result
@@ -250,11 +264,11 @@
         return;
       }
 
-      renderResults(visibility, !!(v.body && v.body.cached), readiness, readinessError);
+      renderResults(visibility, !!(v.body && v.body.cached), readiness, readinessError, visibilityError);
     });
   });
 
-  function renderResults(audit, cached, readiness, readinessError) {
+  function renderResults(audit, cached, readiness, readinessError, visibilityError) {
     loading.classList.remove("show");
     btn.disabled = false;
     btn.textContent = "See what AI thinks of my site";
@@ -262,7 +276,9 @@
     // If only the readiness signal succeeded (visibility failed), build
     // a minimal audit shape so the rest of renderResults can run with
     // empty fields rather than crashing on null. Visibility cards still
-    // render but show "Audit unavailable" copy in their score area.
+    // render but show the specific failure reason from visibilityError
+    // (rate limit hit, network error, etc.) instead of a generic
+    // "didn't run" message.
     if (!audit) {
       audit = { domain: "", category: "", location: null, cited_count: 0, total_queries: 0, queries: [], created_at: new Date().toISOString(), id: null };
     }
@@ -311,7 +327,13 @@
       score.textContent = "n/a";
       score.classList.remove("zero", "some", "all");
       label.textContent = "Visibility check unavailable.";
-      detail.textContent = "The category-visibility audit didn't run. The score card above is still accurate.";
+      // Surface the actual failure reason instead of the old generic
+      // copy. visibilityError comes from the form-submit handler and
+      // explains the specific problem (rate limit hit, network error,
+      // budget exhausted, browser blocked the request, etc.).
+      detail.textContent = visibilityError
+        ? visibilityError + " The score card above is still accurate."
+        : "The category-visibility audit didn't run. Open your browser console for details.";
     } else {
       score.textContent = cited + " / " + total;
       score.classList.remove("zero", "some", "all");
