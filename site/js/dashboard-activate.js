@@ -18,6 +18,17 @@
   var token = null;
   var submitting = false;
 
+  /* Polling state — Phase B real-time DNS status. After a successful
+   * /api/activate, we poll /api/activate/status every POLL_INTERVAL_MS
+   * to flip per-variant pills (⏳ Pending DNS → ✓ Active) and auto-
+   * redirect to /dashboard when all variants land active. Stops after
+   * POLL_MAX_MS so a customer who walked away doesn't hammer us. */
+  var POLL_INTERVAL_MS = 10000;     // 10 s — same as dashboard-dns-wizard.js
+  var POLL_MAX_MS      = 30 * 60_000; // 30 min ceiling
+  var pollTimer  = null;
+  var pollStart  = 0;
+  var allActive  = false;
+
   function setState(name) {
     ['no-token', 'enter', 'loading', 'success', 'error'].forEach(function (s) {
       var el = document.getElementById('state-' + s);
@@ -80,12 +91,21 @@
       ? 'Records for ' + esc(variant.hostname) + ' <span style="font-weight:400;color:var(--muted-2)">(apex)</span>'
       : 'Records for ' + esc(variant.hostname);
 
-    var statusPill = '';
+    var pillStyleBase = 'margin-left:8px;font-size:.6875rem;font-weight:500;padding:2px 8px;border-radius:999px;display:inline-block;min-width:88px;text-align:center;';
+    var pillContent;
+    var pillColor;
+    var pillBg;
     if (variant.verification_status === 'active' && variant.ssl_status === 'active') {
-      statusPill = '<span style="margin-left:8px;font-size:.6875rem;font-weight:500;color:var(--sage);background:var(--sage-tint);padding:2px 8px;border-radius:999px">Active</span>';
-    } else if (variant.verification_status === 'pending' || variant.ssl_status === 'pending' || variant.ssl_status === 'initializing') {
-      statusPill = '<span style="margin-left:8px;font-size:.6875rem;font-weight:500;color:var(--amber);background:var(--amber-tint);padding:2px 8px;border-radius:999px">Pending DNS</span>';
+      pillContent = '✓ Active';
+      pillColor = 'var(--sage)';
+      pillBg = 'var(--sage-tint)';
+    } else {
+      pillContent = '⏳ Pending DNS';
+      pillColor = 'var(--amber)';
+      pillBg = 'var(--amber-tint)';
     }
+    var statusPill = '<span data-status-pill style="' + pillStyleBase +
+      'color:' + pillColor + ';background:' + pillBg + '">' + esc(pillContent) + '</span>';
 
     var recordsHtml = routingCard(variant, cnameTarget);
     if (variant.records && variant.records.length > 0) {
@@ -94,7 +114,7 @@
       }
     }
 
-    return '<div style="margin-bottom:24px">' +
+    return '<div data-variant-host="' + esc(variant.hostname) + '" style="margin-bottom:24px">' +
       '<div style="font-size:.875rem;font-weight:600;color:var(--ink);margin-bottom:10px">' + heading + statusPill + '</div>' +
       recordsHtml +
     '</div>';
@@ -136,6 +156,87 @@
     }
 
     setState('success');
+
+    // Kick off polling so the live status pills update without the
+    // customer refreshing the page. The first poll fires immediately
+    // so the pills reflect the as-of-now state instead of the snapshot
+    // from the activate response.
+    startPolling();
+  }
+
+  /* ── Phase B: real-time DNS polling ─────────────────────────────────────── */
+
+  function startPolling() {
+    stopPolling();
+    pollStart = Date.now();
+    allActive = false;
+    pollOnce();
+    pollTimer = setInterval(pollOnce, POLL_INTERVAL_MS);
+  }
+
+  function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  async function pollOnce() {
+    if (!token) return stopPolling();
+    if (Date.now() - pollStart > POLL_MAX_MS) {
+      stopPolling();
+      return;
+    }
+    try {
+      var res = await fetch(API_BASE + '/api/activate/status?t=' + encodeURIComponent(token), {
+        method: 'GET',
+        credentials: 'include',
+        headers: { 'Accept': 'application/json' },
+      });
+      if (!res.ok) return; // transient; next tick will retry
+      var data = await res.json();
+      updatePillsFromStatus(data);
+      if (data && data.all_active === true && !allActive) {
+        allActive = true;
+        stopPolling();
+        // Brief celebratory pause so the customer sees the green
+        // pills land before we redirect.
+        var msgEl = document.getElementById('success-message');
+        if (msgEl) msgEl.textContent = 'All set. Redirecting you to your dashboard…';
+        setTimeout(function () {
+          window.location.href = 'https://customers.advocatemcp.com/dashboard';
+        }, 1800);
+      }
+    } catch (_) {
+      // Ignore. Polling continues; transient blips are fine.
+    }
+  }
+
+  /* Update each variant's status pill in-place based on the latest
+   * /api/activate/status response. We rely on a `data-variant-host`
+   * attribute set during initial render to find the right group. */
+  function updatePillsFromStatus(data) {
+    if (!data || !Array.isArray(data.variants)) return;
+    for (var i = 0; i < data.variants.length; i++) {
+      var v = data.variants[i];
+      var pill = document.querySelector('[data-variant-host="' + cssEscape(v.hostname) + '"] [data-status-pill]');
+      if (!pill) continue;
+      if (v.active) {
+        pill.style.color = 'var(--sage)';
+        pill.style.background = 'var(--sage-tint)';
+        pill.textContent = '✓ Active';
+      } else if (v.verification_status === 'pending' || v.ssl_status === 'pending' || v.ssl_status === 'initializing') {
+        pill.style.color = 'var(--amber)';
+        pill.style.background = 'var(--amber-tint)';
+        pill.textContent = '⏳ Pending DNS';
+      } else {
+        // unknown / transitional state — surface the literal status
+        pill.textContent = (v.verification_status || '?') + ' / ' + (v.ssl_status || '?');
+      }
+    }
+  }
+
+  function cssEscape(s) {
+    // Minimal CSS-attr escape for hostnames. Fine because hostnames
+    // can only contain a-z 0-9 . - per RFC.
+    return String(s).replace(/[^a-zA-Z0-9.-]/g, '');
   }
 
   function renderError(msg) {

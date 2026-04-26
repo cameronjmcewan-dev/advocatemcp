@@ -366,6 +366,93 @@ async function handleActivateInner(request: Request, env: Env): Promise<Response
   });
 }
 
+/* GET /api/activate/status
+ *
+ * Token-authenticated polling endpoint. The activate page polls this
+ * every ~10s while waiting for the customer's DNS records to propagate
+ * and for Cloudflare to issue SSL. Returns just enough per-variant
+ * state for the UI to flip the live status pills (apex pending → apex
+ * active; www pending → www active) and decide when to auto-redirect
+ * to /dashboard.
+ *
+ * Same auth model as /api/activate/preview: the activation token gates
+ * the response, so anyone hitting the URL without a valid token gets
+ * a 401, not tenant state.
+ *
+ * Cheap: one D1 read (slug → canonical domain) + one KV read (tenant
+ * record). Sub-50ms typical. Safe to poll at 10s intervals from many
+ * concurrent customers.
+ */
+export async function handleActivateStatus(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const token = request.headers.get("X-Activation-Token") ?? url.searchParams.get("t");
+  if (!token) return jsonErr(401, "missing_token");
+  if (!env.ACTIVATION_SIGNING_KEY) return jsonErr(500, "platform_error");
+
+  let payload: ActivationTokenPayload;
+  try {
+    payload = await verifyActivationToken(token, env.ACTIVATION_SIGNING_KEY);
+  } catch (err) {
+    const reason = err as ActivationTokenError;
+    return jsonErr(401, reason === "expired" ? "token_expired" : "token_invalid");
+  }
+
+  const slug = payload.slug;
+  let canonicalDomain: string | null = null;
+  try {
+    const row = await env.DB
+      .prepare("SELECT domain FROM businesses WHERE slug = ? LIMIT 1")
+      .bind(slug)
+      .first<{ domain: string | null }>();
+    canonicalDomain = row?.domain?.toLowerCase() ?? null;
+  } catch {
+    /* fall through */
+  }
+  if (!canonicalDomain) {
+    return jsonOk({ slug, variants: [], all_active: false, skip_dns: false });
+  }
+
+  const tenant = await getTenant(env, canonicalDomain);
+  if (!tenant) {
+    return jsonOk({ slug, variants: [], all_active: false, skip_dns: false });
+  }
+
+  // Use per-variant state when present; fall back to legacy single-
+  // hostname state for pre-Apr-26 tenants.
+  const variantSrc = tenant.cloudflare.variants && tenant.cloudflare.variants.length > 0
+    ? tenant.cloudflare.variants
+    : [{
+        hostname: tenant.domain,
+        customHostnameId: tenant.cloudflare.customHostnameId,
+        verificationStatus: tenant.cloudflare.verificationStatus,
+        sslStatus: tenant.cloudflare.sslStatus,
+        txtName: tenant.cloudflare.txtName,
+        txtValue: tenant.cloudflare.txtValue,
+        ownershipTxtName: tenant.cloudflare.ownershipTxtName,
+        ownershipTxtValue: tenant.cloudflare.ownershipTxtValue,
+      }];
+
+  const variants = variantSrc.map((v) => ({
+    hostname: v.hostname,
+    is_apex: !v.hostname.startsWith("www.")
+              && v.hostname.split(".").length <= 3
+              && !v.hostname.endsWith(".hosted.advocatemcp.com"),
+    verification_status: v.verificationStatus,
+    ssl_status: v.sslStatus,
+    active: v.verificationStatus === "active" && v.sslStatus === "active",
+  }));
+
+  const allActive = variants.length > 0 && variants.every((v) => v.active);
+
+  return jsonOk({
+    slug,
+    domain: tenant.domain,
+    skip_dns: tenant.skipDns === true,
+    variants,
+    all_active: allActive,
+  });
+}
+
 /* GET /api/activate/preview
  *
  * Lightweight pre-flight for the activate page. Verifies the activation
