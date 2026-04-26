@@ -1520,14 +1520,24 @@ export async function handleBillingPortal(
 
   if (!stripeResult.ok) {
     // Most common failure: Customer Portal not configured in the
-    // Stripe dashboard. Surface Stripe's actual error message so the
-    // operator can diagnose without diving into logs.
+    // Stripe dashboard. Log Stripe's full response body server-side
+    // for ops debugging — but DO NOT pass stripeResult.data into the
+    // HTTP response. That data leaks Stripe API internals (request
+    // metadata, error codes, sometimes customer/account hints) to
+    // the client. The user-facing message stays generic; ops finds
+    // the detail in the worker tail.
+    console.log(JSON.stringify({
+      metric:   "billing_portal_failed",
+      slug:     biz.slug,
+      stripe:   stripeResult.data,
+    }));
     return withCors(
       jsonErr(
         502,
         "stripe_portal_failed",
-        "Could not create billing portal session.",
-        stripeResult.data,
+        "Could not create billing portal session. " +
+        "If this persists, check the Customer Portal config in your Stripe dashboard " +
+        "(Settings, Billing, Customer Portal — must be activated).",
       ),
       request,
     );
@@ -1535,8 +1545,13 @@ export async function handleBillingPortal(
 
   const portalUrl = stripeResult.data.url as string;
   if (!portalUrl) {
+    console.log(JSON.stringify({
+      metric:   "billing_portal_no_url",
+      slug:     biz.slug,
+      stripe:   stripeResult.data,
+    }));
     return withCors(
-      jsonErr(502, "stripe_portal_no_url", "Stripe returned no portal URL", stripeResult.data),
+      jsonErr(502, "stripe_portal_no_url", "Stripe returned no portal URL"),
       request,
     );
   }

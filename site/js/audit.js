@@ -22,7 +22,7 @@
     loading.classList.remove("show");
     results.classList.remove("show");
     btn.disabled = false;
-    btn.textContent = "Run my audit";
+    btn.textContent = "See what AI thinks of my site";
   }
 
   function clearError() {
