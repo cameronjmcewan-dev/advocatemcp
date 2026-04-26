@@ -834,18 +834,36 @@ export async function handleBackfillVariants(
     if (!t) return jsonErr(404, `Tenant record missing for ${biz.domain}`);
     tenants.push(t);
   } else if (body.all === true) {
+    // Cap iterations so a runaway listing can't burn the 30s Worker
+    // CPU budget. 1000 keys per page × max 5 pages = 5,000 tenants
+    // per call, more than we'll have for the foreseeable future.
     let cursor: string | undefined = undefined;
-    while (true) {
-      const list: KVNamespaceListResult<unknown> = await env.TENANT_DATA.list({
-        limit: 1000,
-        cursor,
-      });
-      for (const key of list.keys) {
-        const t = await getTenant(env, key.name);
-        if (t) tenants.push(t);
+    let pages = 0;
+    try {
+      while (pages < 5) {
+        const list: KVNamespaceListResult<unknown> = await env.TENANT_DATA.list({
+          limit: 1000,
+          ...(cursor !== undefined ? { cursor } : {}),
+        });
+        for (const key of list.keys) {
+          try {
+            const t = await getTenant(env, key.name);
+            if (t) tenants.push(t);
+          } catch (err) {
+            console.error(JSON.stringify({
+              backfill: true,
+              event: "tenant_load_failed",
+              key: key.name,
+              error: String(err),
+            }));
+          }
+        }
+        if (list.list_complete) break;
+        cursor = list.cursor;
+        pages++;
       }
-      if (list.list_complete) break;
-      cursor = list.cursor;
+    } catch (err) {
+      return jsonErr(500, `TENANT_DATA listing failed: ${String(err)}`);
     }
   }
 
@@ -856,59 +874,125 @@ export async function handleBackfillVariants(
     cf_results: Array<{ hostname: string; outcome: string; reason?: string }>;
     routes: Array<{ hostname: string; ok: boolean; created?: boolean; reason?: string }>;
     kv_writes: string[];
+    skipped?: string;
+    error?: string;
   }> = [];
 
   for (const tenant of tenants) {
-    const variants = deriveHostnameVariants(tenant.domain);
-    const cfRes = await createCfHostnameForTenant(env, tenant);
-    const routes: Array<{ hostname: string; ok: boolean; created?: boolean; reason?: string }> = [];
-    const kvWrites: string[] = [];
-
-    for (const v of variants) {
-      try {
-        const r = await ensureWorkerRouteForHostname(env, v);
-        routes.push({
-          hostname: v,
-          ok: r.ok,
-          created: r.created,
-          reason: r.ok ? r.note : r.error,
+    // Per-tenant try/catch — when running { all: true } against a fleet
+    // of historical tenants we can't trust every record to be well-
+    // formed. One malformed blob (e.g. missing `domain`, missing
+    // `slug`) shouldn't kill the whole batch. Capture the failure
+    // into the outcome list so ops can see exactly what was skipped.
+    try {
+      if (typeof tenant.domain !== "string" || !tenant.domain.trim()) {
+        outcomes.push({
+          domain: String(tenant.domain ?? ""),
+          slug: String(tenant.slug ?? ""),
+          variants: [],
+          cf_results: [],
+          routes: [],
+          kv_writes: [],
+          skipped: "missing or invalid tenant.domain",
         });
-      } catch (err) {
-        routes.push({
-          hostname: v,
-          ok: false,
-          reason: `threw: ${String(err)}`,
-        });
+        continue;
       }
+      if (typeof tenant.slug !== "string" || !tenant.slug.trim()) {
+        outcomes.push({
+          domain: tenant.domain,
+          slug: String(tenant.slug ?? ""),
+          variants: [],
+          cf_results: [],
+          routes: [],
+          kv_writes: [],
+          skipped: "missing or invalid tenant.slug",
+        });
+        continue;
+      }
+
+      const variants = deriveHostnameVariants(tenant.domain);
+      if (variants.length === 0) {
+        outcomes.push({
+          domain: tenant.domain,
+          slug: tenant.slug,
+          variants: [],
+          cf_results: [],
+          routes: [],
+          kv_writes: [],
+          skipped: `deriveHostnameVariants returned [] for "${tenant.domain}"`,
+        });
+        continue;
+      }
+
+      const cfRes = await createCfHostnameForTenant(env, tenant);
+      const routes: Array<{ hostname: string; ok: boolean; created?: boolean; reason?: string }> = [];
+      const kvWrites: string[] = [];
+
+      for (const v of variants) {
+        try {
+          const r = await ensureWorkerRouteForHostname(env, v);
+          routes.push({
+            hostname: v,
+            ok: r.ok,
+            created: r.created,
+            reason: r.ok ? r.note : r.error,
+          });
+        } catch (err) {
+          routes.push({
+            hostname: v,
+            ok: false,
+            reason: `threw: ${String(err)}`,
+          });
+        }
+        try {
+          await env.BUSINESS_MAP.put(v, tenant.slug);
+          kvWrites.push(v);
+        } catch (err) {
+          // KV write failures are rare; log and continue.
+          console.error(JSON.stringify({
+            backfill: true,
+            event: "kv_write_failed",
+            variant: v,
+            slug: tenant.slug,
+            error: String(err),
+          }));
+        }
+      }
+
       try {
-        await env.BUSINESS_MAP.put(v, tenant.slug);
-        kvWrites.push(v);
+        await putTenant(env, tenant);
       } catch (err) {
-        // KV write failures are rare; log and continue.
         console.error(JSON.stringify({
           backfill: true,
-          event: "kv_write_failed",
-          variant: v,
+          event: "puttenant_failed",
           slug: tenant.slug,
           error: String(err),
         }));
       }
+
+      outcomes.push({
+        domain: tenant.domain,
+        slug: tenant.slug,
+        variants,
+        cf_results: cfRes.variants.map((r) => ({
+          hostname: r.hostname,
+          outcome: r.outcome,
+          ...(r.errorReason ? { reason: r.errorReason } : {}),
+        })),
+        routes,
+        kv_writes: kvWrites,
+      });
+    } catch (err) {
+      outcomes.push({
+        domain: String(tenant?.domain ?? ""),
+        slug: String(tenant?.slug ?? ""),
+        variants: [],
+        cf_results: [],
+        routes: [],
+        kv_writes: [],
+        error: `tenant_processing_threw: ${String(err)}`,
+      });
     }
-
-    await putTenant(env, tenant);
-
-    outcomes.push({
-      domain: tenant.domain,
-      slug: tenant.slug,
-      variants,
-      cf_results: cfRes.variants.map((r) => ({
-        hostname: r.hostname,
-        outcome: r.outcome,
-        ...(r.errorReason ? { reason: r.errorReason } : {}),
-      })),
-      routes,
-      kv_writes: kvWrites,
-    });
   }
 
   return jsonOk({

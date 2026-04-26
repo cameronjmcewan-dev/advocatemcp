@@ -56,7 +56,13 @@ const KNOWN_2LABEL_SLDS = new Set([
  * localhost, no dot at all). Doesn't validate against the public
  * suffix list — that's a downstream concern.
  */
-export function normalizeHostname(input: string): string | null {
+export function normalizeHostname(input: string | null | undefined): string | null {
+  // Tolerant of nullable / non-string input — backfill iterates over
+  // historical KV records and some pre-Apr-26-2026 tenant blobs may
+  // not have `domain` set. Safer to short-circuit here than to crash
+  // the whole batch on one bad record.
+  if (input == null) return null;
+  if (typeof input !== "string") return null;
   let host = input.trim().toLowerCase();
   if (!host) return null;
 
@@ -93,7 +99,7 @@ export function normalizeHostname(input: string): string | null {
  * deduplicated and sorted alphabetically so callers can compare
  * outputs across runs.
  */
-export function deriveHostnameVariants(input: string): string[] {
+export function deriveHostnameVariants(input: string | null | undefined): string[] {
   const host = normalizeHostname(input);
   if (!host) return [];
 
