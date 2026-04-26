@@ -189,28 +189,61 @@ async function detectBetaCoupon(env: Env, subscriptionId: string): Promise<BetaD
   // the coupon in Stripe Dashboard.
   if (allowlist.length === 0) return { is_beta: false };
 
-  // Fetch subscription with discount expanded so we see the coupon details.
   if (!env.STRIPE_SECRET_KEY) return { is_beta: false };
+
+  // Stripe's modern subscription shape puts applied promotion codes /
+  // coupons in `discounts[]` (array). The legacy `discount` (singular)
+  // is null for any subscription created via Checkout w/ a promo code,
+  // even when a discount is clearly applied. We read from `discounts[]`
+  // first and fall back to `discount` only for accounts still on the
+  // legacy shape. Each discount has shape:
+  //   { id, promotion_code, source: { coupon: <id|expanded>, type } }
+  // so we expand `discounts.source.coupon` to get duration_in_months.
   const r = await stripeApi(
     env.STRIPE_SECRET_KEY,
     "GET",
-    `/subscriptions/${encodeURIComponent(subscriptionId)}?expand[]=discount.coupon`,
+    `/subscriptions/${encodeURIComponent(subscriptionId)}` +
+      `?expand[]=discounts.source.coupon&expand[]=discount.coupon`,
   );
   if (!r.ok) return { is_beta: false };
 
   const sub = r.data as Record<string, unknown>;
-  const discount = sub.discount as Record<string, unknown> | null | undefined;
-  if (!discount) return { is_beta: false };
 
-  const coupon = discount.coupon as Record<string, unknown> | undefined;
-  const couponId = (coupon?.id as string | undefined) ?? "";
-  if (!couponId || !allowlist.includes(couponId)) return { is_beta: false };
+  // Collect all coupons applied to this subscription. Modern path is
+  // discounts[].source.coupon; legacy path is discount.coupon.
+  type StripeCoupon = {
+    id?: string;
+    duration?: string;
+    duration_in_months?: number;
+  };
+  const coupons: StripeCoupon[] = [];
 
-  const duration = coupon?.duration as string | undefined;
+  const discounts = sub.discounts as Array<Record<string, unknown>> | undefined;
+  if (Array.isArray(discounts)) {
+    for (const d of discounts) {
+      const source = d.source as Record<string, unknown> | undefined;
+      const coupon = source?.coupon as StripeCoupon | undefined;
+      if (coupon && typeof coupon === "object") coupons.push(coupon);
+    }
+  }
+  const legacyDiscount = sub.discount as Record<string, unknown> | null | undefined;
+  if (legacyDiscount) {
+    const c = legacyDiscount.coupon as StripeCoupon | undefined;
+    if (c && typeof c === "object") coupons.push(c);
+  }
+
+  // First coupon on the allowlist wins. In practice subscriptions
+  // typically have one discount; if a tenant somehow stacked two,
+  // beta wins over non-beta because we want them in the cohort.
+  const matched = coupons.find(
+    (c) => typeof c.id === "string" && allowlist.includes(c.id),
+  );
+  if (!matched) return { is_beta: false };
+
   // "forever" coupons aren't trials, they're perpetual discounts. Skip.
-  if (duration === "forever") return { is_beta: false };
+  if (matched.duration === "forever") return { is_beta: false };
 
-  const months = (coupon?.duration_in_months as number | undefined) ?? 2;
+  const months = matched.duration_in_months ?? 2;
   const startedAt = new Date();
   // Stripe billing happens at period boundaries. We approximate end as
   // start + N calendar months. Actual Stripe billing for the customer
@@ -223,7 +256,7 @@ async function detectBetaCoupon(env: Env, subscriptionId: string): Promise<BetaD
     is_beta:           true,
     started_at:        startedAt.toISOString(),
     ends_at:           endsAt.toISOString(),
-    coupon_id:         couponId,
+    coupon_id:         matched.id!,
     duration_months:   months,
   };
 }
