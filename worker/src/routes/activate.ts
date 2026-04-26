@@ -59,6 +59,7 @@ import {
   ACCESS_TOKEN_TTL_SECONDS,
 } from "../lib/access-token";
 import { getTenant } from "./onboard";
+import { detectDnsProvider } from "../lib/dnsProvider";
 
 // ── Customer message catalog ─────────────────────────────────────────────────
 // Every customer-facing string that can appear in an /api/activate response.
@@ -451,6 +452,47 @@ export async function handleActivateStatus(request: Request, env: Env): Promise<
     variants,
     all_active: allActive,
   });
+}
+
+/* Detect the customer's DNS provider for the activate page. Wraps the
+ * generic detector with the activate-token gate so we don't expose
+ * "what DNS provider does this domain use?" to anyone who knows a
+ * domain — it's cheap public info via dig but the gate keeps the
+ * worker endpoint scoped. */
+export async function handleActivateDnsProvider(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const token = request.headers.get("X-Activation-Token") ?? url.searchParams.get("t");
+  if (!token) return jsonErr(401, "missing_token");
+  if (!env.ACTIVATION_SIGNING_KEY) return jsonErr(500, "platform_error");
+
+  let payload: ActivationTokenPayload;
+  try {
+    payload = await verifyActivationToken(token, env.ACTIVATION_SIGNING_KEY);
+  } catch (err) {
+    const reason = err as ActivationTokenError;
+    return jsonErr(401, reason === "expired" ? "token_expired" : "token_invalid");
+  }
+
+  const slug = payload.slug;
+  let canonicalDomain: string | null = null;
+  try {
+    const row = await env.DB
+      .prepare("SELECT domain FROM businesses WHERE slug = ? LIMIT 1")
+      .bind(slug)
+      .first<{ domain: string | null }>();
+    canonicalDomain = row?.domain?.toLowerCase() ?? null;
+  } catch {
+    /* swallow */
+  }
+
+  if (!canonicalDomain) {
+    return jsonOk({ provider: "other", nameservers: [] });
+  }
+
+  // Strip leading "www." for the NS lookup — we want the apex's NS.
+  const apex = canonicalDomain.replace(/^www\./, "");
+  const detection = await detectDnsProvider(apex);
+  return jsonOk(detection);
 }
 
 /* GET /api/activate/preview

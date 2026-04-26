@@ -120,6 +120,154 @@
     '</div>';
   }
 
+  /* ── Phase C: provider-specific guidance ─────────────────────────────────
+   * After the activate page renders generic per-variant records, fetch
+   * the customer's DNS provider and prepend a tailored set of steps so
+   * they don't have to translate generic copy to GoDaddy-speak. The
+   * fetch is best-effort — if the worker times out or returns "other",
+   * we silently skip the prepend and the customer just sees the generic
+   * cards we already rendered. */
+
+  async function loadProviderGuide(data) {
+    if (!token) return;
+    if (!window.AMCP_DNS_GUIDES) return; // dns-provider-guides.js not loaded
+    if (data && data.skip_dns) return;   // hosted tenants don't need guides
+    try {
+      var res = await fetch(API_BASE + '/api/activate/dns-provider?t=' + encodeURIComponent(token), {
+        method: 'GET',
+        credentials: 'include',
+        headers: { 'Accept': 'application/json' },
+      });
+      if (!res.ok) return;
+      var detection = await res.json();
+      var providerId = (detection && detection.provider) || 'other';
+      var guide = window.AMCP_DNS_GUIDES[providerId] || window.AMCP_DNS_GUIDES.other;
+      if (!guide) return;
+      renderProviderGuide(providerId, guide, data);
+    } catch (_) {
+      // Silently skip — generic cards are still on screen.
+    }
+  }
+
+  /* Render the provider-specific section above the generic record
+   * cards. Steps reference {{placeholders}} that interpolate from the
+   * activate response data. */
+  function renderProviderGuide(providerId, guide, activateData) {
+    var dnsEl = document.getElementById('dns-records');
+    if (!dnsEl) return;
+
+    var apex = '';
+    var www = '';
+    if (activateData && Array.isArray(activateData.variants)) {
+      for (var i = 0; i < activateData.variants.length; i++) {
+        var v = activateData.variants[i];
+        if (v.is_apex) apex = v.hostname; else www = v.hostname;
+      }
+    }
+    if (!apex && activateData) apex = activateData.domain || '';
+    if (!www && apex) www = 'www.' + apex.replace(/^www\./, '');
+
+    var cnameTarget = (activateData.cname_record && activateData.cname_record.target) || 'customers.advocatemcp.com';
+
+    // First DCV TXT record across variants — the apex's, ideally.
+    var txtHost = '';
+    var txtValue = '';
+    if (activateData.variants) {
+      for (var j = 0; j < activateData.variants.length; j++) {
+        var vv = activateData.variants[j];
+        if (vv.records) {
+          for (var k = 0; k < vv.records.length; k++) {
+            if (vv.records[k].type === 'TXT' && vv.records[k].value) {
+              if (!txtHost) {
+                txtHost = vv.records[k].host;
+                txtValue = vv.records[k].value;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    function interp(s) {
+      return String(s || '')
+        .replace(/\{\{apex\}\}/g, esc(apex))
+        .replace(/\{\{www\}\}/g, esc(www))
+        .replace(/\{\{cname_target\}\}/g, esc(cnameTarget))
+        .replace(/\{\{txt_host_name\}\}/g, esc(txtHost))
+        .replace(/\{\{txt_value\}\}/g, esc(txtValue));
+    }
+
+    function renderStep(s) {
+      var color, badge;
+      if (s.type === 'tip')      { color = 'var(--maroon)'; badge = '💡'; }
+      else if (s.type === 'warning') { color = 'var(--amber)'; badge = '⚠️'; }
+      else                       { color = 'var(--ink)'; badge = '→'; }
+      return '<li style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;font-size:.875rem;line-height:1.55;color:var(--ink-2)">' +
+        '<span style="flex-shrink:0;width:18px;color:' + color + ';font-weight:600">' + badge + '</span>' +
+        '<span>' + interp(s.text) + '</span>' +
+      '</li>';
+    }
+
+    function renderSection(title, steps) {
+      if (!Array.isArray(steps) || steps.length === 0) return '';
+      var stepsHtml = '';
+      for (var i = 0; i < steps.length; i++) stepsHtml += renderStep(steps[i]);
+      return '<div style="margin-top:18px">' +
+        '<div style="font-size:.6875rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--maroon);margin-bottom:6px">' + esc(title) + '</div>' +
+        '<ol style="list-style:none;padding:0;margin:0">' + stepsHtml + '</ol>' +
+      '</div>';
+    }
+
+    var heading = providerId === 'other'
+      ? 'Generic DNS instructions'
+      : 'Setup steps for ' + esc(guide.name);
+
+    var loginLine = guide.login_url
+      ? '<div style="font-size:.8125rem;color:var(--muted);margin-top:4px">Sign in at <a href="' + esc(guide.login_url) + '" target="_blank" rel="noopener" style="color:var(--maroon)">' + esc(guide.login_url) + '</a></div>'
+      : '';
+
+    var gotchasHtml = '';
+    if (Array.isArray(guide.gotchas) && guide.gotchas.length > 0) {
+      var gItems = '';
+      for (var g = 0; g < guide.gotchas.length; g++) {
+        gItems += '<li style="font-size:.8125rem;color:var(--muted);line-height:1.5;margin-bottom:6px">' + interp(guide.gotchas[g]) + '</li>';
+      }
+      gotchasHtml = '<div style="margin-top:18px;padding:12px 14px;background:var(--paper-2);border:1px solid var(--line);border-radius:var(--r-md)">' +
+        '<div style="font-size:.6875rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px">Provider-specific gotchas</div>' +
+        '<ul style="margin:0;padding-left:18px">' + gItems + '</ul>' +
+      '</div>';
+    }
+
+    var guideEl = document.createElement('div');
+    guideEl.id = 'provider-guide';
+    guideEl.style.cssText = 'background:var(--maroon-wash);border:1px solid var(--maroon-tint);border-radius:var(--r-lg);padding:18px 18px 14px;margin-bottom:24px';
+    guideEl.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">' +
+        '<div>' +
+          '<div style="font-size:1.0625rem;font-weight:600;color:var(--ink)">' + heading + '</div>' +
+          loginLine +
+        '</div>' +
+        '<button type="button" class="btn-link" id="hide-provider-guide" style="background:none;border:0;color:var(--maroon);font-size:.75rem;cursor:pointer;text-decoration:underline">Hide</button>' +
+      '</div>' +
+      renderSection('Step 1: add the www CNAME record', guide.www_steps) +
+      renderSection('Step 2: route apex traffic to us', guide.apex_steps) +
+      renderSection('Step 3: add the SSL verification TXT record', guide.txt_steps) +
+      gotchasHtml;
+
+    // Drop any existing guide before re-rendering.
+    var existing = document.getElementById('provider-guide');
+    if (existing) existing.remove();
+    dnsEl.parentNode.insertBefore(guideEl, dnsEl);
+
+    var hideBtn = document.getElementById('hide-provider-guide');
+    if (hideBtn) {
+      hideBtn.addEventListener('click', function () {
+        var el = document.getElementById('provider-guide');
+        if (el) el.style.display = 'none';
+      });
+    }
+  }
+
   function renderSuccess(data) {
     var msgEl   = document.getElementById('success-message');
     var dnsEl   = document.getElementById('dns-records');
@@ -162,6 +310,10 @@
     // so the pills reflect the as-of-now state instead of the snapshot
     // from the activate response.
     startPolling();
+
+    // Phase C: load and render the provider-specific guide above the
+    // generic record cards. Best-effort — silent skip on failure.
+    loadProviderGuide(data);
   }
 
   /* ── Phase B: real-time DNS polling ─────────────────────────────────────── */

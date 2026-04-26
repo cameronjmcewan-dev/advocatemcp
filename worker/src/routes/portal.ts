@@ -23,7 +23,7 @@ import {
 } from "./onboard";
 import { handleOnboardPage } from "./onboardPage";
 import { handleActivatePage } from "./activatePage";
-import { handleActivate, handleActivateHosted, handleActivatePreview, handleActivateStatus, handleActivationToken, handleGetActivation, handleResendActivation } from "./activate";
+import { handleActivate, handleActivateHosted, handleActivatePreview, handleActivateStatus, handleActivateDnsProvider, handleActivationToken, handleGetActivation, handleResendActivation } from "./activate";
 import {
   getSessionFromRequest,
   handleAuthLogin,
@@ -109,6 +109,8 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/activate/preview"     && method === "GET")     return handleActivatePreview(request, env);
   if (pathname === "/api/activate/status"      && method === "OPTIONS") return handleCorsPreflight(request);
   if (pathname === "/api/activate/status"      && method === "GET")     return handleActivateStatus(request, env);
+  if (pathname === "/api/activate/dns-provider" && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/activate/dns-provider" && method === "GET")     return handleActivateDnsProvider(request, env);
   if (pathname === "/api/activate"             && method === "OPTIONS") return handleCorsPreflight(request);
   if (pathname === "/api/activate"             && method === "POST")    return handleActivate(request, env);
   if (pathname === "/api/activate/hosted"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
