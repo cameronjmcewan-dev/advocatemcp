@@ -122,7 +122,40 @@ Output the JSON only. No prose before or after.`;
   };
 }
 
-function parseJudgeOutput(raw: string): {
+/**
+ * Thrown when a judge model's response cannot be parsed into our
+ * expected `{citability_score, would_cite, reasoning}` shape.
+ *
+ * Why throw instead of returning a sentinel zero (the prior behavior):
+ * a silent zero is indistinguishable from a genuine 1/10 floor in the
+ * downstream rollup. Callers that aggregate (runner.ts) were filtering
+ * `score > 0` so silent zeros got hidden completely; callers that
+ * surface a single trial (citationReadiness, profileScore) reported
+ * "your site scored 0/10" to the user when in fact we never got a
+ * usable score at all. Throwing forces the caller to either skip the
+ * trial (runner already does this in its try/catch) or fail loudly
+ * (citationReadiness/profileScore route handlers already do this and
+ * release reserved budget).
+ *
+ * `stage` captures *where* parsing failed so ops can grep for the
+ * common modes; `rawSnippet` preserves up to ~500 chars of the model's
+ * actual output for postmortem.
+ */
+export class JudgeParseError extends Error {
+  public readonly stage: "no_json_block" | "json_syntax" | "missing_field" | "field_type";
+  public readonly rawSnippet: string;
+  constructor(
+    stage: "no_json_block" | "json_syntax" | "missing_field" | "field_type",
+    rawSnippet: string,
+  ) {
+    super(`Judge output parse failure (${stage}): raw=${rawSnippet}`);
+    this.name = "JudgeParseError";
+    this.stage = stage;
+    this.rawSnippet = rawSnippet;
+  }
+}
+
+export function parseJudgeOutput(raw: string): {
   citability_score: number;
   would_cite: boolean;
   reasoning: string;
@@ -131,33 +164,33 @@ function parseJudgeOutput(raw: string): {
   // though we asked for JSON only.
   const m = raw.match(/\{[\s\S]*\}/);
   if (!m) {
-    return {
-      citability_score: 0,
-      would_cite: false,
-      reasoning: `(parse failure) raw=${raw.slice(0, 200)}`,
-    };
+    throw new JudgeParseError("no_json_block", raw.slice(0, 500));
   }
+  let obj: Partial<{
+    citability_score: number;
+    would_cite: boolean;
+    reasoning: string;
+  }>;
   try {
-    const obj = JSON.parse(m[0]) as Partial<{
+    obj = JSON.parse(m[0]) as Partial<{
       citability_score: number;
       would_cite: boolean;
       reasoning: string;
     }>;
-    return {
-      citability_score:
-        typeof obj.citability_score === "number"
-          ? Math.min(10, Math.max(1, Math.round(obj.citability_score)))
-          : 0,
-      would_cite: !!obj.would_cite,
-      reasoning: typeof obj.reasoning === "string" ? obj.reasoning : "",
-    };
-  } catch (e) {
-    return {
-      citability_score: 0,
-      would_cite: false,
-      reasoning: `(json parse failure) raw=${raw.slice(0, 200)}`,
-    };
+  } catch {
+    throw new JudgeParseError("json_syntax", raw.slice(0, 500));
   }
+  if (obj.citability_score === undefined || obj.citability_score === null) {
+    throw new JudgeParseError("missing_field", raw.slice(0, 500));
+  }
+  if (typeof obj.citability_score !== "number" || !Number.isFinite(obj.citability_score)) {
+    throw new JudgeParseError("field_type", raw.slice(0, 500));
+  }
+  return {
+    citability_score: Math.min(10, Math.max(1, Math.round(obj.citability_score))),
+    would_cite: !!obj.would_cite,
+    reasoning: typeof obj.reasoning === "string" ? obj.reasoning : "",
+  };
 }
 
 /** Cost for a single trial in USD. */
