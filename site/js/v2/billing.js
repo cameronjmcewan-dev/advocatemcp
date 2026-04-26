@@ -87,9 +87,15 @@
                    : (p.id === 'pro')  ? 'Switch to Pro'
                    : (p.id === 'base') ? 'Switch to Base'
                    : `Switch to ${p.name}`;
-        const subj = (p.id === 'pro' && currentPlan === 'base') ? 'Upgrade to Pro' : `Change plan: ${p.name}`;
-        const body = `Hi Advocate team,\n\nI'd like to switch ${bizName} (${slug}) to the ${p.name} plan.\n\nThanks!`;
-        cta = `<a class="btn ${p.featured ? 'btn-primary' : 'btn-ghost'}" style="width:100%" href="${mailtoLink(subj, body)}">${esc(verb)} →</a>`;
+        // Self-serve plan change via Stripe Customer Portal. The button
+        // is wired below by data-billing-portal-cta — clicking it POSTs
+        // to /api/client/billing-portal and redirects to Stripe's hosted
+        // UI. Fallback to mailto if the portal endpoint isn't available
+        // yet (e.g. STRIPE_SECRET_KEY missing or no stripe_customer_id
+        // on the tenant). The fallback handler in billing-portal-click
+        // surfaces the actual error to the user instead of silently
+        // failing.
+        cta = `<button type="button" class="btn ${p.featured ? 'btn-primary' : 'btn-ghost'}" style="width:100%" data-billing-portal-cta data-target-plan="${esc(p.id)}">${esc(verb)} &rarr;</button>`;
       }
 
       return `<div class="price-card ${p.featured ? 'featured' : ''} ${isCurrent ? 'current' : ''}">
@@ -120,12 +126,13 @@
               <div style="font-family:var(--serif);font-size:28px;color:var(--ink);line-height:1;">${esc(currentName)}</div>
               <div style="color:var(--muted);font-size:13px;margin-top:4px">${esc(bizName)}${slug ? ` · <span style="font-family:var(--mono)">${esc(slug)}</span>` : ''}</div>
             </div>
-            ${currentPlan === 'base' ? `<a class="btn btn-primary btn-sm" href="${mailtoLink('Upgrade to Pro', `Hi Advocate team,\n\nI'd like to upgrade ${bizName} (${slug}) to Pro.\n\nThanks!`)}">Upgrade to Pro →</a>` : ''}
+            ${currentPlan === 'base' ? `<button type="button" class="btn btn-primary btn-sm" data-billing-portal-cta data-target-plan="pro">Upgrade to Pro &rarr;</button>` : ''}
           </div>
           <div style="margin-top:16px;font-size:12.5px;color:var(--muted);line-height:1.6">
-            Until the self-serve Stripe portal ships, plan changes and cancellations go through
-            <a href="${mailtoLink('Billing change', `Hi Advocate team,\n\nI'd like to change my plan for ${bizName} (${slug}).\n\nThanks!`)}" style="color:var(--maroon);font-weight:500">hello@advocatemcp.com</a>.
-            We usually reply within one business day.
+            Plan changes and cancellations are self-serve through Stripe's Customer Portal, click any button below.
+            If something doesn't work, email
+            <a href="${mailtoLink('Billing change', `Hi Advocate team,\n\nI'd like to change my plan for ${bizName} (${slug}).\n\nThanks!`)}" style="color:var(--maroon);font-weight:500">hello@advocatemcp.com</a>
+            and we'll switch you manually within one business day.
           </div>
         </div>
         <div class="card-dash">
@@ -176,5 +183,55 @@
     `;
   }
 
-  window.AMCP_BILLING = { demo: () => DEMO, fetch: fetchReal, render };
+  /* afterMount: wire the Stripe Customer Portal click handler.
+   * Every [data-billing-portal-cta] button in the rendered output
+   * (the per-plan "Switch to X" + the "Upgrade to Pro" header CTA)
+   * triggers a POST to /api/client/billing-portal and redirects to
+   * the Stripe-hosted UI. Fallback to mailto when the endpoint
+   * returns a structured error so the user is never left with a
+   * silent dead button. */
+  function afterMount() {
+    var af = window.AMCP && window.AMCP.authedFetch;
+    if (!af) return;
+    document.querySelectorAll('[data-billing-portal-cta]').forEach(function (btn) {
+      btn.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        var originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Opening Stripe...';
+        af('/api/client/billing-portal', { method: 'POST' })
+          .then(function (res) { return res.json().then(function (body) { return { status: res.status, body: body }; }); })
+          .then(function (out) {
+            if (out.body && out.body.url) {
+              // Replace the page so the back button returns to /Billing.html
+              window.location.assign(out.body.url);
+              return;
+            }
+            // Surface specific failure modes with friendlier copy
+            var msg = (out.body && out.body.message) || 'Could not open billing portal.';
+            if (out.body && out.body.error === 'no_stripe_customer') {
+              msg = 'Plan changes via the Customer Portal need a completed Stripe checkout first. ' +
+                    'Email hello@advocatemcp.com and we will switch you over manually.';
+            } else if (out.body && out.body.error === 'stripe_not_configured') {
+              msg = 'Self-serve billing is not configured on this environment yet. ' +
+                    'Email hello@advocatemcp.com to switch plans.';
+            } else if (out.status === 401) {
+              msg = 'Your session expired. Reload the page and try again.';
+            } else if (out.body && out.body.error === 'stripe_portal_failed') {
+              msg = 'Stripe rejected the request: ' + ((out.body.details && out.body.details.error && out.body.details.error.message) || 'configure the Customer Portal in your Stripe dashboard');
+            }
+            alert(msg); // simple UX; could swap for a toast later
+            btn.disabled = false;
+            btn.textContent = originalText;
+          })
+          .catch(function (err) {
+            alert('Network error: ' + (err && err.message ? err.message : err));
+            btn.disabled = false;
+            btn.textContent = originalText;
+          });
+      });
+    });
+  }
+
+  window.AMCP_BILLING = { demo: () => DEMO, fetch: fetchReal, render, afterMount };
 })();

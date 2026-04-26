@@ -29,6 +29,88 @@
     return h.endsWith('.pages.dev') || h === 'localhost' || h === '127.0.0.1';
   }
 
+  /* Inject the shared right-side drawer DOM if it isn't already in the
+   * page. Required by AMCP_UI.openDrawer() (used by the DNS wizard,
+   * activity feed, query detail view, etc.). The legacy dashboard.html
+   * shipped with this DOM inline; the v2 surface (app.html and the
+   * per-section pages) doesn't, so calls like AMCP_DNS_WIZARD.open()
+   * silently no-op without this. We inject once per page, idempotent. */
+  function ensureDrawerDom() {
+    if (document.getElementById('amcp-drawer-overlay')) return;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'amcp-drawer-overlay';
+    overlay.id = 'amcp-drawer-overlay';
+    overlay.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(overlay);
+
+    const panel = document.createElement('aside');
+    panel.className = 'amcp-drawer-panel';
+    panel.id = 'amcp-drawer-panel';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    panel.setAttribute('aria-hidden', 'true');
+    panel.setAttribute('aria-labelledby', 'amcp-drawer-title');
+    panel.innerHTML = [
+      '<div class="amcp-drawer-header">',
+      '  <h2 class="amcp-drawer-title" id="amcp-drawer-title">Details</h2>',
+      '  <button type="button" class="amcp-drawer-close" id="amcp-drawer-close" aria-label="Close drawer">×</button>',
+      '</div>',
+      '<div class="amcp-drawer-body" id="amcp-drawer-body"></div>',
+    ].join('');
+    document.body.appendChild(panel);
+
+    // Inject minimal styles so the drawer renders correctly even on
+    // pages that don't import dashboard.html's stylesheet. Mirrors the
+    // styles in dashboard.html lines ~501-514.
+    if (!document.getElementById('amcp-drawer-styles')) {
+      const s = document.createElement('style');
+      s.id = 'amcp-drawer-styles';
+      s.textContent = `
+        .amcp-drawer-overlay {
+          position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+          opacity: 0; pointer-events: none; transition: opacity .2s ease;
+          z-index: 90;
+        }
+        .amcp-drawer-overlay.open { opacity: 1; pointer-events: auto; }
+        .amcp-drawer-panel {
+          position: fixed; top: 0; right: 0; bottom: 0;
+          width: min(640px, 100vw); background: var(--paper, #fbf9f5);
+          color: var(--ink, #141210); border-left: 1px solid var(--line, #e6e1d8);
+          transform: translateX(100%); transition: transform .25s ease;
+          z-index: 100; display: flex; flex-direction: column;
+          box-shadow: -4px 0 24px rgba(0,0,0,0.18);
+        }
+        .amcp-drawer-panel.open { transform: translateX(0); }
+        .amcp-drawer-header {
+          display: flex; align-items: center; justify-content: space-between;
+          padding: 18px 24px; border-bottom: 1px solid var(--line, #e6e1d8);
+          flex-shrink: 0;
+        }
+        .amcp-drawer-title {
+          font-family: var(--serif, "Instrument Serif", serif);
+          font-weight: 400; font-size: 22px; margin: 0; color: var(--ink, #141210);
+        }
+        .amcp-drawer-close {
+          background: none; border: none; cursor: pointer;
+          font-size: 28px; line-height: 1; color: var(--muted, #8a7c78);
+          padding: 4px 10px; border-radius: 6px;
+          transition: background-color .15s, color .15s;
+        }
+        .amcp-drawer-close:hover { background: var(--paper-2, #f4efe6); color: var(--ink, #141210); }
+        .amcp-drawer-body {
+          padding: 22px 24px 32px; overflow-y: auto; flex: 1;
+          font-size: 14px; line-height: 1.55; color: var(--ink-2, #4a4540);
+        }
+        @media (prefers-color-scheme: dark) {
+          .amcp-drawer-panel { background: var(--paper, #1a1714); border-left-color: var(--line, #2c2622); }
+          .amcp-drawer-header { border-bottom-color: var(--line, #2c2622); }
+        }
+      `;
+      document.head.appendChild(s);
+    }
+  }
+
   function mountPreviewBanner() {
     // Guard against double-mount if AMCP_SHELL.boot is called more than
     // once (e.g. during hot reload in dev).
@@ -54,6 +136,11 @@
     if (!opts || typeof opts.render !== 'function') {
       throw new Error('AMCP_SHELL.boot: opts.render(data) is required');
     }
+    // Inject the right-side drawer DOM up front so AMCP_UI.openDrawer
+    // calls (DNS wizard, activity feed, query detail) work on every v2
+    // page. Idempotent — safe to call repeatedly across hot reloads.
+    ensureDrawerDom();
+
     const preview = isPreviewHost();
 
     let data;

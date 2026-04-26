@@ -33,7 +33,10 @@ import {
   updateActivationStatus,
   updateBusinessApiKey,
   getBusinessBySlug,
+  getActiveBusinesses,
+  getUserBusinesses,
 } from "../portalDb";
+import { getSessionFromRequest } from "./authApi";
 
 // ── CORS helper for the public wizard endpoint ───────────────────────────────
 // Only the marketing site + Cloudflare Pages preview deploys are trusted.
@@ -1430,4 +1433,120 @@ export async function handleRetryRailwayRegistration(
     domain,
     action: "railway_registered_and_d1_api_key_updated",
   });
+}
+
+// ── POST /api/client/billing-portal ──────────────────────────────────────────
+//
+// Self-serve plan switching + cancellation via Stripe's hosted Customer
+// Portal. Replaces the previous mailto:hello@... fallback on the Billing
+// page. Customer clicks "Switch to Pro" / "Switch to Base" / "Cancel" →
+// frontend POSTs here → we create a billing_portal session for that
+// tenant's stripe_customer_id → redirect them to the Stripe-hosted UI →
+// Stripe handles the price change, prorations, cancellation flows
+// natively → webhook fires (existing handler) → we update the tenant's
+// plan in D1.
+//
+// Requires:
+//   - tenant has stripe_customer_id (set during initial checkout)
+//   - STRIPE_SECRET_KEY env var
+//   - (One-time) admin sets up the Customer Portal config in Stripe
+//     dashboard: dashboard.stripe.com → Settings → Customer Portal →
+//     enable "Customers can switch plans" + select Base/Pro prices.
+//     Without that config, the portal still loads but won't show plan
+//     options — the request to Stripe succeeds either way.
+//
+// Auth: customer session via getSessionFromRequest. Tenant role must
+// match (or admin impersonating ?slug=). Cross-tenant access blocked
+// by the same getUserBusinesses pattern used everywhere else.
+//
+// Cost: ~$0/call (Stripe billing_portal sessions are free; pricing
+// changes happen on Stripe's side).
+
+export async function handleBillingPortal(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  if (!env.STRIPE_SECRET_KEY) {
+    return withCors(
+      jsonErr(500, "stripe_not_configured", "STRIPE_SECRET_KEY is not set"),
+      request,
+    );
+  }
+
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "unauthorized", "Not signed in"), request);
+
+  // Resolve which business the request is for. Admin can pick via
+  // ?slug=, regular users get their first owned business.
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) {
+    return withCors(jsonErr(404, "no_business", "No business found for this account"), request);
+  }
+
+  if (!biz.stripe_customer_id) {
+    return withCors(
+      jsonErr(
+        409,
+        "no_stripe_customer",
+        "This tenant doesn't have a Stripe customer_id yet. " +
+        "Plan changes via the portal require a completed initial checkout. " +
+        "If you signed up before Stripe integration was wired in, email hello@advocatemcp.com.",
+      ),
+      request,
+    );
+  }
+
+  // Stripe billing_portal session. return_url brings the customer back
+  // to the dashboard's Billing page after they're done in Stripe's UI.
+  // We use the request's Origin so the return URL matches whichever
+  // surface they came from (advocatemcp.com vs preview vs local).
+  const origin = request.headers.get("Origin")
+              ?? "https://advocatemcp.com";
+  const returnUrl = `${origin}/Billing.html`;
+
+  const stripeResult = await stripeApi(
+    env.STRIPE_SECRET_KEY,
+    "POST",
+    "/billing_portal/sessions",
+    {
+      customer:   biz.stripe_customer_id,
+      return_url: returnUrl,
+    },
+  );
+
+  if (!stripeResult.ok) {
+    // Most common failure: Customer Portal not configured in the
+    // Stripe dashboard. Surface Stripe's actual error message so the
+    // operator can diagnose without diving into logs.
+    return withCors(
+      jsonErr(
+        502,
+        "stripe_portal_failed",
+        "Could not create billing portal session.",
+        stripeResult.data,
+      ),
+      request,
+    );
+  }
+
+  const portalUrl = stripeResult.data.url as string;
+  if (!portalUrl) {
+    return withCors(
+      jsonErr(502, "stripe_portal_no_url", "Stripe returned no portal URL", stripeResult.data),
+      request,
+    );
+  }
+
+  return withCors(
+    jsonOk({
+      ok:   true,
+      url:  portalUrl,
+      slug: biz.slug,
+    }),
+    request,
+  );
 }

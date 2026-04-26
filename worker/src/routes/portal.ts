@@ -37,6 +37,7 @@ import {
   handlePublicOnboard,
   handlePublicOnboardPreflight,
   handleStripeWebhook,
+  handleBillingPortal,
   handleSessionStatus,
   handleRetryRailwayRegistration,
 } from "./stripe";
@@ -154,6 +155,11 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   // ── Stripe / new onboarding API ──────────────────────────────────────────
   if (pathname === "/api/onboard/basic"     && method === "POST") return handleBasicOnboard(request, env);
   if (pathname === "/api/stripe/webhook"    && method === "POST") return handleStripeWebhook(request, env);
+
+  // Stripe Customer Portal — self-serve plan switching + cancellation.
+  // Replaces the prior mailto:hello@... fallback on the Billing page.
+  if (pathname === "/api/client/billing-portal" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/billing-portal" && method === "POST")    return handleBillingPortal(request, env);
 
   // Public wizard endpoint (advocatemcp.com → customers.advocatemcp.com)
   if (pathname === "/api/onboard/public"    && method === "OPTIONS") return handlePublicOnboardPreflight(request);
