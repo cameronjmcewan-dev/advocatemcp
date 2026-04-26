@@ -139,7 +139,6 @@
     try {
       var res = await fetch(API_BASE + '/api/activate/dns-provider?t=' + encodeURIComponent(token), {
         method: 'GET',
-        credentials: 'include',
         headers: { 'Accept': 'application/json' },
       });
       if (!res.ok) return;
@@ -355,7 +354,6 @@
       try {
         var res = await fetch(endpointFor('validate'), {
           method: 'POST',
-          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(creds),
         });
@@ -384,7 +382,6 @@
         try {
           var res = await fetch(endpointFor('apply'), {
             method: 'POST',
-            credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(creds),
           });
@@ -648,7 +645,6 @@
     try {
       var res = await fetch(API_BASE + '/api/activate/status?t=' + encodeURIComponent(token), {
         method: 'GET',
-        credentials: 'include',
         headers: { 'Accept': 'application/json' },
       });
       if (!res.ok) return; // transient; next tick will retry
@@ -714,7 +710,6 @@
     try {
       var res = await fetch(API_BASE + '/api/activate', {
         method: 'POST',
-        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: token, domain: domain }),
       });
@@ -743,7 +738,6 @@
     try {
       var res = await fetch(API_BASE + '/api/activate/preview?t=' + encodeURIComponent(token), {
         method: 'GET',
-        credentials: 'include',
         headers: { 'Accept': 'application/json' },
       });
       if (!res.ok) {
