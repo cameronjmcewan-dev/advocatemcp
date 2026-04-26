@@ -42,6 +42,7 @@ import {
 } from "./stripe";
 import { handleSaveDraft, handleLoadDraft } from "./onboardDraft";
 import { handleContact, handleContactPreflight } from "./contact";
+import { signMagicToken, verifyMagicToken } from "../lib/magicToken";
 import {
   handleAdminInsightsProxy,
   handleAdminInsightsProxyPreflight,
@@ -83,6 +84,11 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/profile-score"   && method === "POST") return apiProfileScore(request, env);
   if (pathname === "/api/client/verify-rating"   && method === "POST") return apiVerifyRating(request, env);
   if (pathname === "/admin/create-client"      && method === "POST") return adminCreateClient(request, env);
+  // Magic-login: admin issues a 5-min token, opens it in incognito, gets a
+  // tenant-role session. Used to verify data isolation visually (no admin
+  // UI, only-this-tenant data) without sharing tenant credentials.
+  if (pathname === "/admin/magic-login"        && method === "POST") return adminMagicLogin(request, env);
+  if (pathname === "/auth/magic"               && method === "GET")  return handleMagicLogin(request, env);
   const resyncMatch = pathname.match(/^\/admin\/businesses\/([^/]+)\/resync-api-key$/);
   if (resyncMatch && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (resyncMatch && method === "POST") return adminResyncApiKey(request, env, resyncMatch[1]);
@@ -1874,6 +1880,107 @@ async function adminCreateClient(request: Request, env: Env): Promise<Response> 
   } catch (err) {
     return jsonErr(500, String(err));
   }
+}
+
+// ── Admin magic-login (Apr 26 2026) ─────────────────────────────────────
+//
+// Lets an admin issue a 5-minute signed token that, when redeemed at
+// /auth/magic, creates a real tenant-role session for the chosen slug's
+// linked user. Use case: verify data isolation visually — admin opens
+// the magic URL in incognito, lands on the dashboard with NO admin
+// sidebar / NO cross-tenant data, exactly as the tenant sees it.
+//
+// Why not just use ?as=<slug> impersonation? Because impersonation
+// keeps the session role as 'admin', so admin UI elements still
+// render. Magic-login swaps to the tenant's actual user_id, with
+// role: 'client' — same auth context as if WCC logged in normally.
+//
+// Auth: Bearer ADMIN_SECRET (same pattern as /admin/create-client).
+// Token TTL: 5 minutes. Token is NOT single-use; the short window is
+// the main protection.
+
+async function adminMagicLogin(request: Request, env: Env): Promise<Response> {
+  // Reject non-JSON content types before touching the body.
+  const ct = request.headers.get("Content-Type") ?? "";
+  if (!ct.includes("application/json")) {
+    return jsonErr(415, "Content-Type must be application/json");
+  }
+  const given  = request.headers.get("Authorization") ?? "";
+  const secret = env.ADMIN_SECRET ?? "";
+  const credentialValid = secret.length > 0 && given === `Bearer ${secret}`;
+  if (!credentialValid) return jsonErr(401, "Unauthorized");
+
+  if (!env.TOKEN_SIGNING_KEY) {
+    return jsonErr(503, "TOKEN_SIGNING_KEY not configured on this worker");
+  }
+
+  let body: { slug?: unknown };
+  try { body = await request.json() as { slug?: unknown }; }
+  catch { return jsonErr(400, "Body must be valid JSON with { slug }"); }
+  const slug = typeof body.slug === "string" ? body.slug.trim() : "";
+  if (!slug) return jsonErr(400, "slug is required");
+
+  // Resolve the business → linked user. We pick the FIRST user_business_access
+  // row for the business; if a tenant has multiple users (shared account),
+  // the magic link logs in as whichever the access row found first. That's
+  // fine for a verification tool — the data they see is identical.
+  const business = await getBusinessBySlug(env.DB, slug);
+  if (!business) return jsonErr(404, `No business with slug '${slug}'`);
+  const accessRow = await env.DB
+    .prepare(
+      `SELECT user_id FROM user_business_access WHERE business_id = ? LIMIT 1`,
+    )
+    .bind(business.id)
+    .first<{ user_id: string }>();
+  if (!accessRow) return jsonErr(404, `No user linked to slug '${slug}'`);
+
+  const tokenStr = await signMagicToken(
+    { user_id: accessRow.user_id, ts: Math.floor(Date.now() / 1000) },
+    env.TOKEN_SIGNING_KEY,
+  );
+
+  // Build the redemption URL on the same hostname as this request so the
+  // resulting cookie binds to the right domain.
+  const url = new URL(request.url);
+  const magicUrl = `${url.protocol}//${url.host}/auth/magic?token=${encodeURIComponent(tokenStr)}`;
+
+  return jsonOk({
+    magic_url:        magicUrl,
+    expires_in_sec:   5 * 60,
+    impersonating:    { slug, business_name: business.business_name, user_id: accessRow.user_id },
+    note:             "Open this URL in an incognito/private window so it doesn't replace your admin session.",
+  });
+}
+
+async function handleMagicLogin(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  const tokenStr = url.searchParams.get("token") ?? "";
+  if (!tokenStr) return jsonErr(400, "missing token");
+  if (!env.TOKEN_SIGNING_KEY) return jsonErr(503, "signing key not configured");
+
+  let payload;
+  try {
+    payload = await verifyMagicToken(tokenStr, env.TOKEN_SIGNING_KEY);
+  } catch (err) {
+    // err is "malformed" | "bad_signature" | "expired" — surface the
+    // reason so admin can debug a stale link without poking the server.
+    return jsonErr(401, `magic token rejected: ${String(err)}`);
+  }
+
+  // Exchange the validated user_id for a real session cookie. Same
+  // session-creation path as /api/auth/login, so the resulting session
+  // is indistinguishable from a normal tenant login.
+  const { token: sessionToken } = await createSession(env.DB, payload.user_id);
+
+  // Redirect to /, which the dashboard chrome will pick up. The cookie
+  // header is set on the redirect response so the next request has it.
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location:     "/",
+      "Set-Cookie": sessionCookieHeader(sessionToken),
+    },
+  });
 }
 
 // ── GET /status ─────────────────────────────────────────────────────────────
