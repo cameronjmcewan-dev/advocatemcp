@@ -1,215 +1,273 @@
-<!DOCTYPE html>
-<html lang="en" data-theme="dark" style="background:#050202">
+<!doctype html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="color-scheme" content="dark light" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AI Visibility Report, Advocate</title>
-  <meta name="description" content="A snapshot of how AI assistants answer category queries about a business." />
-  <meta property="og:title" content="AI Visibility Report, Advocate" />
-  <meta property="og:description" content="See how AI assistants answer category queries about your business, and whether they cite you." />
-  <meta property="og:image" content="https://advocatemcp.com/og-image.png" />
-  <link rel="preconnect" href="https://api.fontshare.com" />
-  <link rel="stylesheet" href="/css/tokens.css" />
-  <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/redesign.css" />
-  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#fbf9f5" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#141210" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="A snapshot of how AI assistants answer category queries about a business.">
+  <meta property="og:title" content="AI Visibility Report, Advocate">
+  <meta property="og:description" content="See how AI assistants answer category queries about your business, and whether they cite you.">
+  <meta property="og:image" content="https://advocatemcp.com/og-image.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://api.fontshare.com">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <link rel="stylesheet" href="/assets/dashboard.css">
   <style>
-    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    html{font-size:16px;-webkit-font-smoothing:antialiased;color-scheme:dark light;background:var(--bg)}
-    body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:var(--tx-base);line-height:1.6;min-height:100vh}
-    a{color:inherit;text-decoration:none}
-    button{font-family:inherit;cursor:pointer;border:none;background:none}
-    img,svg{display:block}
-
-    .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 20px;font-size:var(--tx-sm);font-weight:500;border-radius:var(--r-md);border:1px solid transparent;transition:background .15s,color .15s,border-color .15s;white-space:nowrap;line-height:1}
-    .btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
-    .btn-primary:hover{background:var(--accent-bright);border-color:var(--accent-bright)}
-    .btn-ghost{background:transparent;color:var(--text);border-color:var(--border)}
-    .btn-ghost:hover{background:var(--surface-2)}
-    .btn-sm{padding:7px 14px;font-size:var(--tx-xs)}
-
-    .audit-nav{display:flex;align-items:center;justify-content:space-between;padding:20px 40px;border-bottom:1px solid rgba(255,255,255,.06)}
-    [data-theme="light"] .audit-nav{border-bottom-color:var(--border)}
-    .audit-nav .logo{display:flex;align-items:center;gap:10px;font-size:var(--tx-sm);font-weight:600;letter-spacing:-.01em;color:var(--text)}
-    .audit-nav-actions{display:flex;align-items:center;gap:10px}
-    .icon-btn{display:flex;align-items:center;justify-content:center;width:34px;height:34px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--muted);transition:color .15s}
-    .icon-btn:hover{color:var(--text)}
-
-    .wrap{max-width:760px;margin:0 auto;padding:48px 24px 24px}
-    .header{text-align:center;margin-bottom:36px;position:relative;isolation:isolate}
-    .header::before{content:"";position:absolute;inset:-60px -100px;z-index:-1;pointer-events:none;background:radial-gradient(ellipse 60% 70% at 50% 30%, var(--accent-glow-2) 0%, transparent 70%)}
-    .eyebrow{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:999px;background:var(--accent-dim);color:var(--accent-bright);font-size:var(--tx-xs);font-weight:600;letter-spacing:.08em;text-transform:uppercase;margin-bottom:16px;border:1px solid var(--border-accent)}
-    .h1{font-family:var(--font-serif);font-weight:400;font-size:clamp(2rem,3.6vw,2.875rem);line-height:1.1;letter-spacing:-.02em;color:var(--text);margin-bottom:14px}
-    .h1 em{font-style:italic;color:var(--accent-bright)}
-    .sub{font-size:var(--tx-sm);color:var(--muted);max-width:520px;margin:0 auto;line-height:1.6}
-    .sub code{font-family:var(--font-mono);font-size:0.95em;color:var(--text);background:var(--surface-2);padding:2px 6px;border-radius:4px}
-
-    .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:32px;margin-bottom:20px}
-    .score-card{text-align:center;padding:40px 32px}
-    .score-big{font-family:var(--font-serif);font-weight:400;font-size:clamp(4.5rem,9vw,6.5rem);line-height:1;letter-spacing:-.03em}
-    .score-big.zero{color:#f85149}
-    .score-big.some{color:#d29922}
-    .score-big.all{color:#3fb950}
-    .score-label{font-size:var(--tx-md);color:var(--text);margin-top:12px}
-    .score-detail{font-size:var(--tx-xs);color:var(--muted);margin-top:20px;padding-top:20px;border-top:1px solid var(--border)}
-
-    .query-list{padding:0;overflow:hidden}
-    .query-list-head{padding:18px 32px;font-size:var(--tx-xs);color:var(--muted);letter-spacing:.08em;text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border)}
-    .query{padding:18px 32px;border-bottom:1px solid var(--border)}
-    .query:last-child{border-bottom:none}
-    .query-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:8px}
-    .query-text{font-family:var(--font-serif);font-style:italic;font-size:var(--tx-md);color:var(--text);flex:1}
-    .badge{display:inline-flex;align-items:center;padding:4px 12px;border-radius:999px;font-size:var(--tx-xs);font-weight:600;white-space:nowrap;letter-spacing:.04em;text-transform:uppercase}
-    .badge.win{background:rgba(63,185,80,.15);color:#3fb950;border:1px solid rgba(63,185,80,.3)}
-    .badge.loss{background:rgba(210,153,34,.12);color:#d29922;border:1px solid rgba(210,153,34,.3)}
-    .citations{font-size:var(--tx-xs);color:var(--muted);word-break:break-word;line-height:1.6}
-    .citations strong{color:var(--text);font-weight:500}
-
-    .leaderboard{padding:0;overflow:hidden;margin-bottom:20px}
-    .leaderboard-head{padding:18px 32px;font-size:var(--tx-xs);color:var(--muted);letter-spacing:.08em;text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border)}
-    .leaderboard-head em{font-style:italic;color:var(--accent-bright);font-family:var(--font-serif);text-transform:none;letter-spacing:0;font-size:var(--tx-sm)}
-    .lb-row{display:flex;align-items:center;gap:14px;padding:14px 32px;border-bottom:1px solid var(--border)}
-    .lb-row:last-child{border-bottom:none}
-    .lb-rank{font-family:var(--font-serif);font-style:italic;font-size:var(--tx-md);color:var(--muted);width:24px;flex-shrink:0;text-align:center}
-    .lb-rank.podium{color:var(--accent-bright)}
-    .lb-domain{flex:1;font-size:var(--tx-sm);color:var(--text);font-weight:500;word-break:break-all;min-width:0}
-    .lb-domain a{color:var(--text);text-decoration:none;border-bottom:1px solid transparent;transition:border-color .15s}
-    .lb-domain a:hover{border-bottom-color:var(--accent-bright)}
-    .lb-meter{flex:0 0 110px;height:6px;background:var(--bg);border:1px solid var(--border);border-radius:3px;overflow:hidden;position:relative}
-    .lb-meter-fill{position:absolute;inset:0;background:linear-gradient(90deg,var(--accent),var(--accent-bright));transform-origin:left}
-    .lb-count{flex:0 0 auto;font-size:var(--tx-xs);color:var(--muted);font-variant-numeric:tabular-nums;min-width:80px;text-align:right}
-    .lb-count strong{color:var(--text);font-weight:600}
-
-    .cta-card{background:linear-gradient(135deg, var(--accent) 0%, var(--accent-bright) 100%);color:#fff;padding:36px 32px;border-radius:var(--r-lg);text-align:center;margin-bottom:24px;border:1px solid var(--accent-bright)}
-    .cta-card h3{font-family:var(--font-serif);font-weight:400;font-size:clamp(1.4rem,2.4vw,1.75rem);line-height:1.2;margin-bottom:10px}
-    .cta-card p{font-size:var(--tx-sm);opacity:.92;margin-bottom:22px;max-width:460px;margin-left:auto;margin-right:auto;line-height:1.6}
-    .cta-card .btn{background:#fff;color:var(--accent);border-color:#fff;padding:12px 24px;font-size:var(--tx-sm);font-weight:600;margin:4px}
-    .cta-card .btn:hover{background:rgba(255,255,255,.92)}
-    .cta-card .btn-secondary{background:rgba(255,255,255,.08);color:#fff;border-color:rgba(255,255,255,.3)}
-    .cta-card .btn-secondary:hover{background:rgba(255,255,255,.18)}
-
-    .err{padding:32px;text-align:center;color:var(--muted);font-size:var(--tx-sm)}
-    .skel{background:linear-gradient(90deg,var(--surface) 25%,var(--surface-2) 50%,var(--surface) 75%);background-size:1000px 100%;animation:shimmer 1.5s infinite;border-radius:var(--r-sm);height:280px}
-    @keyframes shimmer{from{background-position:-500px 0}to{background-position:500px 0}}
-
-    footer{text-align:center;padding:32px 24px;font-size:var(--tx-xs);color:var(--muted);border-top:1px solid var(--border);margin-top:40px}
-    footer a{color:var(--muted);text-decoration:underline;text-underline-offset:2px}
-    footer a:hover{color:var(--text)}
-
-    @media (max-width:640px){
-      .audit-nav{padding:16px 20px}
-      .wrap{padding:36px 20px}
-      .card{padding:24px}
-      .query,.query-list-head{padding-left:24px;padding-right:24px}
-      .score-card{padding:32px 24px}
+    /* r.html — shared visibility report. Mirrors the styling of the
+       audit page so a copied /r/:id link feels like the same product
+       to the recipient. Identical IDs to the old r.html so the inline
+       loader script is unchanged. */
+    .r-wrap { max-width: 880px; margin: 0 auto; padding: 64px 24px 24px; }
+    .r-hero { text-align: center; margin-bottom: 32px; max-width: 720px; margin-left: auto; margin-right: auto; }
+    .r-hero .eyebrow {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border-radius: 999px;
+      background: var(--paper-2); color: var(--maroon);
+      font-size: 11px; font-weight: 600; letter-spacing: .08em;
+      text-transform: uppercase; border: 1px solid var(--line);
+      margin-bottom: 18px;
     }
+    .r-hero h1 {
+      font-family: var(--serif); font-weight: 400;
+      font-size: clamp(32px, 4vw, 44px); line-height: 1.1;
+      color: var(--ink); margin-bottom: 12px; letter-spacing: -0.01em;
+    }
+    .r-hero h1 em { font-style: italic; color: var(--maroon); }
+    .r-hero .sub {
+      font-size: 14px; color: var(--ink-2); line-height: 1.55;
+      max-width: 580px; margin: 0 auto;
+    }
+    .r-hero .sub code {
+      background: var(--paper-2); padding: 1px 6px; border-radius: 4px;
+      color: var(--ink); font-size: 13px;
+    }
+
+    /* Loading skeleton */
+    #loading { max-width: 760px; margin: 0 auto; }
+    .skel {
+      height: 200px; background: var(--paper-2);
+      border: 1px solid var(--line); border-radius: 12px;
+      animation: skel-pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes skel-pulse {
+      0%, 100% { opacity: 0.6; }
+      50%      { opacity: 1; }
+    }
+
+    /* Error state */
+    #error .err {
+      background: var(--paper-2); border: 1px solid var(--line);
+      border-left: 3px solid var(--maroon); border-radius: 10px;
+      padding: 24px; max-width: 600px; margin: 0 auto;
+      font-size: 14px; color: var(--ink-2); line-height: 1.6;
+    }
+    #error .err strong { color: var(--ink); }
+
+    /* Results stack */
+    #results > .card-dash { margin-bottom: 18px; }
+    #results > .card-dash:last-child { margin-bottom: 0; }
+
+    /* Visibility score-card */
+    .score-card { padding: 28px 32px; }
+    .score-big {
+      font-family: var(--serif); font-size: 56px; font-weight: 400;
+      line-height: 1; color: var(--ink); margin-bottom: 8px;
+      letter-spacing: -0.02em;
+    }
+    .score-big.zero { color: var(--maroon); }
+    .score-big.some { color: var(--ink); }
+    .score-big.all  { color: var(--green, #3fb950); }
+    .score-label { font-size: 14px; color: var(--ink-2); line-height: 1.5; margin-bottom: 4px; }
+    .score-label strong { color: var(--ink); }
+    .score-detail { font-size: 12.5px; color: var(--muted); }
+
+    /* Leaderboard */
+    .leaderboard { padding: 24px 28px; }
+    .leaderboard-head {
+      font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 14px; font-weight: 600;
+    }
+    .leaderboard-head em { font-style: italic; color: var(--ink-2); }
+    .lb-row {
+      display: grid; grid-template-columns: 32px 1fr 80px 90px;
+      gap: 12px; align-items: center;
+      padding: 10px 0; border-bottom: 1px solid var(--line);
+      font-size: 14px;
+    }
+    .lb-row:last-child { border-bottom: none; }
+    .lb-rank {
+      font-family: var(--serif); font-size: 20px; color: var(--muted);
+      text-align: center;
+    }
+    .lb-rank.podium { color: var(--maroon); }
+    .lb-domain { color: var(--ink); word-break: break-all; min-width: 0; }
+    .lb-domain a { color: var(--ink); text-decoration: none; border-bottom: 1px solid transparent; }
+    .lb-domain a:hover { border-bottom-color: var(--maroon); }
+    .lb-meter {
+      height: 6px; background: var(--paper-2);
+      border-radius: 999px; overflow: hidden;
+    }
+    .lb-meter-fill {
+      height: 100%; background: var(--maroon);
+      transform-origin: left; transition: transform .3s;
+    }
+    .lb-count {
+      font-variant-numeric: tabular-nums; color: var(--ink-2);
+      font-size: 13px; text-align: right;
+    }
+    .lb-count strong { color: var(--ink); }
+
+    /* Query list */
+    .query-list { padding: 0; overflow: hidden; }
+    .query-list-head {
+      padding: 18px 28px 14px;
+      font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+      color: var(--muted); font-weight: 600;
+      border-bottom: 1px solid var(--line);
+    }
+    .query {
+      padding: 16px 28px; border-bottom: 1px solid var(--line);
+    }
+    .query:last-child { border-bottom: none; }
+    .query-head {
+      display: flex; align-items: flex-start; gap: 12px;
+      justify-content: space-between; margin-bottom: 8px;
+    }
+    .query-text {
+      font-size: 14px; color: var(--ink); font-style: italic;
+      line-height: 1.5; flex: 1;
+    }
+    .badge {
+      flex-shrink: 0; padding: 3px 10px; border-radius: 999px;
+      font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase;
+      font-weight: 600;
+    }
+    .badge.win {
+      background: rgba(63,185,86,0.12); color: var(--green, #3fb950);
+      border: 1px solid rgba(63,185,86,0.25);
+    }
+    .badge.loss {
+      background: var(--paper-2); color: var(--muted);
+      border: 1px solid var(--line);
+    }
+    .citations { font-size: 12.5px; color: var(--ink-2); line-height: 1.55; }
+    .citations strong { color: var(--ink); font-weight: 500; }
+    .citations em { color: var(--muted); }
+
+    /* Bottom CTA */
+    .cta-card {
+      padding: 32px; text-align: center;
+      background: var(--paper-2); border: 1px solid var(--line);
+      border-radius: 14px;
+    }
+    .cta-card h3 {
+      font-family: var(--serif); font-weight: 400;
+      font-size: 24px; color: var(--ink); margin-bottom: 10px;
+      line-height: 1.2;
+    }
+    .cta-card h3 em { font-style: italic; color: var(--maroon); }
+    .cta-card p {
+      font-size: 14px; color: var(--ink-2); line-height: 1.55;
+      max-width: 520px; margin: 0 auto 18px;
+    }
+    .cta-card .btn + .btn { margin-left: 8px; }
+
+    /* Footer note */
+    .r-foot {
+      margin-top: 32px; text-align: center;
+      font-size: 12px; color: var(--muted); line-height: 1.55;
+    }
+    .r-foot a { color: var(--maroon); }
   </style>
 </head>
 <body>
+<script src="/assets/shared.js"></script>
+<div id="nav-mount"></div>
 
-<nav class="audit-nav">
-  <a href="/" class="logo">
-    <img src="/icon-192.png" alt="Advocate" width="26" height="26" style="border-radius:5px" />
-    Advocate
-  </a>
-  <div class="audit-nav-actions">
-    <button class="icon-btn" onclick="toggleTheme()" aria-label="Toggle theme">
-      <i data-lucide="sun" id="r-sun"></i>
-      <i data-lucide="moon" id="r-moon" style="display:none"></i>
-    </button>
-    <a href="/audit" class="btn btn-ghost btn-sm">Run yours →</a>
-    <a href="/onboarding" class="btn btn-primary btn-sm">Get Started</a>
-  </div>
-</nav>
+<main>
+  <div class="r-wrap">
+    <div class="r-hero">
+      <span class="eyebrow">Shared report</span>
+      <h1 id="title">Loading <em>report,</em></h1>
+      <p class="sub" id="meta"></p>
+    </div>
 
-<div class="wrap">
-  <div class="header">
-    <div class="eyebrow"><i data-lucide="zap" style="width:10px;height:10px"></i> Shared report</div>
-    <h1 class="h1" id="title">Loading <em>report…</em></h1>
-    <p class="sub" id="meta"></p>
-  </div>
+    <div id="loading"><div class="skel"></div></div>
 
-  <div id="loading"><div class="card skel"></div></div>
+    <div id="error" style="display:none">
+      <div class="err">
+        <strong>This report doesn't exist or has been removed.</strong>
+        <p style="margin-top:14px">Reports older than 24h are cleaned up. To see how AI sees a business right now, run a fresh audit.</p>
+        <p style="margin-top:18px"><a href="/audit.html" class="btn btn-primary">Run a fresh audit &rarr;</a></p>
+      </div>
+    </div>
 
-  <div id="error" style="display:none">
-    <div class="card err">
-      <p>This report doesn't exist or has been removed.</p>
-      <p style="margin-top:16px"><a href="/audit" class="btn btn-primary">Run a fresh audit →</a></p>
+    <div id="results" style="display:none">
+      <div class="card-dash score-card">
+        <div id="score-big" class="score-big"></div>
+        <div class="score-label" id="score-label"></div>
+        <div class="score-detail" id="score-detail"></div>
+      </div>
+
+      <div class="card-dash leaderboard" id="leaderboard-card">
+        <div class="leaderboard-head" id="leaderboard-head">Who's winning the category</div>
+        <div id="leaderboard-body"></div>
+      </div>
+
+      <div class="card-dash query-list">
+        <div class="query-list-head">What AI answered</div>
+        <div id="queries"></div>
+      </div>
+
+      <div class="cta-card">
+        <h3>This was someone else's report. <em>What about yours?</em></h3>
+        <p>Same 30-second audit, same dual-signal report. Citation-readiness score plus AI category visibility.</p>
+        <a class="btn btn-primary" href="/audit.html">See what AI thinks of my site &rarr;</a>
+        <a class="btn btn-ghost" href="/onboarding">Skip ahead, get an agent</a>
+      </div>
+
+      <div class="r-foot">
+        Public read-only snapshot. Reports cached 24h, then auto-removed.<br>
+        The citation-readiness score is per-IP and not stored, run <a href="/audit.html">your own audit</a> to see yours.
+      </div>
     </div>
   </div>
+</main>
 
-  <div id="results" style="display:none">
-    <div class="card score-card">
-      <div id="score-big" class="score-big"></div>
-      <div class="score-label" id="score-label"></div>
-      <div class="score-detail" id="score-detail"></div>
-    </div>
-
-    <div class="card leaderboard" id="leaderboard-card">
-      <div class="leaderboard-head" id="leaderboard-head">Who's winning the category</div>
-      <div id="leaderboard-body"></div>
-    </div>
-
-    <div class="card query-list">
-      <div class="query-list-head">What AI answered</div>
-      <div id="queries"></div>
-    </div>
-
-    <div class="cta-card">
-      <h3>This was someone else's report. <em>What about yours?</em></h3>
-      <p>Run the same 30-second audit on your business, see if AI cites you for your category.</p>
-      <a class="btn" href="/audit">Run my audit →</a>
-      <a class="btn btn-secondary" href="/onboarding">Skip ahead, get an agent</a>
-    </div>
-  </div>
-
-  <footer>
-    Powered by <a href="/">Advocate</a> · AI citation polling · Reports are public read-only snapshots
-  </footer>
-</div>
+<div id="footer-mount"></div>
 
 <script>
-  // Theme toggle, same key as the rest of the site
-  function toggleTheme(){
-    var html = document.documentElement;
-    var current = html.getAttribute('data-theme');
-    var next = current === 'light' ? 'dark' : 'light';
-    html.setAttribute('data-theme', next);
-    try { localStorage.setItem('amcp_theme', next); } catch(e) {}
-    syncIcons(next);
-  }
-  function syncIcons(t){
-    var sun = document.getElementById('r-sun');
-    var moon = document.getElementById('r-moon');
-    if(!sun||!moon) return;
-    sun.style.display  = t === 'dark' ? 'block' : 'none';
-    moon.style.display = t === 'dark' ? 'none' : 'block';
-  }
-  (function initTheme(){
-    try {
-      var saved = localStorage.getItem('amcp_theme');
-      if (saved === 'light') document.documentElement.setAttribute('data-theme','light');
-    } catch(e) {}
-    syncIcons(document.documentElement.getAttribute('data-theme') || 'dark');
-  })();
-
+  /* Shareable visibility-report loader. Identical fetch + render logic
+   * to the previous r.html — only the surrounding HTML/styling changed.
+   * Reads /audit/:id from api.advocatemcp.com (same backend as the
+   * audit page) and renders the visibility data into the cards above.
+   *
+   * Note: we deliberately don't fetch the citation-readiness score
+   * here. Readiness is per-IP-rate-limited and not persisted, so a
+   * shared link inherently can't include the recipient's readiness
+   * score. The footer note above tells the recipient where to get
+   * theirs. */
   function escapeHtml(s){
     return String(s == null ? "" : s)
       .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
       .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
   }
 
-  // Mirror of the leaderboard helpers in /js/audit.js. Inlined here so the
-  // shareable view is self-contained (r.html doesn't load audit.js).
   function bareDomain(urlStr){
     if(!urlStr) return "";
     try { var u = new URL(urlStr); return u.hostname.replace(/^www\./i,"").toLowerCase(); }
     catch(_) { return String(urlStr).replace(/^https?:\/\//i,"").replace(/^www\./i,"").split(/[\/?#]/)[0].toLowerCase(); }
   }
+
   function buildLeaderboard(audit, topN){
     var ownDomain = bareDomain(audit && audit.domain ? audit.domain : "");
     var counts = Object.create(null);
@@ -226,6 +284,7 @@
     rows.sort(function(a,b){ return b.count - a.count || a.domain.localeCompare(b.domain); });
     return { rows: rows.slice(0, topN || 5), max: rows.length > 0 ? rows[0].count : 0 };
   }
+
   function renderLeaderboard(audit){
     var bodyEl = document.getElementById("leaderboard-body");
     var headEl = document.getElementById("leaderboard-head");
@@ -313,9 +372,13 @@
       .then(function(body){ if (!body.audit) throw new Error('no_audit'); render(body.audit); })
       .catch(function(){ showError(); });
   })();
+</script>
 
-  window.addEventListener('DOMContentLoaded', function(){
-    if (window.lucide && window.lucide.createIcons) window.lucide.createIcons();
+<script>
+  AdvocateChrome.renderNav('nav-mount');
+  AdvocateChrome.renderFooter('footer-mount');
+  AdvocateChrome.renderTweaks({
+    defaults: /*EDITMODE-BEGIN*/{"theme":"light","density":"comfortable"}/*EDITMODE-END*/
   });
 </script>
 </body>
