@@ -1972,12 +1972,16 @@ async function handleMagicLogin(request: Request, env: Env): Promise<Response> {
   // is indistinguishable from a normal tenant login.
   const { token: sessionToken } = await createSession(env.DB, payload.user_id);
 
-  // Redirect to /, which the dashboard chrome will pick up. The cookie
-  // header is set on the redirect response so the next request has it.
+  // Redirect to /dashboard — the same target normal login uses (line
+  // ~329 in this file). /dashboard 301s to advocatemcp.com/dashboard.html
+  // which then redirects to /app.html (the v2 dashboard). Plain "/" on
+  // customers.advocatemcp.com falls through to bot detection because
+  // there's no root handler there, which is what produced the
+  // "Non-crawler request" response on first redemption.
   return new Response(null, {
     status: 302,
     headers: {
-      Location:     "/",
+      Location:     "/dashboard",
       "Set-Cookie": sessionCookieHeader(sessionToken),
     },
   });
