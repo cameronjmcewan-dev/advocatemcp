@@ -364,3 +364,127 @@ describe("POST /audit/:id/follow-up — lead capture", () => {
     expect(res.status).toBe(404);
   });
 });
+
+/* (Bug 5) The citation-readiness route used to track its per-IP cap by
+ * inserting synthetic category='__readiness__' rows into public_audits.
+ * Migration 027 adds a dedicated audit_readiness_results table; the
+ * route now writes there and the cap query unions both tables for the
+ * 24h rollout window. These tests pin both halves of that union. */
+describe("POST /audit/citation-readiness — per-IP cap (Bug 5)", () => {
+  const tmp = path.join(os.tmpdir(), `audit-readiness-${Date.now()}.db`);
+
+  beforeEach(async () => {
+    process.env.DATABASE_PATH = tmp;
+    process.env.AUDIT_IP_SALT = "test-salt";
+    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
+    const { _resetDbForTests } = await import("../db.js");
+    _resetDbForTests();
+    for (const suffix of ["", "-wal", "-shm"]) fs.rmSync(tmp + suffix, { force: true });
+    const { getDb } = await import("../db.js");
+    getDb();
+    vi.restoreAllMocks();
+  });
+
+  afterAll(() => {
+    for (const suffix of ["", "-wal", "-shm"]) fs.rmSync(tmp + suffix, { force: true });
+    delete process.env.DATABASE_PATH;
+    delete process.env.AUDIT_IP_SALT;
+    delete process.env.ANTHROPIC_API_KEY;
+    vi.restoreAllMocks();
+  });
+
+  async function mockReadiness(): Promise<void> {
+    const lib = await import("../lib/citationReadiness.js");
+    vi.spyOn(lib, "scoreCitationReadiness").mockResolvedValue({
+      ok:               true,
+      url:              "https://example.com/",
+      byte_length:      1024,
+      fetched_at:       new Date().toISOString(),
+      score:            7,
+      would_cite:       true,
+      reasoning:        "stubbed",
+      signals_present:  [],
+      signals_missing:  [],
+      improvements:     [],
+      cost_usd:         0.04,
+    });
+  }
+
+  it("writes successful runs to audit_readiness_results, not public_audits", async () => {
+    await mockReadiness();
+    const { createTestApp } = await import("../testApp.js");
+    const res = await request(createTestApp())
+      .post("/audit/citation-readiness")
+      .set("x-forwarded-for", "203.0.113.10")
+      .send({ url: "https://example.com" });
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+
+    const { getDb } = await import("../db.js");
+    const db = getDb();
+    const newRow = db.prepare("SELECT COUNT(*) AS c FROM audit_readiness_results").get() as { c: number };
+    const oldRow = db.prepare("SELECT COUNT(*) AS c FROM public_audits WHERE category = '__readiness__'").get() as { c: number };
+    expect(newRow.c).toBe(1);
+    expect(oldRow.c).toBe(0);
+  });
+
+  it("enforces the 5/IP/day cap via the new table", async () => {
+    await mockReadiness();
+    const { createTestApp } = await import("../testApp.js");
+    const app = createTestApp();
+    const ip = "203.0.113.20";
+    // First 5 succeed.
+    for (let i = 0; i < 5; i++) {
+      const res = await request(app)
+        .post("/audit/citation-readiness")
+        .set("x-forwarded-for", ip)
+        .send({ url: "https://example.com" });
+      expect(res.status).toBe(200);
+    }
+    // 6th hits the cap.
+    const denied = await request(app)
+      .post("/audit/citation-readiness")
+      .set("x-forwarded-for", ip)
+      .send({ url: "https://example.com" });
+    expect(denied.status).toBe(429);
+    expect(denied.body.reason).toBe("ip_rate_limited");
+  });
+
+  it("counts legacy synthetic public_audits rows during the rollout window", async () => {
+    // Simulate a tenant who hit the cap on the OLD code path: 5 rows
+    // in public_audits with category='__readiness__'. With the new
+    // code, a 6th call from that IP should still be rejected because
+    // the cap query unions both tables. Once the legacy rows age past
+    // the 24h window they stop counting and the union becomes a
+    // no-op — that's the intended migration glide.
+    const { getDb } = await import("../db.js");
+    const db = getDb();
+    // Compute the same ip_hash the route would: sha256(ip|salt) → first 16 hex.
+    // Use the same salt set in beforeEach.
+    const ip = "203.0.113.30";
+    const cryptoMod = await import("crypto");
+    // Match what route's hashIp() emits: full sha256 hex, no slice.
+    const ipHash = cryptoMod.createHash("sha256")
+      .update(`${ip}|test-salt`).digest("hex");
+
+    const stmt = db.prepare(
+      `INSERT INTO public_audits
+        (id, domain, category, location, ip_hash,
+         queries_json, cited_count, total_queries, error,
+         cost_usd, created_at)
+       VALUES (?, ?, '__readiness__', NULL, ?, '[]', 0, 0, NULL, ?, ?)`,
+    );
+    for (let i = 0; i < 5; i++) {
+      stmt.run(`legacy-${i}`, "__readiness__", ipHash, 0.04, new Date().toISOString());
+    }
+
+    await mockReadiness();
+    const { createTestApp } = await import("../testApp.js");
+    const res = await request(createTestApp())
+      .post("/audit/citation-readiness")
+      .set("x-forwarded-for", ip)
+      .send({ url: "https://example.com" });
+    expect(res.status).toBe(429);
+    expect(res.body.reason).toBe("ip_rate_limited");
+  });
+});

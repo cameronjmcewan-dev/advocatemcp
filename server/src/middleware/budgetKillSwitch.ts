@@ -95,6 +95,31 @@ function rehydrateFromDb(dateKey: string): BudgetState {
  * existing row instead. Helper retained as a no-op stub (with
  * dead-code clearly marked) so importers see the migration intent. */
 
+/* Ensure today's budget_state row exists in SQLite. Called at the top
+ * of every mutator so a fresh DB (Railway redeploy, _resetDbForTests
+ * between vitest cases, manual migration re-run) starts with a row
+ * present. The atomic UPDATEs that follow rely on the row being there
+ * — a missing row would make every reserve match-zero and reject. */
+function ensureRow(dateKey: string): void {
+  try {
+    const db = getDb();
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS budget_state (
+        date_key      TEXT PRIMARY KEY,
+        spent_usd     REAL NOT NULL DEFAULT 0,
+        reserved_usd  REAL NOT NULL DEFAULT 0,
+        updated_at    TEXT NOT NULL
+      )
+    `).run();
+    db.prepare(
+      `INSERT OR IGNORE INTO budget_state (date_key, spent_usd, reserved_usd, updated_at)
+       VALUES (?, 0, 0, ?)`,
+    ).run(dateKey, new Date().toISOString());
+  } catch {
+    /* swallow — caller falls back to in-memory path */
+  }
+}
+
 function getState(): BudgetState {
   const today = utcDateKey();
   if (!state || state.dateKey !== today) {
@@ -126,6 +151,7 @@ export function reserve(maxUsd: number): { allowed: true; reservationId: string 
   const today = utcDateKey();
   const cap = dailyCap();
   const cached = getState();
+  ensureRow(today);
   try {
     const db = getDb();
     const result = db
@@ -181,6 +207,7 @@ export function reserve(maxUsd: number): { allowed: true; reservationId: string 
 export function record(reservationMaxUsd: number, actualUsd: number): void {
   const today = utcDateKey();
   const cached = getState();
+  ensureRow(today);
   try {
     const db = getDb();
     db.prepare(
@@ -203,6 +230,7 @@ export function record(reservationMaxUsd: number, actualUsd: number): void {
 export function release(reservationMaxUsd: number): void {
   const today = utcDateKey();
   const cached = getState();
+  ensureRow(today);
   try {
     const db = getDb();
     db.prepare(

@@ -111,6 +111,32 @@ function rehydrateFromDb(slug: string, dateKey: string): TenantBudgetState {
  * entirely now so a future contributor doesn't accidentally
  * reintroduce the race by calling it. */
 
+/* Ensure today's tenant_budget_state row exists for this slug. Called
+ * at the top of every mutator so a fresh DB / cache-without-row
+ * combination (Railway redeploy mid-day, _resetDbForTests between
+ * vitest cases) doesn't make every UPDATE match zero rows. */
+function ensureRow(slug: string, dateKey: string): void {
+  try {
+    const db = getDb();
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS tenant_budget_state (
+        slug          TEXT NOT NULL,
+        date_key      TEXT NOT NULL,
+        spent_usd     REAL NOT NULL DEFAULT 0,
+        reserved_usd  REAL NOT NULL DEFAULT 0,
+        updated_at    TEXT NOT NULL,
+        PRIMARY KEY (slug, date_key)
+      )
+    `).run();
+    db.prepare(
+      `INSERT OR IGNORE INTO tenant_budget_state (slug, date_key, spent_usd, reserved_usd, updated_at)
+       VALUES (?, ?, 0, 0, ?)`,
+    ).run(slug, dateKey, new Date().toISOString());
+  } catch {
+    /* swallow — caller falls back to in-memory path */
+  }
+}
+
 function getState(slug: string): TenantBudgetState {
   const today = utcDateKey();
   const key = cacheKey(slug, today);
@@ -158,10 +184,12 @@ export function reserveForSlug(
 ): { allowed: true } | { allowed: false; remainingUsd: number; capUsd: number } {
   const today = utcDateKey();
   const cap = perTenantCap();
-  // Make sure the row exists. rehydrateFromDb is idempotent — INSERTs a
-  // zero row if missing, otherwise no-op — and primes the in-memory
-  // cache for fast reads.
+  // getState primes the in-memory cache; ensureRow guarantees the
+  // SQLite row is present for the atomic UPDATE below to match. Both
+  // are needed: in-memory path works without ensureRow but multi-
+  // instance / fresh-DB paths fail without it.
   const cached = getState(slug);
+  ensureRow(slug, today);
   try {
     const db = getDb();
     const result = db
@@ -220,6 +248,7 @@ export function reserveForSlug(
 export function recordForSlug(slug: string, reservationMaxUsd: number, actualUsd: number): void {
   const today = utcDateKey();
   const cached = getState(slug);
+  ensureRow(slug, today);
   try {
     const db = getDb();
     db.prepare(
@@ -242,6 +271,7 @@ export function recordForSlug(slug: string, reservationMaxUsd: number, actualUsd
 export function releaseForSlug(slug: string, reservationMaxUsd: number): void {
   const today = utcDateKey();
   const cached = getState(slug);
+  ensureRow(slug, today);
   try {
     const db = getDb();
     db.prepare(
