@@ -1920,19 +1920,33 @@ async function adminMagicLogin(request: Request, env: Env): Promise<Response> {
   const slug = typeof body.slug === "string" ? body.slug.trim() : "";
   if (!slug) return jsonErr(400, "slug is required");
 
-  // Resolve the business → linked user. We pick the FIRST user_business_access
-  // row for the business; if a tenant has multiple users (shared account),
-  // the magic link logs in as whichever the access row found first. That's
-  // fine for a verification tool — the data they see is identical.
+  // Resolve the business → its TENANT user (role='client'). Admins also
+  // get user_business_access rows for tenants they create, so a naïve
+  // LIMIT 1 query can return the admin's user_id, which would defeat
+  // the whole purpose of magic-login (you'd land back in your admin
+  // dashboard). Filter for role='client' explicitly so we only match
+  // the actual tenant account.
   const business = await getBusinessBySlug(env.DB, slug);
   if (!business) return jsonErr(404, `No business with slug '${slug}'`);
   const accessRow = await env.DB
     .prepare(
-      `SELECT user_id FROM user_business_access WHERE business_id = ? LIMIT 1`,
+      `SELECT u.id AS user_id, u.email AS email
+         FROM user_business_access uba
+         JOIN users u ON u.id = uba.user_id
+        WHERE uba.business_id = ?
+          AND u.role = 'client'
+        ORDER BY u.created_at ASC
+        LIMIT 1`,
     )
     .bind(business.id)
-    .first<{ user_id: string }>();
-  if (!accessRow) return jsonErr(404, `No user linked to slug '${slug}'`);
+    .first<{ user_id: string; email: string }>();
+  if (!accessRow) {
+    return jsonErr(
+      404,
+      `No client-role user linked to slug '${slug}'. ` +
+      `Either no tenant account has been created yet, or only admin users are linked.`,
+    );
+  }
 
   const tokenStr = await signMagicToken(
     { user_id: accessRow.user_id, ts: Math.floor(Date.now() / 1000) },
@@ -1947,7 +1961,13 @@ async function adminMagicLogin(request: Request, env: Env): Promise<Response> {
   return jsonOk({
     magic_url:        magicUrl,
     expires_in_sec:   5 * 60,
-    impersonating:    { slug, business_name: business.business_name, user_id: accessRow.user_id },
+    impersonating:    {
+      slug,
+      business_name: business.business_name,
+      user_id:       accessRow.user_id,
+      email:         accessRow.email,
+      role:          "client",  // confirmed in the SQL filter above
+    },
     note:             "Open this URL in an incognito/private window so it doesn't replace your admin session.",
   });
 }
