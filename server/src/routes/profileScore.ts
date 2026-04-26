@@ -406,6 +406,19 @@ profileScoreRouter.post(
         slug,
       );
 
+      // Hash the profile we ACTUALLY rendered against, not the one we
+      // read at line ~310 to gate the cache hit. runExperiment does its
+      // own loadProfileFromDb internally; if the user updated the
+      // profile between our pre-call read and runExperiment's load,
+      // those two rows differ. Persisting the pre-call hash would
+      // mark the cache stale on the very next read and force a needless
+      // re-run. Falling back to currentHash if the runner didn't return
+      // a row keeps behavior backward-compatible. (Bug 4.)
+      const renderedProfile = result.loadedProfiles[0];
+      const persistedHash = renderedProfile
+        ? computeProfileHash(renderedProfile)
+        : currentHash;
+
       const blob: CachedScore = {
         score:            Number(avgScore.toFixed(2)),
         score_max:        10,
@@ -414,7 +427,7 @@ profileScoreRouter.post(
         improvements,
         sample_reasoning: result.trials[0]?.reasoning ?? "",
         run_at:           new Date().toISOString(),
-        profile_hash:     currentHash,
+        profile_hash:     persistedHash,
       };
 
       writeCache(slug, blob, history);

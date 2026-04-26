@@ -386,6 +386,15 @@ export async function runExperiment(opts: {
   trials: ReturnType<typeof summarize> extends Promise<infer _T> ? never : import("./types.js").JudgeTrial[];
   summary: ReturnType<typeof summarize>;
   report_md: string;
+  /**
+   * The actual profile rows we rendered against, after loadProfileFromDb
+   * + any profilePatches were applied. Callers (e.g. profileScore route)
+   * MUST hash these — not the row they read pre-call — when persisting
+   * `profile_hash`. Otherwise a user update mid-run produces a hash that
+   * doesn't match what we scored, marking the cache stale on every
+   * subsequent read. Order-aligned with `cfg.profiles`.
+   */
+  loadedProfiles: BusinessRow[];
 }> {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error("ANTHROPIC_API_KEY not set");
@@ -443,6 +452,9 @@ export async function runExperiment(opts: {
     trials,
     summary,
     report_md,
+    // Snapshot the post-merge profiles so callers can hash exactly what
+    // we rendered. See the `loadedProfiles` jsdoc above for why.
+    loadedProfiles: cfg.profiles,
   };
 }
 
