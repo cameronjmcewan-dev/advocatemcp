@@ -45,9 +45,9 @@ import type {
  * Omit<> as they appear; the redactSafeProfile() helper below mirrors
  * this list at the value level.
  */
-type SafeBusinessRow = Omit<BusinessRow, "api_key" | "lead_routing_json">;
+export type SafeBusinessRow = Omit<BusinessRow, "api_key" | "lead_routing_json">;
 
-function redactSafeProfile(p: BusinessRow): SafeBusinessRow {
+export function redactSafeProfile(p: BusinessRow): SafeBusinessRow {
   // Explicit destructure rather than `delete` so the typecheck enforces
   // the omit list against future BusinessRow additions.
   const { api_key: _apiKey, lead_routing_json: _leadRouting, ...safe } = p;
