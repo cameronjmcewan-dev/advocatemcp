@@ -15,7 +15,7 @@ import {
 } from "../portalDb";
 import type { Business, User, SessionWithUser } from "../portalDb";
 import { buildDashboard, type AnalyticsData } from "./dashboard";
-import { handleActivateDomain, handleDomainStatus, handleDomainRaw, handleSetFallbackOrigin, handleEnsureWorkerRoute, cfRequest } from "./domains";
+import { handleActivateDomain, handleDomainStatus, handleDomainRaw, handleSetFallbackOrigin, handleEnsureWorkerRoute, handleBackfillVariants, cfRequest } from "./domains";
 import {
   handleOnboard, handleOnboardStatus, handleOnboardList,
   handleVerifyDomain, handleVerifyAll, handleDisableTenant,
@@ -96,6 +96,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/admin/domains/activate"              && method === "POST") return handleActivateDomain(request, env);
   if (pathname === "/admin/domains/saas-fallback-origin"  && method === "POST") return handleSetFallbackOrigin(request, env);
   if (pathname === "/admin/domains/ensure-worker-route"   && method === "POST") return handleEnsureWorkerRoute(request, env);
+  if (pathname === "/admin/domains/backfill-variants"     && method === "POST") return handleBackfillVariants(request, env);
   if (pathname === "/admin/onboard/retry-railway"         && method === "POST") return handleRetryRailwayRegistration(request, env);
   if (pathname === "/status"                   && method === "GET")  return statusPage(request, env);
   if (pathname === "/onboard"                  && method === "GET")  return handleOnboardPage(request, env);

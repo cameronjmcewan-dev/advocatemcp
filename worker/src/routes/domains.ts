@@ -9,8 +9,10 @@ import {
   getTenant,
   putTenant,
   extractCfData,
+  createCfHostnameForTenant,
   type TenantRecord,
 } from "./onboard";
+import { deriveHostnameVariants } from "../lib/hostnameVariants.js";
 import { discoverOriginUrl } from "../lib/origin-discovery.js";
 import { desiredHostnameSpec } from "../lib/hostnameSpec.js";
 import { reconcileHostname, type ReconcileResult } from "../lib/reconcileHostname.js";
@@ -772,6 +774,147 @@ export async function handleEnsureWorkerRoute(
     created: result.created,
     route_id: result.route_id,
     note: result.note,
+  });
+}
+
+// ── POST /admin/domains/backfill-variants ─────────────────────────────────
+//
+// Backfill apex/www variants for tenants that pre-date the Apr 26 2026
+// fan-out change. For each variant in `deriveHostnameVariants(domain)`:
+//
+//   1. Idempotently register the CF custom_hostname (createCfHostnameForTenant
+//      handles the "already exists" case via 1406/1407 reuse).
+//   2. Idempotently create the Worker Route (ensureWorkerRouteForHostname
+//      reuses if a matching route already exists).
+//   3. Write KV BUSINESS_MAP so the worker's hostname → slug lookup hits.
+//
+// Body: { domain?: string; slug?: string; all?: boolean }
+//   - domain  : backfill one tenant by domain
+//   - slug    : backfill one tenant by slug (looked up via D1)
+//   - all=true: iterate every tenant in TENANT_DATA — useful one-shot.
+//               Caller should expect a longer response time and the
+//               result body lists per-tenant outcomes.
+//
+// Idempotent: safe to re-run. Skips variants that already have CF
+// hostnames + Worker Routes + KV entries (the registration + route
+// helpers already check for "exists" cases).
+
+export async function handleBackfillVariants(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  if (!requireAdminSecret(request, env)) {
+    return jsonErr(401, "Unauthorized — X-Admin-Secret header required");
+  }
+
+  let body: { domain?: string; slug?: string; all?: boolean };
+  try {
+    body = await request.json<{ domain?: string; slug?: string; all?: boolean }>();
+  } catch {
+    return jsonErr(400, "Invalid JSON body");
+  }
+
+  if (!body.domain && !body.slug && body.all !== true) {
+    return jsonErr(400, "Provide one of: domain, slug, or all=true");
+  }
+
+  // Resolve which tenants to operate on.
+  const tenants: TenantRecord[] = [];
+  if (body.domain) {
+    const t = await getTenant(env, body.domain.trim().toLowerCase());
+    if (!t) return jsonErr(404, `No tenant for domain: ${body.domain}`);
+    tenants.push(t);
+  } else if (body.slug) {
+    const biz = await env.DB
+      .prepare("SELECT slug, domain FROM businesses WHERE slug = ? LIMIT 1")
+      .bind(body.slug)
+      .first<{ slug: string; domain: string | null }>();
+    if (!biz?.domain) return jsonErr(404, `No tenant for slug: ${body.slug}`);
+    const t = await getTenant(env, biz.domain.toLowerCase());
+    if (!t) return jsonErr(404, `Tenant record missing for ${biz.domain}`);
+    tenants.push(t);
+  } else if (body.all === true) {
+    let cursor: string | undefined = undefined;
+    while (true) {
+      const list: KVNamespaceListResult<unknown> = await env.TENANT_DATA.list({
+        limit: 1000,
+        cursor,
+      });
+      for (const key of list.keys) {
+        const t = await getTenant(env, key.name);
+        if (t) tenants.push(t);
+      }
+      if (list.list_complete) break;
+      cursor = list.cursor;
+    }
+  }
+
+  const outcomes: Array<{
+    domain: string;
+    slug: string;
+    variants: string[];
+    cf_results: Array<{ hostname: string; outcome: string; reason?: string }>;
+    routes: Array<{ hostname: string; ok: boolean; created?: boolean; reason?: string }>;
+    kv_writes: string[];
+  }> = [];
+
+  for (const tenant of tenants) {
+    const variants = deriveHostnameVariants(tenant.domain);
+    const cfRes = await createCfHostnameForTenant(env, tenant);
+    const routes: Array<{ hostname: string; ok: boolean; created?: boolean; reason?: string }> = [];
+    const kvWrites: string[] = [];
+
+    for (const v of variants) {
+      try {
+        const r = await ensureWorkerRouteForHostname(env, v);
+        routes.push({
+          hostname: v,
+          ok: r.ok,
+          created: r.created,
+          reason: r.ok ? r.note : r.error,
+        });
+      } catch (err) {
+        routes.push({
+          hostname: v,
+          ok: false,
+          reason: `threw: ${String(err)}`,
+        });
+      }
+      try {
+        await env.BUSINESS_MAP.put(v, tenant.slug);
+        kvWrites.push(v);
+      } catch (err) {
+        // KV write failures are rare; log and continue.
+        console.error(JSON.stringify({
+          backfill: true,
+          event: "kv_write_failed",
+          variant: v,
+          slug: tenant.slug,
+          error: String(err),
+        }));
+      }
+    }
+
+    await putTenant(env, tenant);
+
+    outcomes.push({
+      domain: tenant.domain,
+      slug: tenant.slug,
+      variants,
+      cf_results: cfRes.variants.map((r) => ({
+        hostname: r.hostname,
+        outcome: r.outcome,
+        ...(r.errorReason ? { reason: r.errorReason } : {}),
+      })),
+      routes,
+      kv_writes: kvWrites,
+    });
+  }
+
+  return jsonOk({
+    ok: true,
+    tenants_processed: tenants.length,
+    outcomes,
   });
 }
 

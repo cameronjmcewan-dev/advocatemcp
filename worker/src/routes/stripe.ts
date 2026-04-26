@@ -24,6 +24,7 @@ import {
   requireAdmin,
 } from "./onboard";
 import { ensureWorkerRouteForHostname } from "./domains";
+import { deriveHostnameVariants } from "../lib/hostnameVariants";
 import { signActivationToken } from "../lib/activation-token";
 import { validateOnboardingPayload } from "../lib/validateOnboarding";
 import { sendActivationEmail } from "../lib/resend";
@@ -266,11 +267,15 @@ export async function handleBasicOnboard(
   if (plan === "free") {
     transitionStatus(tenant, "free_pending_dns", "Free plan selected — skipping payment");
 
-    // Create CF hostname immediately
+    // Create CF hostname for every variant (apex + www, or just the
+    // typed input for custom subdomains / hosted-tenant slugs).
     await createCfHostnameForTenant(env, tenant);
 
-    // Write KV
-    await env.BUSINESS_MAP.put(domain, slug);
+    // Write KV — one entry per variant so the worker's hostname-based
+    // slug lookup hits regardless of which variant a bot crawled.
+    for (const variant of deriveHostnameVariants(domain)) {
+      await env.BUSINESS_MAP.put(variant, slug);
+    }
     await putTenant(env, tenant);
 
     // Register in D1
@@ -1019,43 +1024,59 @@ export async function handleStripeWebhook(
 
   // Workers Route creation is the final routing primitive — without this,
   // CF SaaS has a hostname configured but no Worker to dispatch to (the
-  // 522 we saw in the WCC smoke test). Create it here for every paying
-  // tenant, idempotent on the CF side. Same non-fatal semantics as the
-  // hostname step above.
-  try {
-    const routeRes = await ensureWorkerRouteForHostname(env, domain);
-    if (!routeRes.ok) {
+  // 522 we saw in the WCC smoke test). Create one route AND one KV
+  // entry per hostname variant so a bot crawling any variant gets the
+  // Advocate intercept. Pre-Apr-26-2026 we registered just the primary
+  // hostname here, which left the other variant (apex if signup was on
+  // www, or vice versa) hitting the customer's underlying origin
+  // directly — silently bypassing Advocate for ~half of bot traffic.
+  // Same non-fatal semantics as the hostname step above: failures are
+  // logged but don't block tenant activation. (Variants list is the
+  // same one createCfHostnameForTenant fanned out over.)
+  const routeVariants = deriveHostnameVariants(domain);
+  for (const variant of routeVariants) {
+    try {
+      const routeRes = await ensureWorkerRouteForHostname(env, variant);
+      if (!routeRes.ok) {
+        console.log(JSON.stringify({
+          onboarding: true,
+          event: "stripe_webhook_worker_route_failed",
+          domain,
+          variant,
+          slug: tenant.slug,
+          error: routeRes.error,
+          details: routeRes.details,
+        }));
+      } else {
+        console.log(JSON.stringify({
+          onboarding: true,
+          event: "stripe_webhook_worker_route_ok",
+          domain,
+          variant,
+          slug: tenant.slug,
+          created: routeRes.created,
+          route_id: routeRes.route_id,
+          note: routeRes.note,
+        }));
+      }
+    } catch (err) {
       console.log(JSON.stringify({
         onboarding: true,
-        event: "stripe_webhook_worker_route_failed",
+        event: "stripe_webhook_worker_route_threw",
         domain,
+        variant,
         slug: tenant.slug,
-        error: routeRes.error,
-        details: routeRes.details,
-      }));
-    } else {
-      console.log(JSON.stringify({
-        onboarding: true,
-        event: "stripe_webhook_worker_route_ok",
-        domain,
-        slug: tenant.slug,
-        created: routeRes.created,
-        route_id: routeRes.route_id,
-        note: routeRes.note,
+        error: String(err),
       }));
     }
-  } catch (err) {
-    console.log(JSON.stringify({
-      onboarding: true,
-      event: "stripe_webhook_worker_route_threw",
-      domain,
-      slug: tenant.slug,
-      error: String(err),
-    }));
   }
 
-  // Write KV — routing slug for BUSINESS_MAP
-  await env.BUSINESS_MAP.put(domain, tenant.slug);
+  // Write KV — routing slug for BUSINESS_MAP. One KV entry per variant
+  // so the worker's hostname-based slug lookup hits regardless of which
+  // variant the bot crawled.
+  for (const variant of routeVariants) {
+    await env.BUSINESS_MAP.put(variant, tenant.slug);
+  }
   await putTenant(env, tenant);
 
   // Update D1 with Stripe IDs

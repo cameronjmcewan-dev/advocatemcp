@@ -18,6 +18,43 @@ message; global cap stays untouched and other tenants unaffected. See
 `server/src/middleware/tenantBudget.ts`. Ops view via `GET /admin/budget`
 (now returns `top_spenders_today`) and `GET /admin/budget/tenant/:slug`.
 
+## Operator action required
+
+### Backfill apex/www variants for existing tenants
+**Added 2026-04-26.** Before today every tenant onboarded with one
+hostname (whichever they typed in — usually www). AI bots crawling the
+OTHER variant (apex if they registered www, or vice versa) hit the
+customer's underlying origin directly with no Advocate intercept,
+silently leaking ~half of bot traffic for every tenant.
+
+Today's commit makes new signups register both apex and www
+automatically. Existing tenants need a one-shot backfill:
+
+```bash
+# WCC specifically:
+curl -X POST https://customers.advocatemcp.com/admin/domains/backfill-variants \
+  -H "X-Admin-Secret: <ADMIN_SECRET>" \
+  -H "Content-Type: application/json" \
+  -d '{"slug":"workman-copy-co"}'
+
+# All existing tenants in one shot:
+curl -X POST https://customers.advocatemcp.com/admin/domains/backfill-variants \
+  -H "X-Admin-Secret: <ADMIN_SECRET>" \
+  -H "Content-Type: application/json" \
+  -d '{"all":true}'
+```
+
+The endpoint is idempotent — the underlying CF custom_hostname,
+Worker Routes, and KV writes all have "already exists" reuse paths.
+Returns a per-tenant outcome list so you can see which variants got
+created vs. reused.
+
+After the backfill, the customer still needs to point their apex's
+DNS at us. For most providers that's an ANAME/ALIAS to
+`customers.advocatemcp.com`; for providers without ANAME support
+they'll need to switch their apex to Cloudflare nameservers.
+The activate page now emits per-variant DNS instructions.
+
 ## Real bugs / known gaps
 
 ### Profile-score partial-failure visibility
