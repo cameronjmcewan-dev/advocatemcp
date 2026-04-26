@@ -1,332 +1,355 @@
-<!DOCTYPE html>
-<html lang="en" data-theme="dark" style="background:#050202">
+<!doctype html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="color-scheme" content="dark light" />
-  <title>Free AI Visibility Audit, Advocate</title>
-  <meta name="description" content="See which AI queries answer your category, and whether you're cited. Free 30-second report, no signup." />
-  <meta property="og:title" content="Free AI Visibility Audit, Advocate" />
-  <meta property="og:description" content="See which AI queries answer your category, and whether you're cited. Free 30-second report, no signup." />
-  <meta property="og:image" content="https://advocatemcp.com/og-image.png" />
-  <link rel="preconnect" href="https://api.fontshare.com" />
-  <link rel="stylesheet" href="/css/tokens.css" />
-  <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/redesign.css" />
-  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>See what AI thinks of your site, Advocate</title>
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#fbf9f5" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#141210" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="Free 30-second audit. See your citation-readiness score on the same Claude-judge rubric we publish, plus whether AI assistants cite you for your category. No signup.">
+  <link rel="canonical" href="https://advocatemcp.com/audit.html">
+  <meta property="og:title" content="See what AI thinks of your site, Advocate">
+  <meta property="og:description" content="Free 30-second audit. Citation-readiness score plus AI category visibility. No signup.">
+  <meta property="og:image" content="https://advocatemcp.com/og-image.png">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://advocatemcp.com/audit.html">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="https://advocatemcp.com/og-image.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://api.fontshare.com">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/styles.css">
+  <link rel="stylesheet" href="/assets/dashboard.css">
   <style>
-    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    html{font-size:16px;-webkit-font-smoothing:antialiased;color-scheme:dark light;background:var(--bg)}
-    body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:var(--tx-base);line-height:1.6;min-height:100vh}
-    a{color:inherit;text-decoration:none}
-    button{font-family:inherit;cursor:pointer;border:none;background:none}
-    img,svg{display:block}
-
-    ::-webkit-scrollbar{width:5px;height:5px}
-    ::-webkit-scrollbar-track{background:transparent}
-    ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
-
-    /* ── Buttons (mirrors landing) ────────────────────── */
-    .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 20px;font-size:var(--tx-sm);font-weight:500;border-radius:var(--r-md);border:1px solid transparent;transition:background .15s,color .15s,border-color .15s;white-space:nowrap;line-height:1}
-    .btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
-    .btn-primary:hover{background:var(--accent-bright);border-color:var(--accent-bright)}
-    .btn-ghost{background:transparent;color:var(--text);border-color:var(--border)}
-    .btn-ghost:hover{background:var(--surface-2)}
-    [data-theme="light"] .btn-ghost{color:var(--text)}
-    .btn-lg{padding:14px 28px;font-size:var(--tx-base)}
-
-    /* ── Simple nav (no sticky, just back-to-home) ───── */
-    .audit-nav{
-      display:flex;align-items:center;justify-content:space-between;
-      padding:20px 40px;border-bottom:1px solid rgba(255,255,255,.06);
+    /* Audit-page-specific styles. Scoped tight so they don't leak into
+       the rest of the site. Layout follows the methodology page pattern:
+       narrow centered column, single H1, eyebrow, sub, then the form
+       card. The result panels use .card-dash from dashboard.css. */
+    .audit-wrap { max-width: 880px; margin: 0 auto; padding: 64px 24px 24px; }
+    .audit-hero { text-align: center; margin-bottom: 40px; max-width: 760px; margin-left: auto; margin-right: auto; }
+    .audit-hero .eyebrow {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border-radius: 999px;
+      background: var(--paper-2); color: var(--maroon);
+      font-size: 11px; font-weight: 600; letter-spacing: .08em;
+      text-transform: uppercase; border: 1px solid var(--line);
+      margin-bottom: 18px;
     }
-    [data-theme="light"] .audit-nav{border-bottom-color:var(--border)}
-    .audit-nav .logo{display:flex;align-items:center;gap:10px;font-size:var(--tx-sm);font-weight:600;letter-spacing:-.01em;color:var(--text)}
-    .audit-nav-actions{display:flex;align-items:center;gap:10px}
-    .icon-btn{display:flex;align-items:center;justify-content:center;width:34px;height:34px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-sm);color:var(--muted);transition:color .15s}
-    .icon-btn:hover{color:var(--text)}
-
-    /* ── Page container ──────────────────────────────── */
-    .audit-wrap{max-width:760px;margin:0 auto;padding:64px 24px 24px;position:relative}
-    .audit-hero{text-align:center;margin-bottom:48px;position:relative;isolation:isolate}
-    .audit-hero::before{
-      content:"";position:absolute;inset:-60px -100px;z-index:-1;pointer-events:none;
-      background:radial-gradient(ellipse 60% 70% at 50% 30%, var(--accent-glow-2) 0%, transparent 70%);
+    .audit-hero h1 {
+      font-family: var(--serif); font-weight: 400;
+      font-size: clamp(38px, 5vw, 56px); line-height: 1.05;
+      color: var(--ink); margin-bottom: 16px; letter-spacing: -0.01em;
     }
-    .audit-eyebrow{
-      display:inline-flex;align-items:center;gap:6px;padding:6px 14px;
-      border-radius:999px;background:var(--accent-dim);color:var(--accent-bright);
-      font-size:var(--tx-xs);font-weight:600;letter-spacing:.08em;text-transform:uppercase;
-      margin-bottom:20px;border:1px solid var(--border-accent);
+    .audit-hero h1 em { font-style: italic; color: var(--maroon); }
+    .audit-hero .sub {
+      font-size: 16px; color: var(--ink-2); line-height: 1.6;
+      max-width: 580px; margin: 0 auto;
     }
-    .audit-h1{
-      font-family:var(--font-serif);font-weight:400;
-      font-size:clamp(2.5rem,4.5vw,3.75rem);line-height:1.05;letter-spacing:-.02em;
-      color:var(--text);margin-bottom:16px;
+
+    /* Form card: paper background, line border, subtle shadow on hover.
+       Inputs match the rest of the site's form patterns. */
+    .audit-form-card {
+      background: var(--paper); border: 1px solid var(--line);
+      border-radius: 14px; padding: 28px 28px 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+      max-width: 640px; margin: 0 auto;
     }
-    .audit-h1 em{font-style:italic;color:var(--accent-bright)}
-    .audit-sub{font-size:var(--tx-md);color:var(--muted);max-width:520px;margin:0 auto;line-height:1.6}
-
-    /* ── Form card ──────────────────────────────────── */
-    .card{
-      background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);
-      padding:32px;margin-bottom:24px;
+    .audit-form-card .field { margin-bottom: 18px; }
+    .audit-form-card .field:last-of-type { margin-bottom: 0; }
+    .audit-form-card label {
+      display: block; font-size: 13px; font-weight: 500;
+      color: var(--ink); margin-bottom: 6px; letter-spacing: 0.01em;
     }
-    .field{margin-bottom:20px}
-    .field:last-child{margin-bottom:0}
-    label{display:block;font-size:var(--tx-sm);font-weight:600;margin-bottom:8px;color:var(--text)}
-    .hint{font-size:var(--tx-xs);color:var(--muted);margin-top:6px;line-height:1.5}
-    input[type="text"],input[type="url"]{
-      width:100%;padding:12px 14px;
-      background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md);
-      font-family:inherit;font-size:var(--tx-sm);color:var(--text);
-      transition:border-color .15s,box-shadow .15s;
+    .audit-form-card label .opt {
+      font-weight: 400; color: var(--muted); margin-left: 4px;
     }
-    input[type="text"]::placeholder,input[type="url"]::placeholder{color:var(--muted)}
-    input[type="text"]:focus,input[type="url"]:focus{
-      outline:none;border-color:var(--accent-bright);
-      box-shadow:0 0 0 3px var(--accent-ring);
+    .audit-form-card input[type="url"],
+    .audit-form-card input[type="text"],
+    .audit-form-card input[type="email"] {
+      width: 100%; padding: 12px 14px; font-size: 14.5px;
+      background: var(--paper-2); color: var(--ink);
+      border: 1px solid var(--line); border-radius: 8px;
+      transition: border-color .15s, background .15s;
+      font-family: inherit;
     }
-    .submit-btn{width:100%;padding:14px 24px;font-size:var(--tx-base);font-weight:500;margin-top:8px}
-    .submit-btn:disabled{background:var(--surface-2);border-color:var(--border);color:var(--muted);cursor:not-allowed}
-
-    /* ── Loading / error ────────────────────────────── */
-    #loading{display:none;text-align:center;padding:48px 24px;color:var(--muted)}
-    #loading.show{display:block}
-    .spinner{
-      display:inline-block;width:36px;height:36px;
-      border:3px solid var(--border);border-top-color:var(--accent-bright);
-      border-radius:50%;animation:spin .8s linear infinite;margin-bottom:16px;
+    .audit-form-card input:focus {
+      outline: 2px solid var(--maroon); outline-offset: 1px;
+      background: var(--paper); border-color: var(--maroon);
     }
-    @keyframes spin{to{transform:rotate(360deg)}}
-
-    #error{
-      display:none;padding:16px 20px;
-      background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.3);
-      border-radius:var(--r-md);color:#f85149;font-size:var(--tx-sm);margin-bottom:24px;
+    .audit-form-card .hint {
+      font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.4;
     }
-    #error.show{display:block}
-
-    /* ── Results ────────────────────────────────────── */
-    #results{display:none}
-    #results.show{display:block}
-
-    .score-card{text-align:center;padding:40px 32px}
-    .score-big{
-      font-family:var(--font-serif);font-weight:400;
-      font-size:clamp(4.5rem,9vw,6.5rem);line-height:1;letter-spacing:-.03em;
+    .audit-form-card .submit-row { margin-top: 24px; }
+    .audit-form-card .submit-btn {
+      width: 100%; padding: 14px 24px; font-size: 15px;
     }
-    .score-big.zero{color:#f85149}
-    .score-big.some{color:#d29922}
-    .score-big.all{color:#3fb950}
-    .score-label{font-size:var(--tx-md);color:var(--text);margin-top:12px}
-    .score-detail{font-size:var(--tx-xs);color:var(--muted);margin-top:20px;padding-top:20px;border-top:1px solid var(--border)}
-
-    .query-list{padding:0}
-    .query-list-head{padding:20px 32px;font-size:var(--tx-xs);color:var(--muted);letter-spacing:.08em;text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border)}
-    .query{padding:20px 32px;border-bottom:1px solid var(--border)}
-    .query:last-child{border-bottom:none}
-    .query-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:10px}
-    .query-text{font-family:var(--font-serif);font-style:italic;font-size:var(--tx-md);color:var(--text);flex:1}
-    .badge{display:inline-flex;align-items:center;padding:4px 12px;border-radius:999px;font-size:var(--tx-xs);font-weight:600;white-space:nowrap;letter-spacing:.04em;text-transform:uppercase}
-    .badge.win{background:rgba(63,185,80,.15);color:#3fb950;border:1px solid rgba(63,185,80,.3)}
-    .badge.loss{background:rgba(210,153,34,.12);color:#d29922;border:1px solid rgba(210,153,34,.3)}
-    .citations{font-size:var(--tx-xs);color:var(--muted);word-break:break-word;line-height:1.6}
-    .citations strong{color:var(--text);font-weight:500}
-
-    /* ── CTA card ──────────────────────────────────── */
-    .cta-card{
-      background:linear-gradient(135deg, var(--accent) 0%, var(--accent-bright) 100%);
-      color:#fff;padding:40px 32px;border-radius:var(--r-lg);text-align:center;margin-bottom:32px;
-      border:1px solid var(--accent-bright);
+    .audit-form-card .form-foot {
+      margin-top: 14px; font-size: 12px; color: var(--muted);
+      text-align: center; line-height: 1.5;
     }
-    .cta-card h3{font-family:var(--font-serif);font-weight:400;font-size:clamp(1.5rem,2.5vw,1.875rem);line-height:1.2;margin-bottom:12px}
-    .cta-card p{font-size:var(--tx-sm);opacity:.92;margin-bottom:24px;max-width:460px;margin-left:auto;margin-right:auto;line-height:1.6}
-    .cta-card .btn{background:#fff;color:var(--accent);border-color:#fff;padding:12px 24px;font-size:var(--tx-sm);font-weight:600;margin:4px}
-    .cta-card .btn:hover{background:rgba(255,255,255,.92)}
-    .cta-card .btn-secondary{background:rgba(255,255,255,.08);color:#fff;border-color:rgba(255,255,255,.3)}
-    .cta-card .btn-secondary:hover{background:rgba(255,255,255,.18)}
+    .audit-form-card .form-foot a { color: var(--maroon); }
 
-    /* ── Email capture (post-results) + Share section ──────────── */
-    .followup{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:24px 28px;margin-bottom:24px}
-    .followup h4{font-size:var(--tx-sm);font-weight:600;color:var(--text);margin-bottom:8px;letter-spacing:0}
-    .followup p{font-size:var(--tx-xs);color:var(--muted);margin-bottom:16px;line-height:1.6}
-    .followup-row{display:flex;gap:8px;flex-wrap:wrap}
-    .followup-row input{flex:1;min-width:180px;padding:11px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md);font-family:inherit;font-size:var(--tx-sm);color:var(--text)}
-    .followup-row input:focus{outline:none;border-color:var(--accent-bright);box-shadow:0 0 0 3px var(--accent-ring)}
-    .followup-row button{padding:11px 18px;font-size:var(--tx-sm)}
-    .followup-msg{margin-top:10px;font-size:var(--tx-xs);min-height:1em}
-    .followup-msg.ok{color:#3fb950}
-    .followup-msg.err{color:#f85149}
-
-    .share{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);padding:18px 24px;margin-bottom:24px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-    .share-label{font-size:var(--tx-xs);color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-weight:600}
-    .share-url{flex:1;min-width:200px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r-md);font-family:var(--font-mono);font-size:var(--tx-xs);color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .share-btn{padding:8px 14px;font-size:var(--tx-xs)}
-
-    /* ── Competitor leaderboard ────────────────────────────────── */
-    .leaderboard{padding:0;overflow:hidden;margin-bottom:20px}
-    .leaderboard-head{padding:18px 32px;font-size:var(--tx-xs);color:var(--muted);letter-spacing:.08em;text-transform:uppercase;font-weight:600;border-bottom:1px solid var(--border)}
-    .leaderboard-head em{font-style:italic;color:var(--accent-bright);font-family:var(--font-serif);text-transform:none;letter-spacing:0;font-size:var(--tx-sm)}
-    .lb-row{display:flex;align-items:center;gap:14px;padding:14px 32px;border-bottom:1px solid var(--border)}
-    .lb-row:last-child{border-bottom:none}
-    .lb-rank{font-family:var(--font-serif);font-style:italic;font-size:var(--tx-md);color:var(--muted);width:24px;flex-shrink:0;text-align:center}
-    .lb-rank.podium{color:var(--accent-bright)}
-    .lb-domain{flex:1;font-size:var(--tx-sm);color:var(--text);font-weight:500;word-break:break-all;min-width:0}
-    .lb-domain a{color:var(--text);text-decoration:none;border-bottom:1px solid transparent;transition:border-color .15s}
-    .lb-domain a:hover{border-bottom-color:var(--accent-bright)}
-    .lb-meter{flex:0 0 110px;height:6px;background:var(--bg);border:1px solid var(--border);border-radius:3px;overflow:hidden;position:relative}
-    .lb-meter-fill{position:absolute;inset:0;background:linear-gradient(90deg,var(--accent),var(--accent-bright));transform-origin:left;transition:transform .4s ease}
-    .lb-count{flex:0 0 auto;font-size:var(--tx-xs);color:var(--muted);font-variant-numeric:tabular-nums;min-width:80px;text-align:right}
-    .lb-count strong{color:var(--text);font-weight:600}
-    .lb-empty{padding:24px 32px;font-size:var(--tx-sm);color:var(--muted);font-style:italic;text-align:center}
-
-    footer{text-align:center;padding:32px 24px;font-size:var(--tx-xs);color:var(--muted);border-top:1px solid var(--border);margin-top:48px}
-    footer a{color:var(--muted);text-decoration:underline;text-underline-offset:2px}
-    footer a:hover{color:var(--text)}
-
-    @media (max-width: 640px){
-      .audit-nav{padding:16px 20px}
-      .audit-wrap{padding:40px 20px}
-      .card{padding:24px}
-      .query,.query-list-head{padding-left:24px;padding-right:24px}
-      .score-card{padding:32px 24px}
+    /* Loading: paper card, maroon spinner, small caption. */
+    #loading {
+      display: none; text-align: center; padding: 32px 24px;
+      max-width: 640px; margin: 24px auto 0;
+      background: var(--paper); border: 1px solid var(--line);
+      border-radius: 12px;
     }
+    #loading.show { display: block; }
+    .audit-spinner {
+      width: 28px; height: 28px; border-radius: 999px;
+      border: 3px solid var(--line); border-top-color: var(--maroon);
+      animation: audit-spin 1s linear infinite;
+      margin: 0 auto 14px;
+    }
+    @keyframes audit-spin { to { transform: rotate(360deg); } }
+    #loading #loading-text {
+      font-size: 14px; color: var(--ink-2); line-height: 1.55;
+    }
+
+    /* Error band */
+    #error {
+      display: none; padding: 14px 18px;
+      max-width: 640px; margin: 24px auto 0;
+      background: var(--paper-2); border: 1px solid var(--line);
+      border-left: 3px solid var(--maroon); border-radius: 8px;
+      font-size: 14px; color: var(--ink-2); line-height: 1.5;
+    }
+    #error.show { display: block; }
+    #error strong { color: var(--ink); }
+
+    /* Results stack */
+    #results { display: none; max-width: 880px; margin: 32px auto 0; }
+    #results.show { display: block; }
+    #results > .card-dash { margin-bottom: 18px; }
+    #results > .card-dash:last-child { margin-bottom: 0; }
+
+    /* Visibility score-card (ID-preserved from old design) */
+    .score-card { padding: 28px 32px; }
+    .score-big {
+      font-family: var(--serif); font-size: 56px; font-weight: 400;
+      line-height: 1; color: var(--ink); margin-bottom: 8px;
+      letter-spacing: -0.02em;
+    }
+    .score-big.zero { color: var(--maroon); }
+    .score-big.some { color: var(--ink); }
+    .score-big.all  { color: var(--green, #3fb950); }
+    .score-label { font-size: 14px; color: var(--ink-2); line-height: 1.5; margin-bottom: 4px; }
+    .score-detail { font-size: 12.5px; color: var(--muted); }
+
+    /* Leaderboard table */
+    .leaderboard { padding: 24px 28px; }
+    .leaderboard-head {
+      font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 14px; font-weight: 600;
+    }
+    .lb-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 0; border-bottom: 1px solid var(--line);
+      font-size: 14px;
+    }
+    .lb-row:last-child { border-bottom: none; }
+    .lb-rank {
+      font-family: var(--serif); font-size: 18px; color: var(--muted);
+      min-width: 24px;
+    }
+    .lb-domain { flex: 1; color: var(--ink); word-break: break-all; }
+    .lb-domain a { color: var(--ink); text-decoration: none; border-bottom: 1px solid transparent; }
+    .lb-domain a:hover { border-bottom-color: var(--maroon); }
+    .lb-count {
+      font-variant-numeric: tabular-nums; color: var(--ink-2);
+      font-size: 13px;
+    }
+
+    /* Query list */
+    .query-list { padding: 0; overflow: hidden; }
+    .query-list-head {
+      padding: 18px 28px 14px;
+      font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+      color: var(--muted); font-weight: 600;
+      border-bottom: 1px solid var(--line);
+    }
+    .query {
+      padding: 16px 28px; border-bottom: 1px solid var(--line);
+    }
+    .query:last-child { border-bottom: none; }
+    .query-head {
+      display: flex; align-items: flex-start; gap: 12px;
+      justify-content: space-between; margin-bottom: 8px;
+    }
+    .query-text {
+      font-size: 14px; color: var(--ink); font-style: italic;
+      line-height: 1.5; flex: 1;
+    }
+    .badge {
+      flex-shrink: 0; padding: 3px 10px; border-radius: 999px;
+      font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase;
+      font-weight: 600;
+    }
+    .badge.win {
+      background: rgba(63,185,86,0.12); color: var(--green, #3fb950);
+      border: 1px solid rgba(63,185,86,0.25);
+    }
+    .badge.loss {
+      background: var(--paper-2); color: var(--muted);
+      border: 1px solid var(--line);
+    }
+    .citations { font-size: 12.5px; color: var(--ink-2); line-height: 1.55; }
+    .citations strong { color: var(--ink); font-weight: 500; }
+
+    /* CTA card at bottom */
+    .cta-card {
+      padding: 32px; text-align: center;
+      background: var(--paper-2); border: 1px solid var(--line);
+      border-radius: 14px;
+    }
+    .cta-card h3 {
+      font-family: var(--serif); font-weight: 400;
+      font-size: 26px; color: var(--ink); margin-bottom: 10px;
+      line-height: 1.2;
+    }
+    .cta-card p {
+      font-size: 14.5px; color: var(--ink-2); line-height: 1.55;
+      max-width: 560px; margin: 0 auto 18px;
+    }
+
+    /* Share + monthly-followup row, kept but lightly restyled */
+    .share {
+      padding: 20px 28px; display: flex; align-items: center; gap: 12px;
+      flex-wrap: wrap;
+    }
+    .share-label {
+      font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+      color: var(--muted); font-weight: 600;
+    }
+    .share-url {
+      flex: 1; min-width: 240px; padding: 9px 12px;
+      font-size: 13px; background: var(--paper-2);
+      border: 1px solid var(--line); border-radius: 8px;
+      color: var(--ink-2); font-family: var(--mono, ui-monospace, monospace);
+    }
+    .followup { padding: 22px 28px; }
+    .followup-h {
+      font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+      color: var(--muted); font-weight: 600; margin-bottom: 8px;
+    }
+    .followup p {
+      font-size: 13.5px; color: var(--ink-2); line-height: 1.55;
+      margin-bottom: 14px;
+    }
+    .followup-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .followup-row input[type="email"] {
+      flex: 1; min-width: 240px; padding: 10px 12px; font-size: 14px;
+      background: var(--paper-2); border: 1px solid var(--line);
+      border-radius: 8px; color: var(--ink);
+    }
+    .followup-msg { margin-top: 10px; font-size: 13px; }
+    .followup-msg.ok  { color: var(--green, #3fb950); }
+    .followup-msg.err { color: var(--maroon); }
   </style>
 </head>
 <body>
+<script src="/assets/shared.js"></script>
+<div id="nav-mount"></div>
 
-<!-- Minimal nav: logo + theme toggle + back to marketing -->
-<nav class="audit-nav">
-  <a href="/" class="logo">
-    <img src="/icon-192.png" alt="Advocate" width="26" height="26" style="border-radius:5px" />
-    Advocate
-  </a>
-  <div class="audit-nav-actions">
-    <button class="icon-btn" onclick="toggleTheme()" aria-label="Toggle theme">
-      <i data-lucide="sun" id="audit-sun"></i>
-      <i data-lucide="moon" id="audit-moon" style="display:none"></i>
-    </button>
-    <a href="/onboarding.html" class="btn btn-primary btn-sm">Get Started →</a>
-  </div>
-</nav>
-
-<div class="audit-wrap">
-  <div class="audit-hero">
-    <div class="audit-eyebrow">
-      <i data-lucide="zap" style="width:10px;height:10px"></i>
-      Free · 30 seconds
-    </div>
-    <h1 class="audit-h1">See what AI <em>thinks of your site.</em></h1>
-    <p class="audit-sub">One report, two signals. We score how citation-ready your homepage is on the same rubric we publish, and check whether AI assistants cite you for your category. No signup, ~30 seconds.</p>
-  </div>
-
-  <form id="audit-form" class="card">
-    <div class="field">
-      <label for="domain">Your website</label>
-      <input type="url" id="domain" name="domain" placeholder="https://yourbusiness.com" required />
-    </div>
-    <div class="field">
-      <label for="category">Your category</label>
-      <input type="text" id="category" name="category" placeholder="plumber, email marketing agency, law firm..." required maxlength="80" />
-      <div class="hint">How a prospect would describe you. Keep it short and natural.</div>
-    </div>
-    <div class="field">
-      <label for="location">Your market <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
-      <input type="text" id="location" name="location" placeholder="Austin, TX" maxlength="120" />
-      <div class="hint">Skip for global / online businesses. Helpful for local services.</div>
-    </div>
-    <button type="submit" id="submit-btn" class="btn btn-primary submit-btn">See what AI thinks of my site</button>
-  </form>
-
-  <div id="loading">
-    <div class="spinner"></div>
-    <div id="loading-text">Scoring your homepage and asking AI about your category… ~30 seconds.</div>
-  </div>
-
-  <div id="error"></div>
-
-  <div id="results">
-    <div class="card score-card">
-      <div id="score-big" class="score-big"></div>
-      <div class="score-label" id="score-label"></div>
-      <div class="score-detail" id="score-detail"></div>
+<main>
+  <div class="audit-wrap">
+    <div class="audit-hero">
+      <span class="eyebrow">Free, 30 seconds</span>
+      <h1>See what AI <em>thinks of your site.</em></h1>
+      <p class="sub">
+        One report, two signals. We score how citation-ready your homepage is on the same Claude-judge rubric we publish, and check whether AI assistants cite you for your category. No signup.
+      </p>
     </div>
 
-    <div class="card leaderboard" id="leaderboard-card">
-      <div class="leaderboard-head" id="leaderboard-head">Who's winning your category</div>
-      <div id="leaderboard-body"></div>
+    <form id="audit-form" class="audit-form-card">
+      <div class="field">
+        <label for="domain">Your website</label>
+        <input type="url" id="domain" name="domain" placeholder="https://yourbusiness.com" required />
+      </div>
+      <div class="field">
+        <label for="category">Your category</label>
+        <input type="text" id="category" name="category" placeholder="plumber, email marketing agency, law firm..." required maxlength="80" />
+        <div class="hint">How a prospect would describe you. Keep it short and natural.</div>
+      </div>
+      <div class="field">
+        <label for="location">Your market <span class="opt">(optional)</span></label>
+        <input type="text" id="location" name="location" placeholder="Austin, TX" maxlength="120" />
+        <div class="hint">Skip for global / online businesses. Helpful for local services.</div>
+      </div>
+      <div class="submit-row">
+        <button type="submit" id="submit-btn" class="btn btn-primary submit-btn">See what AI thinks of my site</button>
+        <div class="form-foot">
+          Methodology and judge prompt published on <a href="/methodology.html">methodology.html</a>. Free, rate-limited per IP.
+        </div>
+      </div>
+    </form>
+
+    <div id="loading">
+      <div class="audit-spinner"></div>
+      <div id="loading-text">Scoring your homepage and asking AI about your category, ~30 seconds.</div>
     </div>
 
-    <div class="card query-list" style="padding:0;overflow:hidden">
-      <div class="query-list-head">What AI answered</div>
-      <div id="queries"></div>
-    </div>
+    <div id="error"></div>
 
-    <div class="cta-card">
-      <h3 id="cta-title">Make AI cite you accurately</h3>
-      <p id="cta-body">Advocate gives every AI crawler a structured, citation-ready answer about your business, so next time someone asks, they get your real pitch instead of scraping your HTML.</p>
-      <a class="btn" href="/onboarding" id="cta-link">Claim your agent →</a>
-    </div>
+    <div id="results">
+      <div class="card-dash score-card">
+        <div id="score-big" class="score-big"></div>
+        <div class="score-label" id="score-label"></div>
+        <div class="score-detail" id="score-detail"></div>
+      </div>
 
-    <div class="share" id="share-row">
-      <span class="share-label">Share this report</span>
-      <input type="text" id="share-url" class="share-url" readonly />
-      <button type="button" class="btn btn-ghost share-btn" id="share-copy">Copy link</button>
-    </div>
+      <div class="card-dash leaderboard" id="leaderboard-card">
+        <div class="leaderboard-head" id="leaderboard-head">Who's winning your category</div>
+        <div id="leaderboard-body"></div>
+      </div>
 
-    <div class="followup" id="followup-card">
-      <h4>Get a free monthly re-audit</h4>
-      <p>We'll re-run this audit once a month and email you the result. See whether your AI visibility is improving, or whether competitors are pulling further ahead.</p>
-      <form class="followup-row" id="followup-form">
-        <input type="email" id="followup-email" placeholder="you@yourbusiness.com" required maxlength="254" />
-        <button type="submit" class="btn btn-primary" id="followup-submit">Email me monthly</button>
-      </form>
-      <div class="followup-msg" id="followup-msg"></div>
+      <div class="card-dash query-list">
+        <div class="query-list-head">What AI answered</div>
+        <div id="queries"></div>
+      </div>
+
+      <div class="cta-card">
+        <h3 id="cta-title">Make AI cite you accurately</h3>
+        <p id="cta-body">Advocate gives every AI crawler a structured, citation-ready answer about your business, so next time someone asks, they get your real pitch instead of scraping your HTML.</p>
+        <a class="btn btn-primary btn-lg" href="/onboarding" id="cta-link">Claim your agent &rarr;</a>
+      </div>
+
+      <div class="card-dash share" id="share-row">
+        <span class="share-label">Share this report</span>
+        <input type="text" id="share-url" class="share-url" readonly />
+        <button type="button" class="btn btn-ghost btn-sm" id="share-copy">Copy link</button>
+      </div>
+
+      <div class="card-dash followup" id="followup-card">
+        <div class="followup-h">Track this monthly</div>
+        <p>We'll re-run this audit every 30 days and email you what changed. One email, no marketing, easy unsubscribe.</p>
+        <form class="followup-row" id="followup-form">
+          <input type="email" id="followup-email" placeholder="you@yourbusiness.com" required maxlength="254" />
+          <button type="submit" class="btn btn-primary" id="followup-submit">Email me monthly</button>
+        </form>
+        <div class="followup-msg" id="followup-msg"></div>
+      </div>
     </div>
   </div>
+</main>
 
-  <footer>
-    Powered by <a href="/">Advocate</a> · AI citation polling · 24h cache
-  </footer>
-</div>
+<div id="footer-mount"></div>
 
+<script src="/js/audit.js"></script>
 <script>
-  // Theme toggle, mirrors the logic on index.html
-  function toggleTheme(){
-    var html = document.documentElement;
-    var current = html.getAttribute('data-theme');
-    var next = current === 'light' ? 'dark' : 'light';
-    html.setAttribute('data-theme', next);
-    try { localStorage.setItem('amcp_theme', next); } catch(e) {}
-    syncThemeIcons(next);
-  }
-  function syncThemeIcons(t){
-    var sun = document.getElementById('audit-sun');
-    var moon = document.getElementById('audit-moon');
-    if(!sun||!moon) return;
-    sun.style.display  = t === 'dark' ? 'block' : 'none';
-    moon.style.display = t === 'dark' ? 'none' : 'block';
-  }
-  (function initTheme(){
-    try {
-      var saved = localStorage.getItem('amcp_theme');
-      if (saved === 'light') {
-        document.documentElement.setAttribute('data-theme','light');
-      }
-    } catch(e) {}
-    syncThemeIcons(document.documentElement.getAttribute('data-theme') || 'dark');
-  })();
-
-  // Lucide icons after DOM paint
-  window.addEventListener('DOMContentLoaded', function(){
-    if (window.lucide && window.lucide.createIcons) window.lucide.createIcons();
+  AdvocateChrome.renderNav('nav-mount');
+  AdvocateChrome.renderFooter('footer-mount');
+  AdvocateChrome.renderTweaks({
+    defaults: /*EDITMODE-BEGIN*/{"theme":"light","density":"comfortable"}/*EDITMODE-END*/
   });
 </script>
-<script src="/js/audit.js"></script>
-
 </body>
 </html>
