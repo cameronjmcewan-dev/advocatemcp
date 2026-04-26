@@ -27,6 +27,7 @@
  */
 
 import type { Env } from "../types";
+import { withCors } from "../lib/cors";
 import {
   verifyActivationToken,
   type ActivationTokenError,
@@ -179,6 +180,9 @@ function specsForTenant(tenant: NonNullable<Awaited<ReturnType<typeof getTenant>
 // ── POST /api/dns-auto/cloudflare/validate ───────────────────────────────────
 
 export async function handleCloudflareValidate(request: Request, env: Env): Promise<Response> {
+  return withCors(await handleCloudflareValidateInner(request, env), request);
+}
+async function handleCloudflareValidateInner(request: Request, env: Env): Promise<Response> {
   const auth = await authenticate(request, env);
   if (auth instanceof Response) return auth;
 
@@ -200,6 +204,9 @@ export async function handleCloudflareValidate(request: Request, env: Env): Prom
 // ── POST /api/dns-auto/cloudflare/apply ──────────────────────────────────────
 
 export async function handleCloudflareApply(request: Request, env: Env): Promise<Response> {
+  return withCors(await handleCloudflareApplyInner(request, env), request);
+}
+async function handleCloudflareApplyInner(request: Request, env: Env): Promise<Response> {
   const auth = await authenticate(request, env);
   if (auth instanceof Response) return auth;
 
@@ -304,6 +311,9 @@ function godaddyRecordsForTenant(
 }
 
 export async function handleGoDaddyValidate(request: Request, env: Env): Promise<Response> {
+  return withCors(await handleGoDaddyValidateInner(request, env), request);
+}
+async function handleGoDaddyValidateInner(request: Request, env: Env): Promise<Response> {
   const auth = await authenticate(request, env);
   if (auth instanceof Response) return auth;
   const parsed = await parseGoDaddyBody(request);
@@ -319,6 +329,9 @@ export async function handleGoDaddyValidate(request: Request, env: Env): Promise
 }
 
 export async function handleGoDaddyApply(request: Request, env: Env): Promise<Response> {
+  return withCors(await handleGoDaddyApplyInner(request, env), request);
+}
+async function handleGoDaddyApplyInner(request: Request, env: Env): Promise<Response> {
   const auth = await authenticate(request, env);
   if (auth instanceof Response) return auth;
   const parsed = await parseGoDaddyBody(request);
@@ -426,6 +439,9 @@ function namecheapRecordsForTenant(
 }
 
 export async function handleNamecheapValidate(request: Request, env: Env): Promise<Response> {
+  return withCors(await handleNamecheapValidateInner(request, env), request);
+}
+async function handleNamecheapValidateInner(request: Request, env: Env): Promise<Response> {
   const auth = await authenticate(request, env);
   if (auth instanceof Response) return auth;
   const parsed = await parseNamecheapBody(request);
@@ -437,6 +453,9 @@ export async function handleNamecheapValidate(request: Request, env: Env): Promi
 }
 
 export async function handleNamecheapApply(request: Request, env: Env): Promise<Response> {
+  return withCors(await handleNamecheapApplyInner(request, env), request);
+}
+async function handleNamecheapApplyInner(request: Request, env: Env): Promise<Response> {
   const auth = await authenticate(request, env);
   if (auth instanceof Response) return auth;
   const parsed = await parseNamecheapBody(request);
@@ -535,6 +554,9 @@ function route53RecordsForTenant(
 }
 
 export async function handleRoute53Validate(request: Request, env: Env): Promise<Response> {
+  return withCors(await handleRoute53ValidateInner(request, env), request);
+}
+async function handleRoute53ValidateInner(request: Request, env: Env): Promise<Response> {
   const auth = await authenticate(request, env);
   if (auth instanceof Response) return auth;
   const parsed = await parseAwsBody(request);
@@ -550,6 +572,9 @@ export async function handleRoute53Validate(request: Request, env: Env): Promise
 }
 
 export async function handleRoute53Apply(request: Request, env: Env): Promise<Response> {
+  return withCors(await handleRoute53ApplyInner(request, env), request);
+}
+async function handleRoute53ApplyInner(request: Request, env: Env): Promise<Response> {
   const auth = await authenticate(request, env);
   if (auth instanceof Response) return auth;
   const parsed = await parseAwsBody(request);
@@ -631,6 +656,9 @@ function ionosRecordsForTenant(
 }
 
 export async function handleIonosValidate(request: Request, env: Env): Promise<Response> {
+  return withCors(await handleIonosValidateInner(request, env), request);
+}
+async function handleIonosValidateInner(request: Request, env: Env): Promise<Response> {
   const auth = await authenticate(request, env);
   if (auth instanceof Response) return auth;
   const parsed = await parseIonosBody(request);
@@ -642,6 +670,9 @@ export async function handleIonosValidate(request: Request, env: Env): Promise<R
 }
 
 export async function handleIonosApply(request: Request, env: Env): Promise<Response> {
+  return withCors(await handleIonosApplyInner(request, env), request);
+}
+async function handleIonosApplyInner(request: Request, env: Env): Promise<Response> {
   const auth = await authenticate(request, env);
   if (auth instanceof Response) return auth;
   const parsed = await parseIonosBody(request);

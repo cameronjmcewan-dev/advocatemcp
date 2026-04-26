@@ -30,9 +30,13 @@
   var allActive  = false;
 
   function setState(name) {
+    // Use 'block' (not '') because activate.html's .state-panel CSS
+    // rule sets `display: none` — clearing the inline style would let
+    // the CSS rule re-apply and the panel would stay hidden. Setting
+    // an explicit 'block' wins over the class rule.
     ['no-token', 'enter', 'loading', 'success', 'error'].forEach(function (s) {
       var el = document.getElementById('state-' + s);
-      if (el) el.style.display = s === name ? '' : 'none';
+      if (el) el.style.display = s === name ? 'block' : 'none';
     });
   }
 

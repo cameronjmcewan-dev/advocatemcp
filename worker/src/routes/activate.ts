@@ -385,6 +385,9 @@ async function handleActivateInner(request: Request, env: Env): Promise<Response
  * concurrent customers.
  */
 export async function handleActivateStatus(request: Request, env: Env): Promise<Response> {
+  return withCors(await handleActivateStatusInner(request, env), request);
+}
+async function handleActivateStatusInner(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const token = request.headers.get("X-Activation-Token") ?? url.searchParams.get("t");
   if (!token) return jsonErr(401, "missing_token");
@@ -460,6 +463,9 @@ export async function handleActivateStatus(request: Request, env: Env): Promise<
  * domain — it's cheap public info via dig but the gate keeps the
  * worker endpoint scoped. */
 export async function handleActivateDnsProvider(request: Request, env: Env): Promise<Response> {
+  return withCors(await handleActivateDnsProviderInner(request, env), request);
+}
+async function handleActivateDnsProviderInner(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const token = request.headers.get("X-Activation-Token") ?? url.searchParams.get("t");
   if (!token) return jsonErr(401, "missing_token");
@@ -516,6 +522,9 @@ export async function handleActivateDnsProvider(request: Request, env: Env): Pro
  * page.
  */
 export async function handleActivatePreview(request: Request, env: Env): Promise<Response> {
+  return withCors(await handleActivatePreviewInner(request, env), request);
+}
+async function handleActivatePreviewInner(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const token = request.headers.get("X-Activation-Token") ?? url.searchParams.get("t");
 
