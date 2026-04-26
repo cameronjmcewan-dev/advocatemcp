@@ -154,5 +154,15 @@ export const OnboardingPayloadSchema = z.object({
   // Optional on the wire — server defaults to 'base' if omitted so legacy
   // callers (CLI, manual onboard scripts) continue to work without change.
   plan: z.enum(["base", "pro"]).optional(),
+
+  // Beta cohort fields, mirrored from worker D1. Set by the Stripe
+  // webhook when checkout used a Stripe promo code on the
+  // BETA_COUPON_IDS allowlist. weeklyDigest + betaEndingEmail jobs
+  // read these to pick the right copy. ISO timestamps; cohort is a
+  // free-text label like "beta_2026_04".
+  beta_started_at: z.string().datetime().optional(),
+  beta_ends_at:    z.string().datetime().optional(),
+  beta_coupon_id:  z.string().max(120).optional(),
+  beta_cohort:     z.string().max(60).optional(),
 });
 export type OnboardingPayload = z.infer<typeof OnboardingPayloadSchema>;

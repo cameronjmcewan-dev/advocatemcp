@@ -149,6 +149,85 @@ async function verifyStripeSignature(
   return expected === signature;
 }
 
+// ── Beta cohort detection ────────────────────────────────────────────────────
+//
+// Looks at the discount applied to a Stripe subscription and decides
+// whether the tenant should be flagged as beta. We only flag when the
+// applied coupon is in the BETA_COUPON_IDS env var allowlist —
+// prevents future "friends discount" coupons from accidentally tagging
+// tenants as beta.
+//
+// Returns:
+//   { is_beta: false }                        — no discount, or coupon
+//                                                not on allowlist
+//   { is_beta: true, started_at, ends_at,    — eligible
+//     coupon_id, duration_months }
+//
+// duration_in_months from the coupon → ends_at = started_at + N months.
+// "forever"-duration coupons get is_beta=false (those are perpetual
+// discounts, not beta trials).
+//
+// Failure handling: any Stripe API error returns is_beta=false rather
+// than throwing. The webhook caller wraps this in try/catch so a
+// transient Stripe blip doesn't block tenant activation.
+
+interface BetaDetection {
+  is_beta:           boolean;
+  started_at?:       string;
+  ends_at?:          string;
+  coupon_id?:        string;
+  duration_months?:  number;
+}
+
+async function detectBetaCoupon(env: Env, subscriptionId: string): Promise<BetaDetection> {
+  const allowlist = (env.BETA_COUPON_IDS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  // If no allowlist configured, no tenants ever get marked as beta.
+  // Operator must set BETA_COUPON_IDS in worker secrets after creating
+  // the coupon in Stripe Dashboard.
+  if (allowlist.length === 0) return { is_beta: false };
+
+  // Fetch subscription with discount expanded so we see the coupon details.
+  if (!env.STRIPE_SECRET_KEY) return { is_beta: false };
+  const r = await stripeApi(
+    env.STRIPE_SECRET_KEY,
+    "GET",
+    `/subscriptions/${encodeURIComponent(subscriptionId)}?expand[]=discount.coupon`,
+  );
+  if (!r.ok) return { is_beta: false };
+
+  const sub = r.data as Record<string, unknown>;
+  const discount = sub.discount as Record<string, unknown> | null | undefined;
+  if (!discount) return { is_beta: false };
+
+  const coupon = discount.coupon as Record<string, unknown> | undefined;
+  const couponId = (coupon?.id as string | undefined) ?? "";
+  if (!couponId || !allowlist.includes(couponId)) return { is_beta: false };
+
+  const duration = coupon?.duration as string | undefined;
+  // "forever" coupons aren't trials, they're perpetual discounts. Skip.
+  if (duration === "forever") return { is_beta: false };
+
+  const months = (coupon?.duration_in_months as number | undefined) ?? 2;
+  const startedAt = new Date();
+  // Stripe billing happens at period boundaries. We approximate end as
+  // start + N calendar months. Actual Stripe billing for the customer
+  // resumes at the same moment regardless of our local calculation —
+  // this column is only for our UI countdown.
+  const endsAt = new Date(startedAt);
+  endsAt.setMonth(endsAt.getMonth() + months);
+
+  return {
+    is_beta:           true,
+    started_at:        startedAt.toISOString(),
+    ends_at:           endsAt.toISOString(),
+    coupon_id:         couponId,
+    duration_months:   months,
+  };
+}
+
 // ── POST /api/onboard/basic ──────────────────────────────────────────────────
 // Accepts business info + plan choice. Creates tenant in KV, then either
 // redirects to Stripe Checkout (base/pro) or kicks off free DNS flow.
@@ -307,6 +386,14 @@ export async function handleBasicOnboard(
   const cancelUrl = `${origin}/onboard?cancelled=true`;
 
   // Create Stripe Checkout Session
+  // allow_promotion_codes adds an "Add promotion code" link to Stripe's
+  // hosted checkout UI. Beta testers paste a Stripe Promotion Code
+  // (created in the Stripe Dashboard, attached to a 100%-off-for-N-months
+  // coupon) to get free trial pricing. The webhook below detects the
+  // applied coupon and flags the tenant as beta so we can:
+  //   - render a beta banner with countdown
+  //   - send beta-specific weekly digests
+  //   - track conversion at trial end
   const stripeResult = await stripeApi(env.STRIPE_SECRET_KEY, "POST", "/checkout/sessions", {
     mode: "subscription",
     "line_items[0][price]": priceId,
@@ -318,6 +405,7 @@ export async function handleBasicOnboard(
     "metadata[slug]": slug,
     "metadata[plan]": plan,
     customer_email: tenant.email,
+    allow_promotion_codes: "true",
   });
 
   if (!stripeResult.ok) {
@@ -706,6 +794,7 @@ type RailwayRegisterResult =
 export async function registerBusinessOnRailway(
   env: Env,
   tenant: TenantRecord,
+  beta?: BetaDetection & { cohort?: string },
 ): Promise<RailwayRegisterResult> {
   const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
 
@@ -797,6 +886,17 @@ export async function registerBusinessOnRailway(
   const stripePlan = tenant.stripe?.plan;
   if (stripePlan === "base" || stripePlan === "pro") {
     body.plan = stripePlan;
+  }
+
+  // Forward beta cohort fields when this tenant signed up with a beta
+  // promotion code. Server-side weeklyDigest + trial-ending email cron
+  // read these to pick the right copy. Server's /register zod schema
+  // accepts these as optional; absent values are simply ignored.
+  if (beta?.is_beta) {
+    body.beta_started_at = beta.started_at;
+    body.beta_ends_at    = beta.ends_at;
+    body.beta_coupon_id  = beta.coupon_id;
+    body.beta_cohort     = beta.cohort;
   }
 
   try {
@@ -1103,6 +1203,60 @@ export async function handleStripeWebhook(
     }));
   }
 
+  // ── Beta cohort detection ────────────────────────────────────────────────
+  //
+  // Fetch the subscription with discount expanded to see if a beta
+  // promotion code was applied. If so, mark the tenant as beta in D1
+  // so the dashboard banner / admin list / weekly digest variant can
+  // pick it up. Beta coupons are explicit allowlist via env var so
+  // a future "10% off forever for friends" coupon doesn't accidentally
+  // mark a tenant as beta.
+  //
+  // Result is captured into `betaInfo` so it can flow into the Railway
+  // /register call below (server-side digest + trial-ending email cron
+  // need the same data).
+  let betaInfo: BetaDetection = { is_beta: false };
+  if (tenant.stripe.subscriptionId) {
+    try {
+      betaInfo = await detectBetaCoupon(env, tenant.stripe.subscriptionId);
+      if (betaInfo.is_beta) {
+        const cohort = `beta_${new Date().toISOString().slice(0, 7).replace("-", "_")}`;
+        await env.DB
+          .prepare(
+            `UPDATE businesses
+                SET beta_started_at = ?,
+                    beta_ends_at    = ?,
+                    beta_coupon_id  = ?,
+                    beta_cohort     = ?
+              WHERE slug = ?`,
+          )
+          .bind(betaInfo.started_at, betaInfo.ends_at, betaInfo.coupon_id, cohort, tenant.slug)
+          .run();
+        // Stamp the cohort onto the in-memory detection so we forward
+        // the same value to Railway below.
+        (betaInfo as BetaDetection & { cohort: string }).cohort = cohort;
+        console.log(JSON.stringify({
+          onboarding: true,
+          event: "stripe_webhook_beta_tenant_flagged",
+          slug: tenant.slug,
+          coupon_id: betaInfo.coupon_id,
+          cohort,
+          beta_ends_at: betaInfo.ends_at,
+        }));
+      }
+    } catch (err) {
+      // Non-fatal: a Stripe API hiccup shouldn't block tenant activation.
+      // The tenant just won't get the beta banner / variant digest. We
+      // can backfill manually from /admin/beta-tenants if needed.
+      console.warn(JSON.stringify({
+        onboarding: true,
+        event: "beta_detection_failed",
+        slug: tenant.slug,
+        error: String(err),
+      }));
+    }
+  }
+
   // Register the business on Railway so the agent can serve AI crawler
   // queries and the activation handler's profile check passes. Non-fatal
   // — if Railway is down, the token still gets minted and the email gets
@@ -1119,7 +1273,7 @@ export async function handleStripeWebhook(
     }));
   } else {
     try {
-      const regResult = await registerBusinessOnRailway(env, tenant);
+      const regResult = await registerBusinessOnRailway(env, tenant, betaInfo);
       if (regResult.ok) {
         railwayResult = "registered";
         await updateBusinessApiKey(env.DB, tenant.slug, regResult.api_key);

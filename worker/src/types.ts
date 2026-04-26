@@ -60,6 +60,19 @@ export interface Env {
   STRIPE_PRICE_ID_BASE?: string;
   /** Stripe Price ID for $250/mo pro plan */
   STRIPE_PRICE_ID_PRO?: string;
+  /**
+   * Comma-separated list of Stripe coupon IDs (e.g.
+   * "coup_betacam_2_months,coup_design_partners_q2") that flag a tenant
+   * as a beta cohort member when applied at checkout. The Stripe webhook
+   * inspects the subscription's discount; if its coupon is on this list,
+   * the tenant gets beta_started_at / beta_ends_at / beta_coupon_id /
+   * beta_cohort populated in D1.
+   *
+   * Leave unset to disable beta flagging entirely. Coupons NOT on this
+   * list (e.g. permanent friend discounts) won't accidentally tag
+   * tenants as beta.
+   */
+  BETA_COUPON_IDS?: string;
 
   // ── Email (Resend) ──────────────────────────────────────────────────
   /**
