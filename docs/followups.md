@@ -174,10 +174,23 @@ Field exists on the users table, refresh handler reads it, but nothing uses it f
 per earlier Claude Code investigation. Is it dead? Can it be removed?
 
 ### /demo/:slug architectural concerns
-- Rate limiting missing
-- Hardcoded crawler user agent (GPTBot only)
-- Paid Claude API calls on every public GET
-- 8 open questions from the rearchitecture plan §10
+- ~~Rate limiting missing~~ **PARTIALLY RESOLVED 2026-04-26.** Worker
+  now forwards the visitor IP via X-Forwarded-For so Railway's
+  per-IP cost-rate-limit slots the visitor (was bucketing every
+  visitor on the Worker IP, blocking everyone when one abuser hit).
+- ~~Paid Claude API calls on every public GET~~ **RESOLVED 2026-04-26.**
+  Edge cache (`caches.default`) holds the rendered `/demo/:slug` HTML
+  for 600s so the second-and-later visitor inside the window hits a
+  pre-rendered response — no Railway round-trip, no Claude call.
+  Only cache when the agent query actually succeeded so a transient
+  Railway error doesn't poison the cache and starve the next visitor
+  of a live agent answer. Cache-Control max-age + X-Demo-Cache
+  HIT/MISS header for ops visibility.
+- Hardcoded crawler user agent (GPTBot only) — still open. Demo
+  always shows GPTBot-flavored output regardless of which engine the
+  visitor cares about. Could let the visitor pick (chip row above
+  the JSON?) or rotate randomly.
+- 8 open questions from the rearchitecture plan §10 — still open.
 
 ## Infrastructure / hygiene
 

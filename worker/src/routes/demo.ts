@@ -59,7 +59,7 @@ export async function handleDemo(request: Request, env: Env): Promise<Response |
   if (pathname === "/demo/search") return demoSearch(url, env);
 
   const m = pathname.match(/^\/demo\/([a-z0-9][a-z0-9-]{0,59})$/);
-  if (m) return demoResult(m[1], env);
+  if (m) return demoResult(m[1], request, env);
 
   return null;
 }
@@ -101,22 +101,61 @@ async function demoSearch(url: URL, env: Env): Promise<Response> {
 
 // ── GET /demo/:slug ────────────────────────────────────────────────────────
 
-async function demoResult(slug: string, env: Env): Promise<Response> {
+/* Cache TTL for the rendered /demo/:slug page. Visitors don't need a
+ * fresh Claude answer per pageview; the demo's purpose is "show what an
+ * AI engine sees right now," not "show a unique generation." A 10-min
+ * window cuts duplicate Claude calls (the only paid step) by 90%+ for
+ * any moderately-trafficked slug, and is short enough that profile
+ * edits propagate within an acceptable window.
+ *
+ * Implementation: Cloudflare's `caches.default` keyed on the request
+ * URL (slug-uniqued). On cache miss we render fresh, write to cache
+ * with `Cache-Control: max-age=...`, and serve. The rate-limit value
+ * is also paid into Railway's per-IP bucket via X-Forwarded-For below
+ * so a determined attacker hitting many slugs still trips Railway's
+ * own gates on the second-or-later request per IP per slug. */
+const DEMO_CACHE_TTL_SECONDS = 600;
+
+async function demoResult(slug: string, request: Request, env: Env): Promise<Response> {
+  const cacheKey = new Request(request.url, { method: "GET" });
+  const cache = caches.default;
+  const cached = await cache.match(cacheKey).catch(() => null);
+  if (cached) {
+    // Mark this hit as cached so we can measure cache effectiveness in
+    // production logs without affecting the body. Browsers ignore the
+    // header; Cloudflare's analytics surfaces it.
+    const h = new Headers(cached.headers);
+    h.set("X-Demo-Cache", "HIT");
+    return new Response(cached.body, { status: cached.status, headers: h });
+  }
+
   const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
   const apiKey = env.API_KEY ?? "";
 
+  // Forward visitor IP so Railway's per-IP cost-rate-limit slots the
+  // visitor, not the Worker. Without this, every demo visitor lands
+  // on the same Worker-IP bucket and one abuser blocks everyone.
+  const visitorIp = request.headers.get("cf-connecting-ip")
+    ?? request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    ?? "";
+  const forwardHeaders = (extra: Record<string, string> = {}): HeadersInit => ({
+    ...extra,
+    "X-API-Key": apiKey,
+    ...(visitorIp ? { "X-Forwarded-For": visitorIp } : {}),
+  });
+
   const [profileRes, queryRes, analyticsRes] = await Promise.allSettled([
-    fetch(`${base}/agents/${slug}/profile`, { headers: { "X-API-Key": apiKey } }),
+    fetch(`${base}/agents/${slug}/profile`, { headers: forwardHeaders() }),
     fetch(`${base}/agents/${slug}/query`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
+      headers: forwardHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         query:
           "Tell me about this business. What services do they offer, what makes them stand out, and how can someone get in touch or learn more?",
         crawler: "GPTBot",
       }),
     }),
-    fetch(`${base}/analytics`, { headers: { "X-API-Key": apiKey } }),
+    fetch(`${base}/analytics`, { headers: forwardHeaders() }),
   ]);
 
   // Business not found → nomatch landing
@@ -155,7 +194,32 @@ async function demoResult(slug: string, env: Env): Promise<Response> {
     if (agentRaw.powered_by)   displayData.powered_by   = agentRaw.powered_by;
   }
 
-  return htmlResp(resultHtml(slug, profile, displayData, agentRaw !== null, rawText, analytics));
+  // Build the response with cacheable Cache-Control. Write to the
+  // edge cache for DEMO_CACHE_TTL_SECONDS so subsequent visitors hit
+  // a free pre-rendered HTML response instead of re-fanning out to
+  // Railway. Only cache when the agent query actually succeeded — a
+  // partial render with `agentRaw === null` shouldn't poison the
+  // cache and starve the next visitor of the live agent answer.
+  const body = resultHtml(slug, profile, displayData, agentRaw !== null, rawText, analytics);
+  const headers = new Headers({
+    "Content-Type": "text/html; charset=utf-8",
+    "X-Demo-Cache": "MISS",
+  });
+  if (agentRaw !== null) {
+    headers.set("Cache-Control", `public, max-age=${DEMO_CACHE_TTL_SECONDS}`);
+  } else {
+    headers.set("Cache-Control", "no-store");
+  }
+  const response = new Response(body, { status: 200, headers });
+  if (agentRaw !== null) {
+    // Best-effort cache write; failures don't affect the visitor.
+    try {
+      await cache.put(cacheKey, response.clone());
+    } catch {
+      /* swallow */
+    }
+  }
+  return response;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
