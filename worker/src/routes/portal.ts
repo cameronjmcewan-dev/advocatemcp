@@ -24,7 +24,7 @@ import {
 import { handleOnboardPage } from "./onboardPage";
 import { handleActivatePage } from "./activatePage";
 import { handleActivate, handleActivateHosted, handleActivatePreview, handleActivateStatus, handleActivateDnsProvider, handleActivationToken, handleGetActivation, handleResendActivation } from "./activate";
-import { handleCloudflareValidate, handleCloudflareApply, handleGoDaddyValidate, handleGoDaddyApply } from "./dnsAuto";
+import { handleCloudflareValidate, handleCloudflareApply, handleGoDaddyValidate, handleGoDaddyApply, handleNamecheapValidate, handleNamecheapApply, handleRoute53Validate, handleRoute53Apply, handleIonosValidate, handleIonosApply } from "./dnsAuto";
 import {
   getSessionFromRequest,
   handleAuthLogin,
@@ -120,6 +120,18 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/dns-auto/godaddy/validate"    && method === "POST")    return handleGoDaddyValidate(request, env);
   if (pathname === "/api/dns-auto/godaddy/apply"       && method === "OPTIONS") return handleCorsPreflight(request);
   if (pathname === "/api/dns-auto/godaddy/apply"       && method === "POST")    return handleGoDaddyApply(request, env);
+  if (pathname === "/api/dns-auto/namecheap/validate"  && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/dns-auto/namecheap/validate"  && method === "POST")    return handleNamecheapValidate(request, env);
+  if (pathname === "/api/dns-auto/namecheap/apply"     && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/dns-auto/namecheap/apply"     && method === "POST")    return handleNamecheapApply(request, env);
+  if (pathname === "/api/dns-auto/route53/validate"    && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/dns-auto/route53/validate"    && method === "POST")    return handleRoute53Validate(request, env);
+  if (pathname === "/api/dns-auto/route53/apply"       && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/dns-auto/route53/apply"       && method === "POST")    return handleRoute53Apply(request, env);
+  if (pathname === "/api/dns-auto/ionos/validate"      && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/dns-auto/ionos/validate"      && method === "POST")    return handleIonosValidate(request, env);
+  if (pathname === "/api/dns-auto/ionos/apply"         && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/dns-auto/ionos/apply"         && method === "POST")    return handleIonosApply(request, env);
   if (pathname === "/api/activate"             && method === "OPTIONS") return handleCorsPreflight(request);
   if (pathname === "/api/activate"             && method === "POST")    return handleActivate(request, env);
   if (pathname === "/api/activate/hosted"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });

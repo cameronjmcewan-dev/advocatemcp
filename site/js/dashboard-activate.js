@@ -156,6 +156,9 @@
   function renderAutoDnsSection(providerId, activateData) {
     if (providerId === 'cloudflare') return renderCloudflareAutoDns();
     if (providerId === 'godaddy')    return renderGoDaddyAutoDns();
+    if (providerId === 'namecheap')  return renderNamecheapAutoDns();
+    if (providerId === 'route53')    return renderRoute53AutoDns();
+    if (providerId === 'ionos')      return renderIonosAutoDns();
     return '';
   }
 
@@ -176,6 +179,71 @@
         '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
           '<button type="button" id="btn-auto-dns-validate" class="btn-submit" style="width:auto;padding:9px 16px;font-size:.8125rem">Validate token</button>' +
           '<button type="button" id="btn-auto-dns-apply" class="btn-submit" style="width:auto;padding:9px 16px;font-size:.8125rem;display:none">Add records to my Cloudflare zone</button>' +
+          '<span id="auto-dns-status" style="font-size:.75rem;color:var(--muted)"></span>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function renderIonosAutoDns() {
+    return '' +
+      '<div id="auto-dns-block" data-provider="ionos" style="margin-top:18px;padding:14px 16px;background:var(--paper);border:1px dashed var(--maroon-tint);border-radius:var(--r-md)">' +
+        '<div style="font-size:.6875rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--maroon);margin-bottom:6px">⚡ Or do it automatically</div>' +
+        '<p style="margin:0 0 10px 0;font-size:.8125rem;color:var(--ink-2);line-height:1.55">' +
+          "Paste your IONOS API key and we'll add the records for you. " +
+          'Apex routes via static A records since IONOS doesn\'t support ANAME. ' +
+          'Credentials used once, never stored. ' +
+          '<a href="https://developer.hosting.ionos.com/keys" target="_blank" rel="noopener" style="color:var(--maroon)">Create an IONOS API key →</a>' +
+        '</p>' +
+        '<input type="password" id="auto-dns-ionos-key" placeholder="IONOS API key (PublicPrefix.Secret)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="width:100%;padding:9px 12px;background:var(--paper);border:1px solid var(--line);border-radius:var(--r-md);color:var(--ink);font-family:var(--mono);font-size:.75rem;margin-bottom:10px">' +
+        '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
+          '<button type="button" id="btn-auto-dns-validate" class="btn-submit" style="width:auto;padding:9px 16px;font-size:.8125rem">Validate key</button>' +
+          '<button type="button" id="btn-auto-dns-apply" class="btn-submit" style="width:auto;padding:9px 16px;font-size:.8125rem;display:none">Add records to IONOS</button>' +
+          '<span id="auto-dns-status" style="font-size:.75rem;color:var(--muted)"></span>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function renderRoute53AutoDns() {
+    return '' +
+      '<div id="auto-dns-block" data-provider="route53" style="margin-top:18px;padding:14px 16px;background:var(--paper);border:1px dashed var(--maroon-tint);border-radius:var(--r-md)">' +
+        '<div style="font-size:.6875rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--maroon);margin-bottom:6px">⚡ Or do it automatically</div>' +
+        '<p style="margin:0 0 10px 0;font-size:.8125rem;color:var(--ink-2);line-height:1.55">' +
+          "Paste IAM access key + secret and we'll create the records via Route 53's API. " +
+          'Apex routes via static A records (104.21.44.57, 172.67.195.220) since Route 53 ALIAS only targets AWS resources. ' +
+          'Credentials used once, never stored.' +
+        '</p>' +
+        '<div style="margin:0 0 12px 0;padding:10px 12px;background:var(--maroon-wash);border:1px solid var(--maroon-tint);border-radius:var(--r-md);font-size:.75rem;line-height:1.5;color:var(--ink-2)">' +
+          '<strong>Recommended IAM policy</strong> — create a user with this scoped policy (paste into IAM Visual Editor → JSON):' +
+          '<pre style="margin:6px 0 0 0;font-family:var(--mono);font-size:.6875rem;overflow-x:auto;padding:8px;background:var(--paper);border:1px solid var(--line);border-radius:4px">{\n  "Version": "2012-10-17",\n  "Statement": [{\n    "Effect": "Allow",\n    "Action": [\n      "route53:ListHostedZonesByName",\n      "route53:ChangeResourceRecordSets"\n    ],\n    "Resource": "*"\n  }]\n}</pre>' +
+        '</div>' +
+        '<input type="text"     id="auto-dns-akid"   placeholder="AWS Access Key ID (AKIA…)" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="width:100%;padding:9px 12px;background:var(--paper);border:1px solid var(--line);border-radius:var(--r-md);color:var(--ink);font-family:var(--mono);font-size:.75rem;margin-bottom:8px">' +
+        '<input type="password" id="auto-dns-secret-key" placeholder="AWS Secret Access Key"    autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="width:100%;padding:9px 12px;background:var(--paper);border:1px solid var(--line);border-radius:var(--r-md);color:var(--ink);font-family:var(--mono);font-size:.75rem;margin-bottom:10px">' +
+        '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
+          '<button type="button" id="btn-auto-dns-validate" class="btn-submit" style="width:auto;padding:9px 16px;font-size:.8125rem">Validate credentials</button>' +
+          '<button type="button" id="btn-auto-dns-apply" class="btn-submit" style="width:auto;padding:9px 16px;font-size:.8125rem;display:none">Add records to Route 53</button>' +
+          '<span id="auto-dns-status" style="font-size:.75rem;color:var(--muted)"></span>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function renderNamecheapAutoDns() {
+    return '' +
+      '<div id="auto-dns-block" data-provider="namecheap" style="margin-top:18px;padding:14px 16px;background:var(--paper);border:1px dashed var(--maroon-tint);border-radius:var(--r-md)">' +
+        '<div style="font-size:.6875rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--maroon);margin-bottom:6px">⚡ Or do it automatically</div>' +
+        '<p style="margin:0 0 10px 0;font-size:.8125rem;color:var(--ink-2);line-height:1.55">' +
+          "Paste your Namecheap username + API key and we'll add the records for you. " +
+          'Credentials used once, never stored.' +
+        '</p>' +
+        '<div style="margin:0 0 12px 0;padding:10px 12px;background:var(--amber-tint);border:1px solid var(--amber);border-radius:var(--r-md);font-size:.75rem;line-height:1.5;color:var(--ink-2)">' +
+          '<strong>One-time Namecheap setup:</strong> Go to <a href="https://ap.www.namecheap.com/Profile/Tools/ApiAccess" target="_blank" rel="noopener" style="color:var(--maroon)">namecheap.com → Profile → Tools → API Access</a>. ' +
+          'Toggle API Access ON. Add <code style="background:var(--paper);padding:1px 4px;border-radius:3px">0.0.0.0/0</code> to "Whitelisted IPs" (you can lock it back down after we finish). ' +
+          'Then copy your API Key from that page.' +
+        '</div>' +
+        '<input type="text"     id="auto-dns-username" placeholder="Namecheap username" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="width:100%;padding:9px 12px;background:var(--paper);border:1px solid var(--line);border-radius:var(--r-md);color:var(--ink);font-family:var(--mono);font-size:.75rem;margin-bottom:8px">' +
+        '<input type="password" id="auto-dns-apikey"   placeholder="API Key"             autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="width:100%;padding:9px 12px;background:var(--paper);border:1px solid var(--line);border-radius:var(--r-md);color:var(--ink);font-family:var(--mono);font-size:.75rem;margin-bottom:10px">' +
+        '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">' +
+          '<button type="button" id="btn-auto-dns-validate" class="btn-submit" style="width:auto;padding:9px 16px;font-size:.8125rem">Validate credentials</button>' +
+          '<button type="button" id="btn-auto-dns-apply" class="btn-submit" style="width:auto;padding:9px 16px;font-size:.8125rem;display:none">Add records to Namecheap</button>' +
           '<span id="auto-dns-status" style="font-size:.75rem;color:var(--muted)"></span>' +
         '</div>' +
       '</div>';
@@ -234,6 +302,28 @@
         if (!k || !s) { setStatus('Paste your API key and secret first.', 'err'); return null; }
         return { key: k, secret: s };
       }
+      if (provider === 'namecheap') {
+        var unEl = document.getElementById('auto-dns-username');
+        var akEl = document.getElementById('auto-dns-apikey');
+        var u = unEl ? unEl.value.trim() : '';
+        var a = akEl ? akEl.value.trim() : '';
+        if (!u || !a) { setStatus('Paste your Namecheap username and API key first.', 'err'); return null; }
+        return { username: u, apikey: a };
+      }
+      if (provider === 'route53') {
+        var akidEl = document.getElementById('auto-dns-akid');
+        var sakEl = document.getElementById('auto-dns-secret-key');
+        var akid = akidEl ? akidEl.value.trim() : '';
+        var sak = sakEl ? sakEl.value.trim() : '';
+        if (!akid || !sak) { setStatus('Paste your AWS access key ID and secret first.', 'err'); return null; }
+        return { accessKeyId: akid, secretAccessKey: sak };
+      }
+      if (provider === 'ionos') {
+        var ionosEl = document.getElementById('auto-dns-ionos-key');
+        var ik = ionosEl ? ionosEl.value.trim() : '';
+        if (!ik) { setStatus('Paste your IONOS API key first.', 'err'); return null; }
+        return { apiKey: ik };
+      }
       // Cloudflare default
       var tEl = document.getElementById('auto-dns-token');
       var t = tEl ? tEl.value.trim() : '';
@@ -242,7 +332,7 @@
     }
 
     function clearCreds() {
-      var ids = ['auto-dns-token', 'auto-dns-key', 'auto-dns-secret'];
+      var ids = ['auto-dns-token', 'auto-dns-key', 'auto-dns-secret', 'auto-dns-username', 'auto-dns-apikey', 'auto-dns-akid', 'auto-dns-secret-key', 'auto-dns-ionos-key'];
       for (var i = 0; i < ids.length; i++) {
         var el = document.getElementById(ids[i]);
         if (el) el.value = '';
@@ -333,12 +423,15 @@
       zone_not_found_for_token:       "This token doesn't have access to your domain's zone. Check that the token's zone scope matches.",
       zone_not_active:                "Your Cloudflare zone isn't active yet. Activate it in Cloudflare first, then retry.",
       // GoDaddy-specific
-      credential_format_invalid:      "Your API key or secret looks malformed. Check that you copied each one fully.",
-      credential_invalid_or_revoked:  "GoDaddy doesn't recognize this key/secret pair. Create a fresh one in the GoDaddy developer console.",
-      domain_not_found_for_credential:"This credential can't manage the domain we have on file. Make sure the API key has access to it.",
-      domain_not_active:              "Your domain isn't active in GoDaddy yet (still pending transfer or registration). Try again once it's active.",
+      credential_format_invalid:      "Your API credentials look malformed. Check that you copied each one fully.",
+      credential_invalid_or_revoked:  "Your DNS provider doesn't recognize the credentials you pasted. Create a fresh pair.",
+      domain_not_found_for_credential:"This credential can't manage the domain we have on file. Make sure the API access covers it.",
+      domain_not_active:              "Your domain isn't active in your provider's account yet (still pending transfer or registration). Try again once it's active.",
       forwarding_not_available:       "GoDaddy domain forwarding isn't available for this domain (sometimes happens when DNS is delegated elsewhere). Records were still added — apex traffic needs manual A records or a redirect.",
       forwarding_setup_failed:        "Couldn't set up apex forwarding. Records were added — set up a 301 redirect from apex to www manually.",
+      // Namecheap-specific
+      ip_not_whitelisted:             "Namecheap rejected our request because Cloudflare's IPs aren't on your account whitelist. Add 0.0.0.0/0 to your Namecheap API IP whitelist (Profile → Tools → API Access), retry, then lock it back down once setup finishes.",
+      set_hosts_failed:               "Namecheap rejected the record write. Check for conflicting DNS records in your Namecheap panel and try again.",
       // Shared
       permission_denied:              "The credential isn't allowed to edit DNS in this zone. Re-create it with the 'Edit DNS' permission.",
       record_create_failed:           "Your DNS provider rejected one of the record creations. Open the DNS UI and check for conflicts.",

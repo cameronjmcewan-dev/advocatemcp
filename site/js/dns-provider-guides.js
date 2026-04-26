@@ -82,10 +82,11 @@
       apex_steps: [
         { type: "tip", text: "Squarespace's built-in DNS doesn't support ANAME / ALIAS. The cleanest path is to move DNS to Cloudflare (free, 10 min) — that gives you proper apex CNAME flattening AND a free CDN on top." },
         { type: "do",  text: "Sign up at cloudflare.com (free plan)." },
-        { type: "do",  text: "Click 'Add a site', enter your domain, pick the Free plan." },
-        { type: "do",  text: "Cloudflare will scan your existing DNS records and give you 2 nameservers (e.g., lola.ns.cloudflare.com)." },
+        { type: "do",  text: "Click 'Add a site', enter {{apex}}, pick the Free plan." },
+        { type: "do",  text: "Cloudflare scans your existing DNS records — review them, click 'Continue'. They migrate over so your site stays working." },
+        { type: "do",  text: "Cloudflare gives you 2 nameservers (e.g., lola.ns.cloudflare.com)." },
         { type: "do",  text: "Back in Squarespace → Domains → 'Advanced settings' → 'Use Custom Nameservers'. Paste both Cloudflare nameservers. Save." },
-        { type: "do",  text: "Wait ~10 minutes for the nameserver change to propagate. Then in Cloudflare's DNS panel, add a CNAME at apex pointing to {{cname_target}} (CNAME flattening makes this work at the root)." },
+        { type: "do",  text: "Wait ~10 min - 24h for the nameserver change to propagate. Re-run AdvocateMCP setup — we'll detect you're on Cloudflare and add records automatically (no manual apex setup needed)." },
         { type: "warning", text: "Switching to Cloudflare nameservers does NOT affect your Squarespace site — your site keeps working. It only changes who answers DNS queries." },
       ],
       txt_steps: [
@@ -102,7 +103,7 @@
       name: "Namecheap",
       login_url: "https://ap.www.namecheap.com/domains/list/",
       apex_strategy: "alias",
-      auto_dns: false,
+      auto_dns: true,
       www_steps: [
         { type: "do",  text: "Sign in at namecheap.com." },
         { type: "do",  text: "Domain List → 'Manage' next to your domain → 'Advanced DNS' tab." },
@@ -160,9 +161,10 @@
       ],
       apex_steps: [
         { type: "tip", text: "Wix has limited apex support and doesn't expose ANAME / ALIAS. The cleanest path is to switch DNS to Cloudflare (free) so we can use CNAME flattening at the apex — same approach as Squarespace." },
-        { type: "do",  text: "Sign up at cloudflare.com (free plan), add your domain, copy the two Cloudflare nameservers." },
+        { type: "do",  text: "Sign up at cloudflare.com (free plan), add {{apex}} as a site." },
+        { type: "do",  text: "Cloudflare scans your existing DNS, pre-populates records, gives you 2 nameservers." },
         { type: "do",  text: "Back in Wix → Domains → your domain → Advanced → 'Change Name Servers'. Paste the Cloudflare nameservers. Save." },
-        { type: "do",  text: "Wait 10 min for nameservers to propagate, then in Cloudflare DNS, add a CNAME at @ pointing to {{cname_target}} with proxy disabled." },
+        { type: "do",  text: "Wait 10 min - 24h for propagation. Re-run AdvocateMCP setup — we'll detect Cloudflare and add records automatically with no manual apex work." },
       ],
       txt_steps: [
         { type: "do",  text: "In Wix DNS Records (or Cloudflare's DNS panel if you switched): add a TXT record. Host name: {{txt_host_name}}. Value: {{txt_value}}. Save." },
@@ -187,6 +189,7 @@
       apex_steps: [
         { type: "do",  text: "In 'Manage custom records', add a synthetic record at @ pointing to {{cname_target}}." },
         { type: "tip", text: "Google Domains' Cloud DNS supported ANAME-equivalent A-record synthesis. After migration to Squarespace, this stops working — switch to the Squarespace guide once you see the new UI." },
+        { type: "tip", text: "Better long-term: move DNS to Cloudflare. Sign up at cloudflare.com (free), add {{apex}}, copy the 2 nameservers, swap them in at Google Domains. Re-run AdvocateMCP setup once propagated — we'll auto-add records." },
       ],
       txt_steps: [
         { type: "do",  text: "Add a custom record. Host: {{txt_host_name}}. Type: TXT. TTL: 1H. Data: {{txt_value}}. Save." },
@@ -201,7 +204,7 @@
       name: "AWS Route 53",
       login_url: "https://console.aws.amazon.com/route53/v2/hostedzones",
       apex_strategy: "alias",
-      auto_dns: false,
+      auto_dns: true,
       www_steps: [
         { type: "do",  text: "Sign in to AWS Console → Route 53 → Hosted zones." },
         { type: "do",  text: "Click your hosted zone → 'Create record'." },
@@ -217,6 +220,104 @@
       ],
       gotchas: [
         "Route 53 charges per hosted zone (~$0.50/month). If the cost annoys you, switching to Cloudflare DNS (free) is straightforward — point your domain registrar at Cloudflare's nameservers.",
+      ],
+    },
+
+    // ── Shopify ─────────────────────────────────────────────────────────────
+    shopify: {
+      name: "Shopify",
+      login_url: "https://www.shopify.com/admin/settings/domains",
+      apex_strategy: "cf-nameservers",
+      auto_dns: false,
+      www_steps: [
+        { type: "tip", text: "Shopify's DNS panel doesn't expose enough record types for AdvocateMCP setup. The cleanest fix is to move your domain's DNS to Cloudflare (free), keep Shopify as your store host, and we'll add records via Cloudflare automatically afterward." },
+        { type: "do",  text: "Sign up at cloudflare.com (free plan)." },
+        { type: "do",  text: "Click 'Add a site', enter {{apex}}, pick the Free plan." },
+        { type: "do",  text: "Cloudflare scans your existing DNS and pre-populates the records — review them, click 'Continue'." },
+        { type: "do",  text: "Cloudflare gives you 2 nameservers (e.g., lola.ns.cloudflare.com)." },
+        { type: "do",  text: "In your domain registrar (NOT Shopify — wherever you actually bought the domain), change the nameservers to Cloudflare's two values." },
+        { type: "do",  text: "Wait ~10 min - 24h for nameservers to propagate. Then re-run AdvocateMCP setup. We'll detect Cloudflare and add records automatically." },
+      ],
+      apex_steps: [
+        { type: "tip", text: "After Cloudflare migration above, our auto-DNS handles apex via CNAME flattening — no extra step on your end." },
+      ],
+      txt_steps: [
+        { type: "tip", text: "After Cloudflare migration, our auto-DNS adds the SSL TXT record automatically." },
+      ],
+      gotchas: [
+        "Switching nameservers does NOT take down your Shopify store — it stays on Shopify, you just change who answers DNS queries about your domain.",
+      ],
+    },
+
+    // ── HostGator (EIG / Newfold) ───────────────────────────────────────────
+    hostgator: {
+      name: "HostGator",
+      login_url: "https://portal.hostgator.com/customer/login.php",
+      apex_strategy: "cf-nameservers",
+      auto_dns: false,
+      www_steps: [
+        { type: "tip", text: "HostGator manages DNS via cPanel and doesn't expose a public API. Cleanest path: move DNS to Cloudflare (free), keep HostGator as your hosting." },
+        { type: "do",  text: "Sign up at cloudflare.com (free), add {{apex}}, copy the 2 Cloudflare nameservers." },
+        { type: "do",  text: "Sign in at portal.hostgator.com → My Domains → click your domain → Nameservers → 'Change Nameservers'." },
+        { type: "do",  text: "Replace HostGator's nameservers with the Cloudflare ones. Save." },
+        { type: "do",  text: "Wait ~10 min - 24h for propagation. Re-run AdvocateMCP setup; we'll detect Cloudflare and finish automatically." },
+      ],
+      apex_steps: [
+        { type: "tip", text: "Cloudflare flattening at apex handles routing once you complete the migration above." },
+      ],
+      txt_steps: [
+        { type: "tip", text: "We add the SSL TXT record via the Cloudflare auto-DNS flow after migration." },
+      ],
+      gotchas: [
+        "HostGator's DNS UI sometimes lives under 'cPanel → Zone Editor' and sometimes under 'My Domains → DNS' depending on plan tier. The Cloudflare migration sidesteps that variance.",
+      ],
+    },
+
+    // ── Bluehost (EIG / Newfold) ────────────────────────────────────────────
+    bluehost: {
+      name: "Bluehost",
+      login_url: "https://my.bluehost.com/cgi/login",
+      apex_strategy: "cf-nameservers",
+      auto_dns: false,
+      www_steps: [
+        { type: "tip", text: "Bluehost manages DNS via their cPanel-based panel and doesn't expose a public API. Move DNS to Cloudflare (free) for the cleanest setup." },
+        { type: "do",  text: "Sign up at cloudflare.com (free), add {{apex}}, copy the 2 Cloudflare nameservers." },
+        { type: "do",  text: "Sign in at my.bluehost.com → Domains → click your domain → Name Servers." },
+        { type: "do",  text: "Pick 'Use Custom Nameservers'. Paste the Cloudflare ones. Save." },
+        { type: "do",  text: "Wait ~10 min - 24h. Re-run AdvocateMCP setup; we'll detect Cloudflare and finish." },
+      ],
+      apex_steps: [
+        { type: "tip", text: "Cloudflare flattening handles apex once you've completed the migration above." },
+      ],
+      txt_steps: [
+        { type: "tip", text: "Auto-handled by our Cloudflare auto-DNS flow after migration." },
+      ],
+      gotchas: [
+        "Like other Newfold-owned hosts (HostGator, Domain.com, Network Solutions), Bluehost's DNS UI is dated and inconsistent. Cloudflare's modern UI handles everything once you switch.",
+      ],
+    },
+
+    // ── IONOS (1&1) ─────────────────────────────────────────────────────────
+    ionos: {
+      name: "IONOS",
+      login_url: "https://my.ionos.com/dns",
+      apex_strategy: "a-records",
+      auto_dns: true,
+      www_steps: [
+        { type: "do",  text: "Sign in at my.ionos.com." },
+        { type: "do",  text: "Domains & SSL → click your domain → DNS." },
+        { type: "do",  text: "Click 'Add record'. Type: CNAME. Host name: www. Points to: {{cname_target}}. TTL: 3600. Save." },
+      ],
+      apex_steps: [
+        { type: "tip", text: "IONOS DNS doesn't support ANAME at apex, so we route apex via static A records pointing at our anycast IPs." },
+        { type: "do",  text: "Click 'Add record'. Type: A. Host name: @ (or leave empty). Value: 104.21.44.57. Save. Repeat for 172.67.195.220." },
+        { type: "warning", text: "Static A records work today but Cloudflare anycast IPs can rotate. Re-check this guide every few months." },
+      ],
+      txt_steps: [
+        { type: "do",  text: "Click 'Add record'. Type: TXT. Host name: {{txt_host_name}}. Content: {{txt_value}}. TTL: 3600. Save." },
+      ],
+      gotchas: [
+        "IONOS sometimes shows DNS records under 'Settings → DNS' rather than at the top level. If you don't see DNS listed, dig deeper into the domain's settings panel.",
       ],
     },
 
