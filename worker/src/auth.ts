@@ -96,6 +96,20 @@ export function getSessionToken(request: Request): string | null {
   return cookies[SESSION_COOKIE] ?? null;
 }
 
+// Cross-subdomain session cookie (Apr 27 2026). Domain=.advocatemcp.com
+// makes the cookie visible on both customers.advocatemcp.com (the
+// dashboard / portal) AND advocatemcp.com (the marketing site). When a
+// logged-in user navigates to advocatemcp.com/Pricing the marketing
+// site's auth-check fetch (site/js/marketing-auth.js) sends this cookie
+// and gets back the user profile, swapping the nav from "Sign in" to
+// the avatar dropdown.
+//
+// Migration note: the old cookies (Domain unset → host-only on
+// customers.advocatemcp.com) are different cookies than the new ones
+// (Domain=.advocatemcp.com). Existing sessions need one re-login after
+// this deploys; acceptable pre-outreach.
+const COOKIE_DOMAIN = ".advocatemcp.com";
+
 export function sessionCookieHeader(token: string): string {
   return [
     `${SESSION_COOKIE}=${encodeURIComponent(token)}`,
@@ -103,6 +117,7 @@ export function sessionCookieHeader(token: string): string {
     "Secure",
     "SameSite=Lax",
     "Path=/",
+    `Domain=${COOKIE_DOMAIN}`,
     `Max-Age=${SESSION_MAX_AGE}`,
   ].join("; ");
 }
@@ -114,6 +129,7 @@ export function clearSessionCookieHeader(): string {
     "Secure",
     "SameSite=Lax",
     "Path=/",
+    `Domain=${COOKIE_DOMAIN}`,
     "Max-Age=0",
   ].join("; ");
 }
@@ -156,6 +172,7 @@ export function refreshCookieHeader(token: string): string {
     "Secure",
     "SameSite=Strict",
     `Path=${REFRESH_PATH}`,
+    `Domain=${COOKIE_DOMAIN}`,
     `Max-Age=${REFRESH_MAX_AGE}`,
   ].join("; ");
 }
@@ -167,6 +184,7 @@ export function clearRefreshCookieHeader(): string {
     "Secure",
     "SameSite=Strict",
     `Path=${REFRESH_PATH}`,
+    `Domain=${COOKIE_DOMAIN}`,
     "Max-Age=0",
   ].join("; ");
 }
