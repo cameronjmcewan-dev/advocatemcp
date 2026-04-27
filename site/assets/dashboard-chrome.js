@@ -137,6 +137,12 @@
     const dateBtn = showDateRange ? `<button class="date-range">Last 7 days ⌄</button>` : '';
     const shareBtn = showShare ? `<button class="btn btn-ghost btn-sm">Share</button>` : '';
     const inviteBtn = showInvite ? `<button class="btn btn-primary btn-sm">Invite teammate</button>` : '';
+    // Location selector — visible only for tenants with > 1 location.
+    // Hidden by default in the markup; wireLocationSelector() below
+    // unhides + populates after fetching /api/client/locations.
+    const locBtn = `<button class="loc-selector" id="loc-selector" type="button" hidden>
+      <span style="opacity:.6;margin-right:4px">📍</span><span class="loc-selector-label">All locations</span><span style="opacity:.6;margin-left:4px">⌄</span>
+    </button>`;
     // Extra classes (topbar-crumb / topbar-title) are selectors the
     // SPA router uses to update text content on navigation without
     // re-rendering the whole topbar.
@@ -153,7 +159,7 @@
         <div class="crumb topbar-crumb">${crumb}</div>
         <h1 class="topbar-title">${title}</h1>
       </div>
-      <div class="tb-right">${dateBtn}${shareBtn}${inviteBtn}</div>
+      <div class="tb-right">${locBtn}${dateBtn}${shareBtn}${inviteBtn}</div>
     </div>`;
   }
 
@@ -279,10 +285,114 @@
 
     wireMobileSidebar();
     wireFab();
+    wireLocationSelector();
     injectSpeculationRules();
     loadCommandPaletteIfAdmin();
     loadRouter();
   };
+
+  // ── Location selector (Apr 27 2026 Section 2) ───────────────────────
+  //
+  // Topbar dropdown that filters every dashboard KPI / chart / activity
+  // feed by location. Selection persists in localStorage across page
+  // navigation. When changed, dispatches an `amcp:location-changed`
+  // event on window so module-specific renderers (overview.js,
+  // activity.js, etc.) can refetch their data with the new filter.
+  //
+  // Hidden when the tenant has 0 or 1 location — single-location tenants
+  // don't need a selector. Populated via /api/client/locations after
+  // mount so it doesn't block the initial render.
+  function wireLocationSelector() {
+    const btn = document.getElementById('loc-selector');
+    if (!btn) return;
+
+    // Expose the selected location as a window-global so any module
+    // can read the current filter without subscribing to the event.
+    // localStorage backs it for cross-page persistence.
+    const KEY = 'amcp_selected_location_id';
+    window.AMCP_LOCATION = window.AMCP_LOCATION || {
+      get: () => localStorage.getItem(KEY) || null,
+      set: (id) => {
+        if (id) localStorage.setItem(KEY, id);
+        else    localStorage.removeItem(KEY);
+        window.dispatchEvent(new CustomEvent('amcp:location-changed', { detail: { id: id || null } }));
+      },
+    };
+
+    // Inject styles for the menu (one-time).
+    if (!document.getElementById('amcp-loc-style')) {
+      const style = document.createElement('style');
+      style.id = 'amcp-loc-style';
+      style.textContent = [
+        '.loc-selector{display:inline-flex;align-items:center;background:var(--paper-2);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:13px;color:var(--ink);cursor:pointer;font:inherit}',
+        '.loc-selector:hover{background:var(--paper)}',
+        '.loc-menu{position:fixed;background:var(--paper);border:1px solid var(--line);border-radius:8px;box-shadow:0 12px 36px rgba(0,0,0,.12);padding:6px;z-index:9999;min-width:240px}',
+        '.loc-menu-item{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;font-size:13.5px;color:var(--ink);cursor:pointer;border-radius:6px}',
+        '.loc-menu-item:hover{background:var(--paper-2)}',
+        '.loc-menu-item.active{font-weight:500;color:var(--maroon)}',
+      ].join('');
+      document.head.appendChild(style);
+    }
+
+    // Fetch locations and populate.
+    const af = window.AMCP && window.AMCP.authedFetch;
+    if (!af) return;
+    af('/api/client/locations')
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (!data || !Array.isArray(data.locations) || data.locations.length < 2) return;
+        const locations = data.locations;
+        btn.removeAttribute('hidden');
+
+        function labelFor(id) {
+          if (!id) return 'All locations';
+          const m = locations.find((l) => l.id === id);
+          return m ? m.name : 'All locations';
+        }
+        function refreshLabel() {
+          const lbl = btn.querySelector('.loc-selector-label');
+          if (lbl) lbl.textContent = labelFor(window.AMCP_LOCATION.get());
+        }
+        refreshLabel();
+
+        let menu = null;
+        function closeMenu() { if (menu) { menu.remove(); menu = null; } }
+        function openMenu() {
+          closeMenu();
+          const rect = btn.getBoundingClientRect();
+          menu = document.createElement('div');
+          menu.className = 'loc-menu';
+          menu.style.top = (rect.bottom + 6) + 'px';
+          menu.style.left = (rect.right - 240) + 'px';
+          const current = window.AMCP_LOCATION.get();
+          const items = [{ id: null, name: 'All locations' }].concat(locations);
+          menu.innerHTML = items.map((l) => {
+            const active = (current === l.id) || (!current && l.id === null);
+            const sub = l.city ? `<span style="opacity:.6;font-size:12px;margin-left:8px">${l.city}, ${l.state}</span>` : '';
+            return `<div class="loc-menu-item ${active ? 'active' : ''}" data-loc-id="${l.id || ''}">
+              <span>${(l.name || '').replace(/[<>&]/g, '')}</span>${sub}
+              ${active ? '<span style="color:var(--maroon)">✓</span>' : ''}
+            </div>`;
+          }).join('');
+          document.body.appendChild(menu);
+          menu.addEventListener('click', (e) => {
+            const item = e.target.closest('.loc-menu-item');
+            if (!item) return;
+            const id = item.getAttribute('data-loc-id') || null;
+            window.AMCP_LOCATION.set(id);
+            refreshLabel();
+            closeMenu();
+          });
+        }
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (menu) closeMenu(); else openMenu();
+        });
+        document.addEventListener('click', () => closeMenu());
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
+      })
+      .catch(() => { /* network blip — leave selector hidden */ });
+  }
 
   /* Auto-load the client-side SPA router on every v2 page so sidebar
      clicks swap main content in-place instead of full-reloading. Not

@@ -80,20 +80,20 @@
   async function fetchReal() {
     const af = window.AMCP && window.AMCP.authedFetch;
     if (!af) throw new Error('AMCP.authedFetch not available — did dashboard-auth.js load?');
+    // Per-location filter (Apr 27 2026 Section 2). Reads the topbar
+    // selector's current value; appended to the revenue-summary fetch
+    // so filtering re-scopes the dashboard's headline number. Other
+    // analytics endpoints will gain location_id support as the data
+    // model migration lands; for now the bookings-derived KPIs scope
+    // via the revenue summary's event_count.
+    const locId = (window.AMCP_LOCATION && window.AMCP_LOCATION.get && window.AMCP_LOCATION.get()) || null;
+    const locQuery = locId ? '?location_id=' + encodeURIComponent(locId) : '';
     const [metrics, radar, activity, onboarding, revenue] = await Promise.all([
       af('/api/client/metrics').then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/radar').then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/activity-detail').then(r => r.ok ? r.json() : null).catch(() => null),
-      // Onboarding snapshot drives the inline Get Started panel. 404
-      // means the business row hasn't been created yet (fresh signup
-      // mid-Stripe-webhook); treat as "no snapshot, hide panel".
       af('/api/client/onboarding').then(r => r.ok ? r.json() : null).catch(() => null),
-      // Revenue summary (Pro feature, Apr 27 2026). Three states —
-      // verified / estimated / unconfigured — drive the AI-attributed
-      // bookings KPI's dollar display. Failure (e.g. legacy worker
-      // before deploy) → fall through to no-revenue display, the
-      // existing booking-count behavior.
-      af('/api/client/revenue-summary').then(r => r.ok ? r.json() : null).catch(() => null),
+      af('/api/client/revenue-summary' + locQuery).then(r => r.ok ? r.json() : null).catch(() => null),
     ]);
     return {
       metrics:    metrics  || {},
@@ -102,6 +102,22 @@
       onboarding: onboarding || null,
       revenue:    revenue  || null,
     };
+  }
+
+  // Re-fetch when the topbar location selector changes. Listening on
+  // window because dashboard-chrome.js dispatches the event globally
+  // so every page module can reactively rescope.
+  if (typeof window !== 'undefined') {
+    window.addEventListener('amcp:location-changed', () => {
+      // Rebuild via AMCP_SHELL.boot() flow. The shell provides a single
+      // fetchReal+render pipeline; trigger it via reload of the section.
+      if (window.AMCP_SHELL && typeof window.AMCP_SHELL.refresh === 'function') {
+        window.AMCP_SHELL.refresh();
+      } else {
+        // Fallback: full page reload. Less elegant but always works.
+        window.location.reload();
+      }
+    });
   }
 
   /* ────────────────────────────────────────────────────────────────────

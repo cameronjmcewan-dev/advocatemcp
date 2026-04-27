@@ -25,6 +25,21 @@ export interface Env {
   ACTIVATION_SIGNING_KEY?: string;
 
   /**
+   * HMAC-SHA256 signing key for team-invite magic-link tokens
+   * (Apr 27 2026 Enterprise honesty pass). Used by worker/src/lib/inviteToken.ts
+   * — the POST /api/client/team/invite endpoint mints invite tokens
+   * with this key, the POST /auth/team-accept endpoint verifies them.
+   *
+   * Isolated from ACTIVATION_SIGNING_KEY and TOKEN_SIGNING_KEY by
+   * purpose so a leak of one key can't be used to forge other token
+   * types. When unset, the team-invite endpoints return 503 with a
+   * configuration message.
+   *
+   * Set via: `cd worker && npx wrangler secret put INVITE_SIGNING_KEY`
+   */
+  INVITE_SIGNING_KEY?: string;
+
+  /**
    * HMAC-SHA256 signing key for Phase C cross-origin auth access tokens.
    * Isolated from TOKEN_SIGNING_KEY and ACTIVATION_SIGNING_KEY by purpose
    * — the access token is a stateless short-lived (15-minute) bearer

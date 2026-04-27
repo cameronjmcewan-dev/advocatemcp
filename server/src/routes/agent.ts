@@ -746,12 +746,30 @@ agentRouter.get("/agents/:slug/revenue-summary", requireApiKey, (req: Request, r
   const fromISO = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
   const toISO   = now.toISOString();
 
+  // Optional per-location filter. When the dashboard's topbar location
+  // selector is set, the worker forwards ?location_id=<id> through to
+  // this endpoint. Validate that the supplied id actually belongs to
+  // this tenant — defense against an attacker forging a location_id
+  // from another tenant — by joining to locations.
+  const rawLocationId = (req.query.location_id ?? "") as string;
+  let locationId: string | null = null;
+  if (rawLocationId) {
+    const ownedRow = getDb()
+      .prepare("SELECT id FROM locations WHERE id = ? AND business_slug = ?")
+      .get(rawLocationId, slug) as { id: string } | undefined;
+    if (!ownedRow) {
+      res.status(400).json({ error: "invalid_location_id" });
+      return;
+    }
+    locationId = ownedRow.id;
+  }
+
   // Lazy import to avoid circular deps on agent.ts → revenue.ts → db.ts.
   // computeRevenueWindow throws nothing — it returns 'unconfigured' on
   // any data shortfall — so no try/catch needed here.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { computeRevenueWindow } = require("../lib/revenue.js") as typeof import("../lib/revenue.js");
-  const summary = computeRevenueWindow({ db: getDb(), slug, fromISO, toISO });
+  const summary = computeRevenueWindow({ db: getDb(), slug, fromISO, toISO, locationId });
   res.json(summary);
 });
 

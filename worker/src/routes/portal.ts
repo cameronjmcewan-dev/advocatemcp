@@ -46,6 +46,14 @@ import { handleSaveDraft, handleLoadDraft } from "./onboardDraft";
 import { handleContact, handleContactPreflight } from "./contact";
 import { handleSupportChat, handleSupportChatPreflight } from "./supportChat";
 import { handleRevenueEvent, ensureRevenueWebhookSecret } from "./revenueEvent";
+import {
+  handleListTeam,
+  handleInviteTeam,
+  handleRemoveTeam,
+  handleUpdateTeamRole,
+  handleTeamAccept,
+  handleTeamAcceptPreflight,
+} from "./team";
 import { signMagicToken, verifyMagicToken } from "../lib/magicToken";
 import {
   handleAdminInsightsProxy,
@@ -84,6 +92,21 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/revenue-summary"     && method === "GET")  return apiRevenueSummary(request, env);
   if (pathname === "/api/client/revenue-aov"          && method === "POST") return apiRevenueSetAov(request, env);
   if (pathname === "/api/client/revenue-webhook"      && method === "POST") return apiRevenueWebhookSecret(request, env);
+
+  // Team accounts (Apr 27 2026 Enterprise honesty pass). Owner-only
+  // mutating endpoints + a public token-consume endpoint for invitees
+  // setting their password from the magic link.
+  if (pathname === "/api/client/team"          && method === "GET")  return handleListTeam(request, env);
+  if (pathname === "/api/client/team/invite"   && method === "POST") return handleInviteTeam(request, env);
+  const teamRoleMatch = pathname.match(/^\/api\/client\/team\/([a-zA-Z0-9_-]+)\/role$/);
+  if (teamRoleMatch && method === "PATCH")  return handleUpdateTeamRole(request, env, teamRoleMatch[1]);
+  const teamMemberMatch = pathname.match(/^\/api\/client\/team\/([a-zA-Z0-9_-]+)$/);
+  if (teamMemberMatch && method === "DELETE") return handleRemoveTeam(request, env, teamMemberMatch[1]);
+  // Public team-accept consume endpoint. Hosted on customers.advocatemcp.com
+  // because the magic-link email goes there; CORS allowed from same
+  // origin (the team-accept.html page on customers.advocatemcp.com).
+  if (pathname === "/auth/team-accept"         && method === "OPTIONS") return handleTeamAcceptPreflight(request);
+  if (pathname === "/auth/team-accept"         && method === "POST")    return handleTeamAccept(request, env);
 
   // Multi-location CRUD (Pro/Enterprise feature, Apr 27 2026). Worker
   // is a thin proxy to Railway's /agents/:slug/locations endpoints.
@@ -1091,8 +1114,15 @@ async function apiRevenueSummary(request: Request, env: Env): Promise<Response> 
   // Also enforces the Pro/Enterprise plan gate server-side: Railway
   // returns 402 for base-tier tenants, which we surface unchanged so
   // the dashboard hides the revenue card.
+  //
+  // Per-location filter (Apr 27 2026 Section 2): forward ?location_id
+  // through to Railway. Railway validates ownership against the
+  // locations table; an attacker can't read another tenant's revenue
+  // by forging an id.
   const base = (env as { API_BASE_URL?: string }).API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
-  const url = `${base}/agents/${encodeURIComponent(biz.slug)}/revenue-summary`;
+  const incomingLocId = new URL(request.url).searchParams.get("location_id");
+  const locQuery = incomingLocId ? `?location_id=${encodeURIComponent(incomingLocId)}` : "";
+  const url = `${base}/agents/${encodeURIComponent(biz.slug)}/revenue-summary${locQuery}`;
   const upstream = await fetch(url, {
     headers: { Authorization: `Bearer ${biz.api_key}` },
   });

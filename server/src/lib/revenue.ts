@@ -65,6 +65,13 @@ interface ComputeArgs {
   fromISO: string;
   /** ISO timestamp, inclusive upper bound. */
   toISO:   string;
+  /**
+   * Optional per-location filter (Apr 27 2026). When set, both the
+   * verified events query and the estimated-path reservation count
+   * filter to rows where location_id matches. When omitted (the
+   * default), aggregates across all locations including NULL.
+   */
+  locationId?: string | null;
 }
 
 /**
@@ -76,7 +83,15 @@ interface ComputeArgs {
  * idx_reservations_slug_window) so it's microseconds even at scale.
  */
 export function computeRevenueWindow(args: ComputeArgs): RevenueWindow {
-  const { db, slug, fromISO, toISO } = args;
+  const { db, slug, fromISO, toISO, locationId } = args;
+  // When locationId is set, append `AND location_id = ?` to both the
+  // verified events query and the estimated-path reservation count.
+  // The build* helpers below construct the SQL fragments inline rather
+  // than always-LEFT-JOIN'ing because filtered queries hit the
+  // (business_slug, location_id, time) index efficiently while a
+  // permissive query needs the (business_slug, time) index.
+  const locClause = locationId ? "AND location_id = ?" : "";
+  const locParams: string[] = locationId ? [locationId] : [];
 
   // Pull the three tenant-level config values in one round-trip. Defaults
   // are applied here rather than relying on JS truthy checks because
@@ -104,9 +119,10 @@ export function computeRevenueWindow(args: ComputeArgs): RevenueWindow {
          FROM revenue_events
         WHERE business_slug = ?
           AND occurred_at >= ?
-          AND occurred_at <= ?`,
+          AND occurred_at <= ?
+          ${locClause}`,
     )
-    .get(slug, fromISO, toISO) as { total_cents: number; event_count: number };
+    .get(slug, fromISO, toISO, ...locParams) as { total_cents: number; event_count: number };
 
   if (verified.event_count > 0) {
     return {
@@ -134,9 +150,10 @@ export function computeRevenueWindow(args: ComputeArgs): RevenueWindow {
         WHERE business_slug = ?
           AND status         = 'confirmed'
           AND requested_at  >= ?
-          AND requested_at  <= ?`,
+          AND requested_at  <= ?
+          ${locClause}`,
     )
-    .get(slug, fromEpoch, toEpoch) as { confirmed_count: number };
+    .get(slug, fromEpoch, toEpoch, ...locParams) as { confirmed_count: number };
 
   const aov = tenant?.avg_booking_value_cents ?? null;
 
