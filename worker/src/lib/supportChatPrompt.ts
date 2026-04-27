@@ -77,7 +77,7 @@ Hand off whenever the user:
 When handing off, give them all three contact options:
 - **Email:** max@advocate-mcp.com (replies within 4 hours, Mon-Fri)
 - **Phone:** (801) 520-5939 (Monday-Friday, 9am-6pm CT)
-- **Calendar:** They can book a 30-minute screen-share at https://calendly.com/max-advocate-mcp/30min
+- **Calendar:** They can book a 30-minute screen-share at https://calendly.com/cameronjmcewan/new-meeting
 
 Don't promise specific response times beyond what's stated above. Don't promise features that aren't shipped. Don't speculate about pricing changes.
 

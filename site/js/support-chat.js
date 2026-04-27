@@ -32,7 +32,7 @@
   var SUPPORT_EMAIL = 'max@advocate-mcp.com';
   var SUPPORT_TEL   = '+18015205939';
   var SUPPORT_TEL_DISPLAY = '(801) 520-5939';
-  var CALENDLY_URL  = 'https://calendly.com/max-advocate-mcp/30min';
+  var CALENDLY_URL  = 'https://calendly.com/cameronjmcewan/new-meeting';
 
   // Conversation transcript. Each turn: { role: 'user'|'assistant', content }.
   var history = [];
