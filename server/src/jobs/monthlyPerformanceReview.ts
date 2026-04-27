@@ -56,9 +56,21 @@ const BACKOFF_MS = [
   12 * 60 * 60 * 1000, // 12h
 ];
 
+/**
+ * Return the next-attempt timestamp for retry scheduling.
+ *
+ * `attempts` is the 1-indexed retry number — pass 1 after the first
+ * send fails (BACKOFF_MS[0] = 5min wait), 2 after the second fails
+ * (BACKOFF_MS[1] = 30min), and so on. Returns null when the row has
+ * exhausted the backoff array (terminal). Mirrors the offset
+ * convention in weeklyDigest.ts:nextAttemptIso so both crons behave
+ * identically — audit Apr 27 2026 fixed an off-by-one that skipped
+ * the first retry slot.
+ */
 function nextAttemptIso(attempts: number, from: Date): string | null {
-  if (attempts >= BACKOFF_MS.length) return null;        // terminal
-  return new Date(from.getTime() + BACKOFF_MS[attempts]).toISOString();
+  const waitMs = BACKOFF_MS[attempts - 1];
+  if (waitMs === undefined) return null;        // terminal
+  return new Date(from.getTime() + waitMs).toISOString();
 }
 
 // ── Window math ───────────────────────────────────────────────────────────
@@ -72,18 +84,28 @@ interface ReviewWindow {
 }
 
 /** Calendar month containing `now`, plus the prior calendar month for
- * delta math. */
+ * delta math. UTC-bounded so the same epoch hits regardless of which
+ * timezone the Railway container happens to run in (Railway is UTC by
+ * default, but we don't want to rely on that). The audit Apr 27 2026
+ * flagged that the previous local-time constructors would drift the
+ * window by N hours on non-UTC servers. */
 function monthWindow(now: Date): ReviewWindow {
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const end   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-  const priorStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const priorEnd   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  const start      = new Date(Date.UTC(y, m, 1));
+  const end        = new Date(Date.UTC(y, m + 1, 0, 23, 59, 59));
+  const priorStart = new Date(Date.UTC(y, m - 1, 1));
+  const priorEnd   = new Date(Date.UTC(y, m, 0, 23, 59, 59));
   return {
     start_iso: start.toISOString(),
     end_iso:   end.toISOString(),
     prior_start_iso: priorStart.toISOString(),
     prior_end_iso:   priorEnd.toISOString(),
-    month_label: start.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
+    // toLocaleDateString without a forced timeZone reads the host's
+    // local timezone, which can flip the month label on the Dec 31 →
+    // Jan 1 boundary if Railway's host clock is in a different zone.
+    // Force UTC + en-US so the label always matches the start_iso.
+    month_label: start.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" }),
   };
 }
 
@@ -524,11 +546,14 @@ export async function retryPendingPerformanceReviews(now: Date = new Date()): Pr
 }
 
 function priorMonthIso(monthStartIso: string, which: "start" | "end"): string {
+  // UTC-bounded, matching monthWindow(). See the audit-fix comment there.
   const d = new Date(monthStartIso);
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth();
   if (which === "start") {
-    return new Date(d.getFullYear(), d.getMonth() - 1, 1).toISOString();
+    return new Date(Date.UTC(y, m - 1, 1)).toISOString();
   }
-  return new Date(d.getFullYear(), d.getMonth(), 0, 23, 59, 59).toISOString();
+  return new Date(Date.UTC(y, m, 0, 23, 59, 59)).toISOString();
 }
 
 // ── Cron registration ────────────────────────────────────────────────────

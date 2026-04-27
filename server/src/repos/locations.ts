@@ -152,8 +152,8 @@ export function addLocation(
     );
 
   const row = db
-    .prepare("SELECT * FROM locations WHERE id = ?")
-    .get(id) as LocationRow;
+    .prepare("SELECT * FROM locations WHERE id = ? AND business_slug = ?")
+    .get(id, slug) as LocationRow;
   return { ok: true, row };
 }
 
@@ -221,8 +221,8 @@ export function updateLocation(
     );
 
   const row = db
-    .prepare("SELECT * FROM locations WHERE id = ?")
-    .get(id) as LocationRow;
+    .prepare("SELECT * FROM locations WHERE id = ? AND business_slug = ?")
+    .get(id, slug) as LocationRow;
   return { ok: true, row };
 }
 
@@ -270,7 +270,12 @@ export function setPrimary(
 
   const tx = db.transaction(() => {
     db.prepare("UPDATE locations SET is_primary = 0 WHERE business_slug = ? AND is_primary = 1").run(slug);
-    db.prepare("UPDATE locations SET is_primary = 1 WHERE id = ?").run(id);
+    // Defensive: filter the promote UPDATE by BOTH id AND slug. The
+    // earlier SELECT already verified id belongs to slug, but adding
+    // the slug filter here means even a future refactor that drops
+    // the SELECT can't accidentally cross-tenant a promote. Apr 27
+    // 2026 audit.
+    db.prepare("UPDATE locations SET is_primary = 1 WHERE id = ? AND business_slug = ?").run(id, slug);
   });
   tx();
   return { ok: true };
