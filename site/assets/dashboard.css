@@ -326,3 +326,41 @@ body { background: var(--paper-2); }
   outline: none; border-color: var(--maroon); box-shadow: 0 0 0 3px var(--maroon-wash);
 }
 .form-field textarea { min-height: 120px; resize: vertical; }
+
+/* ── Revenue attribution pills (Pro feature, Apr 27 2026) ────────────────
+   Three states. Verified is green (we have HMAC-signed webhook events
+   confirming actuals). Estimated is amber (computed from customer-
+   supplied AOV × confirmed reservations — clearly labeled so customers
+   can't confuse it with verified). Unconfigured = no pill, no dollars.
+
+   Founder requirement: amber and green must be visually distinct
+   (color-blind-safe pairing) so a customer can never misread an
+   estimated number as verified. Both pills also carry an explicit
+   text label, not just color, for the same reason. */
+.rev-pill {
+  display: inline-flex; align-items: center;
+  font-size: 10.5px; font-weight: 600;
+  padding: 2px 8px; border-radius: 999px;
+  margin-left: 8px; letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+.rev-pill-verified {
+  background: var(--accent-dim, rgba(34, 134, 58, 0.15));
+  color: var(--sage, #228e3a);
+  border: 1px solid var(--sage, #228e3a);
+}
+.rev-pill-estimated {
+  background: rgba(232, 168, 56, 0.15);
+  color: #b07515;
+  border: 1px solid rgba(232, 168, 56, 0.6);
+}
+
+/* Footer-style legal disclaimer for estimated revenue. Placed below
+   the KPI grid by the Settings/Overview render path. Subtle: muted
+   text, no border, no background — just a one-liner customers can
+   ignore but lawyers can point to. */
+.rev-disclaimer {
+  font-size: 11px; color: var(--muted);
+  margin: -8px 0 16px 0; padding: 0 4px;
+  font-style: italic; line-height: 1.5;
+}

@@ -70,8 +70,9 @@ registerRouter.post("/register", requireApiKey, (req: Request, res: Response) =>
         ratings_json, differentiators_text, customer_quotes_json,
         guarantee_text, case_stories_json, lead_routing_json,
         plan, email,
-        beta_started_at, beta_ends_at, beta_coupon_id, beta_cohort)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        beta_started_at, beta_ends_at, beta_coupon_id, beta_cohort,
+        avg_booking_value_cents, revenue_currency)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const slugFreeStmt = db.prepare("SELECT id FROM businesses WHERE slug = ?");
 
@@ -132,6 +133,14 @@ registerRouter.post("/register", requireApiKey, (req: Request, res: Response) =>
         p.beta_ends_at ?? null,
         p.beta_coupon_id ?? null,
         p.beta_cohort ?? null,
+        // Revenue attribution (Pro feature, Apr 27 2026). avg_booking_value
+        // arrives from the wizard step 4 (pricing); customers can also
+        // edit it later from Settings. revenue_webhook_secret is generated
+        // server-side on first opt-in via the settings endpoint, never on
+        // signup, so it stays null here. revenue_currency falls back to
+        // the column-level default 'USD' when omitted.
+        p.avg_booking_value_cents ?? null,
+        p.revenue_currency ?? "USD",
       );
       insertedSlug = candidate;
       break;

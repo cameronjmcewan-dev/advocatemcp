@@ -167,6 +167,23 @@ export const OnboardingPayloadSchema = z.object({
   // callers (CLI, manual onboard scripts) continue to work without change.
   plan: z.enum(["base", "pro"]).optional(),
 
+  // Revenue attribution (Pro feature, Apr 27 2026).
+  //
+  // avg_booking_value_cents — customer-supplied "average ticket" used to
+  //   compute estimated AI-attributed revenue when the customer hasn't
+  //   wired up a verified-revenue webhook. Stored as integer cents to
+  //   avoid float rounding when multiplied by booking counts. Optional;
+  //   when absent the dashboard shows booking counts only, no dollars.
+  // revenue_currency — ISO-4217 string for display formatting. Defaults
+  //   to USD at the column level; the wire field is optional so almost
+  //   no caller has to set it.
+  // revenue_webhook_secret is intentionally NOT exposed via the wizard
+  //   payload — it is server-generated and only readable via the
+  //   authenticated settings endpoint. Customers see/rotate it from
+  //   the dashboard, never set it on signup.
+  avg_booking_value_cents: z.number().int().nonnegative().max(10_000_000).optional(),
+  revenue_currency:        z.string().regex(/^[A-Z]{3}$/, "must be ISO-4217 (3 uppercase letters)").optional(),
+
   // Beta cohort fields, mirrored from worker D1. Set by the Stripe
   // webhook when checkout used a Stripe promo code on the
   // BETA_COUPON_IDS allowlist. weeklyDigest + betaEndingEmail jobs

@@ -80,7 +80,7 @@
   async function fetchReal() {
     const af = window.AMCP && window.AMCP.authedFetch;
     if (!af) throw new Error('AMCP.authedFetch not available — did dashboard-auth.js load?');
-    const [metrics, radar, activity, onboarding] = await Promise.all([
+    const [metrics, radar, activity, onboarding, revenue] = await Promise.all([
       af('/api/client/metrics').then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/radar').then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/activity-detail').then(r => r.ok ? r.json() : null).catch(() => null),
@@ -88,12 +88,19 @@
       // means the business row hasn't been created yet (fresh signup
       // mid-Stripe-webhook); treat as "no snapshot, hide panel".
       af('/api/client/onboarding').then(r => r.ok ? r.json() : null).catch(() => null),
+      // Revenue summary (Pro feature, Apr 27 2026). Three states —
+      // verified / estimated / unconfigured — drive the AI-attributed
+      // bookings KPI's dollar display. Failure (e.g. legacy worker
+      // before deploy) → fall through to no-revenue display, the
+      // existing booking-count behavior.
+      af('/api/client/revenue-summary').then(r => r.ok ? r.json() : null).catch(() => null),
     ]);
     return {
       metrics:    metrics  || {},
       radar:      radar    || { summary: {}, basket: { queries: [] }, authority_report: {} },
       activity:   activity || { reservations: [], handoffs: [], agent_requests: [], totals: {} },
       onboarding: onboarding || null,
+      revenue:    revenue  || null,
     };
   }
 
@@ -112,6 +119,31 @@
   function fmtCount(v) {
     if (v == null || isNaN(v)) return '—';
     return Number(v).toLocaleString();
+  }
+  /**
+   * Format integer cents as a localized currency string. Always uses 0
+   * fraction digits because the dashboard cards are scan-not-spreadsheet —
+   * "$4,250" reads cleaner than "$4,250.00". The currency arg is ISO-4217;
+   * Intl.NumberFormat handles the symbol placement automatically.
+   *
+   * Returns '—' when cents is null/undefined so callers don't have to
+   * branch — useful for the unconfigured-revenue case where we still
+   * want to render the KPI shell but suppress the dollar value.
+   */
+  function fmtMoneyCents(cents, currency) {
+    if (cents == null || isNaN(cents)) return '—';
+    const dollars = Number(cents) / 100;
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: currency || 'USD',
+        maximumFractionDigits: 0,
+      }).format(dollars);
+    } catch {
+      // Bad currency code → fall back to USD-style formatting so we
+      // never crash the dashboard over a malformed config value.
+      return '$' + Math.round(dollars).toLocaleString();
+    }
   }
   function timeAgo(iso) {
     if (!iso) return '';
@@ -184,11 +216,46 @@
   /* ────────────────────────────────────────────────────────────────────
    * Per-card renderers — each returns an HTML string fragment.
    * ──────────────────────────────────────────────────────────────────── */
-  function renderKPIs({ metrics, radar, activity }) {
+  function renderKPIs({ metrics, radar, activity, revenue }) {
     const mentions     = fmtCount(metrics && metrics.total_queries);
     const clicks       = fmtCount(metrics && metrics.referral_clicks_last_30_days);
     const reservations = fmtCount(reservationCount(activity));
     const citation     = fmtPct(citationRate(radar));
+
+    // Revenue card has three render states (Apr 27 2026):
+    //
+    //   verified    → "$X,XXX from N AI-attributed bookings"  (green pill)
+    //   estimated   → "~$X,XXX from N AI-attributed bookings"  (amber pill)
+    //   unconfigured → "N AI-attributed bookings" + CTA (no dollars)
+    //
+    // The unconfigured state intentionally never displays a dollar value —
+    // founder directive: never show unverified currency on the dashboard.
+    // Source defaults to 'unconfigured' when /api/client/revenue-summary
+    // 404s on legacy workers (fall-through-graceful).
+    const revSource    = (revenue && revenue.source) || 'unconfigured';
+    const revAmount    = revenue && revenue.amount_cents;
+    const revCurrency  = (revenue && revenue.currency) || 'USD';
+    const revCount     = (revenue && revenue.event_count != null) ? revenue.event_count : reservationCount(activity);
+
+    let kpiHeadline, kpiSub, kpiPill, kpiPlain;
+    if (revSource === 'verified') {
+      kpiHeadline = fmtMoneyCents(revAmount, revCurrency);
+      kpiSub      = `from ${fmtCount(revCount)} AI-attributed bookings · this month`;
+      kpiPill     = '<span class="rev-pill rev-pill-verified" title="Confirmed via your booking-system webhook.">✓ Verified</span>';
+      kpiPlain    = 'Real dollars from AI-driven bookings, confirmed by your booking system.';
+    } else if (revSource === 'estimated') {
+      const aov = revenue && revenue.aov_cents;
+      kpiHeadline = '~' + fmtMoneyCents(revAmount, revCurrency);
+      kpiSub      = `from ${fmtCount(revCount)} AI-attributed bookings · this month`;
+      kpiPill     = `<span class="rev-pill rev-pill-estimated" title="Estimated using your average ticket of ${fmtMoneyCents(aov, revCurrency)}. Configure a revenue webhook in Settings for verified numbers.">Estimated</span>`;
+      kpiPlain    = 'Estimated using your average ticket × AI-attributed bookings.';
+    } else {
+      // Unconfigured — booking count, no dollars, with CTA.
+      kpiHeadline = fmtCount(revCount);
+      kpiSub      = 'AI-attributed bookings · this month';
+      kpiPill     = '';
+      kpiPlain    = 'Add an average ticket in Settings to see estimated revenue.';
+    }
 
     // KPI ordering choice (Apr 25 2026): "AI-attributed bookings" comes
     // first because it's the single most retention-critical number. A
@@ -198,10 +265,10 @@
     return `
       <div class="kpis" data-tour="kpis">
         <div class="kpi">
-          <div class="head"><div class="k">AI-attributed bookings <span class="info" title="Reservations + handoffs an AI agent made on your behalf via MCP. The closest measurable signal that AI is generating real revenue.">i</span></div></div>
-          <div class="v tabular">${reservations}</div>
-          <div class="d">Held or confirmed</div>
-          <div class="plain">Bookings agents made on your behalf.</div>
+          <div class="head"><div class="k">AI-attributed revenue ${kpiPill} <span class="info" title="${revSource === 'verified' ? 'Confirmed via your booking-system webhook.' : revSource === 'estimated' ? 'Estimated based on your average ticket value.' : 'Bookings AI agents made on your behalf via MCP.'}">i</span></div></div>
+          <div class="v tabular">${kpiHeadline}</div>
+          <div class="d">${kpiSub}</div>
+          <div class="plain">${kpiPlain}</div>
         </div>
         <div class="kpi">
           <div class="head"><div class="k">Mentions <span class="info" title="Total AI queries that referenced your business.">i</span></div></div>
@@ -540,6 +607,18 @@
       ${renderScoreOverviewCard()}
 
       ${renderKPIs(d)}
+
+      ${
+        // Liability-safe disclaimer rendered ONLY when the AI-attributed
+        // revenue card is in the 'estimated' state. Verified state shows
+        // verified actuals — no disclaimer needed. Unconfigured state
+        // shows no dollar values at all. The string "estimated" must
+        // appear here exactly so a customer who screenshots the
+        // dashboard for their accountant sees the label preserved.
+        (d.revenue && d.revenue.source === 'estimated')
+          ? `<div class="rev-disclaimer">Estimated revenue is computed from your supplied average ticket × AI-attributed booking count. Actuals may differ. Configure a verified-revenue webhook in Settings for confirmed numbers.</div>`
+          : ''
+      }
 
       <div class="row" data-tour="bot-traffic">
         ${renderBotChart(d)}

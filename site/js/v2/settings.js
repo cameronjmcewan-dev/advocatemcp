@@ -39,16 +39,23 @@
     const af = window.AMCP && window.AMCP.authedFetch;
     const slug = (window.AMCP_DATA && window.AMCP_DATA.slug) || '';
     const suffix = slug ? `?slug=${encodeURIComponent(slug)}` : '';
-    const [me, metrics, domain, activity] = await Promise.all([
+    const [me, metrics, domain, activity, revenue] = await Promise.all([
       af('/api/client/me').then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/metrics').then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/domain-info' + suffix).then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/activity-detail').then(r => r.ok ? r.json() : null).catch(() => null),
+      // Revenue summary (Pro feature, Apr 27 2026). Used to prefill the
+      // AOV input and indicate whether a webhook secret already exists
+      // so the "Generate" button label can flip to "Rotate". Failure
+      // (legacy worker, network blip) → no prefill, fresh "Generate"
+      // state — non-critical.
+      af('/api/client/revenue-summary').then(r => r.ok ? r.json() : null).catch(() => null),
     ]);
     return Object.assign({}, metrics || {}, {
       _me: me,
       domain:   domain || {},
       activity: activity || {},
+      revenue:  revenue || null,
     });
   }
 
@@ -154,6 +161,60 @@
                   </div>
                 </div>`
           }
+        </div>
+      </div>
+
+      <!-- Revenue tracking (Pro feature, Apr 27 2026). Two configuration
+           paths: AOV (anyone can use, gives estimated revenue) or
+           verified webhook (booking-system integration, gives actual).
+           Both are independent — a tenant can set either, both, or
+           neither. The pill on the dashboard's revenue card and the
+           amount it displays are driven by /api/client/revenue-summary
+           which reads these values. -->
+      <div class="row single">
+        <div class="card-dash">
+          <div class="card-head">
+            <div><h3>Revenue tracking <span class="chip maroon" style="margin-left:6px">Pro</span></h3>
+              <div class="sub">Tell Advocate how to translate AI-attributed bookings into dollars on your dashboard</div>
+            </div>
+          </div>
+          <div class="set-row" style="align-items:center">
+            <div class="l">Average ticket
+              <div style="font-size:11.5px;color:var(--muted);margin-top:2px;font-weight:400;line-height:1.4">Used to estimate revenue when a booking system isn't connected. Stored privately on your account.</div>
+            </div>
+            <div class="r" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <span style="color:var(--muted);font-size:13px">$</span>
+              <input type="number" id="rev-aov-input" step="1" min="0" max="100000" placeholder="450"
+                     value="${d.revenue && d.revenue.aov_cents != null ? Math.round(d.revenue.aov_cents/100) : ''}"
+                     class="key-input" style="width:120px">
+              <button class="btn btn-ghost btn-sm" id="btn-save-aov" type="button">Save</button>
+            </div>
+          </div>
+          <div class="set-row" style="align-items:flex-start">
+            <div class="l">Verified-revenue webhook
+              <div style="font-size:11.5px;color:var(--muted);margin-top:2px;font-weight:400;line-height:1.4">Optional. POST your bookings here so the dashboard shows verified actuals instead of estimates. Replaces the estimate when configured.</div>
+            </div>
+            <div class="r" style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;min-width:340px">
+              <input type="text" id="rev-webhook-url" readonly placeholder="Click 'Generate' to create your endpoint"
+                     value="${d.revenue && d.revenue.webhook_url ? esc(d.revenue.webhook_url) : ''}"
+                     class="key-input" style="width:100%">
+              <input type="text" id="rev-webhook-secret" readonly placeholder="Secret appears here on generate/rotate"
+                     value=""
+                     class="key-input" style="width:100%;font-family:var(--mono);font-size:12px">
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-ghost btn-sm" id="btn-gen-revenue-secret" type="button">${d.revenue && d.revenue.webhook_configured ? 'Rotate secret' : 'Generate'}</button>
+                <button class="btn btn-ghost btn-sm" id="btn-copy-rev-curl" type="button">Copy test curl</button>
+              </div>
+              <div id="rev-secret-status" style="font-size:11.5px;color:var(--muted);max-width:340px;text-align:right;line-height:1.5"></div>
+            </div>
+          </div>
+          <div class="set-row" style="border-bottom:0">
+            <div class="l">&nbsp;</div>
+            <div class="r" style="font-size:11.5px;color:var(--muted);max-width:480px;line-height:1.55;font-style:italic">
+              Estimated revenue is a calculation from your supplied average ticket. Actuals may differ.
+              Configure the webhook for confirmed numbers. Not financial advice.
+            </div>
+          </div>
         </div>
       </div>
 
@@ -448,6 +509,110 @@
         } catch (_) {
           copyBtn.textContent = 'Copy failed';
           setTimeout(() => { copyBtn.textContent = 'Copy snippet'; }, 2000);
+        }
+      });
+    }
+
+    // ── Revenue tracking handlers (Pro feature, Apr 27 2026) ────────────
+    const af = window.AMCP && window.AMCP.authedFetch;
+    const revStatus = document.getElementById('rev-secret-status');
+    function setRevStatus(msg, isError) {
+      if (!revStatus) return;
+      revStatus.textContent = msg;
+      revStatus.style.color = isError ? 'var(--red)' : 'var(--muted)';
+    }
+
+    // Save AOV — POSTs the integer cents value to the worker. Empty/0
+    // input clears the AOV and returns the tenant to the unconfigured
+    // (no estimated dollars) state.
+    const aovBtn = document.getElementById('btn-save-aov');
+    const aovInput = document.getElementById('rev-aov-input');
+    if (aovBtn && aovInput && af) {
+      aovBtn.addEventListener('click', async () => {
+        const dollars = aovInput.value.trim();
+        const cents = dollars === '' ? null : Math.round(parseFloat(dollars) * 100);
+        if (cents !== null && (isNaN(cents) || cents < 0)) {
+          setRevStatus('Enter a positive number or leave blank to clear.', true);
+          return;
+        }
+        aovBtn.disabled = true;
+        aovBtn.textContent = 'Saving…';
+        try {
+          const res = await af('/api/client/revenue-aov', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ avg_booking_value_cents: cents }),
+          });
+          if (!res.ok) throw new Error('save failed');
+          aovBtn.textContent = 'Saved ✓';
+          setRevStatus(cents === null
+            ? 'Average ticket cleared. Dashboard will hide estimated revenue until you set one or configure a webhook.'
+            : 'Average ticket saved. Refresh the dashboard to see updated estimates.',
+          false);
+          setTimeout(() => { aovBtn.textContent = 'Save'; aovBtn.disabled = false; }, 2000);
+        } catch (_) {
+          aovBtn.textContent = 'Save failed';
+          aovBtn.disabled = false;
+          setRevStatus('Could not save. Try again or contact max@advocate-mcp.com.', true);
+        }
+      });
+    }
+
+    // Generate / rotate webhook secret. The secret is shown ONCE inline;
+    // we copy it to the visible input, the input is readonly so the
+    // customer can copy/paste it. Subsequent loads of Settings hide
+    // the secret (it's never re-fetched plaintext after rotation).
+    const genBtn = document.getElementById('btn-gen-revenue-secret');
+    const urlInput = document.getElementById('rev-webhook-url');
+    const secretInput = document.getElementById('rev-webhook-secret');
+    if (genBtn && af && urlInput && secretInput) {
+      genBtn.addEventListener('click', async () => {
+        const isRotate = genBtn.textContent.includes('Rotate');
+        const confirmed = isRotate
+          ? confirm('Rotate the webhook secret? Your booking system will stop signing successfully until you update it with the new secret.')
+          : true;
+        if (!confirmed) return;
+        genBtn.disabled = true;
+        genBtn.textContent = isRotate ? 'Rotating…' : 'Generating…';
+        try {
+          const res = await af('/api/client/revenue-webhook', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rotate: isRotate }),
+          });
+          if (!res.ok) throw new Error('failed');
+          const data = await res.json();
+          urlInput.value = data.webhook_url || '';
+          secretInput.value = data.secret || '';
+          genBtn.textContent = 'Rotate secret';
+          genBtn.disabled = false;
+          setRevStatus('Secret shown above — copy it now. We won\'t show it again. Re-rotate if you lose it.', false);
+        } catch (_) {
+          genBtn.textContent = isRotate ? 'Rotate failed' : 'Generate failed';
+          genBtn.disabled = false;
+          setRevStatus('Could not generate. Try again or contact max@advocate-mcp.com.', true);
+        }
+      });
+    }
+
+    // Copy test curl — generates a one-liner the customer can paste into
+    // their booking-system webhook config to test the integration.
+    const curlBtn = document.getElementById('btn-copy-rev-curl');
+    if (curlBtn && urlInput && secretInput) {
+      curlBtn.addEventListener('click', async () => {
+        const url = urlInput.value || 'https://customers.advocatemcp.com/api/revenue-event/<your-slug>';
+        const secret = secretInput.value || '<your-webhook-secret>';
+        const body = '{"amount_cents":24500,"external_ref":"BOOKING-12345","occurred_at":"' + new Date().toISOString() + '","reservation_id":"r_optional"}';
+        // openssl gives us a portable HMAC for the snippet; works on macOS
+        // + Linux. Customers on Windows can adapt it to PowerShell.
+        const snippet = `BODY='${body}'\nSIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac '${secret}' | sed 's/^.* //')\ncurl -i -X POST '${url}' \\\n  -H "Content-Type: application/json" \\\n  -H "X-Advocate-Signature: sha256=$SIG" \\\n  -d "$BODY"`;
+        try {
+          await navigator.clipboard.writeText(snippet);
+          curlBtn.textContent = 'Copied!';
+          setTimeout(() => { curlBtn.textContent = 'Copy test curl'; }, 2000);
+        } catch (_) {
+          curlBtn.textContent = 'Copy failed';
+          setTimeout(() => { curlBtn.textContent = 'Copy test curl'; }, 2000);
         }
       });
     }
