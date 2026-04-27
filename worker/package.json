@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
+    "build:knowledge": "node scripts/build-knowledge.mjs",
+    "predeploy": "node scripts/build-knowledge.mjs",
     "deploy": "wrangler deploy",
     "kv:add": "wrangler kv:key put --binding=BUSINESS_MAP",
     "typecheck": "tsc --noEmit",

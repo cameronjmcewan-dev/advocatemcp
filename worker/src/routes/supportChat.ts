@@ -29,6 +29,7 @@
 
 import type { Env } from "../types";
 import { SUPPORT_CHAT_SYSTEM_PROMPT } from "../lib/supportChatPrompt";
+import { KNOWLEDGE_BASE, KNOWLEDGE_BASE_META } from "../lib/knowledgeBase";
 
 // ── CORS (mirrors contact.ts) ─────────────────────────────────────────────────
 
@@ -160,10 +161,24 @@ export async function handleSupportChat(request: Request, env: Env): Promise<Res
         model:       ANTHROPIC_MODEL,
         max_tokens:  ANTHROPIC_MAX_TOKENS,
         temperature: ANTHROPIC_TEMPERATURE,
+        // Two system blocks. The first is the persona/style/escalation
+        // contract — small, stable, mostly tone. The second is the full
+        // knowledge dump (site copy + public docs + DNS guides). Both
+        // marked cache_control: ephemeral so Anthropic caches the
+        // concatenated prefix across turns and across sessions; first
+        // call in a window pays full price, every subsequent call hits
+        // the cache and bills at ~10% of base for the cached prefix.
+        // Cache TTL is 5 minutes (Anthropic default for ephemeral) which
+        // amortizes nicely across a busy chat window.
         system: [
           {
             type:          "text",
             text:          SUPPORT_CHAT_SYSTEM_PROMPT,
+            cache_control: { type: "ephemeral" },
+          },
+          {
+            type:          "text",
+            text:          KNOWLEDGE_BASE,
             cache_control: { type: "ephemeral" },
           },
         ],
@@ -226,6 +241,7 @@ export async function handleSupportChat(request: Request, env: Env): Promise<Res
     cached_in:    data.usage?.cache_read_input_tokens ?? null,
     user_msg_len: parsed.messages[parsed.messages.length - 1].content.length,
     turns:        parsed.messages.length,
+    kb_tokens:    KNOWLEDGE_BASE_META.approx_tokens,
   }));
 
   return withCors({ ok: true, message: text }, 200, request);

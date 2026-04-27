@@ -1,14 +1,21 @@
 /**
- * Support chat widget — floats above advocatemcp.com/Contact, opens a
- * bottom-right drawer with a Claude-powered assistant. Stateless on the
- * server side; the conversation lives in this page's memory until reload.
+ * Support chat widget — opens a bottom-right drawer with a Claude-powered
+ * assistant. Stateless on the server side; the conversation lives in this
+ * page's memory until reload.
  *
- * Usage on the host page:
- *   <button data-support-chat-open>Start a chat</button>
+ * Two mounting modes:
+ *   1. Explicit trigger (Contact.html): page has a [data-support-chat-open]
+ *      element; clicking it opens the drawer.
+ *   2. Floating help button (dashboard, activate page, etc.): if no
+ *      explicit trigger exists on the page, the widget injects a small
+ *      floating "?" button bottom-right that opens the drawer.
+ *
+ * Either way:
  *   <script src="/js/support-chat.js" defer></script>
  *
- * The widget self-mounts on DOMContentLoaded. Any element matching
- * [data-support-chat-open] becomes a trigger.
+ * Suppress the auto-floating button by setting
+ *   <script>window.AMCP_CHAT_NO_FLOAT = true;</script>
+ * BEFORE the support-chat.js script tag.
  *
  * Design notes:
  *   - Inline styles via injected <style> tag — no dep on the global
@@ -32,7 +39,7 @@
   var SUPPORT_EMAIL = 'max@advocate-mcp.com';
   var SUPPORT_TEL   = '+18015205939';
   var SUPPORT_TEL_DISPLAY = '(801) 520-5939';
-  var CALENDLY_URL  = 'https://calendly.com/max-advocate-mcp/30min';
+  var CALENDLY_URL  = 'https://calendly.com/cameronjmcewan/new-meeting';
 
   // Conversation transcript. Each turn: { role: 'user'|'assistant', content }.
   var history = [];
@@ -214,7 +221,7 @@
       if (!res.ok) {
         var detail = '';
         try { var j = await res.json(); detail = (j && (j.detail || j.error)) || ''; } catch (_) {}
-        addSystemNote("Couldn't reach the assistant" + (detail ? ' (' + detail + ')' : '') + '. Email ' + SUPPORT_EMAIL + ' and we'll respond directly.');
+        addSystemNote("Couldn't reach the assistant" + (detail ? " (" + detail + ")" : "") + ". Email " + SUPPORT_EMAIL + " and we'll respond directly.");
         // Roll back the last user turn so the next attempt isn't poisoned.
         history.pop();
         return;
@@ -246,6 +253,44 @@
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && drawer.classList.contains('open')) close();
   });
+
+  // Floating help button — only when the page has NO explicit
+  // [data-support-chat-open] trigger (i.e. the dashboard, activate page,
+  // etc., where we want a "Need help?" handle without forcing every page
+  // to template a button).
+  function maybeMountFloatingButton() {
+    if (window.AMCP_CHAT_NO_FLOAT) return;
+    if (document.querySelector('[data-support-chat-open]')) return;
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.setAttribute('data-support-chat-open', '');
+    btn.setAttribute('aria-label', 'Open support chat');
+    btn.title = 'Need help? Chat with Advocate.';
+    btn.textContent = '?';
+    btn.style.cssText = [
+      'position:fixed', 'right:24px', 'bottom:24px', 'z-index:9998',
+      'width:48px', 'height:48px', 'border-radius:50%',
+      'background:#7d2550', 'color:#fff', 'border:none',
+      'font-size:22px', 'font-weight:600', 'cursor:pointer',
+      'box-shadow:0 4px 16px rgba(0,0,0,.25)',
+      'transition:transform .15s ease, background .15s ease',
+      "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif",
+    ].join(';');
+    btn.addEventListener('mouseenter', function () {
+      btn.style.transform = 'scale(1.06)';
+      btn.style.background = '#5c1a3c';
+    });
+    btn.addEventListener('mouseleave', function () {
+      btn.style.transform = 'scale(1)';
+      btn.style.background = '#7d2550';
+    });
+    document.body.appendChild(btn);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', maybeMountFloatingButton);
+  } else {
+    maybeMountFloatingButton();
+  }
 
   // Auto-grow textarea + Enter to send (Shift+Enter for newline).
   inputEl.addEventListener('input', function () {
