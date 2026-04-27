@@ -658,7 +658,10 @@
         var msgEl = document.getElementById('success-message');
         if (msgEl) msgEl.textContent = 'All set. Redirecting you to your dashboard…';
         setTimeout(function () {
-          window.location.href = 'https://customers.advocatemcp.com/dashboard';
+          // .replace() drops the activate ?t= token from browser history
+          // and access logs. Token is single-use server-side, but stripping
+          // it client-side closes the leak window for proxies / shoulder-surf.
+          window.location.replace('https://customers.advocatemcp.com/dashboard');
         }, 1800);
       }
     } catch (_) {
@@ -756,7 +759,10 @@
         // Auto-redirect after a moment so the customer sees the
         // confirmation before the dashboard loads.
         setTimeout(function () {
-          window.location.href = 'https://customers.advocatemcp.com/dashboard';
+          // .replace() drops the activate ?t= token from browser history
+          // and access logs. Token is single-use server-side, but stripping
+          // it client-side closes the leak window for proxies / shoulder-surf.
+          window.location.replace('https://customers.advocatemcp.com/dashboard');
         }, 2200);
         return;
       }

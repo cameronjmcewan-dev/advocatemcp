@@ -127,8 +127,13 @@ async function verifyStripeSignature(
   const signature = parts["v1"];
   if (!timestamp || !signature) return false;
 
-  // Reject signatures older than 5 minutes
-  if (Math.abs(Date.now() / 1000 - parseInt(timestamp)) > 300) return false;
+  // Reject signatures older than 5 minutes. parseInt() returns NaN for
+  // non-numeric input; Math.abs(NaN - x) is NaN, and NaN > 300 is false,
+  // which would silently bypass the replay-window check. Number.isFinite
+  // gates that off so a malformed `t=foo` header fails closed.
+  const ts = parseInt(timestamp, 10);
+  if (!Number.isFinite(ts)) return false;
+  if (Math.abs(Date.now() / 1000 - ts) > 300) return false;
 
   const key = await crypto.subtle.importKey(
     "raw",
@@ -552,24 +557,6 @@ export async function handlePublicOnboard(
   const slug = rawSlug;
   const domain = `${slug}.hosted.advocatemcp.com`;
   const now = new Date().toISOString();
-
-  // ── TEMPORARY DIAGNOSTIC: Stripe key mode probe ────────────────────────────
-  // Logs only the first ~12 chars of each key. Stripe treats the `sk_test_` /
-  // `sk_live_` / `whsec_test_` / `price_` prefixes as non-secret mode
-  // indicators, and 12 chars is not enough entropy to compromise the secret.
-  // This log exists to definitively answer "is the deployed worker in test
-  // mode or live mode?" — watch via `wrangler tail`. Remove in a follow-up
-  // deploy once the test-mode flow is verified end-to-end.
-  console.log(JSON.stringify({
-    onboarding: true,
-    event: "stripe_key_probe",
-    slug,
-    plan,
-    secret_prefix:         env.STRIPE_SECRET_KEY?.slice(0, 12)     ?? "MISSING",
-    base_price_prefix:     env.STRIPE_PRICE_ID_BASE?.slice(0, 10)  ?? "MISSING",
-    pro_price_prefix:      env.STRIPE_PRICE_ID_PRO?.slice(0, 10)   ?? "MISSING",
-    webhook_secret_prefix: env.STRIPE_WEBHOOK_SECRET?.slice(0, 10) ?? "MISSING",
-  }));
 
   // Idempotent lookup — if already paid + active, short-circuit. Otherwise
   // we always re-issue a fresh Stripe Checkout session (safer than reusing
