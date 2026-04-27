@@ -44,6 +44,7 @@ import {
 } from "./stripe";
 import { handleSaveDraft, handleLoadDraft } from "./onboardDraft";
 import { handleContact, handleContactPreflight } from "./contact";
+import { handleSupportChat, handleSupportChatPreflight } from "./supportChat";
 import { signMagicToken, verifyMagicToken } from "../lib/magicToken";
 import {
   handleAdminInsightsProxy,
@@ -197,6 +198,11 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   // Public marketing contact form → Resend → max@advocate-mcp.com
   if (pathname === "/api/contact"           && method === "OPTIONS") return handleContactPreflight(request);
   if (pathname === "/api/contact"           && method === "POST")    return handleContact(request, env);
+
+  // Public Claude-powered support chat for the floating widget on Contact.html.
+  // Stateless on our side; the frontend POSTs the full message history each turn.
+  if (pathname === "/api/support-chat"      && method === "OPTIONS") return handleSupportChatPreflight(request);
+  if (pathname === "/api/support-chat"      && method === "POST")    return handleSupportChat(request, env);
 
   // Phase B.1 (Apr 25 2026) — live MCP demo widget on the marketing
   // homepage. Public, no auth, IP-rate-limited at Railway. Worker just

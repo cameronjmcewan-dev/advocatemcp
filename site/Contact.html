@@ -59,19 +59,23 @@
           <div class="contact-card">
             <div class="icon">▷</div>
             <h3>Book a screen-share</h3>
-            <p>30 minutes with a support specialist who'll walk through your dashboard with you.</p>
-            <button class="btn btn-primary btn-sm">Pick a time →</button>
-            <div class="meta">Free on every plan · next slot: tomorrow 10am</div>
+            <p>30 minutes with Max — we'll walk through your dashboard, your DNS setup, or whatever's tripping you up.</p>
+            <a href="https://calendly.com/max-advocate-mcp/30min" target="_blank" rel="noopener" class="btn btn-primary btn-sm">Pick a time →</a>
+            <div class="meta">Free on every plan</div>
           </div>
-      
+
           <div class="contact-card">
             <div class="icon">◐</div>
             <h3>Live chat</h3>
-            <p>Pop open a chat in the bottom corner for quick questions  a human answers, not a bot.</p>
-            <button class="btn btn-primary btn-sm">Start a chat</button>
-            <div class="meta">Online now · avg. wait ~2 min</div>
+            <p>Pop open a chat for quick questions — an AI assistant trained on Advocate, with a one-click handoff to Max for anything tricky.</p>
+            <button type="button" data-support-chat-open class="btn btn-primary btn-sm">Start a chat</button>
+            <div class="meta">Available 24/7</div>
           </div>
         </div>
+
+        <!-- Floating Claude-powered support chat. Mounts itself + listens
+             for [data-support-chat-open] clicks anywhere on the page. -->
+        <script src="/js/support-chat.js" defer></script>
       
         <div class="row single">
           <div class="card-dash">
