@@ -8,6 +8,7 @@
 //   GET  /api/onboard/list            — list all tenants with status
 
 import type { Env } from "../types";
+import { deriveHostnameVariants } from "../lib/hostnameVariants.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,12 @@ export interface TenantRecord {
   notes: string;
   status: TenantStatus;
   cloudflare: {
+    /**
+     * Primary CF custom_hostname id. Kept for backward compatibility
+     * with code paths that read a single id off the tenant record.
+     * Always equals variants[0].customHostnameId after the variant
+     * fan-out (Apr 26 2026 change).
+     */
     customHostnameId: string | null;
     verificationMethod: string;
     verificationStatus: string;
@@ -49,6 +56,28 @@ export interface TenantRecord {
     txtValue: string | null;
     ownershipTxtName: string | null;
     ownershipTxtValue: string | null;
+    /**
+     * Per-variant Cloudflare state. One entry per hostname we registered
+     * for this tenant — typically two for a `tenant.com` signup
+     * (apex + www) so AI bots crawling either variant get the optimized
+     * Advocate response instead of leaking through to the customer's
+     * underlying origin.
+     *
+     * Optional for backward compatibility: tenants serialized before
+     * Apr 26 2026 don't have this field. Reader code falls back to the
+     * top-level `txtName`/`txtValue`/etc. fields when `variants` is
+     * undefined or empty.
+     */
+    variants?: Array<{
+      hostname: string;
+      customHostnameId: string | null;
+      verificationStatus: string;
+      sslStatus: string;
+      txtName: string | null;
+      txtValue: string | null;
+      ownershipTxtName: string | null;
+      ownershipTxtValue: string | null;
+    }>;
   };
   stripe?: {
     customerId: string | null;
@@ -274,45 +303,90 @@ export interface DnsInstructions {
 }
 
 export function buildDnsInstructions(tenant: TenantRecord): DnsInstructions {
-  const records: DnsInstructions["records"] = [
-    {
-      type: "CNAME",
-      host: tenant.domain,
-      value: CNAME_TARGET,
-      purpose: "Routes traffic to AdvocateMCP platform",
-    },
-  ];
+  const records: DnsInstructions["records"] = [];
 
-  // SSL TXT record
-  if (tenant.cloudflare.txtName && tenant.cloudflare.txtValue) {
-    records.push({
-      type: "TXT",
-      host: tenant.cloudflare.txtName,
-      value: tenant.cloudflare.txtValue,
-      purpose: "SSL certificate validation (DCV)",
-    });
+  // Pull the per-variant array (Apr 26 2026+ tenants) or synthesize a
+  // single-variant array from the legacy top-level fields so older
+  // tenant records still produce instructions.
+  const variants =
+    tenant.cloudflare.variants && tenant.cloudflare.variants.length > 0
+      ? tenant.cloudflare.variants
+      : [
+          {
+            hostname: tenant.domain,
+            customHostnameId: tenant.cloudflare.customHostnameId,
+            verificationStatus: tenant.cloudflare.verificationStatus,
+            sslStatus: tenant.cloudflare.sslStatus,
+            txtName: tenant.cloudflare.txtName,
+            txtValue: tenant.cloudflare.txtValue,
+            ownershipTxtName: tenant.cloudflare.ownershipTxtName,
+            ownershipTxtValue: tenant.cloudflare.ownershipTxtValue,
+          },
+        ];
+
+  for (const v of variants) {
+    const isApex = !v.hostname.startsWith("www.") &&
+      v.hostname.split(".").length <= 3;
+    if (isApex && !v.hostname.endsWith(".hosted.advocatemcp.com")) {
+      // Apex hostnames can't be CNAMEd (DNS spec forbids CNAME at the
+      // zone apex). Tell the customer their three options. Most modern
+      // DNS providers support ANAME / ALIAS / CNAME-flattening at the
+      // apex which is the simplest path; otherwise switching the apex
+      // to Cloudflare nameservers is the most reliable fix; otherwise
+      // they can use static A records pointing at our edge IPs (less
+      // future-proof).
+      records.push({
+        type: "ANAME/ALIAS (or CNAME-flattening)",
+        host: v.hostname,
+        value: CNAME_TARGET,
+        purpose: `Routes apex AI traffic to AdvocateMCP. If your DNS provider doesn't support ANAME/ALIAS, use Cloudflare nameservers or A records — see troubleshooting below.`,
+      });
+    } else {
+      records.push({
+        type: "CNAME",
+        host: v.hostname,
+        value: CNAME_TARGET,
+        purpose: `Routes ${v.hostname === tenant.domain ? "AI" : "AI (variant)"} traffic to AdvocateMCP`,
+      });
+    }
+
+    if (v.txtName && v.txtValue) {
+      records.push({
+        type: "TXT",
+        host: v.txtName,
+        value: v.txtValue,
+        purpose: `SSL certificate validation (DCV) for ${v.hostname}`,
+      });
+    }
+    if (v.ownershipTxtName && v.ownershipTxtValue) {
+      records.push({
+        type: "TXT",
+        host: v.ownershipTxtName,
+        value: v.ownershipTxtValue,
+        purpose: `Domain ownership verification for ${v.hostname}`,
+      });
+    }
   }
 
-  // Ownership TXT record
-  if (tenant.cloudflare.ownershipTxtName && tenant.cloudflare.ownershipTxtValue) {
-    records.push({
-      type: "TXT",
-      host: tenant.cloudflare.ownershipTxtName,
-      value: tenant.cloudflare.ownershipTxtValue,
-      purpose: "Domain ownership verification",
-    });
-  }
+  const variantList =
+    variants.length === 1
+      ? tenant.domain
+      : variants.map((v) => v.hostname).join(" + ");
 
   return {
     summary: [
-      `Add the DNS records listed below at your domain registrar for ${tenant.domain}.`,
+      `Add the DNS records listed below at your domain registrar for ${variantList}.`,
+      variants.length > 1
+        ? `Both ${variants[0]!.hostname} and ${variants[1]!.hostname} need DNS records so AI bots crawling either variant get the optimized response.`
+        : "",
       `DNS changes can take 5–15 minutes to propagate, occasionally up to 24 hours.`,
       `Once propagated, Cloudflare will automatically verify ownership and issue an SSL certificate.`,
-    ].join(" "),
+    ].filter(Boolean).join(" "),
     records,
     troubleshooting: [
       "Verify records are set at the correct DNS provider (check your domain's NS records).",
       "Ensure CNAME host matches exactly — some providers auto-append the apex domain.",
+      "Apex (root) records: if your DNS provider doesn't support ANAME / ALIAS, switch your apex to Cloudflare nameservers (free) or contact support for static A-record values.",
       "Wait at least 15 minutes before assuming verification failed.",
       "Use 'dig CNAME " + tenant.domain + "' and 'dig TXT <host>' to check propagation.",
       "If verification is stuck, call POST /api/onboard/" + tenant.domain + "/verify to force a re-check.",
@@ -346,13 +420,49 @@ function validateBody(body: Record<string, unknown>): string[] {
 
 // ── Shared CF hostname creation ───────────────────────────────────────────────
 // Extracted so stripe.ts can reuse the same logic after payment succeeds.
+//
+// Apr 26 2026 change: fans out across `deriveHostnameVariants(tenant.domain)`
+// so we register both apex and www (or just the typed input for custom
+// subdomains and hosted-tenant slugs). Without this, an AI bot crawling
+// the URL variant we DIDN'T register hits the customer's underlying
+// origin directly with no Advocate intercept — silently losing roughly
+// half of every tenant's bot traffic. See worker/src/lib/hostnameVariants.ts
+// for the variant-derivation rules.
 
-export async function createCfHostnameForTenant(
-  env: Env,
-  tenant: TenantRecord,
-): Promise<{ created: boolean }> {
+interface VariantResult {
+  hostname: string;
+  customHostnameId: string | null;
+  verificationStatus: string;
+  sslStatus: string;
+  txtName: string | null;
+  txtValue: string | null;
+  ownershipTxtName: string | null;
+  ownershipTxtValue: string | null;
+  /** "created" = newly registered; "reused" = pre-existing in CF; "failed" = error path. */
+  outcome: "created" | "reused" | "failed";
+  /** Set when outcome === "failed". */
+  errorReason?: string;
+}
+
+/**
+ * Register one Cloudflare custom_hostname. Pure helper — does not
+ * mutate the tenant record. Caller decides which variant's data
+ * to surface as "primary" and which to put into variants[].
+ */
+async function registerOneCfHostname(env: Env, hostname: string): Promise<VariantResult> {
+  const empty: Omit<VariantResult, "outcome"> = {
+    hostname,
+    customHostnameId: null,
+    verificationStatus: "pending",
+    sslStatus: "pending",
+    txtName: null,
+    txtValue: null,
+    ownershipTxtName: null,
+    ownershipTxtValue: null,
+  };
+
   const cfResult = await cfApi(env, "POST", "", {
-    hostname: tenant.domain,
+    hostname,
     ssl: {
       method: "txt",
       type: "dv",
@@ -362,45 +472,139 @@ export async function createCfHostnameForTenant(
 
   if (cfResult.ok) {
     const result = cfResult.data.result as Record<string, unknown>;
-    extractCfData(tenant, result);
-    addStatusLog(tenant, "cf_hostname_created", `Custom hostname created: ${tenant.cloudflare.customHostnameId}`);
-    return { created: true };
+    return { ...readVariantFromCf(hostname, result), outcome: "created" };
   }
 
-  // Check if hostname already exists (error 1406 or 1407)
+  // 1406/1407 = "hostname already exists" — fetch + reuse.
   const errors = cfResult.data.errors as Array<{ code: number; message: string }> | undefined;
   const alreadyExists = errors?.some((e) => e.code === 1406 || e.code === 1407);
-
   if (alreadyExists) {
-    const listRes = await cfApi(env, "GET", `?hostname=${encodeURIComponent(tenant.domain)}`);
+    const listRes = await cfApi(env, "GET", `?hostname=${encodeURIComponent(hostname)}`);
     const results = listRes.data.result as Array<Record<string, unknown>> | undefined;
     const existingCf = results?.[0];
-
     if (existingCf) {
-      extractCfData(tenant, existingCf);
-      addStatusLog(tenant, "cf_hostname_reused", "Custom hostname already exists in Cloudflare — reusing");
-      if (existingCf.status === "active") {
-        transitionStatus(tenant, "active", "Custom hostname is already active in Cloudflare");
-      }
-      return { created: true };
+      return { ...readVariantFromCf(hostname, existingCf), outcome: "reused" };
     }
-
-    addStatusLog(tenant, "cf_hostname_lookup_failed", "Hostname exists but could not be retrieved");
-    transitionStatus(tenant, "needs_manual_review", "CF hostname exists but could not be retrieved");
-    return { created: false };
+    return { ...empty, outcome: "failed", errorReason: "exists_but_not_retrievable" };
   }
 
-  // Check if CF creds are missing
   const cfMissing = (cfResult.data.error as string | undefined)?.includes("CF_API_TOKEN");
   if (cfMissing) {
-    addStatusLog(tenant, "cf_not_configured", "CF_API_TOKEN/CF_ZONE_ID not set — KV-only mode");
-    transitionStatus(tenant, "needs_manual_review", "Cloudflare credentials not configured");
-  } else {
-    addStatusLog(tenant, "cf_api_error", JSON.stringify(cfResult.data.errors ?? cfResult.data));
-    transitionStatus(tenant, "failed", "Cloudflare API returned an error");
+    return { ...empty, outcome: "failed", errorReason: "cf_not_configured" };
   }
 
-  return { created: false };
+  return {
+    ...empty,
+    outcome: "failed",
+    errorReason: `cf_api_error: ${JSON.stringify(cfResult.data.errors ?? cfResult.data).slice(0, 240)}`,
+  };
+}
+
+function readVariantFromCf(hostname: string, cfResult: Record<string, unknown>): Omit<VariantResult, "outcome"> {
+  const ssl = cfResult.ssl as Record<string, unknown> | null;
+  const ownershipVerification = cfResult.ownership_verification as Record<string, unknown> | null;
+  return {
+    hostname,
+    customHostnameId: (cfResult.id as string) ?? null,
+    verificationStatus: (cfResult.status as string) ?? "pending",
+    sslStatus: (ssl?.status as string) ?? "pending",
+    txtName: (ssl?.txt_name as string) ?? null,
+    txtValue: (ssl?.txt_value as string) ?? null,
+    ownershipTxtName: (ownershipVerification?.name as string) ?? null,
+    ownershipTxtValue: (ownershipVerification?.value as string) ?? null,
+  };
+}
+
+export async function createCfHostnameForTenant(
+  env: Env,
+  tenant: TenantRecord,
+): Promise<{ created: boolean; variants: VariantResult[] }> {
+  // Fan out across every hostname variant we should claim for this
+  // tenant. For "acme.com" or "www.acme.com" that's both apex and www.
+  // For "shop.acme.com" or "*.hosted.advocatemcp.com" it's just the
+  // single typed value. Callers (Stripe webhook + free-plan path)
+  // separately fan out Worker Routes and KV writes across the same
+  // variant list so a bot hitting any of them gets the optimized
+  // response.
+  const variants = deriveHostnameVariants(tenant.domain);
+  if (variants.length === 0) {
+    addStatusLog(tenant, "cf_invalid_domain", `Could not derive hostname variants from "${tenant.domain}"`);
+    transitionStatus(tenant, "failed", "Invalid tenant domain");
+    return { created: false, variants: [] };
+  }
+
+  const results: VariantResult[] = [];
+  for (const v of variants) {
+    results.push(await registerOneCfHostname(env, v));
+  }
+
+  // Choose the canonical variant to populate the legacy single-hostname
+  // fields. Prefer the one that matches `tenant.domain` exactly so old
+  // code paths reading `tenant.cloudflare.txtName` keep showing the
+  // primary record. If the tenant typed "acme.com" we promote the apex;
+  // if they typed "www.acme.com" we promote www.
+  const primary =
+    results.find((r) => r.hostname === tenant.domain) ?? results[0]!;
+
+  if (primary.outcome === "failed" && primary.errorReason === "cf_not_configured") {
+    addStatusLog(tenant, "cf_not_configured", "CF_API_TOKEN/CF_ZONE_ID not set — KV-only mode");
+    transitionStatus(tenant, "needs_manual_review", "Cloudflare credentials not configured");
+    tenant.cloudflare.variants = results;
+    return { created: false, variants: results };
+  }
+
+  // Mirror primary into the legacy fields for backward-compatibility.
+  tenant.cloudflare.customHostnameId = primary.customHostnameId;
+  tenant.cloudflare.verificationStatus = primary.verificationStatus;
+  tenant.cloudflare.sslStatus = primary.sslStatus;
+  tenant.cloudflare.txtName = primary.txtName;
+  tenant.cloudflare.txtValue = primary.txtValue;
+  tenant.cloudflare.ownershipTxtName = primary.ownershipTxtName;
+  tenant.cloudflare.ownershipTxtValue = primary.ownershipTxtValue;
+  tenant.cloudflare.variants = results;
+
+  // Status log + transition based on aggregate result. We treat the
+  // tenant as "created" if AT LEAST ONE variant was created or reused;
+  // a pure-failure variant (e.g., apex registration error while www
+  // succeeded) is logged but doesn't mark the whole tenant failed,
+  // because the customer's site can still be served via the working
+  // variant.
+  const successCount = results.filter((r) => r.outcome !== "failed").length;
+  const failures = results.filter((r) => r.outcome === "failed");
+
+  for (const r of results) {
+    if (r.outcome === "created") {
+      addStatusLog(tenant, "cf_hostname_created", `Custom hostname created: ${r.hostname} (${r.customHostnameId})`);
+    } else if (r.outcome === "reused") {
+      addStatusLog(tenant, "cf_hostname_reused", `Custom hostname reused: ${r.hostname}`);
+    } else {
+      addStatusLog(tenant, "cf_hostname_failed", `Variant registration failed: ${r.hostname} (${r.errorReason})`);
+    }
+  }
+
+  if (successCount === 0) {
+    transitionStatus(tenant, "failed", "Every hostname variant failed to register");
+    return { created: false, variants: results };
+  }
+
+  if (failures.length > 0) {
+    addStatusLog(
+      tenant,
+      "cf_partial_variant_failure",
+      `${successCount}/${results.length} variants registered; failed: ${failures.map((f) => f.hostname).join(", ")}`,
+    );
+  }
+
+  // If the primary CF hostname is already active (re-registration of an
+  // existing tenant) we surface that to the status machine, matching
+  // the pre-fan-out behavior.
+  const primaryCfIsActive =
+    primary.outcome === "reused" && primary.verificationStatus === "active";
+  if (primaryCfIsActive) {
+    transitionStatus(tenant, "active", "Custom hostname is already active in Cloudflare");
+  }
+
+  return { created: true, variants: results };
 }
 
 // ── POST /api/onboard ─────────────────────────────────────────────────────────
@@ -539,9 +743,14 @@ export async function handleOnboard(request: Request, env: Env): Promise<Respons
   // ── Write KV records ──────────────────────────────────────────────────────
 
   try {
-    // BUSINESS_MAP: domain → slug (used by the main routing logic)
-    await env.BUSINESS_MAP.put(domain, slug);
-    // TENANT_DATA: domain → full JSON record
+    // BUSINESS_MAP: hostname → slug for every variant we registered
+    // (apex + www, or the typed input for custom subdomains). One
+    // KV entry per variant so the worker's hostname-based slug
+    // lookup succeeds regardless of which variant a bot crawled.
+    for (const variant of deriveHostnameVariants(domain)) {
+      await env.BUSINESS_MAP.put(variant, slug);
+    }
+    // TENANT_DATA: domain → full JSON record (single key, primary domain).
     await putTenant(env, tenant);
 
     console.log(JSON.stringify({
@@ -549,6 +758,7 @@ export async function handleOnboard(request: Request, env: Env): Promise<Respons
       event: "kv_write_success",
       domain,
       slug,
+      variants: deriveHostnameVariants(domain),
     }));
   } catch (err) {
     console.log(JSON.stringify({

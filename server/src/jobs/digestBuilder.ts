@@ -112,6 +112,9 @@ interface TenantRow {
   email:                string | null;
   digest_unsubscribed:  number;
   plan:                 string;
+  beta_started_at:      string | null;
+  beta_ends_at:         string | null;
+  beta_cohort:          string | null;
 }
 
 export function buildDigest(
@@ -119,11 +122,33 @@ export function buildDigest(
   opts: BuildDigestOptions = {},
 ): DigestPayload | null {
   const db = getDb();
-  const tenant = db
-    .prepare("SELECT name, email, digest_unsubscribed, plan FROM businesses WHERE slug=?")
-    .get(slug) as TenantRow | undefined;
+  // Wrapped in try/catch so beta columns missing on a pre-migration
+  // server deploy doesn't break the digest job. Falls back to the
+  // legacy column set + treats every tenant as non-beta.
+  let tenant: TenantRow | undefined;
+  try {
+    tenant = db
+      .prepare(
+        `SELECT name, email, digest_unsubscribed, plan,
+                beta_started_at, beta_ends_at, beta_cohort
+           FROM businesses WHERE slug=?`,
+      )
+      .get(slug) as TenantRow | undefined;
+  } catch {
+    const fallback = db
+      .prepare("SELECT name, email, digest_unsubscribed, plan FROM businesses WHERE slug=?")
+      .get(slug) as Omit<TenantRow, "beta_started_at" | "beta_ends_at" | "beta_cohort"> | undefined;
+    tenant = fallback
+      ? { ...fallback, beta_started_at: null, beta_ends_at: null, beta_cohort: null }
+      : undefined;
+  }
   if (!tenant)                           return null;
-  if (tenant.plan !== "pro")             return null;
+  // Beta tenants get the digest even on lower plans during their trial
+  // — the cohort is meant to test our weekly-cadence value prop. Once
+  // the trial ends the regular plan-tier gate kicks back in.
+  const isActiveBeta = !!(tenant.beta_started_at && tenant.beta_ends_at &&
+    Date.parse(tenant.beta_ends_at) > Date.now());
+  if (tenant.plan !== "pro" && !isActiveBeta) return null;
   if (!tenant.email)                     return null;
   if (tenant.digest_unsubscribed === 1)  return null;
 
@@ -234,14 +259,26 @@ export function buildDigest(
     top_domains: (citationStmt.all(l.id) as { domain: string }[]).map((c) => c.domain),
   }));
 
-  const subject = renderSubject(tenant.name, totals);
+  // Compute a beta context once so subject + html + text all share
+  // the same framing. daysLeft drives the "ends in N days" copy in
+  // the body. Non-beta tenants get the regular metric-led email.
+  const betaContext = isActiveBeta && tenant.beta_ends_at
+    ? {
+        is_beta:    true as const,
+        ends_at:    tenant.beta_ends_at,
+        days_left:  Math.max(0, Math.ceil((Date.parse(tenant.beta_ends_at) - Date.now()) / 86_400_000)),
+        cohort:     tenant.beta_cohort,
+      }
+    : { is_beta: false as const };
+
+  const subject = renderSubject(tenant.name, totals, betaContext);
   const html    = renderHtml({
     businessName: tenant.name, totals, byBot, topDescriptors, losses,
-    dashboardUrl, unsubscribeUrl: unsubUrl,
+    dashboardUrl, unsubscribeUrl: unsubUrl, beta: betaContext,
   });
   const text    = renderText({
     businessName: tenant.name, totals, byBot, topDescriptors, losses,
-    dashboardUrl, unsubscribeUrl: unsubUrl,
+    dashboardUrl, unsubscribeUrl: unsubUrl, beta: betaContext,
   });
 
   return {
@@ -256,11 +293,31 @@ export function buildDigest(
   };
 }
 
+type BetaContext =
+  | { is_beta: false }
+  | { is_beta: true; ends_at: string; days_left: number; cohort: string | null };
+
 function renderSubject(
   businessName: string,
   totals: { polls: number; cited: number; citation_rate: number; bookings: number },
+  beta: BetaContext = { is_beta: false },
 ): string {
   const { polls, cited, bookings } = totals;
+
+  // Beta tenants get a feedback-led subject line. The metrics still
+  // appear in the body, but week-1 testers care more about being
+  // asked "how's it going" than seeing a metric they can't yet
+  // contextualize.
+  if (beta.is_beta) {
+    if (beta.days_left > 14) {
+      return `${businessName} — your AdvocateMCP beta: week recap + 1 question for you`;
+    }
+    if (beta.days_left > 1) {
+      return `${businessName} — beta wraps in ${beta.days_left} days. How's it going?`;
+    }
+    return `${businessName} — your beta ends tomorrow. Final feedback?`;
+  }
+
   // Lead with bookings when there are any — that's the retention-
   // critical number. Fall back to the citation framing when there are
   // no bookings yet (early-tenant case).
@@ -282,6 +339,7 @@ interface RenderData {
   losses:         DigestLoss[];
   dashboardUrl:   string;
   unsubscribeUrl: string;
+  beta?:          BetaContext;
 }
 
 function renderHtml(d: RenderData): string {
@@ -316,13 +374,24 @@ function renderHtml(d: RenderData): string {
       <tr><td align="center">
         <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
           <tr><td style="padding:28px 32px 16px 32px">
-            <div style="font-size:12px;color:#6b7280;letter-spacing:0.04em;text-transform:uppercase;margin-bottom:8px">AdvocateMCP · Weekly summary</div>
+            <div style="font-size:12px;color:#6b7280;letter-spacing:0.04em;text-transform:uppercase;margin-bottom:8px">AdvocateMCP · ${
+              d.beta?.is_beta ? "Beta cohort weekly check-in" : "Weekly summary"
+            }</div>
             <h1 style="margin:0;font-size:22px;color:#111827">${escapeHtml(businessName)}</h1>
             <p style="margin:6px 0 0 0;color:#6b7280;font-size:14px">${
-              totals.bookings > 0
-                ? `<strong>${totals.bookings} AI ${totals.bookings === 1 ? "booking" : "bookings"} this week.</strong> Plus citation data and lost queries below.`
-                : `Here's how AI assistants described your business this week.`
+              d.beta?.is_beta
+                ? (d.beta.days_left > 7
+                    ? `You're <strong>${d.beta.days_left} days into your beta</strong>. Reply with feedback any time — what's clicking, what's confusing.`
+                    : d.beta.days_left > 1
+                      ? `Your beta wraps in <strong>${d.beta.days_left} days</strong>. Reply if you'd like to keep going (or pause; just tell us).`
+                      : `Your beta ends tomorrow. Reply with final feedback — even a sentence helps.`)
+                : (totals.bookings > 0
+                    ? `<strong>${totals.bookings} AI ${totals.bookings === 1 ? "booking" : "bookings"} this week.</strong> Plus citation data and lost queries below.`
+                    : `Here's how AI assistants described your business this week.`)
             }</p>
+            ${d.beta?.is_beta
+              ? `<p style="margin:12px 0 0 0;color:#5c1a3c;font-size:13px"><em>You're in our launch cohort. We're paying close attention. <a href="mailto:max@advocate-mcp.com?subject=${encodeURIComponent("Beta feedback — " + businessName)}" style="color:#5c1a3c">max@advocate-mcp.com</a> goes straight to the founder.</em></p>`
+              : ""}
           </td></tr>
 
           <tr><td style="padding:8px 32px 0 32px">
@@ -385,10 +454,25 @@ function renderHtml(d: RenderData): string {
 }
 
 function renderText(d: RenderData): string {
-  const { businessName, totals, byBot, topDescriptors, losses, dashboardUrl, unsubscribeUrl } = d;
+  const { businessName, totals, byBot, topDescriptors, losses, dashboardUrl, unsubscribeUrl, beta } = d;
   const lines: string[] = [];
-  lines.push(`${businessName} — AdvocateMCP weekly summary`);
-  lines.push("");
+  if (beta?.is_beta) {
+    lines.push(`${businessName} — AdvocateMCP beta cohort week`);
+    lines.push("");
+    if (beta.days_left > 7) {
+      lines.push(`You're ${beta.days_left} days into your beta. Reply to max@advocate-mcp.com with anything that's clicking or confusing.`);
+    } else if (beta.days_left > 1) {
+      lines.push(`Beta wraps in ${beta.days_left} days. Reply if you'd like to keep going or pause.`);
+    } else {
+      lines.push(`Beta ends tomorrow. Reply with final feedback — even a sentence helps.`);
+    }
+    lines.push("");
+    lines.push("Direct feedback: max@advocate-mcp.com");
+    lines.push("");
+  } else {
+    lines.push(`${businessName} — AdvocateMCP weekly summary`);
+    lines.push("");
+  }
   if (totals.bookings > 0) {
     lines.push(`AI-attributed bookings: ${totals.bookings} ${totals.bookings === 1 ? "booking" : "bookings"} this week (agents reserved or completed work for you)`);
     lines.push("");

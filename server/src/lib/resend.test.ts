@@ -33,7 +33,7 @@ describe("sendEmail", () => {
     ) as unknown as typeof fetch;
     globalThis.fetch = fetchSpy;
 
-    await sendEmail({ ...base, replyTo: "support@advocatemcp.com" });
+    await sendEmail({ ...base, replyTo: "max@advocate-mcp.com" });
 
     const [, init] = (fetchSpy as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0]!;
     const body = JSON.parse(init.body as string);
@@ -42,7 +42,7 @@ describe("sendEmail", () => {
     expect(body.subject).toBe(base.subject);
     expect(body.html).toBe(base.html);
     expect(body.text).toBe(base.text);
-    expect(body.reply_to).toBe("support@advocatemcp.com");
+    expect(body.reply_to).toBe("max@advocate-mcp.com");
   });
 
   it("throws ResendError on non-2xx with status + body preserved", async () => {

@@ -32,7 +32,7 @@
  *     response. Ugly but functional. No HTML response path on the
  *     backend (out of scope for tonight).
  *
- *   - Support contact uses mailto:hello@advocatemcp.com as a placeholder.
+ *   - Support contact uses mailto:max@advocate-mcp.com as a placeholder.
  *     Real support address gets swapped in a follow-up once the support
  *     channel is chosen.
  *
@@ -105,10 +105,31 @@ export async function handleActivatePage(request: Request, env: Env): Promise<Re
     }
   }
 
+  // Hosted tenants stay on the Worker page — they need the password-
+  // setup step (POST /api/activate/hosted), which requires inline UI
+  // we only render here. Custom-domain tenants get redirected to the
+  // Pages-served activate.html where the new per-variant DNS setup
+  // flow lives (Phase A/B/C: per-variant cards, real-time polling,
+  // provider-specific guides). Pages site URL is the marketing
+  // origin (advocatemcp.com) — same Cloudflare Pages project as the
+  // homepage, deployed via `wrangler pages deploy site`.
+  if (!isHosted) {
+    const passthrough = new URLSearchParams();
+    if (hasToken) passthrough.set("t", tokenParam!);
+    // Use the path without .html so we don't bounce through the
+    // Pages site's automatic /activate.html → /activate 308 redirect.
+    const target = `https://advocatemcp.com/activate${passthrough.toString() ? `?${passthrough.toString()}` : ""}`;
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: target,
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+
   return new Response(
-    isHosted
-      ? renderHostedPage(escapedToken, escapeHtml(hostedUrl), escapeHtml(tenantEmail))
-      : renderPage(hasToken, escapedToken),
+    renderHostedPage(escapedToken, escapeHtml(hostedUrl), escapeHtml(tenantEmail)),
     {
       status: 200,
       headers: {
@@ -389,7 +410,7 @@ function renderMissingTokenState(): string {
   <div class="tag">Activation link required</div>
   <h1 class="h1">This page needs a valid link</h1>
   <p class="lede">This page needs a valid activation link to work. If you paid for AdvocateMCP recently, you should have received an email with your link. If you can't find it, please contact support.</p>
-  <a href="mailto:hello@advocatemcp.com" class="btn">Contact support</a>
+  <a href="mailto:max@advocate-mcp.com" class="btn">Contact support</a>
 </div>`;
 }
 

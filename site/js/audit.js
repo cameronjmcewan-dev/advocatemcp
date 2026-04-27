@@ -22,7 +22,7 @@
     loading.classList.remove("show");
     results.classList.remove("show");
     btn.disabled = false;
-    btn.textContent = "Run my audit";
+    btn.textContent = "See what AI thinks of my site";
   }
 
   function clearError() {
@@ -230,7 +230,7 @@
       var visibility = null;
       var visibilityError = null;
       if (v.status === 429 && v.body.error === "ip_rate_limited") {
-        visibilityError = "You've run " + (v.body.limit || 3) + " audits in the last 24 hours. Try again tomorrow or reach out at support@advocatemcp.com.";
+        visibilityError = "You've run " + (v.body.limit || 3) + " audits in the last 24 hours. Try again tomorrow or reach out at max@advocate-mcp.com.";
       } else if (v.status === 503 && v.body.error === "daily_budget_exhausted") {
         visibilityError = "The free audit hit its daily budget. Try again tomorrow.";
       } else if (v.status === 400) {
@@ -400,8 +400,17 @@
 
     // Wire the share-link row. The audit id makes the report shareable
     // at /r/:id (Pages routes /r/* → /r.html?id=:splat via _redirects).
+    //
+    // Citation-readiness audits don't have a stored id (they're not
+    // retained per the disclosure story), and a visibility-failed run
+    // also leaves audit.id null. In both cases there's nothing to
+    // share — hide the entire share row instead of leaving an empty
+    // input + non-functional copy button. (Reported by user: "the
+    // share report button doesn't work either.")
+    var shareRow = document.getElementById("share-row");
     var shareUrlInput = document.getElementById("share-url");
-    if (shareUrlInput && audit.id) {
+    if (audit.id && shareUrlInput) {
+      if (shareRow) shareRow.style.display = "";
       var shareUrl = window.location.origin + "/r/" + audit.id;
       shareUrlInput.value = shareUrl;
       var copyBtn = document.getElementById("share-copy");
@@ -420,6 +429,8 @@
           }
         };
       }
+    } else if (shareRow) {
+      shareRow.style.display = "none";
     }
 
     // Wire the email-capture follow-up form. POSTs to
@@ -429,7 +440,13 @@
     var followupInput  = document.getElementById("followup-email");
     var followupSubmit = document.getElementById("followup-submit");
     var followupMsg    = document.getElementById("followup-msg");
+    var followupCard   = document.getElementById("followup-card");
+    // Same audit.id gate as the share row: monthly-followup POSTs to
+    // /audit/:id/follow-up so it has nothing to attach to when the
+    // visibility audit failed (or for citation-readiness-only runs).
+    // Hide the card rather than letting the user submit into a 404.
     if (followupForm && audit.id) {
+      if (followupCard) followupCard.style.display = "";
       followupForm.onsubmit = function (e) {
         e.preventDefault();
         if (!followupMsg || !followupInput || !followupSubmit) return;
@@ -475,6 +492,8 @@
             followupMsg.className = "followup-msg err";
           });
       };
+    } else if (followupCard) {
+      followupCard.style.display = "none";
     }
 
     results.classList.add("show");

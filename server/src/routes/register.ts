@@ -40,7 +40,12 @@ registerRouter.post("/register", requireApiKey, (req: Request, res: Response) =>
   const p = parsed.data;
 
   const db = getDb();
-  const baseSlug = slugify(p.name);
+  // Prefer the caller-supplied slug (e.g. the worker's mint from wizard
+  // input + KV uniqueness check) so worker-side and server-side slugs stay
+  // in lockstep. Fall back to slugify(name) when omitted, preserving the
+  // legacy /register contract for CLI / manual onboard scripts. The schema
+  // already enforces the character class on p.slug, so we trust it directly.
+  const baseSlug = p.slug ?? slugify(p.name);
   const apiKey = crypto.randomUUID();
   const j = (v: unknown): string | null =>
     v === undefined ? null : JSON.stringify(v);
@@ -64,8 +69,9 @@ registerRouter.post("/register", requireApiKey, (req: Request, res: Response) =>
         hours_json, services_json_v2, pricing_json_v2, credentials_json,
         ratings_json, differentiators_text, customer_quotes_json,
         guarantee_text, case_stories_json, lead_routing_json,
-        plan, email)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        plan, email,
+        beta_started_at, beta_ends_at, beta_coupon_id, beta_cohort)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   const slugFreeStmt = db.prepare("SELECT id FROM businesses WHERE slug = ?");
 
@@ -119,6 +125,13 @@ registerRouter.post("/register", requireApiKey, (req: Request, res: Response) =>
         // here only so an explicit forwarding from the wizard takes effect.
         p.plan ?? "base",
         p.email ?? null,
+        // Beta cohort fields. Worker stripe webhook detects the beta
+        // promo code at checkout, then forwards these to /register so
+        // server-side digest + ending-email crons can pick the right copy.
+        p.beta_started_at ?? null,
+        p.beta_ends_at ?? null,
+        p.beta_coupon_id ?? null,
+        p.beta_cohort ?? null,
       );
       insertedSlug = candidate;
       break;

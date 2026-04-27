@@ -78,7 +78,7 @@ digestRouter.get("/digest/unsubscribe/:token", (req: Request, res: Response) => 
       UNSUB_PAGE(
         `<h1 style="font-size:20px;margin:0 0 8px 0">${already ? "Already unsubscribed" : "Unsubscribed"}</h1>
          <p style="color:#6b7280;font-size:14px;margin:0 0 16px 0">You'll no longer receive weekly radar digest emails for <strong>${existing.name.replace(/[<>&]/g, "")}</strong>.</p>
-         <p style="color:#9ca3af;font-size:12px;margin:0">Want to re-subscribe? Contact <a href="mailto:support@advocatemcp.com" style="color:#0f766e">support@advocatemcp.com</a>.</p>`,
+         <p style="color:#9ca3af;font-size:12px;margin:0">Want to re-subscribe? Contact <a href="mailto:max@advocate-mcp.com" style="color:#0f766e">max@advocate-mcp.com</a>.</p>`,
         already ? "Already unsubscribed" : "Unsubscribed",
       ),
     );

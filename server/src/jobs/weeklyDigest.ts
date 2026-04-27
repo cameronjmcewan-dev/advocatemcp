@@ -131,7 +131,11 @@ export async function sendAllDigests(now: Date = new Date()): Promise<SendAllDig
     const attemptedAt = new Date();
     try {
       const { id } = await sendEmail({
+        // From-address is on the Resend-verified domain (advocatemcp.com).
+        // replyTo routes customer replies to the real support inbox so the
+        // visible support contact stays consistent across all touchpoints.
         from:    digestFrom(),
+        replyTo: "max@advocate-mcp.com",
         to:      payload.recipient,
         subject: payload.subject,
         html:    payload.html,
@@ -236,6 +240,7 @@ export async function retryPendingDigests(
     try {
       const { id } = await sendEmail({
         from:    digestFrom(),
+        replyTo: "max@advocate-mcp.com",
         to:      payload.recipient,
         subject: payload.subject,
         html:    payload.html,

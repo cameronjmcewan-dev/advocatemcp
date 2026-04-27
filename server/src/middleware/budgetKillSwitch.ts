@@ -86,24 +86,37 @@ function rehydrateFromDb(dateKey: string): BudgetState {
   }
 }
 
-/* Write-through to SQLite. Best-effort — never raises out of the
- * caller's hot path. */
-function persistState(s: BudgetState): void {
+/* persistState was the pre-Bug-2 write-through path: it computed the
+ * new (spent, reserved) tuple in JS and UPSERTed the whole row back.
+ * Under multi-instance concurrency, two instances could both compute
+ * "reserved = old + delta" from a stale `s` and then UPSERT, with the
+ * later writer clobbering the earlier delta. The new mutators
+ * (reserve/record/release) use atomic conditional UPDATEs against the
+ * existing row instead. Helper retained as a no-op stub (with
+ * dead-code clearly marked) so importers see the migration intent. */
+
+/* Ensure today's budget_state row exists in SQLite. Called at the top
+ * of every mutator so a fresh DB (Railway redeploy, _resetDbForTests
+ * between vitest cases, manual migration re-run) starts with a row
+ * present. The atomic UPDATEs that follow rely on the row being there
+ * — a missing row would make every reserve match-zero and reject. */
+function ensureRow(dateKey: string): void {
   try {
     const db = getDb();
-    // UPSERT: the row is guaranteed to exist after rehydrateFromDb on
-    // the first read of the day, but defensively use INSERT OR REPLACE
-    // so a never-initialized table still works.
     db.prepare(`
-      INSERT INTO budget_state (date_key, spent_usd, reserved_usd, updated_at)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(date_key) DO UPDATE SET
-        spent_usd    = excluded.spent_usd,
-        reserved_usd = excluded.reserved_usd,
-        updated_at   = excluded.updated_at
-    `).run(s.dateKey, s.spentUsd, s.reservedUsd, new Date().toISOString());
+      CREATE TABLE IF NOT EXISTS budget_state (
+        date_key      TEXT PRIMARY KEY,
+        spent_usd     REAL NOT NULL DEFAULT 0,
+        reserved_usd  REAL NOT NULL DEFAULT 0,
+        updated_at    TEXT NOT NULL
+      )
+    `).run();
+    db.prepare(
+      `INSERT OR IGNORE INTO budget_state (date_key, spent_usd, reserved_usd, updated_at)
+       VALUES (?, 0, 0, ?)`,
+    ).run(dateKey, new Date().toISOString());
   } catch {
-    /* swallow — durability is best-effort, in-memory still works */
+    /* swallow — caller falls back to in-memory path */
   }
 }
 
@@ -125,35 +138,118 @@ function dailyCap(): number {
  * { allowed: true, reservationId } if budget is available, or
  * { allowed: false, ...} if the reservation would exceed the cap.
  * Caller MUST eventually call release() or record() to close the
- * reservation — orphaned reservations decay at rollover. */
+ * reservation — orphaned reservations decay at rollover.
+ *
+ * Concurrency (Bug 2): atomic conditional UPDATE so two instances
+ * can't both pass the cap check, both write, last-writer-wins, and
+ * silently allow $50 of spend through a $25 cap. The cap predicate
+ * lives in the WHERE clause; SQLite serializes the row update. After
+ * a successful UPDATE we sync the in-memory cache so snapshot()
+ * reflects the new state without another SELECT.
+ */
 export function reserve(maxUsd: number): { allowed: true; reservationId: string } | { allowed: false; remainingUsd: number; capUsd: number } {
-  const s = getState();
+  const today = utcDateKey();
   const cap = dailyCap();
-  const projected = s.spentUsd + s.reservedUsd + maxUsd;
-  if (projected > cap) {
-    return { allowed: false, remainingUsd: Math.max(0, cap - s.spentUsd - s.reservedUsd), capUsd: cap };
+  const cached = getState();
+  ensureRow(today);
+  try {
+    const db = getDb();
+    const result = db
+      .prepare(
+        `UPDATE budget_state
+            SET reserved_usd = reserved_usd + ?,
+                updated_at   = ?
+          WHERE date_key = ?
+            AND spent_usd + reserved_usd + ? <= ?`,
+      )
+      .run(maxUsd, new Date().toISOString(), today, maxUsd, cap);
+    if (result.changes === 1) {
+      // Best-effort cache update: reflect OUR delta. If another instance
+      // raced ahead, our cached.reservedUsd will lag behind reality
+      // until the next mutator hits this code path (which re-syncs from
+      // the live row on rejection) or until rehydrateFromDb runs at
+      // rollover. snapshot() readers may see slightly-stale numbers
+      // during that window — the cap enforcement itself is unaffected
+      // because the next reserve()'s SQL re-evaluates the predicate.
+      cached.reservedUsd += maxUsd;
+      return {
+        allowed: true,
+        reservationId: `${maxUsd}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
+      };
+    }
+    const row = db
+      .prepare("SELECT spent_usd, reserved_usd FROM budget_state WHERE date_key = ?")
+      .get(today) as { spent_usd: number; reserved_usd: number } | undefined;
+    const spent = row?.spent_usd ?? cached.spentUsd;
+    const reserved = row?.reserved_usd ?? cached.reservedUsd;
+    cached.spentUsd = spent;
+    cached.reservedUsd = reserved;
+    return {
+      allowed: false,
+      remainingUsd: Math.max(0, cap - spent - reserved),
+      capUsd: cap,
+    };
+  } catch {
+    // DB unavailable: fall back to single-process in-memory check.
+    const projected = cached.spentUsd + cached.reservedUsd + maxUsd;
+    if (projected > cap) {
+      return {
+        allowed: false,
+        remainingUsd: Math.max(0, cap - cached.spentUsd - cached.reservedUsd),
+        capUsd: cap,
+      };
+    }
+    cached.reservedUsd += maxUsd;
+    return {
+      allowed: true,
+      reservationId: `${maxUsd}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
+    };
   }
-  s.reservedUsd += maxUsd;
-  persistState(s);
-  return { allowed: true, reservationId: `${maxUsd}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}` };
 }
 
 /* Close a reservation with the actual spend. If actualUsd > the
  * reserved amount, the difference still counts (doesn't over-consume
- * the cap retroactively but does flow into next requests' budget). */
+ * the cap retroactively but does flow into next requests' budget).
+ * Atomic UPDATE — see Bug 2 jsdoc on reserve(). */
 export function record(reservationMaxUsd: number, actualUsd: number): void {
-  const s = getState();
-  s.reservedUsd = Math.max(0, s.reservedUsd - reservationMaxUsd);
-  s.spentUsd += actualUsd;
-  persistState(s);
+  const today = utcDateKey();
+  const cached = getState();
+  ensureRow(today);
+  try {
+    const db = getDb();
+    db.prepare(
+      `UPDATE budget_state
+          SET reserved_usd = MAX(0, reserved_usd - ?),
+              spent_usd    = spent_usd + ?,
+              updated_at   = ?
+        WHERE date_key = ?`,
+    ).run(reservationMaxUsd, actualUsd, new Date().toISOString(), today);
+    cached.reservedUsd = Math.max(0, cached.reservedUsd - reservationMaxUsd);
+    cached.spentUsd += actualUsd;
+  } catch {
+    cached.reservedUsd = Math.max(0, cached.reservedUsd - reservationMaxUsd);
+    cached.spentUsd += actualUsd;
+  }
 }
 
 /* Release a reservation without recording any spend (e.g. the
- * call failed before it incurred cost). */
+ * call failed before it incurred cost). Atomic UPDATE. */
 export function release(reservationMaxUsd: number): void {
-  const s = getState();
-  s.reservedUsd = Math.max(0, s.reservedUsd - reservationMaxUsd);
-  persistState(s);
+  const today = utcDateKey();
+  const cached = getState();
+  ensureRow(today);
+  try {
+    const db = getDb();
+    db.prepare(
+      `UPDATE budget_state
+          SET reserved_usd = MAX(0, reserved_usd - ?),
+              updated_at   = ?
+        WHERE date_key = ?`,
+    ).run(reservationMaxUsd, new Date().toISOString(), today);
+    cached.reservedUsd = Math.max(0, cached.reservedUsd - reservationMaxUsd);
+  } catch {
+    cached.reservedUsd = Math.max(0, cached.reservedUsd - reservationMaxUsd);
+  }
 }
 
 /* Read-only snapshot for admin / status endpoints. */

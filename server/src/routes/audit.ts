@@ -483,22 +483,33 @@ auditRouter.post("/audit/citation-readiness", async (req: Request, res: Response
   const ip = clientIp(req);
   const ipHash = ip ? hashIp(ip) : "";
 
-  // Per-IP cap: count today's readiness calls from this IP. Stored in
-  // the same audit_followups table is the wrong place; we need a
-  // dedicated counter. Quick approach: use the existing `public_audits`
-  // table's ip_hash column with a synthetic category="__readiness__"
-  // marker so cap counting reuses the existing index. Cleaner long-
-  // term: separate `audit_readiness_results` table (proposal in chat,
-  // not built yet — needs disclosure decision).
+  // Per-IP cap: count today's readiness calls from this IP.
+  //
+  // Pre-Bug-5 this synthesized rows in public_audits with
+  // category='__readiness__' so cap counting reused the public_audits
+  // index. That mixed two unrelated concerns (real audits vs. per-IP
+  // ticks) in one table. Migration 027 added a dedicated
+  // audit_readiness_results table so the counter lives in its own
+  // narrow shape with its own (ip_hash, created_at) index.
+  //
+  // Belt-and-suspenders during rollout: the cap query unions both
+  // tables for ~24h after deploy so old synthetic rows are still
+  // counted against the cap. They age out at the 24h cutoff naturally
+  // and the union becomes a no-op. After a future cleanup migration
+  // deletes the synthetic rows we can drop the union half. (Bug 5.)
   if (ipHash) {
     const db = getDb();
     const cutoff = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
     const { count } = db
       .prepare(
-        `SELECT COUNT(*) AS count FROM public_audits
-          WHERE ip_hash = ? AND category = '__readiness__' AND created_at > ?`,
+        `SELECT
+            (SELECT COUNT(*) FROM audit_readiness_results
+              WHERE ip_hash = ? AND created_at > ?)
+          + (SELECT COUNT(*) FROM public_audits
+              WHERE ip_hash = ? AND category = '__readiness__' AND created_at > ?)
+          AS count`,
       )
-      .get(ipHash, cutoff) as { count: number };
+      .get(ipHash, cutoff, ipHash, cutoff) as { count: number };
     if (count >= READINESS_PER_IP_DAILY_CAP) {
       res.status(429).json({
         ok: false, reason: "ip_rate_limited",
@@ -553,27 +564,23 @@ auditRouter.post("/audit/citation-readiness", async (req: Request, res: Response
   budgetRecord(READINESS_RESERVATION_USD, result.cost_usd || 0.04);
 
   // Stamp a counter row so per-IP rate-limit lookup works on the next
-  // call. Minimal data — id, ip_hash, created_at, category=__readiness__.
-  // We deliberately do NOT persist the URL or score here; the disclosure
-  // story is "we scored your site, no per-result retention." The data-
-  // capture proposal in chat is a separate, opt-in decision.
+  // call. Minimal data — ip_hash, cost_usd, created_at. We deliberately
+  // do NOT persist the URL or score here; the disclosure story is "we
+  // scored your site, no per-result retention." The data-capture
+  // proposal in chat is a separate, opt-in decision.
+  //
+  // Writes go to the dedicated audit_readiness_results table (added in
+  // migration 027). The old code path inserted synthetic
+  // category='__readiness__' rows into public_audits — see Bug 5 for
+  // the migration rationale.
   if (ipHash) {
     try {
       const db = getDb();
       db.prepare(
-        `INSERT INTO public_audits
-          (id, domain, category, location, ip_hash,
-           queries_json, cited_count, total_queries, error,
-           cost_usd, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO audit_readiness_results (ip_hash, cost_usd, created_at)
+         VALUES (?, ?, ?)`,
       ).run(
-        crypto.randomUUID(),
-        "__readiness__",          // synthetic domain (not the visitor's URL)
-        "__readiness__",          // marker for the per-IP counter
-        null,
         ipHash,
-        "[]",
-        0, 0, null,
         result.cost_usd || 0.04,
         new Date().toISOString(),
       );

@@ -15,7 +15,7 @@ import {
 } from "../portalDb";
 import type { Business, User, SessionWithUser } from "../portalDb";
 import { buildDashboard, type AnalyticsData } from "./dashboard";
-import { handleActivateDomain, handleDomainStatus, handleDomainRaw, handleSetFallbackOrigin, handleEnsureWorkerRoute, cfRequest } from "./domains";
+import { handleActivateDomain, handleDomainStatus, handleDomainRaw, handleSetFallbackOrigin, handleEnsureWorkerRoute, handleBackfillVariants, cfRequest } from "./domains";
 import {
   handleOnboard, handleOnboardStatus, handleOnboardList,
   handleVerifyDomain, handleVerifyAll, handleDisableTenant,
@@ -23,7 +23,8 @@ import {
 } from "./onboard";
 import { handleOnboardPage } from "./onboardPage";
 import { handleActivatePage } from "./activatePage";
-import { handleActivate, handleActivateHosted, handleActivationToken, handleGetActivation, handleResendActivation } from "./activate";
+import { handleActivate, handleActivateHosted, handleActivatePreview, handleActivateStatus, handleActivateDnsProvider, handleActivationToken, handleGetActivation, handleResendActivation } from "./activate";
+import { handleCloudflareValidate, handleCloudflareApply, handleGoDaddyValidate, handleGoDaddyApply, handleNamecheapValidate, handleNamecheapApply, handleRoute53Validate, handleRoute53Apply, handleIonosValidate, handleIonosApply } from "./dnsAuto";
 import {
   getSessionFromRequest,
   handleAuthLogin,
@@ -89,6 +90,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   // tenant-role session. Used to verify data isolation visually (no admin
   // UI, only-this-tenant data) without sharing tenant credentials.
   if (pathname === "/admin/magic-login"        && method === "POST") return adminMagicLogin(request, env);
+  if (pathname === "/admin/beta-tenants"       && method === "GET")  return adminBetaTenants(request, env);
   if (pathname === "/auth/magic"               && method === "GET")  return handleMagicLogin(request, env);
   const resyncMatch = pathname.match(/^\/admin\/businesses\/([^/]+)\/resync-api-key$/);
   if (resyncMatch && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
@@ -96,6 +98,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/admin/domains/activate"              && method === "POST") return handleActivateDomain(request, env);
   if (pathname === "/admin/domains/saas-fallback-origin"  && method === "POST") return handleSetFallbackOrigin(request, env);
   if (pathname === "/admin/domains/ensure-worker-route"   && method === "POST") return handleEnsureWorkerRoute(request, env);
+  if (pathname === "/admin/domains/backfill-variants"     && method === "POST") return handleBackfillVariants(request, env);
   if (pathname === "/admin/onboard/retry-railway"         && method === "POST") return handleRetryRailwayRegistration(request, env);
   if (pathname === "/status"                   && method === "GET")  return statusPage(request, env);
   if (pathname === "/onboard"                  && method === "GET")  return handleOnboardPage(request, env);
@@ -104,6 +107,32 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   // Separate flow from the existing /onboard wizard. See feat(worker):
   // phase 3 spine commit for the full design rationale.
   if (pathname === "/activate"                 && method === "GET")  return handleActivatePage(request, env);
+  if (pathname === "/api/activate/preview"     && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/activate/preview"     && method === "GET")     return handleActivatePreview(request, env);
+  if (pathname === "/api/activate/status"      && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/activate/status"      && method === "GET")     return handleActivateStatus(request, env);
+  if (pathname === "/api/activate/dns-provider" && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/activate/dns-provider" && method === "GET")     return handleActivateDnsProvider(request, env);
+  if (pathname === "/api/dns-auto/cloudflare/validate" && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/dns-auto/cloudflare/validate" && method === "POST")    return handleCloudflareValidate(request, env);
+  if (pathname === "/api/dns-auto/cloudflare/apply"    && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/dns-auto/cloudflare/apply"    && method === "POST")    return handleCloudflareApply(request, env);
+  if (pathname === "/api/dns-auto/godaddy/validate"    && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/dns-auto/godaddy/validate"    && method === "POST")    return handleGoDaddyValidate(request, env);
+  if (pathname === "/api/dns-auto/godaddy/apply"       && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/dns-auto/godaddy/apply"       && method === "POST")    return handleGoDaddyApply(request, env);
+  if (pathname === "/api/dns-auto/namecheap/validate"  && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/dns-auto/namecheap/validate"  && method === "POST")    return handleNamecheapValidate(request, env);
+  if (pathname === "/api/dns-auto/namecheap/apply"     && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/dns-auto/namecheap/apply"     && method === "POST")    return handleNamecheapApply(request, env);
+  if (pathname === "/api/dns-auto/route53/validate"    && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/dns-auto/route53/validate"    && method === "POST")    return handleRoute53Validate(request, env);
+  if (pathname === "/api/dns-auto/route53/apply"       && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/dns-auto/route53/apply"       && method === "POST")    return handleRoute53Apply(request, env);
+  if (pathname === "/api/dns-auto/ionos/validate"      && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/dns-auto/ionos/validate"      && method === "POST")    return handleIonosValidate(request, env);
+  if (pathname === "/api/dns-auto/ionos/apply"         && method === "OPTIONS") return handleCorsPreflight(request);
+  if (pathname === "/api/dns-auto/ionos/apply"         && method === "POST")    return handleIonosApply(request, env);
   if (pathname === "/api/activate"             && method === "OPTIONS") return handleCorsPreflight(request);
   if (pathname === "/api/activate"             && method === "POST")    return handleActivate(request, env);
   if (pathname === "/api/activate/hosted"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
@@ -165,7 +194,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/onboard/public"    && method === "OPTIONS") return handlePublicOnboardPreflight(request);
   if (pathname === "/api/onboard/public"    && method === "POST")    return handlePublicOnboard(request, env);
 
-  // Public marketing contact form → Resend → hello@advocatemcp.com
+  // Public marketing contact form → Resend → max@advocate-mcp.com
   if (pathname === "/api/contact"           && method === "OPTIONS") return handleContactPreflight(request);
   if (pathname === "/api/contact"           && method === "POST")    return handleContact(request, env);
 
@@ -447,11 +476,45 @@ async function apiMetrics(request: Request, env: Env): Promise<Response> {
     onboardingSnapshot = null;
   }
 
+  // Beta cohort metadata. Set when this tenant signed up with a Stripe
+  // promotion code on our beta-coupon allowlist (BETA_COUPON_IDS env var).
+  // Dashboard shell reads beta_started_at + beta_ends_at to render the
+  // "you're in beta — N days left" banner. Computed days_left server-
+  // side so the UI doesn't have to handle date math (and stays correct
+  // across timezones).
+  let beta: {
+    started_at: string;
+    ends_at: string;
+    days_left: number;
+    cohort: string | null;
+  } | null = null;
+  try {
+    const row = await env.DB
+      .prepare(
+        "SELECT beta_started_at, beta_ends_at, beta_cohort FROM businesses WHERE slug = ? LIMIT 1",
+      )
+      .bind(biz.slug)
+      .first<{ beta_started_at: string | null; beta_ends_at: string | null; beta_cohort: string | null }>();
+    if (row?.beta_started_at && row.beta_ends_at) {
+      const endsMs = Date.parse(row.beta_ends_at);
+      const daysLeft = Math.max(0, Math.ceil((endsMs - Date.now()) / 86_400_000));
+      beta = {
+        started_at: row.beta_started_at,
+        ends_at:    row.beta_ends_at,
+        days_left:  daysLeft,
+        cohort:     row.beta_cohort,
+      };
+    }
+  } catch {
+    // Pre-migration tenants: column doesn't exist yet. Leave beta null.
+  }
+
   const data = {
     ...(analytics ?? { message: "No data available yet", slug: biz.slug }),
     domain,
     is_hosted: isHosted,
     onboarding: onboardingSnapshot,
+    beta,
   };
   return withCors(jsonOk(data), request, { credentials: true });
 }
@@ -1904,6 +1967,65 @@ async function adminCreateClient(request: Request, env: Env): Promise<Response> 
 // Auth: Bearer ADMIN_SECRET (same pattern as /admin/create-client).
 // Token TTL: 5 minutes. Token is NOT single-use; the short window is
 // the main protection.
+
+/**
+ * GET /admin/beta-tenants
+ *
+ * Lists every tenant whose checkout used a Stripe promo code on the
+ * BETA_COUPON_IDS allowlist. Sorted by ends_at ascending so the soonest
+ * to convert / churn appear first. Used by the founder to track the
+ * beta cohort in real time during launch:
+ *
+ *   curl -s -H "X-Admin-Secret: $ADMIN_SECRET" \
+ *     https://customers.advocatemcp.com/admin/beta-tenants | jq
+ *
+ * Returns:
+ *   {
+ *     ok: true,
+ *     count: <int>,
+ *     tenants: [{ slug, name, domain, plan, beta_started_at,
+ *                 beta_ends_at, days_left, beta_cohort, beta_coupon_id,
+ *                 stripe_customer_id, stripe_subscription_id }]
+ *   }
+ */
+async function adminBetaTenants(request: Request, env: Env): Promise<Response> {
+  const provided = request.headers.get("X-Admin-Secret") ?? "";
+  if (!env.ADMIN_SECRET || provided !== env.ADMIN_SECRET) {
+    return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  }
+  let rows: Array<Record<string, string | number | null>> = [];
+  try {
+    const result = await env.DB
+      .prepare(
+        `SELECT
+            slug, business_name AS name, domain, plan,
+            beta_started_at, beta_ends_at, beta_cohort, beta_coupon_id,
+            stripe_customer_id, stripe_subscription_id
+           FROM businesses
+          WHERE beta_started_at IS NOT NULL
+          ORDER BY beta_ends_at ASC`,
+      )
+      .all();
+    rows = (result.results ?? []) as typeof rows;
+  } catch (err) {
+    return withCors(
+      jsonErr(500, `DB error: ${String(err).slice(0, 200)}`),
+      request,
+      { credentials: true },
+    );
+  }
+  const now = Date.now();
+  const tenants = rows.map((r) => {
+    const endsAt = r.beta_ends_at ? Date.parse(String(r.beta_ends_at)) : null;
+    const daysLeft = endsAt !== null ? Math.max(0, Math.ceil((endsAt - now) / 86_400_000)) : null;
+    return { ...r, days_left: daysLeft };
+  });
+  return withCors(
+    jsonOk({ ok: true, count: tenants.length, tenants }),
+    request,
+    { credentials: true },
+  );
+}
 
 async function adminMagicLogin(request: Request, env: Env): Promise<Response> {
   // Reject non-JSON content types before touching the body.

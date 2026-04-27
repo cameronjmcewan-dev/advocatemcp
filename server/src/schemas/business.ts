@@ -99,6 +99,18 @@ export const LeadRoutingSchema = z.object({
 });
 
 export const OnboardingPayloadSchema = z.object({
+  // Optional caller-supplied slug. When the worker registers a tenant on
+  // Railway, the worker has already minted the canonical slug (from wizard
+  // input + KV uniqueness check) — passing it through here lets Railway
+  // store the same slug instead of slugify(name)-ing the display name and
+  // diverging. Without this, the worker stores Railway's api_key under its
+  // own slug while Railway has the tenant under slugify(name) — so every
+  // /agents/:slug/query call from the bot-interception path 404s.
+  // Same character constraints as server's slugify() output: lowercase
+  // alphanumeric + single-hyphen separators, 2-60 chars. If omitted (or
+  // invalid for any reason) the server falls back to slugify(name) for
+  // back-compat with existing /register callers (CLI, manual scripts).
+  slug: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).min(2).max(60).optional(),
   // Step 1 — identity
   name: z.string().min(1).max(200),
   description: z.string().min(1).max(2000),
@@ -154,5 +166,15 @@ export const OnboardingPayloadSchema = z.object({
   // Optional on the wire — server defaults to 'base' if omitted so legacy
   // callers (CLI, manual onboard scripts) continue to work without change.
   plan: z.enum(["base", "pro"]).optional(),
+
+  // Beta cohort fields, mirrored from worker D1. Set by the Stripe
+  // webhook when checkout used a Stripe promo code on the
+  // BETA_COUPON_IDS allowlist. weeklyDigest + betaEndingEmail jobs
+  // read these to pick the right copy. ISO timestamps; cohort is a
+  // free-text label like "beta_2026_04".
+  beta_started_at: z.string().datetime().optional(),
+  beta_ends_at:    z.string().datetime().optional(),
+  beta_coupon_id:  z.string().max(120).optional(),
+  beta_cohort:     z.string().max(60).optional(),
 });
 export type OnboardingPayload = z.infer<typeof OnboardingPayloadSchema>;

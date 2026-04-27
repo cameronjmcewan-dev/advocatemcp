@@ -76,7 +76,7 @@
   }
 
   function mailtoLink(subject, body) {
-    return `mailto:hello@advocatemcp.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    return `mailto:max@advocate-mcp.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   }
 
   function render(data) {
@@ -147,7 +147,11 @@
                 </div>`
               : `<div class="set-row" style="border-bottom:0;padding-top:16px">
                   <div class="l"></div>
-                  <div class="r"><button class="btn btn-ghost btn-sm" id="btn-open-dns-wizard" type="button">Open DNS wizard →</button></div>
+                  <div class="r" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                    <button class="btn btn-ghost btn-sm" id="btn-open-dns-wizard" type="button">Open DNS wizard →</button>
+                    <button class="btn btn-ghost btn-sm" id="btn-verify-dns" type="button">Verify DNS now</button>
+                    <span id="verify-dns-status" style="font-size:12.5px;color:var(--muted)"></span>
+                  </div>
                 </div>`
           }
         </div>
@@ -277,6 +281,62 @@
           // Script failed to load — graceful fallback to the legacy entry
           // point so the customer isn't stranded.
           window.location.href = '/dashboard.html#sec-domains';
+        }
+      });
+    }
+
+    // "Verify DNS now" button (Phase B). Re-fetches /api/client/domain-info
+    // and re-renders the page so the customer sees the latest status
+    // without reloading. Useful for customers who closed the activation
+    // tab, added DNS records on their own, and came back later wanting
+    // to know if it worked.
+    const verifyBtn = document.getElementById('btn-verify-dns');
+    const verifyStatusEl = document.getElementById('verify-dns-status');
+    if (verifyBtn) {
+      verifyBtn.addEventListener('click', async () => {
+        if (preview) {
+          if (verifyStatusEl) verifyStatusEl.textContent = 'Log in to use this.';
+          return;
+        }
+        verifyBtn.disabled = true;
+        const oldText = verifyBtn.textContent;
+        verifyBtn.textContent = 'Checking…';
+        if (verifyStatusEl) {
+          verifyStatusEl.textContent = '';
+          verifyStatusEl.style.color = 'var(--muted)';
+        }
+        try {
+          const fetchFn = (window.AMCP && window.AMCP.authedFetch) || fetch;
+          const res = await fetchFn('/api/client/domain-info?slug=' + encodeURIComponent(window.AMCP_DATA?.slug || ''));
+          if (!res || !res.ok) throw new Error('lookup failed');
+          const data = await res.json();
+          // Did anything actually change vs. what's currently rendered?
+          const currentStatus = (window.AMCP_DATA && window.AMCP_DATA.domain && window.AMCP_DATA.domain.status) || 'unknown';
+          const newStatus = (data && data.status) || 'unknown';
+          if (newStatus === 'active') {
+            if (verifyStatusEl) {
+              verifyStatusEl.textContent = '✓ DNS active. Refreshing…';
+              verifyStatusEl.style.color = 'var(--sage)';
+            }
+            setTimeout(() => window.location.reload(), 800);
+          } else if (newStatus === currentStatus) {
+            if (verifyStatusEl) {
+              verifyStatusEl.textContent = 'Still pending. DNS can take 5–15 minutes to propagate.';
+              verifyStatusEl.style.color = 'var(--muted)';
+            }
+          } else {
+            // Status changed (e.g. inactive → pending). Reload so the
+            // chip updates.
+            setTimeout(() => window.location.reload(), 400);
+          }
+        } catch (_) {
+          if (verifyStatusEl) {
+            verifyStatusEl.textContent = "Couldn't check. Try again in a moment.";
+            verifyStatusEl.style.color = 'var(--maroon)';
+          }
+        } finally {
+          verifyBtn.disabled = false;
+          verifyBtn.textContent = oldText;
         }
       });
     }

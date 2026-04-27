@@ -37,6 +37,23 @@ import type {
   VariantSummary,
 } from "./types.js";
 
+/**
+ * Profile row with secrets stripped. The runner returns these from
+ * `runExperiment().loadedProfiles` so callers can compute a profile
+ * hash without ever holding the raw `api_key` or PII-bearing
+ * `lead_routing_json`. Add new sensitive BusinessRow fields to the
+ * Omit<> as they appear; the redactSafeProfile() helper below mirrors
+ * this list at the value level.
+ */
+export type SafeBusinessRow = Omit<BusinessRow, "api_key" | "lead_routing_json">;
+
+export function redactSafeProfile(p: BusinessRow): SafeBusinessRow {
+  // Explicit destructure rather than `delete` so the typecheck enforces
+  // the omit list against future BusinessRow additions.
+  const { api_key: _apiKey, lead_routing_json: _leadRouting, ...safe } = p;
+  return safe;
+}
+
 // ── Config knobs ───────────────────────────────────────────────────────────
 
 const DEFAULT_QUERIES = [
@@ -199,6 +216,12 @@ async function runTrials(
   answerCache: Map<string, string>,
 ): Promise<JudgeTrial[]> {
   const trials: JudgeTrial[] = [];
+  // Track failure modes so a totally-failed run can throw a useful
+  // aggregate error instead of returning [] (which downstream summarize
+  // would turn into a silent 0/10 score). See the "all-trials-failed"
+  // guard below.
+  const failures: { reason: string; sample: string }[] = [];
+  let attempted = 0;
   let i = 0;
   const total =
     cfg.profiles.length *
@@ -221,6 +244,7 @@ async function runTrials(
         });
         for (const judge of cfg.judges) {
           i++;
+          attempted++;
           process.stdout.write(
             `[formatJudge] Trial ${i}/${total}: ${variant.id} × ${judge} ... `,
           );
@@ -237,11 +261,35 @@ async function runTrials(
               `score=${trial.citability_score} cite=${trial.would_cite} (${trial.latency_ms}ms)`,
             );
           } catch (err) {
-            console.log(`ERROR: ${String(err).slice(0, 100)}`);
+            // Bumped truncation from 100 → 300 so JudgeParseError's
+            // raw=<...> snippet (up to 500 chars in the message)
+            // survives long enough to be useful in Railway logs.
+            const msg = err instanceof Error ? err.message : String(err);
+            const reason = err instanceof Error && err.name ? err.name : "error";
+            failures.push({ reason, sample: msg.slice(0, 200) });
+            console.log(`ERROR (${reason}): ${msg.slice(0, 300)}`);
           }
         }
       }
     }
+  }
+
+  // All-trials-failed guard. If we attempted N trials and zero
+  // succeeded, throw rather than return []. Returning [] flows through
+  // summarize() → empty per-variant array → callers compute mean=0
+  // and persist "site scored 0/10" — exactly the silent-zero problem
+  // we just fixed in parseJudgeOutput. Surface the dominant failure
+  // mode in the message so the route handler can log/return something
+  // actionable.
+  if (attempted > 0 && trials.length === 0) {
+    const counts = new Map<string, number>();
+    for (const f of failures) counts.set(f.reason, (counts.get(f.reason) ?? 0) + 1);
+    const top = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+    const summary = top.map(([k, v]) => `${k}=${v}`).join(", ");
+    const sample = failures[0]?.sample ?? "(no error captured)";
+    throw new Error(
+      `All ${attempted} judge trials failed (${summary}). Sample: ${sample}`,
+    );
   }
   return trials;
 }
@@ -355,6 +403,22 @@ export async function runExperiment(opts: {
   trials: ReturnType<typeof summarize> extends Promise<infer _T> ? never : import("./types.js").JudgeTrial[];
   summary: ReturnType<typeof summarize>;
   report_md: string;
+  /**
+   * The actual profile rows we rendered against, after loadProfileFromDb
+   * + any profilePatches were applied. Callers (e.g. profileScore route)
+   * MUST hash these — not the row they read pre-call — when persisting
+   * `profile_hash`. Otherwise a user update mid-run produces a hash that
+   * doesn't match what we scored, marking the cache stale on every
+   * subsequent read. Order-aligned with `cfg.profiles`.
+   *
+   * Type-safety note: this is `SafeBusinessRow`, not `BusinessRow`,
+   * specifically to keep `api_key` and `lead_routing_json` (PII —
+   * phone/email recipients) out of any caller's response surface. The
+   * admin /admin/experiments/format-judge route does `res.json(result)`,
+   * so a future BusinessRow field marked sensitive needs to land in
+   * the Omit<> below or the runner's redact step. Found by code review.
+   */
+  loadedProfiles: SafeBusinessRow[];
 }> {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error("ANTHROPIC_API_KEY not set");
@@ -412,6 +476,11 @@ export async function runExperiment(opts: {
     trials,
     summary,
     report_md,
+    // Snapshot the post-merge profiles so callers can hash exactly what
+    // we rendered, with `api_key` + `lead_routing_json` stripped so the
+    // admin route's `res.json(result)` can't accidentally leak secrets.
+    // See the `loadedProfiles` jsdoc above for why.
+    loadedProfiles: cfg.profiles.map(redactSafeProfile),
   };
 }
 

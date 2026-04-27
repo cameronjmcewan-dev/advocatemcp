@@ -133,4 +133,40 @@ describe("tenantBudget", () => {
     expect(top[1].slug).toBe("alpha");
     expect(top[2].slug).toBe("bravo");
   });
+
+  /* (Bug 2) Multi-instance race protection: simulate "another instance
+   * wrote to SQLite after we hydrated our in-memory cache." Pre-fix,
+   * reserveForSlug used (cache value) + maxUsd ≤ cap; the cache was
+   * stale so it allowed a reservation that would actually overflow the
+   * DB. Post-fix, the conditional UPDATE re-evaluates the predicate
+   * against the live DB row, matches zero rows, and we reject. */
+  it("rejects when another writer raced ahead in SQLite (Bug 2)", () => {
+    // Hydrate cache: alpha has $1 reserved according to our local view.
+    expect(reserveForSlug("alpha", 1).allowed).toBe(true);
+    expect(snapshotForSlug("alpha").reserved_usd).toBe(1);
+
+    // Another Railway instance writes directly: alpha now has $4.5
+    // reserved in the DB. Our in-memory cache still thinks $1.
+    const today = new Date().toISOString().slice(0, 10);
+    db.prepare(
+      "UPDATE tenant_budget_state SET reserved_usd = ? WHERE slug = ? AND date_key = ?",
+    ).run(4.5, "alpha", today);
+
+    // This reservation should fail: $4.5 + $1 = $5.5 > $5 cap.
+    // Pre-Bug-2 behavior would ALLOW (in-memory said $1+$1=$2 ≤ $5).
+    const r = reserveForSlug("alpha", 1);
+    expect(r.allowed).toBe(false);
+    if (!r.allowed) {
+      expect(r.capUsd).toBe(5);
+      // Cache is now refreshed to reflect the racing write.
+      expect(snapshotForSlug("alpha").reserved_usd).toBe(4.5);
+    }
+  });
+
+  it("allows the reservation that exactly hits the cap, rejects the next (Bug 2)", () => {
+    // $5 cap exactly: $5 should fit, $0.01 more should not.
+    expect(reserveForSlug("alpha", 5).allowed).toBe(true);
+    const r = reserveForSlug("alpha", 0.01);
+    expect(r.allowed).toBe(false);
+  });
 });

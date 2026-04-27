@@ -208,7 +208,7 @@ These are intentional, approved cuts from the Phase 3 proposal, captured here so
 
 ### Placeholder to swap in a future session
 
-All customer-facing error states and the missing-token short-circuit link to `mailto:hello@advocatemcp.com` as the support contact. This is a placeholder — the real support address (or form URL, Discord link, whatever channel is chosen) gets swapped in a follow-up. `grep -rn "hello@advocatemcp.com" worker/src/routes/` finds every occurrence.
+All customer-facing error states and the missing-token short-circuit link to `mailto:max@advocate-mcp.com` as the support contact. This is a placeholder — the real support address (or form URL, Discord link, whatever channel is chosen) gets swapped in a follow-up. `grep -rn "max@advocate-mcp.com" worker/src/routes/` finds every occurrence.
 
 ---
 

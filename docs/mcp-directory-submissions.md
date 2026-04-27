@@ -23,7 +23,7 @@ Last validated: 2026-04-19.
 | **Manifest URL** | `https://api.advocatemcp.com/.well-known/mcp.json` |
 | **Category** | Local business / SMB directory / Customer discovery |
 | **License** | Proprietary (hosted SaaS); SDK/manifest spec is open |
-| **Maintainer email** | support@advocatemcp.com |
+| **Maintainer email** | max@advocate-mcp.com |
 | **Repository** | `https://github.com/cameronjmcewan-dev/advocatemcp` |
 | **Logo** | `https://advocatemcp.com/icon-512.png` (512×512 PNG) |
 
@@ -73,7 +73,7 @@ canonical long-form description.
 | Auth required | Discovery: none. Transactions: per-tenant Bearer. |
 | Homepage | `https://advocatemcp.com/mcp.html` |
 | GitHub | `https://github.com/cameronjmcewan-dev/advocatemcp` |
-| Contact | support@advocatemcp.com |
+| Contact | max@advocate-mcp.com |
 | Example queries | See list above |
 
 **Review expectation:** 3–7 day turnaround. Reviewer may ping to
@@ -120,7 +120,7 @@ description: |
   The MCP layer for local businesses...
 url: https://api.advocatemcp.com/mcp
 homepage: https://advocatemcp.com/mcp.html
-maintainer: Cameron McEwan <support@advocatemcp.com>
+maintainer: Cameron McEwan <max@advocate-mcp.com>
 transport: streamable-http
 category: local-business
 tools:

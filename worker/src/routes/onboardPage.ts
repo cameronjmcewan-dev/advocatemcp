@@ -385,7 +385,7 @@ ${renderFooter()}
         <span class="si-icon">&#x2709;&#xFE0F;</span>
         <div class="si-body">
           <div class="si-title">Email Us</div>
-          <div class="si-desc">support@advocatemcp.com</div>
+          <div class="si-desc">max@advocate-mcp.com</div>
         </div>
       </div>
       <div class="support-item" onclick="openChat()">
@@ -874,10 +874,10 @@ function renderLive(){
     actions += '<div class="action-card upgrade-card" onclick="goUpgrade(\\'pro\\')"><div class="upgrade-price">$250/mo</div><div class="action-title">Upgrade to Pro</div><div class="action-desc">Priority support, custom agent tone, advanced analytics</div></div>';
   } else if (plan === 'base'){
     actions += '<div class="action-card upgrade-card" onclick="goUpgrade(\\'pro\\')"><div class="upgrade-price">$250/mo</div><div class="action-title">Upgrade to Pro</div><div class="action-desc">Priority support, custom agent tone, advanced analytics</div></div>';
-    actions += '<a class="action-card" href="mailto:support@advocatemcp.com"><div class="action-icon">&#x1F4E7;</div><div class="action-title">Contact Support</div><div class="action-desc">We\\u2019re here to help</div></a>';
+    actions += '<a class="action-card" href="mailto:max@advocate-mcp.com"><div class="action-icon">&#x1F4E7;</div><div class="action-title">Contact Support</div><div class="action-desc">We\\u2019re here to help</div></a>';
   } else {
-    actions += '<a class="action-card" href="mailto:support@advocatemcp.com"><div class="action-icon">&#x1F4E7;</div><div class="action-title">Contact Support</div><div class="action-desc">We\\u2019re here to help</div></a>';
-    actions += '<a class="action-card" href="mailto:support@advocatemcp.com"><div class="action-icon">&#x2B50;</div><div class="action-title">Pro Plan Active</div><div class="action-desc">You\\u2019re on the highest tier</div></a>';
+    actions += '<a class="action-card" href="mailto:max@advocate-mcp.com"><div class="action-icon">&#x1F4E7;</div><div class="action-title">Contact Support</div><div class="action-desc">We\\u2019re here to help</div></a>';
+    actions += '<a class="action-card" href="mailto:max@advocate-mcp.com"><div class="action-icon">&#x2B50;</div><div class="action-title">Pro Plan Active</div><div class="action-desc">You\\u2019re on the highest tier</div></a>';
   }
 
   document.getElementById('liveActions').innerHTML = actions;
@@ -888,7 +888,7 @@ function renderLive(){
 window.goUpgrade = function(plan){
   // Future: call an upgrade endpoint that creates a new Stripe Checkout Session
   // for changing the subscription. For now, direct to email.
-  window.location.href = 'mailto:support@advocatemcp.com?subject=' +
+  window.location.href = 'mailto:max@advocate-mcp.com?subject=' +
     encodeURIComponent('Upgrade to ' + plan.charAt(0).toUpperCase() + plan.slice(1) + ' plan') +
     '&body=' + encodeURIComponent('Domain: ' + state.domain + '\\nCurrent plan: ' + (state.plan || 'free') + '\\nRequested plan: ' + plan);
 };
@@ -965,7 +965,7 @@ window.checkApiStatus = function(){
 };
 window.openEmail = function(){
   var subj = state.domain ? '['+state.domain+'] Onboarding Issue' : 'Onboarding Help';
-  window.location.href = 'mailto:support@advocatemcp.com?subject='+encodeURIComponent(subj)+
+  window.location.href = 'mailto:max@advocate-mcp.com?subject='+encodeURIComponent(subj)+
     '&body='+encodeURIComponent('Domain: '+(state.domain||'N/A')+'\\nStep: '+state.step+'\\nPlan: '+state.plan+'\\n\\nDescribe your issue:\\n');
 };
 window.openChat = function(){

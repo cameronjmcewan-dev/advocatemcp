@@ -87,7 +87,7 @@
               <h4>Company</h4>
               <ul>
                 <li><a href="/Contact.html">Contact</a></li>
-                <li><a href="mailto:hello@advocatemcp.com">Email us</a></li>
+                <li><a href="mailto:max@advocate-mcp.com">Email us</a></li>
               </ul>
             </div>
             <div>

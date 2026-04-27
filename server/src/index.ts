@@ -5,6 +5,7 @@ import { getDb } from "./db.js";
 import { startReputationRollupSchedule } from "./jobs/reputationRollup.js";
 import { pollAll } from "./jobs/competitorRadar.js";
 import { startWeeklyDigestSchedule } from "./jobs/weeklyDigest.js";
+import { startBetaEndingSchedule } from "./jobs/betaEndingEmail.js";
 import { startBackfillSchedule } from "./jobs/backfillQueries.js";
 import { startEmbeddingsBackfillSchedule } from "./jobs/backfillEmbeddings.js";
 import { startClusterSchedule } from "./jobs/clusterQueries.js";
@@ -78,6 +79,7 @@ if (process.env.PERPLEXITY_API_KEY && cron.validate(CRON_SCHEDULE)) {
 // P5: weekly Competitor Radar digest. Mondays 14:00 UTC by default.
 // Gated on RESEND_API_KEY so dev/test deploys without the key stay silent.
 startWeeklyDigestSchedule();
+startBetaEndingSchedule();
 
 app.listen(PORT, () => {
   console.log(`

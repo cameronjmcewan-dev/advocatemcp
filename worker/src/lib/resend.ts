@@ -31,7 +31,12 @@ export interface SendResult {
 // ── Constants ───────────────────────────────────────────────────────────────
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
+// SMTP from-address must be on a Resend-verified domain. advocatemcp.com is
+// already verified on the free tier; advocate-mcp.com would require a paid
+// plan to add as a second sending domain. Replies route to REPLY_TO via the
+// reply_to header so customers still reach the real support inbox.
 const FROM_ADDRESS    = "AdvocateMCP <support@advocatemcp.com>";
+const REPLY_TO        = "max@advocate-mcp.com";
 const SEND_TIMEOUT_MS = 10_000;
 
 // ── Email template ──────────────────────────────────────────────────────────
@@ -125,9 +130,10 @@ export async function sendActivationEmail(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from:    FROM_ADDRESS,
-        to:      [to],
-        subject: "Welcome to AdvocateMCP \u2014 let\u2019s get you live",
+        from:     FROM_ADDRESS,
+        to:       [to],
+        reply_to: REPLY_TO,
+        subject:  "Welcome to AdvocateMCP \u2014 let\u2019s get you live",
         html,
       }),
     });
@@ -165,7 +171,7 @@ export async function sendActivationEmail(
 
 /**
  * Send a contact-form submission from the public marketing site to
- * hello@advocatemcp.com. Used by POST /api/contact (the Contact.html
+ * max@advocate-mcp.com. Used by POST /api/contact (the Contact.html
  * form). Reply-to is set to the visitor's email so replying from the
  * inbox goes straight to them.
  *
@@ -174,7 +180,7 @@ export async function sendActivationEmail(
  * inbox. Resend accepts `text` alongside `html` for plain-text
  * fallback; we send both.
  */
-const CONTACT_INBOX = "hello@advocatemcp.com";
+const CONTACT_INBOX = "max@advocate-mcp.com";
 const MAX_MESSAGE_LEN = 4000;
 
 function escapeHtml(s: string): string {

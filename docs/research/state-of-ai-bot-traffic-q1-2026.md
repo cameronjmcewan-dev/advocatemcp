@@ -3,7 +3,7 @@
 **Published Apr 17 2026**
 
 By Cameron McEwan, Founder, Advocate
-Contact: support@advocatemcp.com
+Contact: max@advocate-mcp.com
 
 ---
 
@@ -169,7 +169,7 @@ The Q2 report lands in July 2026. Between now and then we will onboard more cust
 Advocate intercepts AI crawler traffic at the edge, generates per-bot per-query optimized responses, and tracks every resulting citation click end-to-end. We also expose all registered businesses through a central MCP server at `/mcp` so MCP-compatible clients like Claude Desktop and Cursor can query any tenant directly. The free **Business** tier covers agent hosting and attribution. **Pro** adds Competitor Radar (weekly Perplexity citation polling) and per-agent reputation analytics.
 
 - **Web:** [advocatemcp.com](https://advocatemcp.com)
-- **Contact:** [support@advocatemcp.com](mailto:support@advocatemcp.com)
+- **Contact:** [max@advocate-mcp.com](mailto:max@advocate-mcp.com)
 
 Journalists and AI-platform partnerships leads: we will share a de-identified aggregate export on request so you can evaluate any claim against the underlying data.
 
@@ -193,4 +193,4 @@ A small deterministic rule set over the lowercased query string returning one of
 LIVE / PILOT / TEST tenant-type classifications were applied post-hoc to the production `queries` table using the slug allowlists documented in the Methodology section. BURST detection uses a 10-minute window on matching `(slug, bot, query)` tuples. Neither classifier is (yet) a first-class piece of the production stack; Q2 will include them as durable views alongside raw query data.
 
 ### Verification
-Journalists, AI-platform partnerships teams, and research reviewers can request a methodology walk-through call at support@advocatemcp.com. We can demonstrate the pipeline end-to-end against a live tenant without disclosing proprietary implementation detail.
+Journalists, AI-platform partnerships teams, and research reviewers can request a methodology walk-through call at max@advocate-mcp.com. We can demonstrate the pipeline end-to-end against a live tenant without disclosing proprietary implementation detail.

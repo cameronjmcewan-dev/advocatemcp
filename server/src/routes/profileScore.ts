@@ -85,7 +85,16 @@ const HASH_FIELDS = [
   "case_stories_json", "differentiators_text", "guarantee_text",
 ] as const;
 
-function computeProfileHash(business: BusinessRow): string {
+/**
+ * Computes the cache-invalidation hash from a tenant's profile fields.
+ * Accepts a `Partial<BusinessRow>` (rather than the full row) so the
+ * runner can pass back a `SafeBusinessRow` — same shape minus the
+ * `api_key` and `lead_routing_json` columns we strip to keep secrets
+ * out of any caller's response surface. None of HASH_FIELDS overlaps
+ * the redacted columns, so the computed hash is byte-identical to the
+ * pre-redaction value.
+ */
+function computeProfileHash(business: Partial<BusinessRow>): string {
   const subset: Record<string, unknown> = {};
   for (const k of HASH_FIELDS) {
     subset[k] = (business as unknown as Record<string, unknown>)[k] ?? null;
@@ -139,19 +148,44 @@ function readHistory(business: BusinessRow): HistoryEntry[] {
   return [];
 }
 
-function writeCache(slug: string, blob: CachedScore, prevHistory: HistoryEntry[]): void {
+/**
+ * Persist `blob` as the latest score and append a history entry. Reads
+ * the current history *inside* the same SQLite transaction as the
+ * UPDATE so two concurrent runs can't both read N entries, both append,
+ * and last-writer-wins drop one of the two new rows. Returns the
+ * newly-persisted history list (caller uses it for the response).
+ *
+ * Pre-fix this took a `prevHistory` arg captured at request-start time.
+ * That's the actual race: prevHistory was read at T0, runExperiment
+ * ran for ~10s, the row could change underneath, and the write would
+ * regress whatever else landed mid-flight. The transactional re-read
+ * fixes it. (Bug 1.)
+ */
+function writeCache(slug: string, blob: CachedScore): HistoryEntry[] {
   const db = getDb();
-  // Append to history. Cap at HISTORY_CAP entries so the JSON column
-  // stays bounded over time (30 weeks of history at one save per week).
-  const newHistory: HistoryEntry[] = [
-    ...prevHistory,
-    { score: blob.score, cite_rate: blob.cite_rate, run_at: blob.run_at },
-  ].slice(-HISTORY_CAP);
-  db.prepare(
-    `UPDATE businesses
-       SET last_score_json = ?, score_history_json = ?
-     WHERE slug = ?`
-  ).run(JSON.stringify(blob), JSON.stringify(newHistory), slug);
+  const tx = db.transaction((s: string): HistoryEntry[] => {
+    const row = db
+      .prepare("SELECT score_history_json FROM businesses WHERE slug = ?")
+      .get(s) as { score_history_json: string | null } | undefined;
+    let prevHistory: HistoryEntry[] = [];
+    if (row?.score_history_json) {
+      try {
+        const parsed = JSON.parse(row.score_history_json);
+        if (Array.isArray(parsed)) prevHistory = parsed as HistoryEntry[];
+      } catch { /* malformed JSON → start a fresh history */ }
+    }
+    const merged: HistoryEntry[] = [
+      ...prevHistory,
+      { score: blob.score, cite_rate: blob.cite_rate, run_at: blob.run_at },
+    ].slice(-HISTORY_CAP);
+    db.prepare(
+      `UPDATE businesses
+         SET last_score_json = ?, score_history_json = ?
+       WHERE slug = ?`,
+    ).run(JSON.stringify(blob), JSON.stringify(merged), s);
+    return merged;
+  });
+  return tx(slug);
 }
 
 const DEFAULT_QUERY = (slug: string, name: string) =>
@@ -406,6 +440,19 @@ profileScoreRouter.post(
         slug,
       );
 
+      // Hash the profile we ACTUALLY rendered against, not the one we
+      // read at line ~310 to gate the cache hit. runExperiment does its
+      // own loadProfileFromDb internally; if the user updated the
+      // profile between our pre-call read and runExperiment's load,
+      // those two rows differ. Persisting the pre-call hash would
+      // mark the cache stale on the very next read and force a needless
+      // re-run. Falling back to currentHash if the runner didn't return
+      // a row keeps behavior backward-compatible. (Bug 4.)
+      const renderedProfile = result.loadedProfiles[0];
+      const persistedHash = renderedProfile
+        ? computeProfileHash(renderedProfile)
+        : currentHash;
+
       const blob: CachedScore = {
         score:            Number(avgScore.toFixed(2)),
         score_max:        10,
@@ -414,14 +461,15 @@ profileScoreRouter.post(
         improvements,
         sample_reasoning: result.trials[0]?.reasoning ?? "",
         run_at:           new Date().toISOString(),
-        profile_hash:     currentHash,
+        profile_hash:     persistedHash,
       };
 
-      writeCache(slug, blob, history);
-      const newHistory = [
-        ...history,
-        { score: blob.score, cite_rate: blob.cite_rate, run_at: blob.run_at },
-      ].slice(-HISTORY_CAP);
+      // writeCache now returns the post-merge history list — it's the
+      // authoritative result of the transactional read+write inside
+      // SQLite. The previous code recomputed the list in JS from the
+      // request-start `history` snapshot, which suffered the same race
+      // we just fixed in writeCache. (Bug 1.)
+      const newHistory = writeCache(slug, blob);
 
       // Record actual spend against BOTH budgets. Approximate from the
       // experiment's reported total_cost (sum of trial costs). Order

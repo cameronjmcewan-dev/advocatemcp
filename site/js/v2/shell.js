@@ -273,6 +273,15 @@
         mountImpersonationBanner(window.AMCP_DATA.impersonating, window.AMCP_DATA.business_name);
       }
 
+      // Beta banner — surfaced when the worker reports beta cohort data
+      // for this tenant. Lives at the top of every dashboard page so the
+      // customer always sees the countdown + the feedback channel. The
+      // banner gracefully fades when there are 0 days left (Stripe will
+      // bill normally and the cohort flag stays in D1 for analytics).
+      if (window.AMCP_DATA.beta && !document.getElementById('amcp-beta-banner')) {
+        mountBetaBanner(window.AMCP_DATA.beta);
+      }
+
       if (typeof opts.afterMount === 'function') opts.afterMount(data);
       return;
     }
@@ -347,6 +356,79 @@
     document.body.appendChild(b);
     document.querySelectorAll('.app, .sidebar, .main').forEach(el => {
       el.style.paddingTop = (parseFloat(getComputedStyle(el).paddingTop) + 32) + 'px';
+    });
+  }
+
+  /**
+   * Beta banner — sits below the impersonation banner if both are
+   * present. Shows the cohort countdown + a direct feedback link.
+   * Color uses the warm-cream + maroon palette so it doesn't clash
+   * with the regular dashboard chrome (vs the bright maroon of the
+   * impersonation banner which intentionally screams "you're in
+   * admin-as-tenant mode").
+   *
+   * Dismissable per session via localStorage so a returning beta
+   * tester doesn't have to look at it every page load — but the
+   * banner always returns on full reload so they don't forget.
+   */
+  function mountBetaBanner(beta) {
+    if (document.getElementById('amcp-beta-banner')) return;
+    const dismissedThisSession = sessionStorage.getItem('amcp_beta_banner_dismissed') === '1';
+    if (dismissedThisSession) return;
+
+    const days = typeof beta.days_left === 'number' ? beta.days_left : 0;
+    const endsAt = beta.ends_at ? new Date(beta.ends_at) : null;
+    const endsLabel = endsAt
+      ? endsAt.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+      : 'soon';
+
+    let leftCopy;
+    if (days > 7) {
+      leftCopy = `<strong>You're in beta.</strong> ${days} days free remaining (full billing starts ${endsLabel}).`;
+    } else if (days > 1) {
+      leftCopy = `<strong>Beta ends in ${days} days</strong> on ${endsLabel}. Full billing kicks in then.`;
+    } else if (days === 1) {
+      leftCopy = `<strong>Last day of beta.</strong> Full billing starts tomorrow (${endsLabel}).`;
+    } else {
+      leftCopy = `<strong>Beta complete.</strong> You're now on full pricing. Thanks for testing.`;
+    }
+
+    const b = document.createElement('div');
+    b.id = 'amcp-beta-banner';
+    b.setAttribute('role', 'status');
+    // Top offset accounts for the impersonation banner above (32px) when
+    // both are present. Otherwise sits at the very top.
+    const hasImpersonation = !!document.getElementById('amcp-impersonation-banner');
+    b.style.cssText = [
+      'position:fixed',
+      'top:' + (hasImpersonation ? '32px' : '0'),
+      'left:0', 'right:0', 'z-index:99',
+      'background:#fbf3f7', 'color:#3d0f26',
+      'font-size:13px', 'font-weight:500', 'letter-spacing:.01em',
+      'padding:8px 16px',
+      'border-bottom:1px solid #f3e4ec',
+      'display:flex', 'align-items:center', 'justify-content:center', 'gap:14px', 'flex-wrap:wrap',
+    ].join(';');
+    b.innerHTML =
+      `<span>${leftCopy}</span>` +
+      `<a href="mailto:max@advocate-mcp.com?subject=${encodeURIComponent('AdvocateMCP beta feedback')}" ` +
+        `style="color:#5c1a3c;text-decoration:underline;font-weight:500">Send feedback →</a>` +
+      `<button type="button" id="amcp-beta-banner-dismiss" ` +
+        `style="background:transparent;border:0;color:#6b655c;cursor:pointer;font-size:16px;line-height:1;padding:0 4px" ` +
+        `aria-label="Dismiss for this session">×</button>`;
+    document.body.appendChild(b);
+    // Push down chrome so the fixed banner doesn't cover the topbar.
+    const offset = hasImpersonation ? 64 : 32;
+    document.querySelectorAll('.app, .sidebar, .main').forEach(el => {
+      el.style.paddingTop = (parseFloat(getComputedStyle(el).paddingTop) + 32) + 'px';
+    });
+    document.getElementById('amcp-beta-banner-dismiss')?.addEventListener('click', () => {
+      sessionStorage.setItem('amcp_beta_banner_dismissed', '1');
+      b.remove();
+      // Walk back the padding push so the page doesn't have a phantom gap.
+      document.querySelectorAll('.app, .sidebar, .main').forEach(el => {
+        el.style.paddingTop = Math.max(0, parseFloat(getComputedStyle(el).paddingTop) - 32) + 'px';
+      });
     });
   }
 

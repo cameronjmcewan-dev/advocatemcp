@@ -3,7 +3,45 @@
 Items captured from development sessions that need attention in future focused work.
 Sorted by urgency: blockers first, then real bugs, then polish, then research.
 
-Last updated: 2026-04-25
+Last updated: 2026-04-26
+
+## Pre-outreach push required
+
+### Push `feat/design-rollout` to deploy Pages changes
+**Added 2026-04-26.** Three commits ahead of origin, worker is already
+deployed via `wrangler deploy` for each, but Pages won't pick up the
+site/ changes until the branch is pushed. The most user-visible item
+is `site/activate.html` gaining `<meta name="robots" content="noindex, nofollow">`
+— without push, the activation page is still indexable by search engines,
+and any leaked share-link including the single-use `?t=` activation
+token becomes discoverable.
+
+Commits awaiting push:
+- `89e117d` chore(security): pre-launch audit cleanup
+- `e1aef03` fix(beta): read coupon from discounts[] array
+- `5e64a60` fix(stripe): allow_promotion_codes on public onboard
+
+```bash
+git push origin feat/design-rollout
+```
+
+## Pre-outreach security audit (2026-04-26)
+
+Ran 4 parallel audits (worker / server / frontend / dead-code) with focused
+investigation agents. 0 CRITICAL, all real findings fixed, 5 deferred with
+documented rationale. Worth keeping a few notes from this exercise:
+
+- **Audit agent caveat:** the dead-code agent reported `handleRetryRailwayRegistration`,
+  `handleActivationToken`, and `handleSaveDraft`/`handleLoadDraft` as dead because
+  it searched only `worker/src/index.ts`. The actual route dispatch table is in
+  `worker/src/routes/portal.ts` (lines 102, 140, 236, 239) — these handlers are
+  all live. Future audits: tell agents that the route dispatch entrypoint is
+  `portal.ts`, not `index.ts`.
+- **Deferred (not security blockers):** timing-safe admin-key compare (high-entropy
+  random secret over CF edge — network jitter dwarfs timing differential),
+  activation-token replay (CF custom hostname creation is idempotent so impact
+  is "wastes API quota"), SRI on Lucide / Chart.js CDNs (auth-gated dashboards
+  limit blast radius), email-loop rate-limiting (Resend handles it at our scale).
 
 ## Operator action required
 
@@ -18,7 +56,60 @@ message; global cap stays untouched and other tenants unaffected. See
 `server/src/middleware/tenantBudget.ts`. Ops view via `GET /admin/budget`
 (now returns `top_spenders_today`) and `GET /admin/budget/tenant/:slug`.
 
+## Operator action required
+
+### Backfill apex/www variants for existing tenants
+**Added 2026-04-26.** Before today every tenant onboarded with one
+hostname (whichever they typed in — usually www). AI bots crawling the
+OTHER variant (apex if they registered www, or vice versa) hit the
+customer's underlying origin directly with no Advocate intercept,
+silently leaking ~half of bot traffic for every tenant.
+
+Today's commit makes new signups register both apex and www
+automatically. Existing tenants need a one-shot backfill:
+
+```bash
+# WCC specifically:
+curl -X POST https://customers.advocatemcp.com/admin/domains/backfill-variants \
+  -H "X-Admin-Secret: <ADMIN_SECRET>" \
+  -H "Content-Type: application/json" \
+  -d '{"slug":"workman-copy-co"}'
+
+# All existing tenants in one shot:
+curl -X POST https://customers.advocatemcp.com/admin/domains/backfill-variants \
+  -H "X-Admin-Secret: <ADMIN_SECRET>" \
+  -H "Content-Type: application/json" \
+  -d '{"all":true}'
+```
+
+The endpoint is idempotent — the underlying CF custom_hostname,
+Worker Routes, and KV writes all have "already exists" reuse paths.
+Returns a per-tenant outcome list so you can see which variants got
+created vs. reused.
+
+After the backfill, the customer still needs to point their apex's
+DNS at us. For most providers that's an ANAME/ALIAS to
+`customers.advocatemcp.com`; for providers without ANAME support
+they'll need to switch their apex to Cloudflare nameservers.
+The activate page now emits per-variant DNS instructions.
+
 ## Real bugs / known gaps
+
+### Profile-score partial-failure visibility
+**Tracked 2026-04-25.** Bug 3 made `parseJudgeOutput` throw on bad
+judge output instead of returning a silent zero. The `runTrials`
+all-trials-failed guard catches the case where every trial errors,
+but a partial-failure case is still silent: if 3 of 4 variants throw
+parse errors and 1 succeeds, the user gets a "score" derived from
+that single trial with no indication their result is low-confidence.
+
+Fix candidates: surface `failed_trial_count` on `VariantSummary` and
+have `profileScore.ts` flag the response (e.g. `{ confidence: "low",
+failed_count: 3 }`) when failures cross some threshold. Or threshold
+the all-failed guard at e.g. `trials.length < attempted * 0.5` so
+high-failure batches throw rather than serve thin data. Decision
+deferred — current behavior is strictly better than the pre-Bug-3
+silent zero, just not yet ideal.
 
 ### Bot-query graceful-degrade (deferred design call)
 **Tracked 2026-04-25.** `POST /agents/:slug/query` (the production
@@ -127,8 +218,14 @@ Apr 12 — cleaned 12 pending test tenants from D1, removed orphaned test user c
 
 ## Polish — affects customer experience but not blocking
 
-### Activation page styling
-Activation page HTML doesn't match Phase D dashboard visual language. Bug C / Phase D follow-up.
+### ~~Activation page styling~~ RESOLVED
+**Resolved 2026-04-26.** `site/activate.html` and `site/login.html` migrated
+to the warm-paper design system (`/assets/styles.css`, `prefers-color-scheme`
+auto-toggle, maroon accent, serif headings). Both pages preserve every
+element ID so `/js/dashboard-activate.js` and `/js/dashboard-auth.js`
+continue working unchanged. Customer's first three screens after Stripe
+checkout — activation email link → activate.html → login.html → dashboard
+— all share one visual system now.
 
 ### ~~Dashboard domains section for hosted tenants~~ RESOLVED
 **Resolved 2026-04-24.** v2 Settings → Connection card now detects hosted tenants
@@ -158,10 +255,23 @@ Field exists on the users table, refresh handler reads it, but nothing uses it f
 per earlier Claude Code investigation. Is it dead? Can it be removed?
 
 ### /demo/:slug architectural concerns
-- Rate limiting missing
-- Hardcoded crawler user agent (GPTBot only)
-- Paid Claude API calls on every public GET
-- 8 open questions from the rearchitecture plan §10
+- ~~Rate limiting missing~~ **PARTIALLY RESOLVED 2026-04-26.** Worker
+  now forwards the visitor IP via X-Forwarded-For so Railway's
+  per-IP cost-rate-limit slots the visitor (was bucketing every
+  visitor on the Worker IP, blocking everyone when one abuser hit).
+- ~~Paid Claude API calls on every public GET~~ **RESOLVED 2026-04-26.**
+  Edge cache (`caches.default`) holds the rendered `/demo/:slug` HTML
+  for 600s so the second-and-later visitor inside the window hits a
+  pre-rendered response — no Railway round-trip, no Claude call.
+  Only cache when the agent query actually succeeded so a transient
+  Railway error doesn't poison the cache and starve the next visitor
+  of a live agent answer. Cache-Control max-age + X-Demo-Cache
+  HIT/MISS header for ops visibility.
+- Hardcoded crawler user agent (GPTBot only) — still open. Demo
+  always shows GPTBot-flavored output regardless of which engine the
+  visitor cares about. Could let the visitor pick (chip row above
+  the JSON?) or rotate randomly.
+- 8 open questions from the rearchitecture plan §10 — still open.
 
 ## Infrastructure / hygiene
 
