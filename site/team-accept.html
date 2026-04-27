@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" content="#fbf9f5" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#141210" media="(prefers-color-scheme: dark)" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Accept invitation, Advocate</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/assets/styles.css" />
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--paper);color:var(--ink);
+    font-family:var(--sans);font-size:1rem;line-height:1.6;
+    min-height:100vh;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:24px;
+  }
+  .ta-card{
+    width:100%;max-width:460px;
+    background:var(--paper-2);border:1px solid var(--line);
+    border-radius:var(--r-lg);padding:36px 32px;
+    box-shadow:var(--shadow-md);
+  }
+  .ta-logo{display:flex;align-items:center;gap:8px;font-size:.875rem;font-weight:600;margin-bottom:24px;color:var(--ink)}
+  .ta-h{font-family:var(--serif);font-weight:400;font-size:1.875rem;line-height:1.1;letter-spacing:-.02em;margin-bottom:8px;color:var(--ink)}
+  .ta-sub{font-size:.875rem;color:var(--ink-2);margin-bottom:24px;line-height:1.6}
+  .fg{margin-bottom:14px}
+  .fl{display:block;font-size:.875rem;font-weight:500;margin-bottom:6px;color:var(--ink)}
+  .fi{
+    width:100%;padding:10px 12px;
+    background:var(--paper);border:1px solid var(--line);border-radius:var(--r-md);
+    color:var(--ink);font-family:var(--sans);font-size:.875rem;
+  }
+  .fi:focus{outline:none;border-color:var(--maroon);box-shadow:0 0 0 3px var(--maroon-tint)}
+  .fi-hint{font-size:.75rem;color:var(--muted);margin-top:5px}
+  .btn-primary{
+    display:flex;align-items:center;justify-content:center;
+    width:100%;padding:12px 20px;font-size:.9375rem;font-weight:500;
+    background:var(--maroon);color:#fff;border:1px solid var(--maroon);
+    border-radius:var(--r-md);cursor:pointer;line-height:1;margin-top:8px;
+  }
+  .btn-primary:hover{background:var(--maroon-2)}
+  .btn-primary:disabled{opacity:.55;cursor:not-allowed}
+  .ta-state{display:none}
+  .ta-err{background:var(--maroon-wash);border:1px solid var(--maroon-tint);color:var(--maroon);padding:10px 14px;border-radius:var(--r-md);font-size:.875rem;margin-bottom:14px}
+  .ta-foot{text-align:center;font-size:.875rem;color:var(--muted);margin-top:18px}
+  .ta-foot a{color:var(--maroon)}
+</style>
+</head>
+<body>
+
+<div class="ta-card">
+  <div class="ta-logo">
+    <img src="/icon-192.png" alt="Advocate" width="22" height="22" style="border-radius:5px;display:block" />
+    Advocate
+  </div>
+
+  <!-- ── State: missing/invalid token ── -->
+  <div id="state-no-token" class="ta-state">
+    <h1 class="ta-h">Invitation link missing</h1>
+    <p class="ta-sub">
+      This page needs a valid invitation token. If you received an invitation email from AdvocateMCP, click the link in the email directly — pasting the URL by hand can drop the token. Already accepted? <a href="/dashboard">Sign in instead</a>.
+    </p>
+    <p class="ta-foot">
+      Need help? <a href="mailto:max@advocate-mcp.com">Email Max</a>
+    </p>
+  </div>
+
+  <!-- ── State: set password ── -->
+  <div id="state-form" class="ta-state">
+    <h1 class="ta-h">Welcome to Advocate</h1>
+    <p class="ta-sub">Set a password to finish accepting your invitation. After this, you'll be signed in.</p>
+
+    <div id="ta-err-mount" style="display:none"></div>
+
+    <form id="ta-form" novalidate>
+      <div class="fg">
+        <label class="fl" for="ta-name">Your name <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+        <input class="fi" id="ta-name" name="full_name" type="text" maxlength="200" autocomplete="name" />
+      </div>
+      <div class="fg">
+        <label class="fl" for="ta-pw">Password</label>
+        <input class="fi" id="ta-pw" name="password" type="password" required minlength="8" maxlength="200" autocomplete="new-password" />
+        <div class="fi-hint">8 characters minimum.</div>
+      </div>
+      <button class="btn-primary" id="ta-submit" type="submit">Accept invitation →</button>
+    </form>
+  </div>
+
+  <!-- ── State: success (redirecting) ── -->
+  <div id="state-success" class="ta-state">
+    <h1 class="ta-h">You're in.</h1>
+    <p class="ta-sub">Sending you to your dashboard…</p>
+  </div>
+</div>
+
+<script>
+(function () {
+  function $(id) { return document.getElementById(id); }
+  function show(name) {
+    ['state-no-token', 'state-form', 'state-success'].forEach(function (s) {
+      $(s).style.display = s === name ? 'block' : 'none';
+    });
+  }
+  function showError(msg) {
+    var mount = $('ta-err-mount');
+    mount.innerHTML = '<div class="ta-err">' + (msg || '').replace(/[<>&]/g, function (c) {
+      return ({'<':'&lt;','>':'&gt;','&':'&amp;'})[c];
+    }) + '</div>';
+    mount.style.display = 'block';
+  }
+
+  var params = new URLSearchParams(window.location.search);
+  var token = params.get('t');
+  if (!token) { show('state-no-token'); return; }
+
+  show('state-form');
+
+  $('ta-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var pw = ($('ta-pw').value || '').trim();
+    var fullName = ($('ta-name').value || '').trim();
+    if (pw.length < 8) {
+      showError('Password must be at least 8 characters.');
+      return;
+    }
+    var btn = $('ta-submit');
+    btn.disabled = true;
+    btn.textContent = 'Setting up…';
+
+    fetch('https://customers.advocatemcp.com/auth/team-accept', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: token, password: pw, full_name: fullName || undefined }),
+    })
+      .then(function (r) {
+        return r.json().then(function (j) { return { status: r.status, body: j }; });
+      })
+      .then(function (res) {
+        if (res.status === 200 && res.body && res.body.ok) {
+          show('state-success');
+          setTimeout(function () {
+            window.location.replace('https://customers.advocatemcp.com' + (res.body.redirect || '/dashboard'));
+          }, 800);
+          return;
+        }
+        btn.disabled = false;
+        btn.textContent = 'Accept invitation →';
+        var err = (res.body && res.body.error) || 'Something went wrong.';
+        if (err === 'already_accepted') {
+          showError('This invitation has already been used. Sign in at /dashboard if you forgot your password — or ask your team to send a new invite.');
+        } else if (err === 'expired') {
+          showError('This invitation has expired. Ask your team owner to send a new one.');
+        } else if (err === 'invalid_token') {
+          showError('This invitation link is invalid. Make sure you copied the full URL from your email.');
+        } else if (err.indexOf('invalid_password') === 0) {
+          showError('Password must be 8–200 characters.');
+        } else {
+          showError(err);
+        }
+      })
+      .catch(function () {
+        btn.disabled = false;
+        btn.textContent = 'Accept invitation →';
+        showError('Network error. Try again, or email max@advocate-mcp.com.');
+      });
+  });
+})();
+</script>
+
+</body>
+</html>

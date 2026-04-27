@@ -164,6 +164,24 @@
         </div>
       </div>
 
+      <!-- Team (Apr 27 2026 Enterprise honesty pass). Owner-only invite/
+           remove/role-change controls. Plan caps: base=1, pro=5,
+           enterprise=∞. Editor + viewer roles defined in
+           worker/src/routes/team.ts. -->
+      <div class="row single">
+        <div class="card-dash">
+          <div class="card-head">
+            <div><h3>Team <span class="chip ${plan === 'enterprise' ? 'maroon' : plan === 'pro' ? 'maroon' : 'sage'}" style="margin-left:6px">${plan === 'enterprise' ? 'Enterprise' : plan === 'pro' ? 'Pro' : 'Base'}</span></h3>
+              <div class="sub" id="team-cap-sub">Loading…</div>
+            </div>
+            <button class="btn btn-primary btn-sm" id="btn-invite-member" type="button" style="display:none">Invite team member</button>
+          </div>
+          <div id="team-list">
+            <div style="padding:18px;color:var(--muted);font-size:13.5px;text-align:center">Loading team…</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Multi-location (Pro = up to 3, Enterprise = unlimited).
            Apr 27 2026. The card lists every location for the tenant
            with edit + delete + promote-to-primary controls. The "Add
@@ -635,6 +653,180 @@
           setTimeout(() => { curlBtn.textContent = 'Copy test curl'; }, 2000);
         }
       });
+    }
+
+    // ── Team handlers (Apr 27 2026 Enterprise honesty pass) ──────────────
+    const teamList = document.getElementById('team-list');
+    const teamCapSub = document.getElementById('team-cap-sub');
+    const inviteBtn = document.getElementById('btn-invite-member');
+    if (teamList && af) {
+      let inviting = false;
+      let editingRoleFor = null;
+      let cachedTeam = null;
+
+      async function loadTeam() {
+        try {
+          const res = await af('/api/client/team');
+          if (!res.ok) throw new Error('fetch failed');
+          cachedTeam = await res.json();
+          renderTeam();
+        } catch (_) {
+          teamList.innerHTML = '<div style="padding:18px;color:var(--red);font-size:13.5px">Could not load team. Try refreshing.</div>';
+        }
+      }
+
+      function roleChip(role) {
+        const map = { owner: 'maroon', editor: 'sage', viewer: '' };
+        return `<span class="chip ${map[role] || ''}" style="font-size:10.5px;padding:2px 8px">${esc(role)}</span>`;
+      }
+
+      function renderTeam() {
+        if (!cachedTeam) return;
+        const { members, caller_role, plan: tPlan, cap, current_count } = cachedTeam;
+        if (teamCapSub) {
+          if (cap === null) teamCapSub.textContent = `${current_count} member${current_count === 1 ? '' : 's'} · unlimited on ${tPlan}`;
+          else teamCapSub.textContent = `${current_count} of ${cap} member${cap === 1 ? '' : 's'} · ${tPlan} plan`;
+        }
+        if (inviteBtn) {
+          inviteBtn.style.display = (caller_role === 'owner' && (cap === null || current_count < cap)) ? 'inline-flex' : 'none';
+        }
+
+        const rows = (members || []).map((m) => {
+          const isSelf = false; // we don't have user_id of the caller in the response, but we identify self via cannot_remove_self in API
+          const isOwner = m.role === 'owner';
+          const isEditingRole = editingRoleFor === m.user_id;
+          const showActions = caller_role === 'owner' && !isOwner;
+          return `<div class="set-row" data-user-id="${esc(m.user_id)}" style="align-items:center;gap:12px">
+            <div class="l" style="flex:1">
+              <strong>${esc(m.email)}${m.full_name ? ` <span style="font-weight:400;color:var(--muted)">· ${esc(m.full_name)}</span>` : ''}</strong>
+              <div style="font-size:12px;color:var(--muted);margin-top:3px;display:flex;align-items:center;gap:6px">
+                ${roleChip(m.role)}
+                ${m.pending_invite ? '<span class="chip" style="font-size:10.5px;padding:2px 8px;background:rgba(232,168,56,.15);color:#b07515">Pending invite</span>' : ''}
+              </div>
+            </div>
+            <div class="r" style="display:flex;gap:6px;flex-wrap:wrap">
+              ${showActions && isEditingRole ? `
+                <select class="key-input" data-act="role-select" data-user-id="${esc(m.user_id)}" style="font-size:13px;padding:6px 8px">
+                  <option value="viewer" ${m.role === 'viewer' ? 'selected' : ''}>Viewer</option>
+                  <option value="editor" ${m.role === 'editor' ? 'selected' : ''}>Editor</option>
+                  <option value="owner">Transfer ownership →</option>
+                </select>
+                <button class="btn btn-ghost btn-sm" data-act="role-cancel">Cancel</button>
+              ` : showActions ? `
+                <button class="btn btn-ghost btn-sm" data-act="role-edit" data-user-id="${esc(m.user_id)}">Change role</button>
+                <button class="btn btn-ghost btn-sm" data-act="remove" data-user-id="${esc(m.user_id)}" style="color:var(--red);border-color:rgba(248,81,73,.35)">Remove</button>
+              ` : ''}
+            </div>
+          </div>`;
+        }).join('');
+
+        const inviteForm = inviting && caller_role === 'owner' ? `
+          <div class="set-row" style="align-items:flex-end;gap:12px;flex-wrap:wrap;background:var(--paper-2)">
+            <div style="flex:1;display:grid;grid-template-columns:1fr auto;gap:8px;min-width:280px">
+              <input type="email" id="invite-email" class="key-input" placeholder="teammate@example.com" autocomplete="email">
+              <select id="invite-role" class="key-input" style="font-size:13.5px">
+                <option value="viewer">Viewer (read-only)</option>
+                <option value="editor">Editor (can edit)</option>
+              </select>
+            </div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-primary btn-sm" data-act="invite-send">Send invite</button>
+              <button class="btn btn-ghost btn-sm" data-act="invite-cancel">Cancel</button>
+            </div>
+          </div>` : '';
+
+        teamList.innerHTML = (rows || `<div style="padding:18px;color:var(--muted);font-size:13.5px;text-align:center">No team members yet.</div>`) + inviteForm;
+      }
+
+      teamList.addEventListener('click', async (e) => {
+        const btn = e.target.closest('button[data-act]');
+        if (!btn) return;
+        const act = btn.getAttribute('data-act');
+        const id = btn.getAttribute('data-user-id');
+
+        if (act === 'role-edit') { editingRoleFor = id; renderTeam(); return; }
+        if (act === 'role-cancel') { editingRoleFor = null; renderTeam(); return; }
+        if (act === 'invite-cancel') { inviting = false; renderTeam(); return; }
+
+        if (act === 'invite-send') {
+          const email = (document.getElementById('invite-email') || {}).value || '';
+          const roleSel = (document.getElementById('invite-role') || {}).value || 'viewer';
+          if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+            alert('Enter a valid email.');
+            return;
+          }
+          btn.disabled = true; btn.textContent = 'Sending…';
+          try {
+            const res = await af('/api/client/team/invite', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: email.trim(), role: roleSel }),
+            });
+            if (res.status === 402) {
+              const j = await res.json().catch(() => ({}));
+              alert(j.message || 'You\'ve hit your plan\'s team-member cap. Upgrade to add more.');
+              btn.disabled = false; btn.textContent = 'Send invite';
+              return;
+            }
+            if (res.status === 409) {
+              alert('That person is already on your team.');
+              btn.disabled = false; btn.textContent = 'Send invite';
+              return;
+            }
+            if (!res.ok) throw new Error('failed');
+            inviting = false;
+            await loadTeam();
+            alert('Invite sent — they\'ll receive an email with a magic link.');
+          } catch (_) { btn.disabled = false; btn.textContent = 'Send invite'; alert('Could not send invite.'); }
+          return;
+        }
+        if (act === 'remove') {
+          if (!confirm('Remove this team member? They\'ll lose access immediately.')) return;
+          try {
+            const res = await af('/api/client/team/' + encodeURIComponent(id), { method: 'DELETE' });
+            if (res.status === 409) {
+              const j = await res.json().catch(() => ({}));
+              alert(j.error === 'cannot_remove_owner'
+                ? 'Demote this owner to editor or viewer first, then remove.'
+                : 'Cannot remove yourself.');
+              return;
+            }
+            if (!res.ok) throw new Error('failed');
+            await loadTeam();
+          } catch (_) { alert('Could not remove.'); }
+          return;
+        }
+      });
+
+      // Delegated change-handler for the role dropdown.
+      teamList.addEventListener('change', async (e) => {
+        const sel = e.target.closest('select[data-act="role-select"]');
+        if (!sel) return;
+        const id = sel.getAttribute('data-user-id');
+        const role = sel.value;
+        if (role === 'owner') {
+          if (!confirm('Transfer ownership? You\'ll become an editor and they\'ll have full control over billing and team.')) {
+            sel.value = (cachedTeam.members.find(m => m.user_id === id) || {}).role || 'viewer';
+            return;
+          }
+        }
+        try {
+          const res = await af('/api/client/team/' + encodeURIComponent(id) + '/role', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role }),
+          });
+          if (!res.ok) throw new Error('failed');
+          editingRoleFor = null;
+          await loadTeam();
+        } catch (_) { alert('Could not change role.'); }
+      });
+
+      if (inviteBtn) {
+        inviteBtn.addEventListener('click', () => { inviting = true; renderTeam(); });
+      }
+
+      loadTeam();
     }
 
     // ── Locations handlers (Pro/Enterprise feature, Apr 27 2026) ─────────

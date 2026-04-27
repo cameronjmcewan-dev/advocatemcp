@@ -220,6 +220,89 @@ export async function getUserBusinesses(db: D1Database, userId: string): Promise
   return result.results;
 }
 
+/**
+ * Per-business role lookup for the team-accounts feature.
+ *
+ * Returns the user's role on a specific business, or null if the user
+ * has no access to that business. Use this in any handler that needs
+ * to gate a write operation on the role (e.g., only owners can invite
+ * team members, only owner/editor can change profile, etc.).
+ *
+ * Migration 0011 added the role column to user_business_access; legacy
+ * rows default to 'owner' so this returns the correct role for tenants
+ * that pre-date team accounts.
+ */
+export type BusinessRole = "owner" | "editor" | "viewer";
+
+export async function getUserRoleOnBusiness(
+  db: D1Database,
+  userId: string,
+  businessId: string,
+): Promise<BusinessRole | null> {
+  const row = await db
+    .prepare(
+      `SELECT role FROM user_business_access
+        WHERE user_id = ? AND business_id = ? LIMIT 1`,
+    )
+    .bind(userId, businessId)
+    .first<{ role: string }>();
+  if (!row) return null;
+  if (row.role === "owner" || row.role === "editor" || row.role === "viewer") return row.role;
+  // Legacy rows or unexpected values fall back to owner — pre-migration
+  // tenants always had a single user who paid, so 'owner' is the safe
+  // assumption when the column data is dirty.
+  return "owner";
+}
+
+/**
+ * List every team member on a business + their role.
+ * Used by the Settings Team card and the role-management endpoints.
+ */
+export interface TeamMember {
+  user_id:        string;
+  email:          string;
+  full_name:      string | null;
+  role:           BusinessRole;
+  pending_invite: boolean;
+  created_at:     string;
+}
+
+export async function listTeamMembers(
+  db: D1Database,
+  businessId: string,
+): Promise<TeamMember[]> {
+  const result = await db
+    .prepare(
+      `SELECT u.id          AS user_id,
+              u.email       AS email,
+              u.full_name   AS full_name,
+              uba.role      AS role,
+              u.pending_invite AS pending_invite,
+              uba.created_at AS created_at
+         FROM users u
+         JOIN user_business_access uba ON uba.user_id = u.id
+        WHERE uba.business_id = ?
+        ORDER BY (uba.role = 'owner') DESC, uba.created_at ASC`,
+    )
+    .bind(businessId)
+    .all<{
+      user_id: string;
+      email: string;
+      full_name: string | null;
+      role: string;
+      pending_invite: number;
+      created_at: string;
+    }>();
+  return result.results.map((r) => ({
+    user_id:        r.user_id,
+    email:          r.email,
+    full_name:      r.full_name,
+    role:           (r.role === "editor" || r.role === "viewer") ? r.role : "owner",
+    pending_invite: r.pending_invite === 1,
+    created_at:     r.created_at,
+  }));
+}
+
 export async function getBusinessBySlug(db: D1Database, slug: string): Promise<Business | null> {
   return db
     .prepare("SELECT * FROM businesses WHERE slug = ? LIMIT 1")
