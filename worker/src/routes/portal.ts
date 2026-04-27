@@ -84,6 +84,18 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/revenue-summary"     && method === "GET")  return apiRevenueSummary(request, env);
   if (pathname === "/api/client/revenue-aov"          && method === "POST") return apiRevenueSetAov(request, env);
   if (pathname === "/api/client/revenue-webhook"      && method === "POST") return apiRevenueWebhookSecret(request, env);
+
+  // Multi-location CRUD (Pro/Enterprise feature, Apr 27 2026). Worker
+  // is a thin proxy to Railway's /agents/:slug/locations endpoints.
+  // We don't reimplement the plan-tier cap here — Railway is the source
+  // of truth for plan + count.
+  if (pathname === "/api/client/locations"            && method === "GET")    return apiLocationsList(request, env);
+  if (pathname === "/api/client/locations"            && method === "POST")   return apiLocationsAdd(request, env);
+  const locUpdMatch = pathname.match(/^\/api\/client\/locations\/([a-zA-Z0-9_]+)$/);
+  if (locUpdMatch && method === "PATCH")   return apiLocationsUpdate(request, env, locUpdMatch[1]);
+  if (locUpdMatch && method === "DELETE")  return apiLocationsDelete(request, env, locUpdMatch[1]);
+  const locPromoteMatch = pathname.match(/^\/api\/client\/locations\/([a-zA-Z0-9_]+)\/promote$/);
+  if (locPromoteMatch && method === "POST") return apiLocationsPromote(request, env, locPromoteMatch[1]);
   if (pathname === "/api/client/radar"         && method === "GET")    return apiRadar(request, env);
   const radarBasketDel = pathname.match(/^\/api\/client\/radar\/basket\/([^/]+)$/);
   if (pathname === "/api/client/radar/basket"  && method === "POST")   return apiRadarBasketAdd(request, env);
@@ -1209,6 +1221,109 @@ async function apiRevenueWebhookSecret(request: Request, env: Env): Promise<Resp
 
   const result = await ensureRevenueWebhookSecret(env, biz.slug, rotate);
   return withCors(jsonOk(result), request, { credentials: true });
+}
+
+// ── Multi-location proxy helpers (Pro/Enterprise feature, Apr 27 2026) ────
+//
+// Worker is a thin auth-and-CORS gateway to Railway's
+// /agents/:slug/locations* endpoints. Railway holds the source-of-truth
+// data + enforces plan-tier caps. We intentionally don't reimplement
+// the cap logic here — that would split the cap rule across two
+// codebases and create drift opportunities. Worker just passes through
+// the 402 from Railway as-is so the dashboard can render the upgrade CTA.
+
+async function locationsBackendUrl(env: Env, slug: string, suffix = ""): Promise<string> {
+  const base = (env as { API_BASE_URL?: string }).API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  return `${base}/agents/${encodeURIComponent(slug)}/locations${suffix}`;
+}
+
+async function resolveTenantSlug(request: Request, env: Env): Promise<{ slug: string; api_key: string } | { error: Response }> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return { error: withCors(jsonErr(401, "Unauthorized"), request, { credentials: true }) };
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slugQuery = new URL(request.url).searchParams.get("slug");
+  const biz = (slugQuery ? businesses.find((b) => b.slug === slugQuery) : null) ?? businesses[0] ?? null;
+  if (!biz) return { error: withCors(jsonErr(404, "No business found for this account"), request, { credentials: true }) };
+  return { slug: biz.slug, api_key: biz.api_key };
+}
+
+async function apiLocationsList(request: Request, env: Env): Promise<Response> {
+  const ctxOrErr = await resolveTenantSlug(request, env);
+  if ("error" in ctxOrErr) return ctxOrErr.error;
+  const url = await locationsBackendUrl(env, ctxOrErr.slug);
+  const resp = await fetch(url, { headers: { Authorization: `Bearer ${ctxOrErr.api_key}` } });
+  const body = await resp.text();
+  return withCors(
+    new Response(body, { status: resp.status, headers: { "Content-Type": "application/json" } }),
+    request,
+    { credentials: true },
+  );
+}
+
+async function apiLocationsAdd(request: Request, env: Env): Promise<Response> {
+  const ctxOrErr = await resolveTenantSlug(request, env);
+  if ("error" in ctxOrErr) return ctxOrErr.error;
+  const body = await request.text();
+  const url = await locationsBackendUrl(env, ctxOrErr.slug);
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${ctxOrErr.api_key}`, "Content-Type": "application/json" },
+    body,
+  });
+  return withCors(
+    new Response(await resp.text(), { status: resp.status, headers: { "Content-Type": "application/json" } }),
+    request,
+    { credentials: true },
+  );
+}
+
+async function apiLocationsUpdate(request: Request, env: Env, locationId: string): Promise<Response> {
+  const ctxOrErr = await resolveTenantSlug(request, env);
+  if ("error" in ctxOrErr) return ctxOrErr.error;
+  const body = await request.text();
+  const url = await locationsBackendUrl(env, ctxOrErr.slug, `/${encodeURIComponent(locationId)}`);
+  const resp = await fetch(url, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${ctxOrErr.api_key}`, "Content-Type": "application/json" },
+    body,
+  });
+  return withCors(
+    new Response(await resp.text(), { status: resp.status, headers: { "Content-Type": "application/json" } }),
+    request,
+    { credentials: true },
+  );
+}
+
+async function apiLocationsDelete(request: Request, env: Env, locationId: string): Promise<Response> {
+  const ctxOrErr = await resolveTenantSlug(request, env);
+  if ("error" in ctxOrErr) return ctxOrErr.error;
+  const url = await locationsBackendUrl(env, ctxOrErr.slug, `/${encodeURIComponent(locationId)}`);
+  const resp = await fetch(url, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${ctxOrErr.api_key}` },
+  });
+  return withCors(
+    new Response(await resp.text(), { status: resp.status, headers: { "Content-Type": "application/json" } }),
+    request,
+    { credentials: true },
+  );
+}
+
+async function apiLocationsPromote(request: Request, env: Env, locationId: string): Promise<Response> {
+  const ctxOrErr = await resolveTenantSlug(request, env);
+  if ("error" in ctxOrErr) return ctxOrErr.error;
+  const url = await locationsBackendUrl(env, ctxOrErr.slug, `/${encodeURIComponent(locationId)}/promote`);
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${ctxOrErr.api_key}` },
+  });
+  return withCors(
+    new Response(await resp.text(), { status: resp.status, headers: { "Content-Type": "application/json" } }),
+    request,
+    { credentials: true },
+  );
 }
 
 // ── POST /api/client/profile ───────────────────────────────────────────────

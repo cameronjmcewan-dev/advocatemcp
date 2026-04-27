@@ -164,6 +164,26 @@
         </div>
       </div>
 
+      <!-- Multi-location (Pro = up to 3, Enterprise = unlimited).
+           Apr 27 2026. The card lists every location for the tenant
+           with edit + delete + promote-to-primary controls. The "Add
+           location" button is hidden once the plan cap is hit; the
+           server returns 402 with cap details if the customer races
+           past the cap (e.g. via direct API). -->
+      <div class="row single">
+        <div class="card-dash">
+          <div class="card-head">
+            <div><h3>Locations <span class="chip ${plan === 'enterprise' ? 'maroon' : plan === 'pro' ? 'maroon' : 'sage'}" style="margin-left:6px">${plan === 'enterprise' ? 'Enterprise' : plan === 'pro' ? 'Pro' : 'Base'}</span></h3>
+              <div class="sub" id="loc-cap-sub">Loading…</div>
+            </div>
+            <button class="btn btn-primary btn-sm" id="btn-add-location" type="button" style="display:none">Add location</button>
+          </div>
+          <div id="loc-list">
+            <div style="padding:18px;color:var(--muted);font-size:13.5px;text-align:center">Loading locations…</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Revenue tracking (Pro feature, Apr 27 2026). Two configuration
            paths: AOV (anyone can use, gives estimated revenue) or
            verified webhook (booking-system integration, gives actual).
@@ -615,6 +635,206 @@
           setTimeout(() => { curlBtn.textContent = 'Copy test curl'; }, 2000);
         }
       });
+    }
+
+    // ── Locations handlers (Pro/Enterprise feature, Apr 27 2026) ─────────
+    //
+    // Single-card UX: list locations inline, "Add location" opens an
+    // inline form below the list. Edit toggles the row to an editable
+    // state. Promote / delete are buttons per row. Plan-cap is read
+    // from the server's response (cap, current_count, plan) and used
+    // to hide the Add button when capped.
+    const locList = document.getElementById('loc-list');
+    const locCapSub = document.getElementById('loc-cap-sub');
+    const addLocBtn = document.getElementById('btn-add-location');
+    if (locList && af) {
+      let editingId = null;
+      let adding = false;
+      let cached = null;        // last server response
+
+      async function loadLocations() {
+        try {
+          const res = await af('/api/client/locations');
+          if (!res.ok) throw new Error('fetch failed');
+          cached = await res.json();
+          renderLocations();
+        } catch (_) {
+          locList.innerHTML = '<div style="padding:18px;color:var(--red);font-size:13.5px">Could not load locations. Try refreshing the page.</div>';
+        }
+      }
+
+      function fmtAddress(loc) {
+        const parts = [];
+        if (loc.address_line1) parts.push(esc(loc.address_line1));
+        if (loc.address_line2) parts.push(esc(loc.address_line2));
+        const city = `${esc(loc.city)}, ${esc(loc.state)}${loc.postal_code ? ' ' + esc(loc.postal_code) : ''}`;
+        parts.push(city);
+        return parts.join('<br>');
+      }
+
+      function renderLocations() {
+        if (!cached) return;
+        const { locations, plan: locPlan, cap, current_count } = cached;
+        // Cap subtitle.
+        if (locCapSub) {
+          if (cap === null) locCapSub.textContent = `${current_count} location${current_count === 1 ? '' : 's'} · unlimited on ${locPlan}`;
+          else locCapSub.textContent = `${current_count} of ${cap} location${cap === 1 ? '' : 's'} · ${locPlan} plan`;
+        }
+        // Add button visibility.
+        if (addLocBtn) {
+          addLocBtn.style.display = (cap === null || current_count < cap) ? 'inline-flex' : 'none';
+        }
+        // Render rows.
+        const rowHtml = (locations || []).map((l) => {
+          if (editingId === l.id) {
+            return `<div class="set-row" data-loc-id="${esc(l.id)}" style="align-items:flex-start;gap:12px;flex-wrap:wrap">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:1;min-width:280px">
+                <input type="text" class="key-input" data-field="name" placeholder="Location name" value="${esc(l.name)}" style="grid-column:1/-1">
+                <input type="text" class="key-input" data-field="address_line1" placeholder="Address line 1" value="${esc(l.address_line1 || '')}">
+                <input type="text" class="key-input" data-field="address_line2" placeholder="Address line 2 (opt.)" value="${esc(l.address_line2 || '')}">
+                <input type="text" class="key-input" data-field="city" placeholder="City" value="${esc(l.city)}">
+                <input type="text" class="key-input" data-field="state" placeholder="State" value="${esc(l.state)}">
+                <input type="text" class="key-input" data-field="postal_code" placeholder="ZIP/Postal" value="${esc(l.postal_code || '')}">
+                <input type="text" class="key-input" data-field="phone" placeholder="Phone" value="${esc(l.phone || '')}">
+              </div>
+              <div style="display:flex;gap:6px;flex-direction:column">
+                <button class="btn btn-primary btn-sm" data-act="save-edit" data-loc-id="${esc(l.id)}">Save</button>
+                <button class="btn btn-ghost btn-sm" data-act="cancel-edit">Cancel</button>
+              </div>
+            </div>`;
+          }
+          return `<div class="set-row" data-loc-id="${esc(l.id)}" style="align-items:flex-start;gap:12px;flex-wrap:wrap">
+            <div class="l" style="flex:1">
+              <strong>${esc(l.name)}${l.is_primary ? ' <span class="chip sage" style="font-size:10px;padding:1px 6px">Primary</span>' : ''}</strong>
+              <div style="font-size:12.5px;color:var(--muted);margin-top:4px;line-height:1.5">${fmtAddress(l)}${l.phone ? '<br>' + esc(l.phone) : ''}</div>
+            </div>
+            <div class="r" style="display:flex;gap:6px;flex-wrap:wrap">
+              ${!l.is_primary ? `<button class="btn btn-ghost btn-sm" data-act="promote" data-loc-id="${esc(l.id)}" title="Make this the primary location">Set primary</button>` : ''}
+              <button class="btn btn-ghost btn-sm" data-act="edit" data-loc-id="${esc(l.id)}">Edit</button>
+              ${!l.is_primary ? `<button class="btn btn-ghost btn-sm" data-act="delete" data-loc-id="${esc(l.id)}" style="color:var(--red);border-color:rgba(248,81,73,.35)">Delete</button>` : ''}
+            </div>
+          </div>`;
+        }).join('');
+
+        // Optional add-form below the list.
+        const addFormHtml = adding
+          ? `<div class="set-row" data-loc-id="__new" style="align-items:flex-start;gap:12px;flex-wrap:wrap;background:var(--paper-2)">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:1;min-width:280px">
+                <input type="text" class="key-input" data-field="name" placeholder="Location name (e.g. Round Rock branch)" style="grid-column:1/-1">
+                <input type="text" class="key-input" data-field="address_line1" placeholder="Address line 1">
+                <input type="text" class="key-input" data-field="address_line2" placeholder="Address line 2 (opt.)">
+                <input type="text" class="key-input" data-field="city" placeholder="City *">
+                <input type="text" class="key-input" data-field="state" placeholder="State *">
+                <input type="text" class="key-input" data-field="postal_code" placeholder="ZIP/Postal">
+                <input type="text" class="key-input" data-field="phone" placeholder="Phone">
+              </div>
+              <div style="display:flex;gap:6px;flex-direction:column">
+                <button class="btn btn-primary btn-sm" data-act="save-new">Add location</button>
+                <button class="btn btn-ghost btn-sm" data-act="cancel-new">Cancel</button>
+              </div>
+            </div>`
+          : '';
+
+        locList.innerHTML = rowHtml + addFormHtml ||
+          '<div style="padding:18px;color:var(--muted);font-size:13.5px;text-align:center">No locations yet — click Add location to create your first.</div>';
+      }
+
+      function readForm(rowEl) {
+        const fields = ['name','address_line1','address_line2','city','state','postal_code','phone'];
+        const out = {};
+        for (const f of fields) {
+          const inp = rowEl.querySelector(`[data-field="${f}"]`);
+          out[f] = inp ? inp.value.trim() : '';
+        }
+        return out;
+      }
+
+      // Delegated click handler for the locations card.
+      locList.addEventListener('click', async (e) => {
+        const btn = e.target.closest('button[data-act]');
+        if (!btn) return;
+        const act = btn.getAttribute('data-act');
+        const id = btn.getAttribute('data-loc-id');
+
+        if (act === 'edit') { editingId = id; renderLocations(); return; }
+        if (act === 'cancel-edit') { editingId = null; renderLocations(); return; }
+        if (act === 'cancel-new') { adding = false; renderLocations(); return; }
+
+        if (act === 'save-edit') {
+          const row = locList.querySelector(`[data-loc-id="${id}"]`);
+          if (!row) return;
+          const fields = readForm(row);
+          if (!fields.name || !fields.city || !fields.state) {
+            alert('Name, city, and state are required.');
+            return;
+          }
+          btn.disabled = true; btn.textContent = 'Saving…';
+          try {
+            const res = await af('/api/client/locations/' + encodeURIComponent(id), {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(fields),
+            });
+            if (!res.ok) throw new Error('save failed');
+            editingId = null;
+            await loadLocations();
+          } catch (_) { btn.disabled = false; btn.textContent = 'Save'; alert('Save failed.'); }
+          return;
+        }
+        if (act === 'save-new') {
+          const row = locList.querySelector('[data-loc-id="__new"]');
+          if (!row) return;
+          const fields = readForm(row);
+          if (!fields.name || !fields.city || !fields.state) {
+            alert('Name, city, and state are required.');
+            return;
+          }
+          btn.disabled = true; btn.textContent = 'Adding…';
+          try {
+            const res = await af('/api/client/locations', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(fields),
+            });
+            if (res.status === 402) {
+              const j = await res.json().catch(() => ({}));
+              alert(j.message || 'You\'ve hit your plan\'s location cap. Upgrade to add more.');
+              btn.disabled = false; btn.textContent = 'Add location';
+              return;
+            }
+            if (!res.ok) throw new Error('add failed');
+            adding = false;
+            await loadLocations();
+          } catch (_) { btn.disabled = false; btn.textContent = 'Add location'; alert('Add failed.'); }
+          return;
+        }
+        if (act === 'promote') {
+          if (!confirm('Make this the primary location? AI agents will default to this location\'s details when no specific city is mentioned.')) return;
+          try {
+            const res = await af('/api/client/locations/' + encodeURIComponent(id) + '/promote', { method: 'POST' });
+            if (!res.ok) throw new Error('promote failed');
+            await loadLocations();
+          } catch (_) { alert('Could not promote. Try again.'); }
+          return;
+        }
+        if (act === 'delete') {
+          if (!confirm('Delete this location? This cannot be undone.')) return;
+          try {
+            const res = await af('/api/client/locations/' + encodeURIComponent(id), { method: 'DELETE' });
+            if (res.status === 409) { alert('Cannot delete the primary location. Promote another location to primary first.'); return; }
+            if (!res.ok) throw new Error('delete failed');
+            await loadLocations();
+          } catch (_) { alert('Delete failed.'); }
+          return;
+        }
+      });
+
+      if (addLocBtn) {
+        addLocBtn.addEventListener('click', () => { adding = true; renderLocations(); });
+      }
+
+      // Initial load.
+      loadLocations();
     }
   }
 
