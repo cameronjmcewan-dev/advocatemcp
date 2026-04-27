@@ -105,7 +105,7 @@
     const biz = currentBiz();
     const bizSub = biz.location ? `${escHtml(biz.location)} · ${escHtml(biz.plan)}` : escHtml(biz.plan);
     return `
-    <aside class="sidebar">
+    <aside class="sidebar" id="amcp-sidebar">
       <div class="sb-brand">
         <span class="brand-mark" aria-hidden="true">A</span>
         <span class="name">Advocate</span>
@@ -140,9 +140,16 @@
     // Extra classes (topbar-crumb / topbar-title) are selectors the
     // SPA router uses to update text content on navigation without
     // re-rendering the whole topbar.
+    // Hamburger only renders meaningfully on mobile via CSS; on desktop
+    // it stays display:none. Lives inside .tb-left so it sits before
+    // the breadcrumb on small screens. aria-controls points at the
+    // sidebar so screen readers announce the toggle correctly.
     return `
     <div class="topbar">
       <div class="tb-left">
+        <button type="button" class="topbar-hamburger" id="topbar-hamburger"
+                aria-label="Open navigation" aria-controls="amcp-sidebar"
+                aria-expanded="false">☰</button>
         <div class="crumb topbar-crumb">${crumb}</div>
         <h1 class="topbar-title">${title}</h1>
       </div>
@@ -151,9 +158,16 @@
   }
 
   function renderFab() {
+    // The first item is wired to /js/support-chat.js via the
+    // data-support-chat-open attribute — clicking it opens the
+    // floating Claude-powered support drawer instead of navigating.
+    // support-chat.js's MutationObserver detects this FAB on the page
+    // and suppresses its own redundant floating "?" so we only show one
+    // help button bottom-right.
     return `
     <button class="fab" id="fab-btn" aria-label="Help">?</button>
     <div class="fab-menu" id="fab-menu" role="menu">
+      <a href="#" data-support-chat-open><span class="g">◑</span> Chat with Advocate</a>
       <a id="fab-replay"><span class="g">▶</span> Replay tutorial</a>
       <a href="/FAQs.html"><span class="g">☰</span> What does each number mean?</a>
       <a href="/intro.html" target="_blank" rel="noopener"><span class="g">▷</span> Watch 2-minute video intro</a>
@@ -162,6 +176,45 @@
       <a href="mailto:max@advocate-mcp.com"><span class="g">✉</span> Email support</a>
       <a href="/Contact.html"><span class="g">☎</span> Book a support call</a>
     </div>`;
+  }
+
+  // Hamburger ↔ sidebar drawer toggle for mobile (≤900px). The CSS handles
+  // the slide-in transform; this just flips body.sidebar-open. Outside-tap
+  // on the overlay (body::after, also bound via a delegated click on body)
+  // closes it. Escape key also closes.
+  function wireMobileSidebar() {
+    const ham = document.getElementById('topbar-hamburger');
+    const sidebar = document.getElementById('amcp-sidebar');
+    if (!ham || !sidebar) return;
+    function setOpen(open) {
+      document.body.classList.toggle('sidebar-open', open);
+      ham.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    ham.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setOpen(!document.body.classList.contains('sidebar-open'));
+    });
+    // Close on tap anywhere outside the sidebar.
+    document.addEventListener('click', (e) => {
+      if (!document.body.classList.contains('sidebar-open')) return;
+      if (sidebar.contains(e.target)) return;
+      if (ham.contains(e.target)) return;
+      setOpen(false);
+    });
+    // Close on Escape.
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && document.body.classList.contains('sidebar-open')) {
+        setOpen(false);
+      }
+    });
+    // Auto-close after a sidebar nav click on mobile (so the drawer
+    // doesn't stay open over the freshly-routed page).
+    sidebar.addEventListener('click', (e) => {
+      const link = e.target.closest('a[href]');
+      if (link && window.matchMedia('(max-width: 900px)').matches) {
+        setOpen(false);
+      }
+    });
   }
 
   function wireFab() {
@@ -224,6 +277,7 @@
     fabHolder.innerHTML = renderFab();
     while (fabHolder.firstChild) body.appendChild(fabHolder.firstChild);
 
+    wireMobileSidebar();
     wireFab();
     injectSpeculationRules();
     loadCommandPaletteIfAdmin();

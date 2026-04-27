@@ -255,12 +255,16 @@
   });
 
   // Floating help button — only when the page has NO explicit
-  // [data-support-chat-open] trigger (i.e. the dashboard, activate page,
-  // etc., where we want a "Need help?" handle without forcing every page
-  // to template a button).
+  // [data-support-chat-open] trigger AND no existing FAB from
+  // dashboard-chrome.js. The dashboard shell mounts its own #fab-btn
+  // help button at bottom-right; auto-mounting another one on top of it
+  // produces the "two stacked circles" the user reported. Skip when
+  // either trigger surface already exists — the dashboard FAB menu
+  // includes a "Chat with Advocate" item that calls open() instead.
   function maybeMountFloatingButton() {
     if (window.AMCP_CHAT_NO_FLOAT) return;
     if (document.querySelector('[data-support-chat-open]')) return;
+    if (document.querySelector('#fab-btn')) return;
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.setAttribute('data-support-chat-open', '');
@@ -286,10 +290,29 @@
     });
     document.body.appendChild(btn);
   }
+  // 1s delay so async-rendered chrome shells (the dashboard's #fab-btn is
+  // mounted from AMCP_SHELL.boot which awaits a /me fetch) have time to
+  // append their FAB before we decide whether to add a redundant one.
+  // Also set up a MutationObserver as a belt-and-suspenders fallback so
+  // a #fab-btn that appears AFTER our floating button mounts triggers
+  // removal of the floater.
+  function scheduleMaybeMountFloatingButton() {
+    setTimeout(maybeMountFloatingButton, 1000);
+    var obs = new MutationObserver(function () {
+      if (document.querySelector('#fab-btn')) {
+        var floater = document.querySelector('button[data-support-chat-open][title^="Need help"]');
+        if (floater) floater.remove();
+        obs.disconnect();
+      }
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
+    // Stop watching after 5s — chrome is either there or it isn't.
+    setTimeout(function () { obs.disconnect(); }, 5000);
+  }
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', maybeMountFloatingButton);
+    document.addEventListener('DOMContentLoaded', scheduleMaybeMountFloatingButton);
   } else {
-    maybeMountFloatingButton();
+    scheduleMaybeMountFloatingButton();
   }
 
   // Auto-grow textarea + Enter to send (Shift+Enter for newline).
