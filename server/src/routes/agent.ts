@@ -3,6 +3,15 @@ import type { Request, Response } from "express";
 import { getDb, type BusinessRow } from "../db.js";
 import { queryAgent } from "../agent/query.js";
 import { requireApiKey } from "../middleware/auth.js";
+import {
+  listLocations,
+  addLocation,
+  updateLocation,
+  removeLocation,
+  setPrimary,
+  getLocationCap,
+  type Plan as LocationPlan,
+} from "../repos/locations.js";
 import { buildToken } from "../lib/tracked-url.js";
 import { resolveAgentId } from "../lib/agentIdentity.js";
 import { verifyGoogleRating } from "../lib/googlePlaces.js";
@@ -692,3 +701,197 @@ agentRouter.post("/agents/:slug/query", requireApiKey, async (req: Request, res:
     });
   }
 });
+
+// ── Multi-location CRUD (Pro/Enterprise feature, Apr 27 2026) ─────────────
+//
+// Pro = up to 3 locations, Enterprise = unlimited. Caps enforced inside
+// addLocation() — the route just surfaces the cap rejection as 402.
+// Auth: requireApiKey on every endpoint, same as the rest of the agent
+// surface, so the customer's portal session-bridge works unchanged.
+
+/**
+ * GET /agents/:slug/locations — list every location for the tenant.
+ */
+agentRouter.get("/agents/:slug/locations", requireApiKey, (req: Request, res: Response) => {
+  const { slug } = req.params;
+  const rows = listLocations(getDb(), slug);
+  // Hours_json is stored as raw text; parse on the way out for callers.
+  const out = rows.map((r) => ({
+    id:            r.id,
+    name:          r.name,
+    address_line1: r.address_line1,
+    address_line2: r.address_line2,
+    city:          r.city,
+    state:         r.state,
+    postal_code:   r.postal_code,
+    country:       r.country,
+    phone:         r.phone,
+    hours:         r.hours_json ? safeParseJson(r.hours_json) : null,
+    is_primary:    r.is_primary === 1,
+    created_at:    r.created_at,
+  }));
+
+  // Tenant plan + cap so the UI can render "X of Y locations" without a
+  // second round-trip. Reads businesses.plan inline; mirrors the resolution
+  // rule in addLocation().
+  const tenant = getDb()
+    .prepare("SELECT plan FROM businesses WHERE slug = ?")
+    .get(slug) as { plan: string | null } | undefined;
+  const plan: LocationPlan = (tenant?.plan === "pro" || tenant?.plan === "enterprise")
+    ? tenant.plan
+    : "base";
+  const cap = getLocationCap(plan);
+
+  res.json({
+    locations: out,
+    plan,
+    cap: Number.isFinite(cap) ? cap : null,    // null on the wire = unlimited
+    current_count: out.length,
+  });
+});
+
+/**
+ * POST /agents/:slug/locations — add a new location.
+ *
+ * Body: { name, city, state, address_line1?, address_line2?,
+ *         postal_code?, country?, phone?, hours? }
+ *
+ * 402 with `{ code: 'plan_limit', cap, current_count, plan }` when
+ * adding would exceed the tier's cap. UI surfaces this as an upgrade
+ * CTA pointing at Pro / Enterprise.
+ */
+agentRouter.post("/agents/:slug/locations", requireApiKey, (req: Request, res: Response) => {
+  const { slug } = req.params;
+  const body = req.body as Record<string, unknown> | undefined;
+  if (!body || typeof body !== "object") {
+    res.status(400).json({ error: "validation", message: "JSON body required" });
+    return;
+  }
+
+  // Lightweight validation — repo's addLocation() does the authoritative
+  // shape check, but we coerce types here to surface clearer errors.
+  const result = addLocation(getDb(), slug, {
+    name:          String(body.name ?? "").trim(),
+    address_line1: body.address_line1 == null ? null : String(body.address_line1),
+    address_line2: body.address_line2 == null ? null : String(body.address_line2),
+    city:          String(body.city  ?? "").trim(),
+    state:         String(body.state ?? "").trim(),
+    postal_code:   body.postal_code == null ? null : String(body.postal_code),
+    country:       body.country == null ? "US" : String(body.country),
+    phone:         body.phone == null ? null : String(body.phone),
+    hours_json:    body.hours == null ? null : (body.hours as Record<string, unknown>),
+  });
+
+  if (!result.ok && result.code === "plan_limit") {
+    res.status(402).json({
+      error:         "plan_limit",
+      message:       `Your ${result.plan} plan allows up to ${result.cap} location${result.cap === 1 ? "" : "s"}. Upgrade to add more.`,
+      cap:           result.cap,
+      current_count: result.current_count,
+      plan:          result.plan,
+    });
+    return;
+  }
+  if (!result.ok && result.code === "validation") {
+    res.status(400).json({ error: "validation", field: result.field });
+    return;
+  }
+  res.status(201).json({ location: result.row });
+});
+
+/**
+ * PATCH /agents/:slug/locations/:id — update a location.
+ *
+ * Mutable fields: name, address_line1, address_line2, city, state,
+ * postal_code, country, phone, hours. is_primary is NOT mutable here —
+ * use POST /agents/:slug/locations/:id/promote instead (transactional
+ * demote-then-promote so the partial unique index doesn't reject).
+ */
+agentRouter.patch(
+  "/agents/:slug/locations/:id",
+  requireApiKey,
+  (req: Request, res: Response) => {
+    const { slug, id } = req.params;
+    const body = req.body as Record<string, unknown> | undefined;
+    if (!body || typeof body !== "object") {
+      res.status(400).json({ error: "validation", message: "JSON body required" });
+      return;
+    }
+    const result = updateLocation(getDb(), slug, id, {
+      name:          body.name === undefined ? undefined : String(body.name).trim(),
+      address_line1: body.address_line1 === undefined ? undefined : (body.address_line1 == null ? null : String(body.address_line1)),
+      address_line2: body.address_line2 === undefined ? undefined : (body.address_line2 == null ? null : String(body.address_line2)),
+      city:          body.city  === undefined ? undefined : String(body.city).trim(),
+      state:         body.state === undefined ? undefined : String(body.state).trim(),
+      postal_code:   body.postal_code === undefined ? undefined : (body.postal_code == null ? null : String(body.postal_code)),
+      country:       body.country === undefined ? undefined : String(body.country ?? "US"),
+      phone:         body.phone === undefined ? undefined : (body.phone == null ? null : String(body.phone)),
+      hours_json:    body.hours === undefined ? undefined : (body.hours == null ? null : (body.hours as Record<string, unknown>)),
+    });
+    if (!result.ok) {
+      if (result.code === "not_found") {
+        res.status(404).json({ error: "not_found" });
+        return;
+      }
+      res.status(400).json({ error: "validation", field: result.field });
+      return;
+    }
+    res.json({ location: result.row });
+  },
+);
+
+/**
+ * DELETE /agents/:slug/locations/:id — remove a location.
+ *
+ * Refuses to delete the primary (409 'primary_locked') so a tenant
+ * never lands in the "no locations" state. Customer must promote a
+ * different location first.
+ */
+agentRouter.delete(
+  "/agents/:slug/locations/:id",
+  requireApiKey,
+  (req: Request, res: Response) => {
+    const { slug, id } = req.params;
+    const result = removeLocation(getDb(), slug, id);
+    if (!result.ok && result.code === "not_found") {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    if (!result.ok && result.code === "primary_locked") {
+      res.status(409).json({
+        error:   "primary_locked",
+        message: "Promote another location to primary before removing this one.",
+      });
+      return;
+    }
+    res.json({ ok: true });
+  },
+);
+
+/**
+ * POST /agents/:slug/locations/:id/promote — make this location primary.
+ *
+ * Atomic demote-then-promote so the partial unique index on is_primary=1
+ * never sees two simultaneously.
+ */
+agentRouter.post(
+  "/agents/:slug/locations/:id/promote",
+  requireApiKey,
+  (req: Request, res: Response) => {
+    const { slug, id } = req.params;
+    const result = setPrimary(getDb(), slug, id);
+    if (!result.ok) {
+      res.status(404).json({ error: result.code });
+      return;
+    }
+    res.json({ ok: true });
+  },
+);
+
+/** Defensive JSON parse for hours_json — return null on bad data rather
+ * than throwing, since this is a presentation-layer concern (the bot
+ * agent reads the same column directly without parse). */
+function safeParseJson(s: string): unknown {
+  try { return JSON.parse(s); }
+  catch { return null; }
+}

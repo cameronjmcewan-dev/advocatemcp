@@ -45,6 +45,7 @@ import {
 import { handleSaveDraft, handleLoadDraft } from "./onboardDraft";
 import { handleContact, handleContactPreflight } from "./contact";
 import { handleSupportChat, handleSupportChatPreflight } from "./supportChat";
+import { handleRevenueEvent, ensureRevenueWebhookSecret } from "./revenueEvent";
 import { signMagicToken, verifyMagicToken } from "../lib/magicToken";
 import {
   handleAdminInsightsProxy,
@@ -74,6 +75,27 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/profile"         && method === "GET")  return apiGetProfile(request, env);
   if (pathname === "/api/client/profile"         && method === "POST") return apiUpdateProfile(request, env);
   if (pathname === "/api/client/rotate-key" && method === "POST") return apiRotateKey(request, env);
+
+  // Revenue attribution (Pro feature, Apr 27 2026). Three tenant-side
+  // endpoints — read summary, set/clear AOV, generate-or-rotate the
+  // webhook signing secret. Plus the public webhook receiver scoped by
+  // slug below. All tenant-side endpoints require the portal session
+  // cookie (handled by the Bearer/session auth helpers inside).
+  if (pathname === "/api/client/revenue-summary"     && method === "GET")  return apiRevenueSummary(request, env);
+  if (pathname === "/api/client/revenue-aov"          && method === "POST") return apiRevenueSetAov(request, env);
+  if (pathname === "/api/client/revenue-webhook"      && method === "POST") return apiRevenueWebhookSecret(request, env);
+
+  // Multi-location CRUD (Pro/Enterprise feature, Apr 27 2026). Worker
+  // is a thin proxy to Railway's /agents/:slug/locations endpoints.
+  // We don't reimplement the plan-tier cap here — Railway is the source
+  // of truth for plan + count.
+  if (pathname === "/api/client/locations"            && method === "GET")    return apiLocationsList(request, env);
+  if (pathname === "/api/client/locations"            && method === "POST")   return apiLocationsAdd(request, env);
+  const locUpdMatch = pathname.match(/^\/api\/client\/locations\/([a-zA-Z0-9_]+)$/);
+  if (locUpdMatch && method === "PATCH")   return apiLocationsUpdate(request, env, locUpdMatch[1]);
+  if (locUpdMatch && method === "DELETE")  return apiLocationsDelete(request, env, locUpdMatch[1]);
+  const locPromoteMatch = pathname.match(/^\/api\/client\/locations\/([a-zA-Z0-9_]+)\/promote$/);
+  if (locPromoteMatch && method === "POST") return apiLocationsPromote(request, env, locPromoteMatch[1]);
   if (pathname === "/api/client/radar"         && method === "GET")    return apiRadar(request, env);
   const radarBasketDel = pathname.match(/^\/api\/client\/radar\/basket\/([^/]+)$/);
   if (pathname === "/api/client/radar/basket"  && method === "POST")   return apiRadarBasketAdd(request, env);
@@ -203,6 +225,15 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   // Stateless on our side; the frontend POSTs the full message history each turn.
   if (pathname === "/api/support-chat"      && method === "OPTIONS") return handleSupportChatPreflight(request);
   if (pathname === "/api/support-chat"      && method === "POST")    return handleSupportChat(request, env);
+
+  // Public verified-revenue webhook receiver. Customer's booking system
+  // POSTs HMAC-signed events to /api/revenue-event/<slug>. Auth is
+  // signature-based (no portal session), so this lives in the public
+  // route block. Bad signature → 401 (no detail).
+  const revenueEventMatch = pathname.match(/^\/api\/revenue-event\/([a-z0-9][a-z0-9-]*[a-z0-9])$/);
+  if (revenueEventMatch && method === "POST") {
+    return handleRevenueEvent(request, env, revenueEventMatch[1]);
+  }
 
   // Phase B.1 (Apr 25 2026) — live MCP demo widget on the marketing
   // homepage. Public, no auth, IP-rate-limited at Railway. Worker just
@@ -1008,6 +1039,291 @@ async function apiGetProfile(request: Request, env: Env): Promise<Response> {
   const profile = await fetchProfile(biz, env);
   if (!profile) return withCors(jsonErr(502, "Profile unavailable"), request, { credentials: true });
   return withCors(jsonOk(profile), request, { credentials: true });
+}
+
+// ── Revenue attribution endpoints (Pro feature, Apr 27 2026) ──────────────
+//
+// Three tenant-side endpoints that back the dashboard revenue card and
+// the Settings "Revenue tracking" panel:
+//
+//   GET  /api/client/revenue-summary  — current-month + prior-month numbers
+//   POST /api/client/revenue-aov      — set or clear the average ticket
+//   POST /api/client/revenue-webhook  — generate or rotate the webhook secret
+//
+// All require the portal session cookie. Admins viewing as a tenant get
+// the same surface; impersonation is fine (admin doesn't pollute the
+// tenant's first_dashboard_at, but they can still configure on behalf).
+//
+// Server-side compute lives in server/src/lib/revenue.ts —
+// computeRevenueWindow(). The summary endpoint here proxies to Railway's
+// /agents/:slug/revenue-summary so the worker doesn't reimplement the
+// SQLite joins. Worker D1 is the source of truth for verified webhook
+// events; Railway's mirror is best-effort and trails by seconds.
+
+async function apiRevenueSummary(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slugQuery = new URL(request.url).searchParams.get("slug");
+  const biz = (slugQuery ? businesses.find((b) => b.slug === slugQuery) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  // Compute directly from D1 — verified events are written here by the
+  // webhook receiver. We replicate the lightweight version of
+  // computeRevenueWindow() inline rather than round-tripping to Railway,
+  // because the dashboard renders this on every page load and we don't
+  // want to add a Railway hop to that path. The Railway-side helper is
+  // kept in lockstep so the monthly-review email cron uses the same
+  // numbers the dashboard does.
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const monthEnd   = now.toISOString();
+
+  // Pull tenant config + verified totals + estimated count in three
+  // parallel D1 reads. (D1's prepared-statement API doesn't support a
+  // single multi-result query, so this is the cheapest shape.)
+  const [tenantRow, verifiedAgg, confirmedAgg] = await Promise.all([
+    env.DB
+      .prepare("SELECT avg_booking_value_cents, revenue_currency, revenue_webhook_secret FROM businesses WHERE slug = ?")
+      .bind(biz.slug)
+      .first<{ avg_booking_value_cents: number | null; revenue_currency: string | null; revenue_webhook_secret: string | null }>(),
+    env.DB
+      .prepare(
+        `SELECT COALESCE(SUM(amount_cents), 0) AS total_cents,
+                COUNT(*)                       AS event_count
+           FROM revenue_events
+          WHERE business_slug = ? AND occurred_at >= ? AND occurred_at <= ?`,
+      )
+      .bind(biz.slug, monthStart, monthEnd)
+      .first<{ total_cents: number; event_count: number }>(),
+    // Confirmed reservations from worker D1 — the worker mirrors the
+    // 'confirmed' state via /a2a/confirm. If reservations live only on
+    // Railway in this codebase, this returns 0 and we'll fall through
+    // to unconfigured rather than estimated. The monthly-review job
+    // computes the same number from Railway and is authoritative.
+    env.DB
+      .prepare(
+        `SELECT COUNT(*) AS confirmed_count
+           FROM reservations
+          WHERE business_slug = ? AND status = 'confirmed'
+            AND created_at >= ? AND created_at <= ?`,
+      )
+      .bind(biz.slug, monthStart, monthEnd)
+      .first<{ confirmed_count: number }>()
+      .catch(() => ({ confirmed_count: 0 })), // worker D1 may not mirror reservations yet
+  ]);
+
+  const aov      = tenantRow?.avg_booking_value_cents ?? null;
+  const currency = tenantRow?.revenue_currency ?? "USD";
+  const verifiedCount = verifiedAgg?.event_count ?? 0;
+  const verifiedSum   = verifiedAgg?.total_cents ?? 0;
+  const confirmedCount = confirmedAgg?.confirmed_count ?? 0;
+
+  let summary;
+  if (verifiedCount > 0) {
+    summary = {
+      source: "verified" as const,
+      amount_cents: verifiedSum,
+      event_count: verifiedCount,
+      currency,
+      aov_cents: null as number | null,
+    };
+  } else if (aov !== null && aov > 0) {
+    summary = {
+      source: "estimated" as const,
+      amount_cents: confirmedCount * aov,
+      event_count: confirmedCount,
+      currency,
+      aov_cents: aov,
+    };
+  } else {
+    summary = {
+      source: "unconfigured" as const,
+      amount_cents: null as number | null,
+      event_count: confirmedCount,
+      currency,
+      aov_cents: null as number | null,
+    };
+  }
+
+  return withCors(
+    jsonOk({
+      window_start: monthStart,
+      window_end: monthEnd,
+      ...summary,
+      webhook_configured: !!tenantRow?.revenue_webhook_secret,
+    }),
+    request,
+    { credentials: true },
+  );
+}
+
+async function apiRevenueSetAov(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slugQuery = new URL(request.url).searchParams.get("slug");
+  const biz = (slugQuery ? businesses.find((b) => b.slug === slugQuery) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  let body: { avg_booking_value_cents?: unknown; revenue_currency?: unknown };
+  try { body = await request.json(); }
+  catch { return withCors(jsonErr(400, "Body must be JSON"), request, { credentials: true }); }
+
+  // null / 0 / undefined all clear the AOV (returning the tenant to the
+  // unconfigured state). Otherwise must be a positive integer ≤ 10M cents
+  // ($100k) — sane upper bound to catch typos like "45000000" instead of "4500".
+  let aovCents: number | null = null;
+  if (body.avg_booking_value_cents !== null && body.avg_booking_value_cents !== undefined && body.avg_booking_value_cents !== 0) {
+    if (typeof body.avg_booking_value_cents !== "number" || !Number.isInteger(body.avg_booking_value_cents)) {
+      return withCors(jsonErr(400, "avg_booking_value_cents must be an integer"), request, { credentials: true });
+    }
+    if (body.avg_booking_value_cents < 0 || body.avg_booking_value_cents > 10_000_000) {
+      return withCors(jsonErr(400, "avg_booking_value_cents must be between 0 and 10_000_000"), request, { credentials: true });
+    }
+    aovCents = body.avg_booking_value_cents;
+  }
+
+  let currency = "USD";
+  if (typeof body.revenue_currency === "string" && /^[A-Z]{3}$/.test(body.revenue_currency)) {
+    currency = body.revenue_currency;
+  }
+
+  await env.DB
+    .prepare("UPDATE businesses SET avg_booking_value_cents = ?, revenue_currency = ? WHERE slug = ?")
+    .bind(aovCents, currency, biz.slug)
+    .run();
+
+  return withCors(jsonOk({ ok: true, avg_booking_value_cents: aovCents, revenue_currency: currency }), request, { credentials: true });
+}
+
+async function apiRevenueWebhookSecret(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slugQuery = new URL(request.url).searchParams.get("slug");
+  const biz = (slugQuery ? businesses.find((b) => b.slug === slugQuery) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  let body: { rotate?: unknown };
+  try { body = await request.json(); }
+  catch { body = {}; }
+  const rotate = body.rotate === true;
+
+  const result = await ensureRevenueWebhookSecret(env, biz.slug, rotate);
+  return withCors(jsonOk(result), request, { credentials: true });
+}
+
+// ── Multi-location proxy helpers (Pro/Enterprise feature, Apr 27 2026) ────
+//
+// Worker is a thin auth-and-CORS gateway to Railway's
+// /agents/:slug/locations* endpoints. Railway holds the source-of-truth
+// data + enforces plan-tier caps. We intentionally don't reimplement
+// the cap logic here — that would split the cap rule across two
+// codebases and create drift opportunities. Worker just passes through
+// the 402 from Railway as-is so the dashboard can render the upgrade CTA.
+
+async function locationsBackendUrl(env: Env, slug: string, suffix = ""): Promise<string> {
+  const base = (env as { API_BASE_URL?: string }).API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  return `${base}/agents/${encodeURIComponent(slug)}/locations${suffix}`;
+}
+
+async function resolveTenantSlug(request: Request, env: Env): Promise<{ slug: string; api_key: string } | { error: Response }> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return { error: withCors(jsonErr(401, "Unauthorized"), request, { credentials: true }) };
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slugQuery = new URL(request.url).searchParams.get("slug");
+  const biz = (slugQuery ? businesses.find((b) => b.slug === slugQuery) : null) ?? businesses[0] ?? null;
+  if (!biz) return { error: withCors(jsonErr(404, "No business found for this account"), request, { credentials: true }) };
+  return { slug: biz.slug, api_key: biz.api_key };
+}
+
+async function apiLocationsList(request: Request, env: Env): Promise<Response> {
+  const ctxOrErr = await resolveTenantSlug(request, env);
+  if ("error" in ctxOrErr) return ctxOrErr.error;
+  const url = await locationsBackendUrl(env, ctxOrErr.slug);
+  const resp = await fetch(url, { headers: { Authorization: `Bearer ${ctxOrErr.api_key}` } });
+  const body = await resp.text();
+  return withCors(
+    new Response(body, { status: resp.status, headers: { "Content-Type": "application/json" } }),
+    request,
+    { credentials: true },
+  );
+}
+
+async function apiLocationsAdd(request: Request, env: Env): Promise<Response> {
+  const ctxOrErr = await resolveTenantSlug(request, env);
+  if ("error" in ctxOrErr) return ctxOrErr.error;
+  const body = await request.text();
+  const url = await locationsBackendUrl(env, ctxOrErr.slug);
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${ctxOrErr.api_key}`, "Content-Type": "application/json" },
+    body,
+  });
+  return withCors(
+    new Response(await resp.text(), { status: resp.status, headers: { "Content-Type": "application/json" } }),
+    request,
+    { credentials: true },
+  );
+}
+
+async function apiLocationsUpdate(request: Request, env: Env, locationId: string): Promise<Response> {
+  const ctxOrErr = await resolveTenantSlug(request, env);
+  if ("error" in ctxOrErr) return ctxOrErr.error;
+  const body = await request.text();
+  const url = await locationsBackendUrl(env, ctxOrErr.slug, `/${encodeURIComponent(locationId)}`);
+  const resp = await fetch(url, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${ctxOrErr.api_key}`, "Content-Type": "application/json" },
+    body,
+  });
+  return withCors(
+    new Response(await resp.text(), { status: resp.status, headers: { "Content-Type": "application/json" } }),
+    request,
+    { credentials: true },
+  );
+}
+
+async function apiLocationsDelete(request: Request, env: Env, locationId: string): Promise<Response> {
+  const ctxOrErr = await resolveTenantSlug(request, env);
+  if ("error" in ctxOrErr) return ctxOrErr.error;
+  const url = await locationsBackendUrl(env, ctxOrErr.slug, `/${encodeURIComponent(locationId)}`);
+  const resp = await fetch(url, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${ctxOrErr.api_key}` },
+  });
+  return withCors(
+    new Response(await resp.text(), { status: resp.status, headers: { "Content-Type": "application/json" } }),
+    request,
+    { credentials: true },
+  );
+}
+
+async function apiLocationsPromote(request: Request, env: Env, locationId: string): Promise<Response> {
+  const ctxOrErr = await resolveTenantSlug(request, env);
+  if ("error" in ctxOrErr) return ctxOrErr.error;
+  const url = await locationsBackendUrl(env, ctxOrErr.slug, `/${encodeURIComponent(locationId)}/promote`);
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${ctxOrErr.api_key}` },
+  });
+  return withCors(
+    new Response(await resp.text(), { status: resp.status, headers: { "Content-Type": "application/json" } }),
+    request,
+    { credentials: true },
+  );
 }
 
 // ── POST /api/client/profile ───────────────────────────────────────────────

@@ -39,16 +39,23 @@
     const af = window.AMCP && window.AMCP.authedFetch;
     const slug = (window.AMCP_DATA && window.AMCP_DATA.slug) || '';
     const suffix = slug ? `?slug=${encodeURIComponent(slug)}` : '';
-    const [me, metrics, domain, activity] = await Promise.all([
+    const [me, metrics, domain, activity, revenue] = await Promise.all([
       af('/api/client/me').then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/metrics').then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/domain-info' + suffix).then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/activity-detail').then(r => r.ok ? r.json() : null).catch(() => null),
+      // Revenue summary (Pro feature, Apr 27 2026). Used to prefill the
+      // AOV input and indicate whether a webhook secret already exists
+      // so the "Generate" button label can flip to "Rotate". Failure
+      // (legacy worker, network blip) → no prefill, fresh "Generate"
+      // state — non-critical.
+      af('/api/client/revenue-summary').then(r => r.ok ? r.json() : null).catch(() => null),
     ]);
     return Object.assign({}, metrics || {}, {
       _me: me,
       domain:   domain || {},
       activity: activity || {},
+      revenue:  revenue || null,
     });
   }
 
@@ -154,6 +161,80 @@
                   </div>
                 </div>`
           }
+        </div>
+      </div>
+
+      <!-- Multi-location (Pro = up to 3, Enterprise = unlimited).
+           Apr 27 2026. The card lists every location for the tenant
+           with edit + delete + promote-to-primary controls. The "Add
+           location" button is hidden once the plan cap is hit; the
+           server returns 402 with cap details if the customer races
+           past the cap (e.g. via direct API). -->
+      <div class="row single">
+        <div class="card-dash">
+          <div class="card-head">
+            <div><h3>Locations <span class="chip ${plan === 'enterprise' ? 'maroon' : plan === 'pro' ? 'maroon' : 'sage'}" style="margin-left:6px">${plan === 'enterprise' ? 'Enterprise' : plan === 'pro' ? 'Pro' : 'Base'}</span></h3>
+              <div class="sub" id="loc-cap-sub">Loading…</div>
+            </div>
+            <button class="btn btn-primary btn-sm" id="btn-add-location" type="button" style="display:none">Add location</button>
+          </div>
+          <div id="loc-list">
+            <div style="padding:18px;color:var(--muted);font-size:13.5px;text-align:center">Loading locations…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Revenue tracking (Pro feature, Apr 27 2026). Two configuration
+           paths: AOV (anyone can use, gives estimated revenue) or
+           verified webhook (booking-system integration, gives actual).
+           Both are independent — a tenant can set either, both, or
+           neither. The pill on the dashboard's revenue card and the
+           amount it displays are driven by /api/client/revenue-summary
+           which reads these values. -->
+      <div class="row single">
+        <div class="card-dash">
+          <div class="card-head">
+            <div><h3>Revenue tracking <span class="chip maroon" style="margin-left:6px">Pro</span></h3>
+              <div class="sub">Tell Advocate how to translate AI-attributed bookings into dollars on your dashboard</div>
+            </div>
+          </div>
+          <div class="set-row" style="align-items:center">
+            <div class="l">Average ticket
+              <div style="font-size:11.5px;color:var(--muted);margin-top:2px;font-weight:400;line-height:1.4">Used to estimate revenue when a booking system isn't connected. Stored privately on your account.</div>
+            </div>
+            <div class="r" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <span style="color:var(--muted);font-size:13px">$</span>
+              <input type="number" id="rev-aov-input" step="1" min="0" max="100000" placeholder="450"
+                     value="${d.revenue && d.revenue.aov_cents != null ? Math.round(d.revenue.aov_cents/100) : ''}"
+                     class="key-input" style="width:120px">
+              <button class="btn btn-ghost btn-sm" id="btn-save-aov" type="button">Save</button>
+            </div>
+          </div>
+          <div class="set-row" style="align-items:flex-start">
+            <div class="l">Verified-revenue webhook
+              <div style="font-size:11.5px;color:var(--muted);margin-top:2px;font-weight:400;line-height:1.4">Optional. POST your bookings here so the dashboard shows verified actuals instead of estimates. Replaces the estimate when configured.</div>
+            </div>
+            <div class="r" style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;min-width:340px">
+              <input type="text" id="rev-webhook-url" readonly placeholder="Click 'Generate' to create your endpoint"
+                     value="${d.revenue && d.revenue.webhook_url ? esc(d.revenue.webhook_url) : ''}"
+                     class="key-input" style="width:100%">
+              <input type="text" id="rev-webhook-secret" readonly placeholder="Secret appears here on generate/rotate"
+                     value=""
+                     class="key-input" style="width:100%;font-family:var(--mono);font-size:12px">
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-ghost btn-sm" id="btn-gen-revenue-secret" type="button">${d.revenue && d.revenue.webhook_configured ? 'Rotate secret' : 'Generate'}</button>
+                <button class="btn btn-ghost btn-sm" id="btn-copy-rev-curl" type="button">Copy test curl</button>
+              </div>
+              <div id="rev-secret-status" style="font-size:11.5px;color:var(--muted);max-width:340px;text-align:right;line-height:1.5"></div>
+            </div>
+          </div>
+          <div class="set-row" style="border-bottom:0">
+            <div class="l">&nbsp;</div>
+            <div class="r" style="font-size:11.5px;color:var(--muted);max-width:480px;line-height:1.55;font-style:italic">
+              Estimated revenue is a calculation from your supplied average ticket. Actuals may differ.
+              Configure the webhook for confirmed numbers. Not financial advice.
+            </div>
+          </div>
         </div>
       </div>
 
@@ -450,6 +531,310 @@
           setTimeout(() => { copyBtn.textContent = 'Copy snippet'; }, 2000);
         }
       });
+    }
+
+    // ── Revenue tracking handlers (Pro feature, Apr 27 2026) ────────────
+    const af = window.AMCP && window.AMCP.authedFetch;
+    const revStatus = document.getElementById('rev-secret-status');
+    function setRevStatus(msg, isError) {
+      if (!revStatus) return;
+      revStatus.textContent = msg;
+      revStatus.style.color = isError ? 'var(--red)' : 'var(--muted)';
+    }
+
+    // Save AOV — POSTs the integer cents value to the worker. Empty/0
+    // input clears the AOV and returns the tenant to the unconfigured
+    // (no estimated dollars) state.
+    const aovBtn = document.getElementById('btn-save-aov');
+    const aovInput = document.getElementById('rev-aov-input');
+    if (aovBtn && aovInput && af) {
+      aovBtn.addEventListener('click', async () => {
+        const dollars = aovInput.value.trim();
+        const cents = dollars === '' ? null : Math.round(parseFloat(dollars) * 100);
+        if (cents !== null && (isNaN(cents) || cents < 0)) {
+          setRevStatus('Enter a positive number or leave blank to clear.', true);
+          return;
+        }
+        aovBtn.disabled = true;
+        aovBtn.textContent = 'Saving…';
+        try {
+          const res = await af('/api/client/revenue-aov', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ avg_booking_value_cents: cents }),
+          });
+          if (!res.ok) throw new Error('save failed');
+          aovBtn.textContent = 'Saved ✓';
+          setRevStatus(cents === null
+            ? 'Average ticket cleared. Dashboard will hide estimated revenue until you set one or configure a webhook.'
+            : 'Average ticket saved. Refresh the dashboard to see updated estimates.',
+          false);
+          setTimeout(() => { aovBtn.textContent = 'Save'; aovBtn.disabled = false; }, 2000);
+        } catch (_) {
+          aovBtn.textContent = 'Save failed';
+          aovBtn.disabled = false;
+          setRevStatus('Could not save. Try again or contact max@advocate-mcp.com.', true);
+        }
+      });
+    }
+
+    // Generate / rotate webhook secret. The secret is shown ONCE inline;
+    // we copy it to the visible input, the input is readonly so the
+    // customer can copy/paste it. Subsequent loads of Settings hide
+    // the secret (it's never re-fetched plaintext after rotation).
+    const genBtn = document.getElementById('btn-gen-revenue-secret');
+    const urlInput = document.getElementById('rev-webhook-url');
+    const secretInput = document.getElementById('rev-webhook-secret');
+    if (genBtn && af && urlInput && secretInput) {
+      genBtn.addEventListener('click', async () => {
+        const isRotate = genBtn.textContent.includes('Rotate');
+        const confirmed = isRotate
+          ? confirm('Rotate the webhook secret? Your booking system will stop signing successfully until you update it with the new secret.')
+          : true;
+        if (!confirmed) return;
+        genBtn.disabled = true;
+        genBtn.textContent = isRotate ? 'Rotating…' : 'Generating…';
+        try {
+          const res = await af('/api/client/revenue-webhook', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rotate: isRotate }),
+          });
+          if (!res.ok) throw new Error('failed');
+          const data = await res.json();
+          urlInput.value = data.webhook_url || '';
+          secretInput.value = data.secret || '';
+          genBtn.textContent = 'Rotate secret';
+          genBtn.disabled = false;
+          setRevStatus('Secret shown above — copy it now. We won\'t show it again. Re-rotate if you lose it.', false);
+        } catch (_) {
+          genBtn.textContent = isRotate ? 'Rotate failed' : 'Generate failed';
+          genBtn.disabled = false;
+          setRevStatus('Could not generate. Try again or contact max@advocate-mcp.com.', true);
+        }
+      });
+    }
+
+    // Copy test curl — generates a one-liner the customer can paste into
+    // their booking-system webhook config to test the integration.
+    const curlBtn = document.getElementById('btn-copy-rev-curl');
+    if (curlBtn && urlInput && secretInput) {
+      curlBtn.addEventListener('click', async () => {
+        const url = urlInput.value || 'https://customers.advocatemcp.com/api/revenue-event/<your-slug>';
+        const secret = secretInput.value || '<your-webhook-secret>';
+        const body = '{"amount_cents":24500,"external_ref":"BOOKING-12345","occurred_at":"' + new Date().toISOString() + '","reservation_id":"r_optional"}';
+        // openssl gives us a portable HMAC for the snippet; works on macOS
+        // + Linux. Customers on Windows can adapt it to PowerShell.
+        const snippet = `BODY='${body}'\nSIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac '${secret}' | sed 's/^.* //')\ncurl -i -X POST '${url}' \\\n  -H "Content-Type: application/json" \\\n  -H "X-Advocate-Signature: sha256=$SIG" \\\n  -d "$BODY"`;
+        try {
+          await navigator.clipboard.writeText(snippet);
+          curlBtn.textContent = 'Copied!';
+          setTimeout(() => { curlBtn.textContent = 'Copy test curl'; }, 2000);
+        } catch (_) {
+          curlBtn.textContent = 'Copy failed';
+          setTimeout(() => { curlBtn.textContent = 'Copy test curl'; }, 2000);
+        }
+      });
+    }
+
+    // ── Locations handlers (Pro/Enterprise feature, Apr 27 2026) ─────────
+    //
+    // Single-card UX: list locations inline, "Add location" opens an
+    // inline form below the list. Edit toggles the row to an editable
+    // state. Promote / delete are buttons per row. Plan-cap is read
+    // from the server's response (cap, current_count, plan) and used
+    // to hide the Add button when capped.
+    const locList = document.getElementById('loc-list');
+    const locCapSub = document.getElementById('loc-cap-sub');
+    const addLocBtn = document.getElementById('btn-add-location');
+    if (locList && af) {
+      let editingId = null;
+      let adding = false;
+      let cached = null;        // last server response
+
+      async function loadLocations() {
+        try {
+          const res = await af('/api/client/locations');
+          if (!res.ok) throw new Error('fetch failed');
+          cached = await res.json();
+          renderLocations();
+        } catch (_) {
+          locList.innerHTML = '<div style="padding:18px;color:var(--red);font-size:13.5px">Could not load locations. Try refreshing the page.</div>';
+        }
+      }
+
+      function fmtAddress(loc) {
+        const parts = [];
+        if (loc.address_line1) parts.push(esc(loc.address_line1));
+        if (loc.address_line2) parts.push(esc(loc.address_line2));
+        const city = `${esc(loc.city)}, ${esc(loc.state)}${loc.postal_code ? ' ' + esc(loc.postal_code) : ''}`;
+        parts.push(city);
+        return parts.join('<br>');
+      }
+
+      function renderLocations() {
+        if (!cached) return;
+        const { locations, plan: locPlan, cap, current_count } = cached;
+        // Cap subtitle.
+        if (locCapSub) {
+          if (cap === null) locCapSub.textContent = `${current_count} location${current_count === 1 ? '' : 's'} · unlimited on ${locPlan}`;
+          else locCapSub.textContent = `${current_count} of ${cap} location${cap === 1 ? '' : 's'} · ${locPlan} plan`;
+        }
+        // Add button visibility.
+        if (addLocBtn) {
+          addLocBtn.style.display = (cap === null || current_count < cap) ? 'inline-flex' : 'none';
+        }
+        // Render rows.
+        const rowHtml = (locations || []).map((l) => {
+          if (editingId === l.id) {
+            return `<div class="set-row" data-loc-id="${esc(l.id)}" style="align-items:flex-start;gap:12px;flex-wrap:wrap">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:1;min-width:280px">
+                <input type="text" class="key-input" data-field="name" placeholder="Location name" value="${esc(l.name)}" style="grid-column:1/-1">
+                <input type="text" class="key-input" data-field="address_line1" placeholder="Address line 1" value="${esc(l.address_line1 || '')}">
+                <input type="text" class="key-input" data-field="address_line2" placeholder="Address line 2 (opt.)" value="${esc(l.address_line2 || '')}">
+                <input type="text" class="key-input" data-field="city" placeholder="City" value="${esc(l.city)}">
+                <input type="text" class="key-input" data-field="state" placeholder="State" value="${esc(l.state)}">
+                <input type="text" class="key-input" data-field="postal_code" placeholder="ZIP/Postal" value="${esc(l.postal_code || '')}">
+                <input type="text" class="key-input" data-field="phone" placeholder="Phone" value="${esc(l.phone || '')}">
+              </div>
+              <div style="display:flex;gap:6px;flex-direction:column">
+                <button class="btn btn-primary btn-sm" data-act="save-edit" data-loc-id="${esc(l.id)}">Save</button>
+                <button class="btn btn-ghost btn-sm" data-act="cancel-edit">Cancel</button>
+              </div>
+            </div>`;
+          }
+          return `<div class="set-row" data-loc-id="${esc(l.id)}" style="align-items:flex-start;gap:12px;flex-wrap:wrap">
+            <div class="l" style="flex:1">
+              <strong>${esc(l.name)}${l.is_primary ? ' <span class="chip sage" style="font-size:10px;padding:1px 6px">Primary</span>' : ''}</strong>
+              <div style="font-size:12.5px;color:var(--muted);margin-top:4px;line-height:1.5">${fmtAddress(l)}${l.phone ? '<br>' + esc(l.phone) : ''}</div>
+            </div>
+            <div class="r" style="display:flex;gap:6px;flex-wrap:wrap">
+              ${!l.is_primary ? `<button class="btn btn-ghost btn-sm" data-act="promote" data-loc-id="${esc(l.id)}" title="Make this the primary location">Set primary</button>` : ''}
+              <button class="btn btn-ghost btn-sm" data-act="edit" data-loc-id="${esc(l.id)}">Edit</button>
+              ${!l.is_primary ? `<button class="btn btn-ghost btn-sm" data-act="delete" data-loc-id="${esc(l.id)}" style="color:var(--red);border-color:rgba(248,81,73,.35)">Delete</button>` : ''}
+            </div>
+          </div>`;
+        }).join('');
+
+        // Optional add-form below the list.
+        const addFormHtml = adding
+          ? `<div class="set-row" data-loc-id="__new" style="align-items:flex-start;gap:12px;flex-wrap:wrap;background:var(--paper-2)">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:1;min-width:280px">
+                <input type="text" class="key-input" data-field="name" placeholder="Location name (e.g. Round Rock branch)" style="grid-column:1/-1">
+                <input type="text" class="key-input" data-field="address_line1" placeholder="Address line 1">
+                <input type="text" class="key-input" data-field="address_line2" placeholder="Address line 2 (opt.)">
+                <input type="text" class="key-input" data-field="city" placeholder="City *">
+                <input type="text" class="key-input" data-field="state" placeholder="State *">
+                <input type="text" class="key-input" data-field="postal_code" placeholder="ZIP/Postal">
+                <input type="text" class="key-input" data-field="phone" placeholder="Phone">
+              </div>
+              <div style="display:flex;gap:6px;flex-direction:column">
+                <button class="btn btn-primary btn-sm" data-act="save-new">Add location</button>
+                <button class="btn btn-ghost btn-sm" data-act="cancel-new">Cancel</button>
+              </div>
+            </div>`
+          : '';
+
+        locList.innerHTML = rowHtml + addFormHtml ||
+          '<div style="padding:18px;color:var(--muted);font-size:13.5px;text-align:center">No locations yet — click Add location to create your first.</div>';
+      }
+
+      function readForm(rowEl) {
+        const fields = ['name','address_line1','address_line2','city','state','postal_code','phone'];
+        const out = {};
+        for (const f of fields) {
+          const inp = rowEl.querySelector(`[data-field="${f}"]`);
+          out[f] = inp ? inp.value.trim() : '';
+        }
+        return out;
+      }
+
+      // Delegated click handler for the locations card.
+      locList.addEventListener('click', async (e) => {
+        const btn = e.target.closest('button[data-act]');
+        if (!btn) return;
+        const act = btn.getAttribute('data-act');
+        const id = btn.getAttribute('data-loc-id');
+
+        if (act === 'edit') { editingId = id; renderLocations(); return; }
+        if (act === 'cancel-edit') { editingId = null; renderLocations(); return; }
+        if (act === 'cancel-new') { adding = false; renderLocations(); return; }
+
+        if (act === 'save-edit') {
+          const row = locList.querySelector(`[data-loc-id="${id}"]`);
+          if (!row) return;
+          const fields = readForm(row);
+          if (!fields.name || !fields.city || !fields.state) {
+            alert('Name, city, and state are required.');
+            return;
+          }
+          btn.disabled = true; btn.textContent = 'Saving…';
+          try {
+            const res = await af('/api/client/locations/' + encodeURIComponent(id), {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(fields),
+            });
+            if (!res.ok) throw new Error('save failed');
+            editingId = null;
+            await loadLocations();
+          } catch (_) { btn.disabled = false; btn.textContent = 'Save'; alert('Save failed.'); }
+          return;
+        }
+        if (act === 'save-new') {
+          const row = locList.querySelector('[data-loc-id="__new"]');
+          if (!row) return;
+          const fields = readForm(row);
+          if (!fields.name || !fields.city || !fields.state) {
+            alert('Name, city, and state are required.');
+            return;
+          }
+          btn.disabled = true; btn.textContent = 'Adding…';
+          try {
+            const res = await af('/api/client/locations', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(fields),
+            });
+            if (res.status === 402) {
+              const j = await res.json().catch(() => ({}));
+              alert(j.message || 'You\'ve hit your plan\'s location cap. Upgrade to add more.');
+              btn.disabled = false; btn.textContent = 'Add location';
+              return;
+            }
+            if (!res.ok) throw new Error('add failed');
+            adding = false;
+            await loadLocations();
+          } catch (_) { btn.disabled = false; btn.textContent = 'Add location'; alert('Add failed.'); }
+          return;
+        }
+        if (act === 'promote') {
+          if (!confirm('Make this the primary location? AI agents will default to this location\'s details when no specific city is mentioned.')) return;
+          try {
+            const res = await af('/api/client/locations/' + encodeURIComponent(id) + '/promote', { method: 'POST' });
+            if (!res.ok) throw new Error('promote failed');
+            await loadLocations();
+          } catch (_) { alert('Could not promote. Try again.'); }
+          return;
+        }
+        if (act === 'delete') {
+          if (!confirm('Delete this location? This cannot be undone.')) return;
+          try {
+            const res = await af('/api/client/locations/' + encodeURIComponent(id), { method: 'DELETE' });
+            if (res.status === 409) { alert('Cannot delete the primary location. Promote another location to primary first.'); return; }
+            if (!res.ok) throw new Error('delete failed');
+            await loadLocations();
+          } catch (_) { alert('Delete failed.'); }
+          return;
+        }
+      });
+
+      if (addLocBtn) {
+        addLocBtn.addEventListener('click', () => { adding = true; renderLocations(); });
+      }
+
+      // Initial load.
+      loadLocations();
     }
   }
 

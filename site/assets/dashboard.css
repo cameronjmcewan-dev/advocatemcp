@@ -10,7 +10,42 @@ body { background: var(--paper-2); }
   min-height: 100vh;
 }
 [data-density="compact"] .app { grid-template-columns: 232px 1fr; }
-@media (max-width: 900px) { .app { grid-template-columns: 1fr; } .sidebar { display: none; } }
+
+/* ---------- Mobile (≤900px) — slide-out sidebar drawer ----------
+   Old behavior was display:none which left users with no nav at all.
+   Now: single-column main, sidebar slides in from the left as a fixed
+   drawer when .sidebar-open is added to body (toggled by the hamburger
+   in the topbar). Overlay closes on outside-tap. */
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; }
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; height: 100vh;
+    width: 280px; max-width: 80vw; z-index: 200;
+    transform: translateX(-100%);
+    transition: transform .25s ease;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, .15);
+  }
+  body.sidebar-open .sidebar { transform: translateX(0); }
+  body.sidebar-open::after {
+    content: ""; position: fixed; inset: 0; z-index: 150;
+    background: rgba(0, 0, 0, .35);
+    animation: amcp-fade-in .2s ease;
+  }
+  /* Show the topbar hamburger button only on mobile. */
+  .topbar-hamburger { display: inline-flex !important; }
+}
+@keyframes amcp-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* Hamburger button (rendered into the topbar by dashboard-chrome.js).
+   Hidden by default; the @media block above shows it on ≤900px. */
+.topbar-hamburger {
+  display: none; align-items: center; justify-content: center;
+  width: 36px; height: 36px; padding: 0;
+  background: transparent; border: 1px solid var(--line); border-radius: 8px;
+  color: var(--ink); cursor: pointer; margin-right: 12px;
+  font-size: 18px; line-height: 1;
+}
+.topbar-hamburger:hover { background: var(--paper-2); }
 
 /* ---------- Sidebar ---------- */
 .sidebar {
@@ -291,3 +326,41 @@ body { background: var(--paper-2); }
   outline: none; border-color: var(--maroon); box-shadow: 0 0 0 3px var(--maroon-wash);
 }
 .form-field textarea { min-height: 120px; resize: vertical; }
+
+/* ── Revenue attribution pills (Pro feature, Apr 27 2026) ────────────────
+   Three states. Verified is green (we have HMAC-signed webhook events
+   confirming actuals). Estimated is amber (computed from customer-
+   supplied AOV × confirmed reservations — clearly labeled so customers
+   can't confuse it with verified). Unconfigured = no pill, no dollars.
+
+   Founder requirement: amber and green must be visually distinct
+   (color-blind-safe pairing) so a customer can never misread an
+   estimated number as verified. Both pills also carry an explicit
+   text label, not just color, for the same reason. */
+.rev-pill {
+  display: inline-flex; align-items: center;
+  font-size: 10.5px; font-weight: 600;
+  padding: 2px 8px; border-radius: 999px;
+  margin-left: 8px; letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+.rev-pill-verified {
+  background: var(--accent-dim, rgba(34, 134, 58, 0.15));
+  color: var(--sage, #228e3a);
+  border: 1px solid var(--sage, #228e3a);
+}
+.rev-pill-estimated {
+  background: rgba(232, 168, 56, 0.15);
+  color: #b07515;
+  border: 1px solid rgba(232, 168, 56, 0.6);
+}
+
+/* Footer-style legal disclaimer for estimated revenue. Placed below
+   the KPI grid by the Settings/Overview render path. Subtle: muted
+   text, no border, no background — just a one-liner customers can
+   ignore but lawyers can point to. */
+.rev-disclaimer {
+  font-size: 11px; color: var(--muted);
+  margin: -8px 0 16px 0; padding: 0 4px;
+  font-style: italic; line-height: 1.5;
+}

@@ -6,6 +6,7 @@ import { startReputationRollupSchedule } from "./jobs/reputationRollup.js";
 import { pollAll } from "./jobs/competitorRadar.js";
 import { startWeeklyDigestSchedule } from "./jobs/weeklyDigest.js";
 import { startBetaEndingSchedule } from "./jobs/betaEndingEmail.js";
+import { startMonthlyPerformanceReviewSchedule } from "./jobs/monthlyPerformanceReview.js";
 import { startBackfillSchedule } from "./jobs/backfillQueries.js";
 import { startEmbeddingsBackfillSchedule } from "./jobs/backfillEmbeddings.js";
 import { startClusterSchedule } from "./jobs/clusterQueries.js";
@@ -80,6 +81,11 @@ if (process.env.PERPLEXITY_API_KEY && cron.validate(CRON_SCHEDULE)) {
 // Gated on RESEND_API_KEY so dev/test deploys without the key stay silent.
 startWeeklyDigestSchedule();
 startBetaEndingSchedule();
+// Monthly executive review email (Apr 27 2026). 1st of each month at
+// 09:00 UTC. Pro/Enterprise only; active-beta tenants get the weekly
+// digest's beta variant instead so they don't double-up. Same RESEND
+// gate as the schedules above.
+startMonthlyPerformanceReviewSchedule();
 
 app.listen(PORT, () => {
   console.log(`

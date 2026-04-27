@@ -1,8 +1,25 @@
 import type { BusinessRow } from "../db.js";
+import { getDb } from "../db.js";
+import { listLocations, type LocationRow } from "../repos/locations.js";
 import { getBotPromptBlock } from "../prompts/index.js";
 import type { QueryStage } from "../prompts/types.js";
 import { getAgentPromptBlock } from "../prompts/agents/index.js";
 import { getStagePromptBlock } from "../prompts/bystage.js";
+
+/**
+ * Read locations rows for the prompt builder. Wrapped here (rather than
+ * importing listLocations directly at the call site) so we can swallow
+ * the "table doesn't exist" error on tenants whose DB pre-dates
+ * migration 030. The legacy single-line `Location:` emit takes over
+ * when this returns an empty array.
+ */
+function locationsForPrompt(slug: string): LocationRow[] {
+  try {
+    return listLocations(getDb(), slug);
+  } catch {
+    return [];
+  }
+}
 
 function parseJsonSafe<T = unknown>(raw: string | null): T | null {
   if (!raw) return null;
@@ -122,7 +139,56 @@ export function buildSystemPrompt(
   ];
   // Tier 1 (assert directly) — objective business-action facts.
   if (business.category) profileLines.push(`- Category: ${business.category}`);
-  if (business.location) profileLines.push(`- Location: ${business.location}`);
+
+  // Multi-location support (Pro/Enterprise feature, Apr 27 2026).
+  // We read every row from `locations` for this tenant and emit a
+  // structured `Locations:` block. The model handles disambiguation
+  // naturally — when a user query mentions a city, ZIP, or neighborhood
+  // matching one of the rows, the model picks that location's hours /
+  // phone / address for its answer.
+  //
+  // The legacy `business.location` field is still emitted as a
+  // single-line "Location:" assertion when a tenant has no rows in
+  // `locations` yet (legacy tenants pre-migration 030, or the
+  // unlikely case of a hand-deleted primary). This keeps the prompt
+  // valid for tenants where the migration hasn't run.
+  let emittedMultiLocation = false;
+  try {
+    const rows = locationsForPrompt(business.slug);
+    if (rows.length > 0) {
+      // Build a compact multiline block. Primary first (name + city/state
+      // header line, then per-location detail lines indented for the
+      // model). Subsequent locations get a similar block. Keeping it
+      // human-readable means the model treats it as structured data
+      // rather than free-text — it picks the right location reliably.
+      const blocks = rows.map((r, i) => {
+        const headline = r.is_primary
+          ? `${r.name} (primary)`
+          : r.name;
+        const line2parts: string[] = [];
+        if (r.address_line1) line2parts.push(r.address_line1);
+        if (r.address_line2) line2parts.push(r.address_line2);
+        const street = line2parts.join(", ");
+        const cityState = `${r.city}, ${r.state}${r.postal_code ? " " + r.postal_code : ""}`;
+        const lines = [`  ${i + 1}. ${headline}`];
+        if (street) lines.push(`     Address: ${street}, ${cityState}`);
+        else lines.push(`     City: ${cityState}`);
+        if (r.phone) lines.push(`     Phone: ${r.phone}`);
+        return lines.join("\n");
+      });
+      profileLines.push(`- Locations (${rows.length}):\n${blocks.join("\n")}`);
+      profileLines.push(
+        `- When a user's query mentions a city, neighborhood, or ZIP that matches one of the locations above, prefer THAT location's hours/phone/address for your answer. When no specific location is named, default to the primary.`,
+      );
+      emittedMultiLocation = true;
+    }
+  } catch {
+    // Locations table may not exist yet on a pre-migration deployment;
+    // fall through to the legacy single-line emit.
+  }
+  if (!emittedMultiLocation && business.location) {
+    profileLines.push(`- Location: ${business.location}`);
+  }
 
   // Tier 2 (attribute softly) — self-reported metrics.
   // When ratings_json has per-platform data, the per-platform lines
