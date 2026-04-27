@@ -85,6 +85,18 @@ export interface Env {
    */
   RESEND_API_KEY?: string;
 
+  // ── Marketing-site support chat ─────────────────────────────────────
+  /**
+   * Anthropic API key for the public /api/support-chat endpoint that
+   * powers the floating chat widget on advocatemcp.com/Contact. The
+   * worker calls Anthropic directly (no Railway hop) on each turn with
+   * a baked-in system prompt (worker/src/lib/supportChatPrompt.ts).
+   * When unset, the endpoint returns 503 and the frontend falls back
+   * to surfacing the email + phone + Calendly contact options.
+   * Set via: `cd worker && npx wrangler secret put ANTHROPIC_API_KEY`
+   */
+  ANTHROPIC_API_KEY?: string;
+
   // ── Admin tooling ───────────────────────────────────────────────────
   /**
    * Bearer token for Railway's /admin/insights/* JSON endpoints (server-
