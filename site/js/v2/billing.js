@@ -3,7 +3,7 @@
  * Plan tier comes from AMCP_DATA.plan (populated by shell via
  * /api/client/metrics.plan). No Stripe Customer Portal endpoint wired
  * yet, so upgrade/downgrade/cancel all route through a mailto that
- * lands in hello@advocatemcp.com with context prefilled. */
+ * lands in max@advocate-mcp.com with context prefilled. */
 (function () {
   'use strict';
 
@@ -27,7 +27,7 @@
   }
 
   function mailtoLink(subject, body) {
-    return `mailto:hello@advocatemcp.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    return `mailto:max@advocate-mcp.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   }
 
   const PLANS = [
@@ -131,14 +131,14 @@
           <div style="margin-top:16px;font-size:12.5px;color:var(--muted);line-height:1.6">
             Plan changes and cancellations are self-serve through Stripe's Customer Portal, click any button below.
             If something doesn't work, email
-            <a href="${mailtoLink('Billing change', `Hi Advocate team,\n\nI'd like to change my plan for ${bizName} (${slug}).\n\nThanks!`)}" style="color:var(--maroon);font-weight:500">hello@advocatemcp.com</a>
+            <a href="${mailtoLink('Billing change', `Hi Advocate team,\n\nI'd like to change my plan for ${bizName} (${slug}).\n\nThanks!`)}" style="color:var(--maroon);font-weight:500">max@advocate-mcp.com</a>
             and we'll switch you manually within one business day.
           </div>
         </div>
         <div class="card-dash">
           <div class="card-head"><div><h3>Invoices</h3><div class="sub">Receipts for past billing cycles</div></div></div>
           <p style="font-size:13.5px;line-height:1.65;color:var(--ink-2);margin-top:12px">Invoice history isn't exposed in-app yet. Email
-            <a href="${mailtoLink('Invoice request', `Hi Advocate team,\n\nPlease send recent invoices for ${bizName} (${slug}).\n\nThanks!`)}" style="color:var(--maroon);font-weight:500">hello@advocatemcp.com</a>
+            <a href="${mailtoLink('Invoice request', `Hi Advocate team,\n\nPlease send recent invoices for ${bizName} (${slug}).\n\nThanks!`)}" style="color:var(--maroon);font-weight:500">max@advocate-mcp.com</a>
             and we'll send the last 12 months.</p>
         </div>
       </div>
@@ -211,10 +211,10 @@
             var msg = (out.body && out.body.message) || 'Could not open billing portal.';
             if (out.body && out.body.error === 'no_stripe_customer') {
               msg = 'Plan changes via the Customer Portal need a completed Stripe checkout first. ' +
-                    'Email hello@advocatemcp.com and we will switch you over manually.';
+                    'Email max@advocate-mcp.com and we will switch you over manually.';
             } else if (out.body && out.body.error === 'stripe_not_configured') {
               msg = 'Self-serve billing is not configured on this environment yet. ' +
-                    'Email hello@advocatemcp.com to switch plans.';
+                    'Email max@advocate-mcp.com to switch plans.';
             } else if (out.status === 401) {
               msg = 'Your session expired. Reload the page and try again.';
             } else if (out.body && out.body.error === 'stripe_portal_failed') {

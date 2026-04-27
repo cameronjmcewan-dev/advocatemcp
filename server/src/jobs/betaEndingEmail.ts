@@ -97,7 +97,7 @@ function renderT7Email(a: ReminderArgs): { subject: string; html: string; text: 
     ``,
     `— AdvocateMCP`,
     ``,
-    `feedback@advocatemcp.com`,
+    `max@advocate-mcp.com`,
   ].join("\n");
 
   const html = `<!DOCTYPE html>
@@ -123,7 +123,7 @@ function renderT7Email(a: ReminderArgs): { subject: string; html: string; text: 
           </ul>
           <p style="margin:24px 0 0 0;font-size:13px;color:#6b655c;border-top:1px solid #e4ddd0;padding-top:16px">
             Thanks for being part of the launch cohort.<br>
-            Reply directly: <a href="mailto:feedback@advocatemcp.com" style="color:#5c1a3c">feedback@advocatemcp.com</a>
+            Reply directly: <a href="mailto:max@advocate-mcp.com" style="color:#5c1a3c">max@advocate-mcp.com</a>
           </p>
         </td></tr>
       </table>
@@ -146,7 +146,7 @@ function renderT1Email(a: ReminderArgs): { subject: string; html: string; text: 
     ``,
     `— AdvocateMCP`,
     ``,
-    `feedback@advocatemcp.com`,
+    `max@advocate-mcp.com`,
   ].join("\n");
 
   const html = `<!DOCTYPE html>
@@ -167,7 +167,7 @@ function renderT1Email(a: ReminderArgs): { subject: string; html: string; text: 
             Otherwise, we'll see you on the other side. Thanks for testing.
           </p>
           <p style="margin:24px 0 0 0;font-size:13px;color:#6b655c;border-top:1px solid #e4ddd0;padding-top:16px">
-            <a href="mailto:feedback@advocatemcp.com" style="color:#5c1a3c">feedback@advocatemcp.com</a>
+            <a href="mailto:max@advocate-mcp.com" style="color:#5c1a3c">max@advocate-mcp.com</a>
           </p>
         </td></tr>
       </table>
@@ -254,7 +254,7 @@ export async function sendBetaEndingReminders(): Promise<{
       const email = renderT7Email(args);
       try {
         await sendEmail({
-          from:    process.env.DIGEST_EMAIL_FROM ?? "AdvocateMCP <support@advocatemcp.com>",
+          from:    process.env.DIGEST_EMAIL_FROM ?? "AdvocateMCP <max@advocate-mcp.com>",
           to:      row.email,
           subject: email.subject,
           html:    email.html,
@@ -276,7 +276,7 @@ export async function sendBetaEndingReminders(): Promise<{
       const email = renderT1Email(args);
       try {
         await sendEmail({
-          from:    process.env.DIGEST_EMAIL_FROM ?? "AdvocateMCP <support@advocatemcp.com>",
+          from:    process.env.DIGEST_EMAIL_FROM ?? "AdvocateMCP <max@advocate-mcp.com>",
           to:      row.email,
           subject: email.subject,
           html:    email.html,

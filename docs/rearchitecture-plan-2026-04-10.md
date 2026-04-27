@@ -837,7 +837,7 @@ During Phase D, the new static HTML pages can be served from a subdomain like `s
 
 **Q2**: Does the existing `site/index.html` have an ongoing editing workflow (branch + deploy), or is it edited directly on production?
 
-**Q3**: What's the real support contact address? The Phase 3 planning doc flagged `mailto:hello@advocatemcp.com` as a placeholder. This applies to the new login/dashboard/activate pages as well.
+**Q3**: What's the real support contact address? The Phase 3 planning doc flagged `mailto:max@advocate-mcp.com` as a placeholder. This applies to the new login/dashboard/activate pages as well.
 
 **Q4**: Should `/demo` and `/status` stay on the worker as public surfaces, or migrate to `advocatemcp.com` with the rest?
 

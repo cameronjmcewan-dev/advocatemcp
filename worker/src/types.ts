@@ -80,7 +80,7 @@ export interface Env {
    * worker/src/lib/resend.ts to send activation emails after
    * successful Stripe checkout. The advocatemcp.com domain must be
    * verified in Resend (DKIM + SPF) for delivery from
-   * support@advocatemcp.com.
+   * max@advocate-mcp.com.
    * Set via: `cd worker && npx wrangler secret put RESEND_API_KEY`
    */
   RESEND_API_KEY?: string;

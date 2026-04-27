@@ -36,7 +36,7 @@ describe("GET /.well-known/mcp.json", () => {
     // can discover privacy/terms/support without a second HTTP hop.
     expect(res.body).toHaveProperty(
       "support_contact",
-      "mailto:support@advocatemcp.com",
+      "mailto:max@advocate-mcp.com",
     );
     expect(res.body).toHaveProperty(
       "privacy_url",

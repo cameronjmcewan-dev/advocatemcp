@@ -346,7 +346,7 @@
       ],
       gotchas: [
         "If you don't know who manages your DNS, run `dig NS yourdomain.com` (or visit https://www.whatsmydns.net) and look at the NS records. The hostname tells you the provider — e.g. ns1.googledomains.com → Google, ns35.domaincontrol.com → GoDaddy.",
-        "Tell us your provider so we can add a guide. Email support@advocatemcp.com — usually only takes us a day to add new providers.",
+        "Tell us your provider so we can add a guide. Email max@advocate-mcp.com — usually only takes us a day to add new providers.",
       ],
     },
   };

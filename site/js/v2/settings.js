@@ -76,7 +76,7 @@
   }
 
   function mailtoLink(subject, body) {
-    return `mailto:hello@advocatemcp.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    return `mailto:max@advocate-mcp.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   }
 
   function render(data) {

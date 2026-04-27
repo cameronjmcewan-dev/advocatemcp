@@ -194,7 +194,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/onboard/public"    && method === "OPTIONS") return handlePublicOnboardPreflight(request);
   if (pathname === "/api/onboard/public"    && method === "POST")    return handlePublicOnboard(request, env);
 
-  // Public marketing contact form → Resend → hello@advocatemcp.com
+  // Public marketing contact form → Resend → max@advocate-mcp.com
   if (pathname === "/api/contact"           && method === "OPTIONS") return handleContactPreflight(request);
   if (pathname === "/api/contact"           && method === "POST")    return handleContact(request, env);
 

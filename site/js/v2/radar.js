@@ -9,7 +9,7 @@
  * Non-Pro tenants (plan === 'free' or 'base' and role !== 'admin') see a
  * locked-feature teaser with a clear upgrade path. Until a Stripe
  * customer-portal upgrade endpoint is wired, the CTA mails
- * hello@advocatemcp.com with a prefilled subject so we can process the
+ * max@advocate-mcp.com with a prefilled subject so we can process the
  * upgrade manually. That's intentionally friction-y — it guarantees a
  * founder touches every upgrade conversation in the early days. */
 (function () {
@@ -138,7 +138,7 @@
               <div style="font-size:13px;color:var(--muted);margin-top:4px;">Cancel any time · 14-day money-back guarantee</div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <a href="mailto:hello@advocatemcp.com?subject=${mailtoSubject}&body=${mailtoBody}" class="btn btn-primary btn-sm">Upgrade now →</a>
+              <a href="mailto:max@advocate-mcp.com?subject=${mailtoSubject}&body=${mailtoBody}" class="btn btn-primary btn-sm">Upgrade now →</a>
               <a href="/Pricing.html" class="btn btn-ghost btn-sm" target="_blank" rel="noopener">See all plans</a>
             </div>
           </div>

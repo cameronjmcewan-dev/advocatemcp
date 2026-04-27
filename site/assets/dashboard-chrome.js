@@ -159,7 +159,7 @@
       <a href="/intro.html" target="_blank" rel="noopener"><span class="g">▷</span> Watch 2-minute video intro</a>
       <div class="fab-menu-sep"></div>
       <a href="/FAQs.html"><span class="g">◐</span> Browse help articles</a>
-      <a href="mailto:hello@advocatemcp.com"><span class="g">✉</span> Email support</a>
+      <a href="mailto:max@advocate-mcp.com"><span class="g">✉</span> Email support</a>
       <a href="/Contact.html"><span class="g">☎</span> Book a support call</a>
     </div>`;
   }

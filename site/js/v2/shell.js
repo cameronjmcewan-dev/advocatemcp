@@ -411,7 +411,7 @@
     ].join(';');
     b.innerHTML =
       `<span>${leftCopy}</span>` +
-      `<a href="mailto:feedback@advocatemcp.com?subject=${encodeURIComponent('AdvocateMCP beta feedback')}" ` +
+      `<a href="mailto:max@advocate-mcp.com?subject=${encodeURIComponent('AdvocateMCP beta feedback')}" ` +
         `style="color:#5c1a3c;text-decoration:underline;font-weight:500">Send feedback →</a>` +
       `<button type="button" id="amcp-beta-banner-dismiss" ` +
         `style="background:transparent;border:0;color:#6b655c;cursor:pointer;font-size:16px;line-height:1;padding:0 4px" ` +

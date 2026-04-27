@@ -110,7 +110,7 @@ describe("ManifestSchema", () => {
       rate_limits: { per_agent_per_minute: 100, per_ip_per_minute: 100 },
       auth_model: { modes: ["open"] },
       attribution_endpoint: "https://customers.advocatemcp.com/track",
-      support_contact: "mailto:support@advocatemcp.com",
+      support_contact: "mailto:max@advocate-mcp.com",
       privacy_url: "https://advocatemcp.com/privacy",
       terms_url: "https://advocatemcp.com/terms",
     });

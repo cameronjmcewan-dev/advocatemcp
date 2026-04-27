@@ -390,7 +390,7 @@ function renderHtml(d: RenderData): string {
                     : `Here's how AI assistants described your business this week.`)
             }</p>
             ${d.beta?.is_beta
-              ? `<p style="margin:12px 0 0 0;color:#5c1a3c;font-size:13px"><em>You're in our launch cohort. We're paying close attention. <a href="mailto:feedback@advocatemcp.com?subject=${encodeURIComponent("Beta feedback — " + businessName)}" style="color:#5c1a3c">feedback@advocatemcp.com</a> goes straight to the founder.</em></p>`
+              ? `<p style="margin:12px 0 0 0;color:#5c1a3c;font-size:13px"><em>You're in our launch cohort. We're paying close attention. <a href="mailto:max@advocate-mcp.com?subject=${encodeURIComponent("Beta feedback — " + businessName)}" style="color:#5c1a3c">max@advocate-mcp.com</a> goes straight to the founder.</em></p>`
               : ""}
           </td></tr>
 
@@ -460,14 +460,14 @@ function renderText(d: RenderData): string {
     lines.push(`${businessName} — AdvocateMCP beta cohort week`);
     lines.push("");
     if (beta.days_left > 7) {
-      lines.push(`You're ${beta.days_left} days into your beta. Reply to feedback@advocatemcp.com with anything that's clicking or confusing.`);
+      lines.push(`You're ${beta.days_left} days into your beta. Reply to max@advocate-mcp.com with anything that's clicking or confusing.`);
     } else if (beta.days_left > 1) {
       lines.push(`Beta wraps in ${beta.days_left} days. Reply if you'd like to keep going or pause.`);
     } else {
       lines.push(`Beta ends tomorrow. Reply with final feedback — even a sentence helps.`);
     }
     lines.push("");
-    lines.push("Direct feedback: feedback@advocatemcp.com");
+    lines.push("Direct feedback: max@advocate-mcp.com");
     lines.push("");
   } else {
     lines.push(`${businessName} — AdvocateMCP weekly summary`);

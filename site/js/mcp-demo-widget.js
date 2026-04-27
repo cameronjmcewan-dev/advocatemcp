@@ -159,7 +159,7 @@
             "We've hit our daily AI budget cap. Resets at UTC midnight.",
           );
         } else {
-          renderError(body.error || `HTTP ${res.status}`, "Try refreshing or contact hello@advocatemcp.com.");
+          renderError(body.error || `HTTP ${res.status}`, "Try refreshing or contact max@advocate-mcp.com.");
         }
         return;
       }

@@ -32,7 +32,7 @@
  *     response. Ugly but functional. No HTML response path on the
  *     backend (out of scope for tonight).
  *
- *   - Support contact uses mailto:hello@advocatemcp.com as a placeholder.
+ *   - Support contact uses mailto:max@advocate-mcp.com as a placeholder.
  *     Real support address gets swapped in a follow-up once the support
  *     channel is chosen.
  *
@@ -410,7 +410,7 @@ function renderMissingTokenState(): string {
   <div class="tag">Activation link required</div>
   <h1 class="h1">This page needs a valid link</h1>
   <p class="lede">This page needs a valid activation link to work. If you paid for AdvocateMCP recently, you should have received an email with your link. If you can't find it, please contact support.</p>
-  <a href="mailto:hello@advocatemcp.com" class="btn">Contact support</a>
+  <a href="mailto:max@advocate-mcp.com" class="btn">Contact support</a>
 </div>`;
 }
 

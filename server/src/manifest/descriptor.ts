@@ -276,7 +276,7 @@ export function buildManifest(opts: BuildManifestOptions): Manifest {
     // Required by the ChatGPT Apps SDK review. Hardcoded to the
     // advocatemcp.com canonical URLs — tenant-specific manifests live at
     // the Worker /.well-known/ai-agent.json mirror, not here.
-    support_contact: "mailto:support@advocatemcp.com",
+    support_contact: "mailto:max@advocate-mcp.com",
     privacy_url: "https://advocatemcp.com/privacy",
     terms_url: "https://advocatemcp.com/terms",
   };

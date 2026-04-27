@@ -1702,7 +1702,7 @@ export async function handleBillingPortal(
         "no_stripe_customer",
         "This tenant doesn't have a Stripe customer_id yet. " +
         "Plan changes via the portal require a completed initial checkout. " +
-        "If you signed up before Stripe integration was wired in, email hello@advocatemcp.com.",
+        "If you signed up before Stripe integration was wired in, email max@advocate-mcp.com.",
       ),
       request,
     );

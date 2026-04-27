@@ -230,7 +230,7 @@
       var visibility = null;
       var visibilityError = null;
       if (v.status === 429 && v.body.error === "ip_rate_limited") {
-        visibilityError = "You've run " + (v.body.limit || 3) + " audits in the last 24 hours. Try again tomorrow or reach out at support@advocatemcp.com.";
+        visibilityError = "You've run " + (v.body.limit || 3) + " audits in the last 24 hours. Try again tomorrow or reach out at max@advocate-mcp.com.";
       } else if (v.status === 503 && v.body.error === "daily_budget_exhausted") {
         visibilityError = "The free audit hit its daily budget. Try again tomorrow.";
       } else if (v.status === 400) {

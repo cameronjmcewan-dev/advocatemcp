@@ -74,7 +74,7 @@
       <div class="row single">
         <div class="card-dash" style="padding:40px;text-align:center">
           <h3 style="font-family:var(--serif);font-weight:400;font-size:28px;margin-bottom:8px">Not your page</h3>
-          <p style="color:var(--ink-2);font-size:14.5px;max-width:480px;margin:0 auto">Head back to your <a href="/app.html" style="color:var(--maroon);font-weight:500">own dashboard</a>. If you think you should have admin access, email <a href="mailto:hello@advocatemcp.com" style="color:var(--maroon);font-weight:500">hello@advocatemcp.com</a>.</p>
+          <p style="color:var(--ink-2);font-size:14.5px;max-width:480px;margin:0 auto">Head back to your <a href="/app.html" style="color:var(--maroon);font-weight:500">own dashboard</a>. If you think you should have admin access, email <a href="mailto:max@advocate-mcp.com" style="color:var(--maroon);font-weight:500">max@advocate-mcp.com</a>.</p>
         </div>
       </div>
     `;
