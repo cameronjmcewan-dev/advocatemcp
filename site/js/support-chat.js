@@ -214,7 +214,7 @@
       if (!res.ok) {
         var detail = '';
         try { var j = await res.json(); detail = (j && (j.detail || j.error)) || ''; } catch (_) {}
-        addSystemNote("Couldn't reach the assistant" + (detail ? ' (' + detail + ')' : '') + '. Email ' + SUPPORT_EMAIL + ' and we'll respond directly.');
+        addSystemNote("Couldn't reach the assistant" + (detail ? " (" + detail + ")" : "") + ". Email " + SUPPORT_EMAIL + " and we'll respond directly.");
         // Roll back the last user turn so the next attempt isn't poisoned.
         history.pop();
         return;
