@@ -3,7 +3,45 @@
 Items captured from development sessions that need attention in future focused work.
 Sorted by urgency: blockers first, then real bugs, then polish, then research.
 
-Last updated: 2026-04-25
+Last updated: 2026-04-26
+
+## Pre-outreach push required
+
+### Push `feat/design-rollout` to deploy Pages changes
+**Added 2026-04-26.** Three commits ahead of origin, worker is already
+deployed via `wrangler deploy` for each, but Pages won't pick up the
+site/ changes until the branch is pushed. The most user-visible item
+is `site/activate.html` gaining `<meta name="robots" content="noindex, nofollow">`
+— without push, the activation page is still indexable by search engines,
+and any leaked share-link including the single-use `?t=` activation
+token becomes discoverable.
+
+Commits awaiting push:
+- `89e117d` chore(security): pre-launch audit cleanup
+- `e1aef03` fix(beta): read coupon from discounts[] array
+- `5e64a60` fix(stripe): allow_promotion_codes on public onboard
+
+```bash
+git push origin feat/design-rollout
+```
+
+## Pre-outreach security audit (2026-04-26)
+
+Ran 4 parallel audits (worker / server / frontend / dead-code) with focused
+investigation agents. 0 CRITICAL, all real findings fixed, 5 deferred with
+documented rationale. Worth keeping a few notes from this exercise:
+
+- **Audit agent caveat:** the dead-code agent reported `handleRetryRailwayRegistration`,
+  `handleActivationToken`, and `handleSaveDraft`/`handleLoadDraft` as dead because
+  it searched only `worker/src/index.ts`. The actual route dispatch table is in
+  `worker/src/routes/portal.ts` (lines 102, 140, 236, 239) — these handlers are
+  all live. Future audits: tell agents that the route dispatch entrypoint is
+  `portal.ts`, not `index.ts`.
+- **Deferred (not security blockers):** timing-safe admin-key compare (high-entropy
+  random secret over CF edge — network jitter dwarfs timing differential),
+  activation-token replay (CF custom hostname creation is idempotent so impact
+  is "wastes API quota"), SRI on Lucide / Chart.js CDNs (auth-gated dashboards
+  limit blast radius), email-loop rate-limiting (Resend handles it at our scale).
 
 ## Operator action required
 
