@@ -1071,94 +1071,78 @@ async function apiRevenueSummary(request: Request, env: Env): Promise<Response> 
   const biz = (slugQuery ? businesses.find((b) => b.slug === slugQuery) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
 
-  // Compute directly from D1 — verified events are written here by the
-  // webhook receiver. We replicate the lightweight version of
-  // computeRevenueWindow() inline rather than round-tripping to Railway,
-  // because the dashboard renders this on every page load and we don't
-  // want to add a Railway hop to that path. The Railway-side helper is
-  // kept in lockstep so the monthly-review email cron uses the same
-  // numbers the dashboard does.
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const monthEnd   = now.toISOString();
+  // Source-of-truth fix (Apr 27 2026 audit):
+  //
+  // Reservations live on Railway, not in worker D1, so the previous
+  // local-D1 compute returned 0 confirmed bookings for every tenant —
+  // estimated revenue silently displayed $0 forever. Even worse, when
+  // the customer's booking system POSTed verified events, the worker
+  // wrote them to D1 but Railway's monthly review cron read its own
+  // (empty) revenue_events table, so the monthly email also showed
+  // zero verified revenue.
+  //
+  // Fix: route this through Railway's authoritative endpoint, which
+  // uses computeRevenueWindow() from server/src/lib/revenue.ts. That's
+  // the same function the monthly review email uses, so the dashboard
+  // and the email show identical numbers byte-for-byte. The Railway
+  // hop adds ~50-100ms to dashboard load — acceptable for the data
+  // correctness we get back.
+  //
+  // Also enforces the Pro/Enterprise plan gate server-side: Railway
+  // returns 402 for base-tier tenants, which we surface unchanged so
+  // the dashboard hides the revenue card.
+  const base = (env as { API_BASE_URL?: string }).API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  const url = `${base}/agents/${encodeURIComponent(biz.slug)}/revenue-summary`;
+  const upstream = await fetch(url, {
+    headers: { Authorization: `Bearer ${biz.api_key}` },
+  });
+  const upstreamBody = await upstream.text();
 
-  // Pull tenant config + verified totals + estimated count in three
-  // parallel D1 reads. (D1's prepared-statement API doesn't support a
-  // single multi-result query, so this is the cheapest shape.)
-  const [tenantRow, verifiedAgg, confirmedAgg] = await Promise.all([
-    env.DB
-      .prepare("SELECT avg_booking_value_cents, revenue_currency, revenue_webhook_secret FROM businesses WHERE slug = ?")
+  // Pull the webhook_configured flag from D1 separately — Railway doesn't
+  // know whether a webhook secret has been generated (that lives only
+  // on the worker side). Settings UI uses this to flip the "Generate"
+  // button label to "Rotate".
+  let webhookConfigured = false;
+  try {
+    const row = await env.DB
+      .prepare("SELECT revenue_webhook_secret FROM businesses WHERE slug = ?")
       .bind(biz.slug)
-      .first<{ avg_booking_value_cents: number | null; revenue_currency: string | null; revenue_webhook_secret: string | null }>(),
-    env.DB
-      .prepare(
-        `SELECT COALESCE(SUM(amount_cents), 0) AS total_cents,
-                COUNT(*)                       AS event_count
-           FROM revenue_events
-          WHERE business_slug = ? AND occurred_at >= ? AND occurred_at <= ?`,
-      )
-      .bind(biz.slug, monthStart, monthEnd)
-      .first<{ total_cents: number; event_count: number }>(),
-    // Confirmed reservations from worker D1 — the worker mirrors the
-    // 'confirmed' state via /a2a/confirm. If reservations live only on
-    // Railway in this codebase, this returns 0 and we'll fall through
-    // to unconfigured rather than estimated. The monthly-review job
-    // computes the same number from Railway and is authoritative.
-    env.DB
-      .prepare(
-        `SELECT COUNT(*) AS confirmed_count
-           FROM reservations
-          WHERE business_slug = ? AND status = 'confirmed'
-            AND created_at >= ? AND created_at <= ?`,
-      )
-      .bind(biz.slug, monthStart, monthEnd)
-      .first<{ confirmed_count: number }>()
-      .catch(() => ({ confirmed_count: 0 })), // worker D1 may not mirror reservations yet
-  ]);
-
-  const aov      = tenantRow?.avg_booking_value_cents ?? null;
-  const currency = tenantRow?.revenue_currency ?? "USD";
-  const verifiedCount = verifiedAgg?.event_count ?? 0;
-  const verifiedSum   = verifiedAgg?.total_cents ?? 0;
-  const confirmedCount = confirmedAgg?.confirmed_count ?? 0;
-
-  let summary;
-  if (verifiedCount > 0) {
-    summary = {
-      source: "verified" as const,
-      amount_cents: verifiedSum,
-      event_count: verifiedCount,
-      currency,
-      aov_cents: null as number | null,
-    };
-  } else if (aov !== null && aov > 0) {
-    summary = {
-      source: "estimated" as const,
-      amount_cents: confirmedCount * aov,
-      event_count: confirmedCount,
-      currency,
-      aov_cents: aov,
-    };
-  } else {
-    summary = {
-      source: "unconfigured" as const,
-      amount_cents: null as number | null,
-      event_count: confirmedCount,
-      currency,
-      aov_cents: null as number | null,
-    };
+      .first<{ revenue_webhook_secret: string | null }>();
+    webhookConfigured = !!row?.revenue_webhook_secret;
+  } catch {
+    // Non-fatal — D1 hiccup just means the UI stays on "Generate".
   }
 
-  return withCors(
-    jsonOk({
-      window_start: monthStart,
-      window_end: monthEnd,
-      ...summary,
-      webhook_configured: !!tenantRow?.revenue_webhook_secret,
-    }),
-    request,
-    { credentials: true },
-  );
+  if (!upstream.ok) {
+    return withCors(
+      new Response(upstreamBody, { status: upstream.status, headers: { "Content-Type": "application/json" } }),
+      request,
+      { credentials: true },
+    );
+  }
+
+  // Splice webhook_configured into Railway's response. Railway returns
+  // { source, amount_cents, event_count, currency, aov_cents,
+  //   window_start, window_end }; we add webhook_configured for the UI.
+  let merged: Record<string, unknown>;
+  try {
+    merged = { ...JSON.parse(upstreamBody), webhook_configured: webhookConfigured };
+  } catch {
+    return withCors(
+      jsonErr(502, "upstream_parse_error: Could not parse Railway revenue summary"),
+      request,
+      { credentials: true },
+    );
+  }
+
+  return withCors(jsonOk(merged), request, { credentials: true });
+
+  // ── Legacy local compute (DELETED) ─────────────────────────────────
+  // The block below is unreachable; left commented during the audit
+  // fix to make the diff readable. Will be removed in a follow-up
+  // pass once the Railway endpoint is verified live.
+  /*
+  */
 }
 
 async function apiRevenueSetAov(request: Request, env: Env): Promise<Response> {
@@ -1172,20 +1156,41 @@ async function apiRevenueSetAov(request: Request, env: Env): Promise<Response> {
   const biz = (slugQuery ? businesses.find((b) => b.slug === slugQuery) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
 
+  // Plan gate (audit fix Apr 27 2026) — revenue attribution is a Pro
+  // feature per the pricing page. Base tenants who somehow hit this
+  // endpoint shouldn't be able to set an AOV that the dashboard would
+  // then refuse to display anyway — surface the upgrade message here
+  // rather than silently accept the write.
+  const planRow = await env.DB
+    .prepare("SELECT plan FROM businesses WHERE slug = ?")
+    .bind(biz.slug)
+    .first<{ plan: string | null }>();
+  const plan = planRow?.plan ?? "base";
+  if (plan !== "pro" && plan !== "enterprise") {
+    return withCors(
+      jsonErr(402, "plan_required"),
+      request,
+      { credentials: true },
+    );
+  }
+
   let body: { avg_booking_value_cents?: unknown; revenue_currency?: unknown };
   try { body = await request.json(); }
   catch { return withCors(jsonErr(400, "Body must be JSON"), request, { credentials: true }); }
 
   // null / 0 / undefined all clear the AOV (returning the tenant to the
-  // unconfigured state). Otherwise must be a positive integer ≤ 10M cents
-  // ($100k) — sane upper bound to catch typos like "45000000" instead of "4500".
+  // unconfigured state). Otherwise must be a positive integer ≤ 5M cents
+  // ($50k) — lowered from $100k after the audit flagged that a high-
+  // volume tenant with $99k AOV could display absurd revenue numbers
+  // ($99M+ on a 1k-booking month). $50k still covers high-end services
+  // (luxury catering, weddings, dental implants) without inviting abuse.
   let aovCents: number | null = null;
   if (body.avg_booking_value_cents !== null && body.avg_booking_value_cents !== undefined && body.avg_booking_value_cents !== 0) {
     if (typeof body.avg_booking_value_cents !== "number" || !Number.isInteger(body.avg_booking_value_cents)) {
       return withCors(jsonErr(400, "avg_booking_value_cents must be an integer"), request, { credentials: true });
     }
-    if (body.avg_booking_value_cents < 0 || body.avg_booking_value_cents > 10_000_000) {
-      return withCors(jsonErr(400, "avg_booking_value_cents must be between 0 and 10_000_000"), request, { credentials: true });
+    if (body.avg_booking_value_cents < 0 || body.avg_booking_value_cents > 5_000_000) {
+      return withCors(jsonErr(400, "avg_booking_value_cents must be between 0 and 5_000_000 (max $50k per booking)"), request, { credentials: true });
     }
     aovCents = body.avg_booking_value_cents;
   }
@@ -1213,6 +1218,17 @@ async function apiRevenueWebhookSecret(request: Request, env: Env): Promise<Resp
   const slugQuery = new URL(request.url).searchParams.get("slug");
   const biz = (slugQuery ? businesses.find((b) => b.slug === slugQuery) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  // Plan gate — same as set-AOV. Don't generate a secret for a tenant
+  // who can't actually use the verified-revenue feature.
+  const planRow = await env.DB
+    .prepare("SELECT plan FROM businesses WHERE slug = ?")
+    .bind(biz.slug)
+    .first<{ plan: string | null }>();
+  const plan = planRow?.plan ?? "base";
+  if (plan !== "pro" && plan !== "enterprise") {
+    return withCors(jsonErr(402, "plan_required"), request, { credentials: true });
+  }
 
   let body: { rotate?: unknown };
   try { body = await request.json(); }

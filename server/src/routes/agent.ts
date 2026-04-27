@@ -702,6 +702,59 @@ agentRouter.post("/agents/:slug/query", requireApiKey, async (req: Request, res:
   }
 });
 
+// ── Revenue summary (Pro/Enterprise feature, Apr 27 2026) ─────────────────
+//
+// Authoritative endpoint behind /api/client/revenue-summary on the worker.
+// Reads from server SQLite via computeRevenueWindow(), so the dashboard
+// and the monthly review email show identical numbers. Plan-gated:
+// base tenants get 402 with an upgrade hint instead of zero-state data.
+
+/**
+ * GET /agents/:slug/revenue-summary — current month's revenue summary.
+ *
+ * Returns the three-state shape (verified / estimated / unconfigured)
+ * with window bounds. The worker splices `webhook_configured` from D1
+ * before returning to the client.
+ */
+agentRouter.get("/agents/:slug/revenue-summary", requireApiKey, (req: Request, res: Response) => {
+  const { slug } = req.params;
+  const tenant = getDb()
+    .prepare("SELECT plan FROM businesses WHERE slug = ?")
+    .get(slug) as { plan: string | null } | undefined;
+  if (!tenant) {
+    res.status(404).json({ error: "not_found" });
+    return;
+  }
+  const plan = tenant.plan ?? "base";
+  if (plan !== "pro" && plan !== "enterprise") {
+    // Plan gate — base tenants don't get revenue attribution per the
+    // pricing page. Returning 402 (instead of an empty payload) lets
+    // the dashboard hide the revenue card cleanly without rendering
+    // the unconfigured zero-state for tenants who literally cannot
+    // configure it.
+    res.status(402).json({
+      error:   "plan_required",
+      message: "Revenue attribution is a Pro feature. Upgrade to enable.",
+      plan,
+    });
+    return;
+  }
+
+  // Current calendar month, UTC-bounded so the same epoch hits both the
+  // dashboard render and the monthly email cron's window calculation.
+  const now = new Date();
+  const fromISO = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+  const toISO   = now.toISOString();
+
+  // Lazy import to avoid circular deps on agent.ts → revenue.ts → db.ts.
+  // computeRevenueWindow throws nothing — it returns 'unconfigured' on
+  // any data shortfall — so no try/catch needed here.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { computeRevenueWindow } = require("../lib/revenue.js") as typeof import("../lib/revenue.js");
+  const summary = computeRevenueWindow({ db: getDb(), slug, fromISO, toISO });
+  res.json(summary);
+});
+
 // ── Multi-location CRUD (Pro/Enterprise feature, Apr 27 2026) ─────────────
 //
 // Pro = up to 3 locations, Enterprise = unlimited. Caps enforced inside

@@ -54,13 +54,21 @@ async function hmacSha256Hex(secret: string, body: string): Promise<string> {
 }
 
 /** Constant-time compare — prevents timing attacks against the secret.
+ *
  * Web Crypto doesn't expose timingSafeEqual; this is the standard
- * length-safe XOR-and-OR pattern. */
+ * length-safe XOR-and-OR pattern. The earlier implementation early-
+ * returned on length mismatch which leaked timing information about
+ * the expected signature length. The current form always loops the
+ * MAX of the two lengths, folding the length difference into the
+ * accumulator so mismatched lengths still take constant time relative
+ * to the expected signature length (HMAC-SHA256 hex is always 64
+ * chars, so attacker-controlled input length never reveals anything).
+ */
 function constantTimeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  const len = Math.max(a.length, b.length);
+  let diff = a.length ^ b.length;        // length mismatch flagged in accumulator
+  for (let i = 0; i < len; i++) {
+    diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
   }
   return diff === 0;
 }
@@ -135,15 +143,34 @@ export async function handleRevenueEvent(
   // bytes the customer signed, not over a re-serialized JSON.
   const rawBody = await request.text();
 
-  // Look up tenant + their webhook secret.
+  // Look up tenant + their webhook secret + plan. Plan gate is enforced
+  // here so a base-tier tenant who somehow obtained a secret (manual D1
+  // edit, a future leak) can't post events — defense-in-depth alongside
+  // the Settings UI's plan gate.
   const row = await env.DB
-    .prepare("SELECT slug, revenue_webhook_secret, revenue_currency FROM businesses WHERE slug = ?")
-    .bind(slug)
-    .first<{ slug: string; revenue_webhook_secret: string | null; revenue_currency: string | null }>();
+    .prepare(
+      `SELECT slug,
+              revenue_webhook_secret,
+              revenue_currency,
+              COALESCE((SELECT plan FROM businesses WHERE slug = ?), 'base') AS plan_value
+         FROM businesses WHERE slug = ?`,
+    )
+    .bind(slug, slug)
+    .first<{ slug: string; revenue_webhook_secret: string | null; revenue_currency: string | null; plan_value: string }>();
 
   if (!row || !row.revenue_webhook_secret) {
     // Same response for "tenant doesn't exist" and "tenant exists but
     // hasn't configured a webhook" — don't leak which case we're in.
+    return new Response(JSON.stringify({ error: "unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  if (row.plan_value !== "pro" && row.plan_value !== "enterprise") {
+    // Plan-gate on the webhook receiver. Same opaque 401 so an
+    // attacker can't tell whether the secret is wrong or the tenant
+    // is on the wrong plan — operationally these are equivalent
+    // conditions for the customer.
     return new Response(JSON.stringify({ error: "unauthorized" }), {
       status: 401,
       headers: { "Content-Type": "application/json" },
@@ -214,6 +241,55 @@ export async function handleRevenueEvent(
   // customer-side response is 200; the operational difference is
   // logged for our own observability.
   const inserted = (result.meta?.changes ?? 0) > 0;
+
+  // Mirror to Railway so the monthly review email cron and the
+  // dashboard's revenue summary endpoint (both server-side, both
+  // reading from server SQLite's revenue_events) actually see this
+  // event. Audit fix Apr 27 2026 — without the mirror, verified
+  // events written here on D1 never reach the cron, so the monthly
+  // email always showed zero verified revenue.
+  //
+  // Best-effort: a Railway hiccup doesn't cause us to lose the event
+  // (D1 has it) and shouldn't fail the customer's webhook (200 to
+  // them stays 200). On next D1 mirror or manual reconciliation, the
+  // miss can be backfilled. We log the mirror status so operators
+  // can spot persistent drift in wrangler tail.
+  if (inserted && env.API_BASE_URL && env.API_KEY) {
+    try {
+      const mirrorResp = await fetch(`${env.API_BASE_URL}/admin/revenue-events/mirror`, {
+        method:  "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${env.API_KEY}`,
+        },
+        body: JSON.stringify({
+          business_slug:  slug,
+          id,
+          reservation_id: body.reservation_id ?? null,
+          amount_cents:   body.amount_cents,
+          currency,
+          occurred_at:    body.occurred_at,
+          external_ref:   body.external_ref,
+        }),
+      });
+      if (!mirrorResp.ok) {
+        console.warn(JSON.stringify({
+          event:        "revenue_event_mirror_failed",
+          slug,
+          status:       mirrorResp.status,
+          external_ref: body.external_ref,
+        }));
+      }
+    } catch (err) {
+      console.warn(JSON.stringify({
+        event:        "revenue_event_mirror_threw",
+        slug,
+        error:        String(err).slice(0, 200),
+        external_ref: body.external_ref,
+      }));
+    }
+  }
+
   console.log(JSON.stringify({
     onboarding: false,
     event:      "revenue_event_received",
