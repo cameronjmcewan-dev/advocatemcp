@@ -31,7 +31,12 @@ export interface SendResult {
 // ── Constants ───────────────────────────────────────────────────────────────
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
-const FROM_ADDRESS    = "AdvocateMCP <max@advocate-mcp.com>";
+// SMTP from-address must be on a Resend-verified domain. advocatemcp.com is
+// already verified on the free tier; advocate-mcp.com would require a paid
+// plan to add as a second sending domain. Replies route to REPLY_TO via the
+// reply_to header so customers still reach the real support inbox.
+const FROM_ADDRESS    = "AdvocateMCP <support@advocatemcp.com>";
+const REPLY_TO        = "max@advocate-mcp.com";
 const SEND_TIMEOUT_MS = 10_000;
 
 // ── Email template ──────────────────────────────────────────────────────────
@@ -125,9 +130,10 @@ export async function sendActivationEmail(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from:    FROM_ADDRESS,
-        to:      [to],
-        subject: "Welcome to AdvocateMCP \u2014 let\u2019s get you live",
+        from:     FROM_ADDRESS,
+        to:       [to],
+        reply_to: REPLY_TO,
+        subject:  "Welcome to AdvocateMCP \u2014 let\u2019s get you live",
         html,
       }),
     });

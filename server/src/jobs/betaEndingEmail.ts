@@ -254,7 +254,12 @@ export async function sendBetaEndingReminders(): Promise<{
       const email = renderT7Email(args);
       try {
         await sendEmail({
-          from:    process.env.DIGEST_EMAIL_FROM ?? "AdvocateMCP <max@advocate-mcp.com>",
+          // From-address must be on a Resend-verified domain (advocatemcp.com
+          // is on free tier; advocate-mcp.com would require paid). Replies
+          // route to max@advocate-mcp.com via reply_to so the visible support
+          // contact stays consistent.
+          from:    process.env.DIGEST_EMAIL_FROM ?? "AdvocateMCP <support@advocatemcp.com>",
+          replyTo: "max@advocate-mcp.com",
           to:      row.email,
           subject: email.subject,
           html:    email.html,
@@ -276,7 +281,9 @@ export async function sendBetaEndingReminders(): Promise<{
       const email = renderT1Email(args);
       try {
         await sendEmail({
-          from:    process.env.DIGEST_EMAIL_FROM ?? "AdvocateMCP <max@advocate-mcp.com>",
+          // Same Resend-verified-domain constraint as the T-7 path above.
+          from:    process.env.DIGEST_EMAIL_FROM ?? "AdvocateMCP <support@advocatemcp.com>",
+          replyTo: "max@advocate-mcp.com",
           to:      row.email,
           subject: email.subject,
           html:    email.html,
