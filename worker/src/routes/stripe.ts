@@ -863,6 +863,12 @@ export async function registerBusinessOnRailway(
 
   // Build base body — always present
   const body: Record<string, unknown> = {
+    // Pass the worker's canonical slug so Railway stores the same one. Without
+    // this, Railway falls back to slugify(name) and the two sides diverge —
+    // bot interception calls /agents/<worker-slug>/query and Railway 404s
+    // because it has the tenant under slugify(name) instead. (See server's
+    // OnboardingPayloadSchema.slug + register.ts baseSlug fallback.)
+    slug: tenant.slug,
     name: tenant.name,
     description: typeof profile.description === "string" ? profile.description : `${tenant.name} — managed by AdvocateMCP`,
     services: services.length > 0 ? services : ["General services"],

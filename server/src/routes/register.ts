@@ -40,7 +40,12 @@ registerRouter.post("/register", requireApiKey, (req: Request, res: Response) =>
   const p = parsed.data;
 
   const db = getDb();
-  const baseSlug = slugify(p.name);
+  // Prefer the caller-supplied slug (e.g. the worker's mint from wizard
+  // input + KV uniqueness check) so worker-side and server-side slugs stay
+  // in lockstep. Fall back to slugify(name) when omitted, preserving the
+  // legacy /register contract for CLI / manual onboard scripts. The schema
+  // already enforces the character class on p.slug, so we trust it directly.
+  const baseSlug = p.slug ?? slugify(p.name);
   const apiKey = crypto.randomUUID();
   const j = (v: unknown): string | null =>
     v === undefined ? null : JSON.stringify(v);
