@@ -1114,8 +1114,15 @@ async function apiRevenueSummary(request: Request, env: Env): Promise<Response> 
   // Also enforces the Pro/Enterprise plan gate server-side: Railway
   // returns 402 for base-tier tenants, which we surface unchanged so
   // the dashboard hides the revenue card.
+  //
+  // Per-location filter (Apr 27 2026 Section 2): forward ?location_id
+  // through to Railway. Railway validates ownership against the
+  // locations table; an attacker can't read another tenant's revenue
+  // by forging an id.
   const base = (env as { API_BASE_URL?: string }).API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
-  const url = `${base}/agents/${encodeURIComponent(biz.slug)}/revenue-summary`;
+  const incomingLocId = new URL(request.url).searchParams.get("location_id");
+  const locQuery = incomingLocId ? `?location_id=${encodeURIComponent(incomingLocId)}` : "";
+  const url = `${base}/agents/${encodeURIComponent(biz.slug)}/revenue-summary${locQuery}`;
   const upstream = await fetch(url, {
     headers: { Authorization: `Bearer ${biz.api_key}` },
   });
