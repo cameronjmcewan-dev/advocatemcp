@@ -29,7 +29,14 @@ function requireAdmin(req: Request, res: Response, next: NextFunction): void {
   next();
 }
 
+// Mounted BEFORE the requireAdmin chain. Express evaluates registrations
+// in order; if requireAdmin runs first and rejects (when the Bearer
+// token isn't ADMIN_API_KEY), the request stops there and never falls
+// through to my requireApiKey-gated route. Order matters.
+import { requireApiKey as requireApiKeyEarly } from "../../middleware/auth.js";
+
 export const adminRouter = Router();
+
 // Insights must be registered BEFORE the Bearer-only requireAdmin mounts.
 // Express evaluates router middleware in registration order — a request
 // to /admin/insights passes through every matching /admin mount. If
@@ -39,22 +46,21 @@ export const adminRouter = Router();
 // both Bearer and Basic auth. Everything else continues through the
 // Bearer-only path below unchanged.
 adminRouter.use(adminInsightsRouter);
+
+// FAQ admin endpoints (Apr 28 2026 — Phase 1 grey-hat verification).
+// Same precedence reasoning as adminInsightsRouter: register BEFORE the
+// requireAdmin chain so the SERVER_API_KEY (worker / CI shared secret)
+// authenticates instead of needing a separate ADMIN_API_KEY. The FAQ
+// router itself does an in-handler slug-ownership check so a business
+// api_key still can't regenerate another tenant's FAQs.
+adminRouter.use("/admin", requireApiKeyEarly, adminFaqsRouter);
+
 adminRouter.use("/admin", requireAdmin, agentsRouter);
 adminRouter.use("/admin", requireAdmin, adminDigestRouter);
 adminRouter.use("/admin", requireAdmin, tenantsRouter);
 adminRouter.use("/admin", requireAdmin, adminAuditsRouter);
 adminRouter.use("/admin", requireAdmin, adminAuditBatchRouter);
 adminRouter.use("/admin", requireAdmin, adminExperimentsRouter);
-
-// FAQ admin endpoints (Apr 28 2026 — Phase 1 grey-hat verification).
-// Mounted via requireApiKey instead of requireAdmin so the same SERVER
-// API_KEY that worker + CI scripts already use authenticates here too.
-// ADMIN_API_KEY is a separate higher-privilege key the operator may not
-// have provisioned for early-stage tooling — requireApiKey accepts the
-// SERVER_API_KEY and any business api_key, but the FAQ trigger validates
-// slug ownership inside the handler so a business api_key still can't
-// regenerate another business's FAQs.
-adminRouter.use("/admin", requireApiKey, adminFaqsRouter);
 // Worker → Railway revenue_events mirror (Apr 27 2026). Uses
 // requireApiKey (X-API-Key / Bearer SERVER_API_KEY) instead of
 // requireAdmin so the worker's existing env.API_KEY authenticates it.
