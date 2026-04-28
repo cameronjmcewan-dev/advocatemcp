@@ -13,6 +13,7 @@
  *   Path fallback — first path segment used as slug if KV has no hostname match
  */
 
+import * as Sentry from "@sentry/cloudflare";
 import type { Env } from "./types";
 import { handlePortal } from "./routes/portal";
 import { handleDemo } from "./routes/demo";
@@ -199,7 +200,29 @@ export function buildWellKnownResponse(
 
 // ── Main fetch handler ─────────────────────────────────────────────────────
 
-export default {
+// Sentry-wrapped default export. `withSentry` takes a config-builder
+// function (called once per request with the env) plus the underlying
+// handler. When SENTRY_DSN is unset (dev/test), Sentry initializes
+// with `dsn: undefined` and silently no-ops — no crashes, no leaks.
+//
+// `tracesSampleRate: 0.1` keeps perf tracing enabled but only on 10%
+// of requests so we don't burn through the free-tier transaction
+// quota. Errors are captured at 100%. Bump to 1.0 if you want full
+// trace coverage and the quota allows.
+//
+// `sendDefaultPii: false` matches our privacy posture — IPs and full
+// request/response bodies don't reach Sentry's servers. Anything we
+// want surfaced (slug, request_id, agent_id) gets explicitly tagged
+// in the relevant route handlers via `Sentry.setTag()`.
+export default Sentry.withSentry(
+  (env: Env) => ({
+    dsn:               env.SENTRY_DSN,
+    environment:       env.SENTRY_ENVIRONMENT ?? "production",
+    release:           "advocatemcp-worker",
+    tracesSampleRate:  0.1,
+    sendDefaultPii:    false,
+  }),
+  {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const startMs    = Date.now();
     const url        = new URL(request.url);
@@ -721,4 +744,5 @@ export default {
       }
     );
   },
-};
+  } satisfies ExportedHandler<Env>,
+);
