@@ -4,9 +4,9 @@
   "description": "AdvocateMCP — AI search crawler interception and business agent platform",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch --import ./src/instrument.ts src/index.ts",
     "build": "tsc && node -e \"require('fs').cpSync('src/db/migrations','dist/db/migrations',{recursive:true})\"",
-    "start": "node dist/index.js",
+    "start": "node --import ./dist/instrument.js dist/index.js",
     "db:seed": "tsx src/seed.ts"
   },
   "dependencies": {
