@@ -271,7 +271,13 @@ export async function handleInviteTeam(request: Request, env: Env): Promise<Resp
       { user_id: userId, business_slug: r.tenant.business_slug, role },
       env.INVITE_SIGNING_KEY,
     );
-    inviteUrl = `https://customers.advocatemcp.com/team-accept.html?t=${encodeURIComponent(token)}`;
+    // team-accept.html lives on advocatemcp.com Pages, not on the
+    // worker (customers.advocatemcp.com). The worker's bot-detection
+    // catch-all would return JSON for /team-accept.html, so the email
+    // must link to advocatemcp.com directly. The session cookie set
+    // after /auth/team-accept rides the Domain=.advocatemcp.com scope
+    // so the redirect to /dashboard authenticates correctly.
+    inviteUrl = `https://advocatemcp.com/team-accept.html?t=${encodeURIComponent(token)}`;
 
     const inviterName = r.ctx.full_name || r.ctx.email;
     const subject = `${inviterName} invited you to AdvocateMCP for ${r.tenant.business_name}`;

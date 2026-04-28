@@ -26,9 +26,18 @@
   if (window.__amcpMarketingAuthMounted) return;
   window.__amcpMarketingAuthMounted = true;
 
-  var DASHBOARD_ORIGIN = 'https://customers.advocatemcp.com';
-  var ME_URL           = DASHBOARD_ORIGIN + '/api/client/me';
-  var LOGOUT_URL       = DASHBOARD_ORIGIN + '/auth/logout';
+  // The /api/* + /auth/* endpoints live on the worker
+  // (customers.advocatemcp.com); HTML pages (app, settings, billing)
+  // live on Pages (advocatemcp.com). Keeping them split because the
+  // worker's catch-all bot-detection path returns a JSON error for any
+  // unmatched HTML URL on customers.advocatemcp.com — clicking
+  // /app.html on the worker domain shows that JSON to a real human
+  // user. Linking to advocatemcp.com directly avoids the trap and the
+  // session cookie travels via the Domain=.advocatemcp.com scope.
+  var API_ORIGIN     = 'https://customers.advocatemcp.com';     // /api + /auth
+  var SITE_ORIGIN    = 'https://advocatemcp.com';                // HTML pages
+  var ME_URL         = API_ORIGIN + '/api/client/me';
+  var LOGOUT_URL     = API_ORIGIN + '/auth/logout';
 
   function checkAuth() {
     fetch(ME_URL, {
@@ -102,9 +111,9 @@
       '  <div style="padding:8px 10px 6px;font-size:12px;color:var(--muted, #766f63);border-bottom:1px solid var(--line, #d4ccbf);margin-bottom:4px">',
       escapeHtml(me.email || ''),
       '  </div>',
-      '  <a href="' + DASHBOARD_ORIGIN + '/dashboard" role="menuitem" class="amcp-auth-link">Dashboard</a>',
-      '  <a href="' + DASHBOARD_ORIGIN + '/app.html#settings" role="menuitem" class="amcp-auth-link">Settings</a>',
-      '  <a href="' + DASHBOARD_ORIGIN + '/Billing.html" role="menuitem" class="amcp-auth-link">Billing</a>',
+      '  <a href="' + SITE_ORIGIN + '/app.html" role="menuitem" class="amcp-auth-link">Dashboard</a>',
+      '  <a href="' + SITE_ORIGIN + '/app.html#settings" role="menuitem" class="amcp-auth-link">Settings</a>',
+      '  <a href="' + SITE_ORIGIN + '/Billing.html" role="menuitem" class="amcp-auth-link">Billing</a>',
       '  <hr style="border:none;border-top:1px solid var(--line, #d4ccbf);margin:4px 0">',
       '  <button type="button" class="amcp-auth-link amcp-auth-logout" role="menuitem" ',
       '    style="background:transparent;border:none;width:100%;text-align:left;cursor:pointer;font:inherit">Sign out</button>',
