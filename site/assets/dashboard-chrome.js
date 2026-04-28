@@ -188,6 +188,34 @@
   // the slide-in transform; this just flips body.sidebar-open. Outside-tap
   // on the overlay (body::after, also bound via a delegated click on body)
   // closes it. Escape key also closes.
+  /* Brand logo click handler — bulletproof "back to homepage" wiring.
+   *
+   * The anchor's `href="/"` should work natively because the SPA router
+   * doesn't match `/` and lets the browser navigate. But: if Pages
+   * serves a stale dashboard-chrome.js (browser cache), if the SPA
+   * router gets a future route added that accidentally matches `/`,
+   * or if any other interceptor in this module preventDefault's, the
+   * logo silently breaks.
+   *
+   * This explicit handler short-circuits all of that by navigating via
+   * window.location.assign — same behavior as a top-level GET, ignores
+   * the SPA. The href stays so middle-click + cmd-click "open in new
+   * tab" still work natively. (Apr 28 2026 user-reported fix.)
+   */
+  function wireBrandLogo() {
+    const brand = document.querySelector('a.sb-brand');
+    if (!brand) return;
+    brand.addEventListener('click', (e) => {
+      // Respect modifier keys: cmd/ctrl/shift/alt = open in new tab,
+      // middle-click = open in new tab. Native browser handles those.
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      window.location.assign('/');
+    });
+  }
+
   function wireMobileSidebar() {
     const ham = document.getElementById('topbar-hamburger');
     const sidebar = document.getElementById('amcp-sidebar');
@@ -286,6 +314,7 @@
     wireMobileSidebar();
     wireFab();
     wireLocationSelector();
+    wireBrandLogo();
     injectSpeculationRules();
     loadCommandPaletteIfAdmin();
     loadRouter();
