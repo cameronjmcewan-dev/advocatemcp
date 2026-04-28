@@ -112,7 +112,11 @@
       escapeHtml(me.email || ''),
       '  </div>',
       '  <a href="' + SITE_ORIGIN + '/app.html" role="menuitem" class="amcp-auth-link">Dashboard</a>',
-      '  <a href="' + SITE_ORIGIN + '/app.html#settings" role="menuitem" class="amcp-auth-link">Settings</a>',
+      // /app.html#settings is a dead anchor — the SPA router matches on
+      // pathname, not hash, so it lands on Overview and the hash is
+      // never read by anything. Link to /Settings.html so the router
+      // routes to the actual Settings page. (Apr 28 2026 audit fix.)
+      '  <a href="' + SITE_ORIGIN + '/Settings.html" role="menuitem" class="amcp-auth-link">Settings</a>',
       '  <a href="' + SITE_ORIGIN + '/Billing.html" role="menuitem" class="amcp-auth-link">Billing</a>',
       '  <hr style="border:none;border-top:1px solid var(--line, #d4ccbf);margin:4px 0">',
       '  <button type="button" class="amcp-auth-link amcp-auth-logout" role="menuitem" ',

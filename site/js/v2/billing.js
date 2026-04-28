@@ -45,12 +45,16 @@
       id: 'pro', name: 'Pro', price: 349,
       featured: true,
       blurb: 'For shops that want to win head-to-head against local competitors.',
+      // Feature list mirrors Pricing.html (Apr 28 2026 sync). Anything
+      // shipped + visible on /Pricing should also appear here so the
+      // billing page never undersells what the customer is paying for.
       features: [
         'Everything in Base',
-        'Competitor Radar — weekly polls + loss analysis',
-        'Multiple locations',
-        'Weekly digest email',
-        'Priority support',
+        'Competitor Radar — weekly head-to-head tracking',
+        'Revenue attribution — see dollars from AI',
+        'Up to 3 locations',
+        'Monthly performance review email',
+        'Priority support (1-hour reply)',
       ],
     },
     {
@@ -58,9 +62,10 @@
       blurb: 'For franchises and multi-location brands.',
       features: [
         'Everything in Pro',
+        'Unlimited locations',
+        'Team accounts & role-based access',
         'Dedicated success manager',
-        'Custom integrations',
-        'Team accounts & roles',
+        'Custom integrations on request',
       ],
     },
   ];
