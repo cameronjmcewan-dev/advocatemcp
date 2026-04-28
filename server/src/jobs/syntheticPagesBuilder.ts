@@ -118,9 +118,13 @@ export interface SyntheticPagesBuilderResult {
  * mentioning urgent / 24-7 / same-day language.
  */
 function planCandidatesForBusiness(business: BusinessRow): PagePlan[] {
-  const tier = (business as { plan?: string }).plan ?? "base";
-  const tierCap = TIER_CAPS[tier] ?? TIER_CAPS.base;
-  const hardCap = tier === "enterprise" ? ENTERPRISE_HARD_CAP : tierCap;
+  // Plan tier resolution: lowercase + clamp to the known set so a stored
+  // 'Pro' (any casing) maps to the right cap and never silently falls
+  // through to base. Defensive against legacy rows + manual DB edits.
+  const rawTier = ((business as { plan?: string }).plan ?? "base").toLowerCase();
+  const tier = rawTier in TIER_CAPS ? rawTier : "base";
+  const softCap = TIER_CAPS[tier];
+  const hardCap = tier === "enterprise" ? ENTERPRISE_HARD_CAP : softCap;
 
   // Services come from `top_services` (CSV) preferred, fall back to `services`.
   const servicesRaw =
@@ -158,7 +162,11 @@ function planCandidatesForBusiness(business: BusinessRow): PagePlan[] {
 
   // Combinations, ordered by intent priority. Stop emitting once we hit
   // either the tier cap or the per-service / per-location sub-cap.
+  // For enterprise, the soft cap (150) emits an observability warn but
+  // generation continues up to the hard cap (500) — operators monitor
+  // and tune via per-contract overrides, this is just early signal.
   const out: PagePlan[] = [];
+  let warnedSoftCap = false;
   const perService:  Record<string, number> = {};
   const perLocation: Record<string, number> = {};
   for (const intent of intents) {
@@ -185,6 +193,14 @@ function planCandidatesForBusiness(business: BusinessRow): PagePlan[] {
 
         perService[sSlug]  = (perService[sSlug]  ?? 0) + 1;
         perLocation[lSlug] = (perLocation[lSlug] ?? 0) + 1;
+
+        if (!warnedSoftCap && tier === "enterprise" && out.length >= softCap) {
+          warnedSoftCap = true;
+          console.warn(
+            `[synthetic-pages] enterprise soft cap (${softCap}) reached for ${business.slug}; ` +
+            `continuing to hard cap (${ENTERPRISE_HARD_CAP}). Tune per-contract if this is unexpected.`,
+          );
+        }
       }
     }
   }
@@ -274,7 +290,10 @@ Generate a landing page for:
 
   const tokensIn  = message.usage.input_tokens;
   const tokensOut = message.usage.output_tokens;
-  const costCents = (tokensIn * 0.0003 + tokensOut * 0.0015) / 10;
+  // Sonnet 4.6 pricing: $3/MTok input, $15/MTok output. Cents = tokens × $/MTok ÷ 10000.
+  // i.e. tokensIn * 3/10000 = tokensIn * 0.0003 cents, ditto output. NO extra /10
+  // (the earlier reviewer-flagged divisor was a 10x undercount). Reviewer fix Apr 28.
+  const costCents = tokensIn * 0.0003 + tokensOut * 0.0015;
 
   // Generator may emit { skip: '...' } when the combo doesn't fit.
   let parsed: { skip?: string; title?: string; body_md?: string; source_facts?: string[] };
@@ -388,8 +407,23 @@ export async function runSyntheticPagesBuilder(
         generated_at, generator_version, status)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'live')`,
   );
+  // Audit-trail row for validator-rejected combinations. Distinct from
+  // 'live' so the public route never serves them, but still queryable so
+  // operators can see why a combo got skipped (the rejection_reason lives
+  // in source_facts_json under a `rejected_reason` key — schema-stable
+  // workaround for not adding a dedicated column at this stage).
+  const insertRejectedStmt = db.prepare(
+    `INSERT OR IGNORE INTO synthetic_pages
+       (business_id, intent, service_slug, location_slug, host, path,
+        title, body_md, schema_jsonld, source_facts_json,
+        generated_at, generator_version, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'rejected')`,
+  );
   const existsStmt = db.prepare(
     "SELECT 1 FROM synthetic_pages WHERE host = ? AND path = ? LIMIT 1",
+  );
+  const directoryCountStmt = db.prepare(
+    "SELECT COUNT(*) AS n FROM synthetic_pages WHERE business_id = ? AND host = 'advocatemcp.com' AND status = 'live'",
   );
 
   for (const biz of candidates) {
@@ -398,6 +432,14 @@ export async function runSyntheticPagesBuilder(
       for (const plan of plans) {
         if (todayCount + result.generated >= dailyCap) break;
         if (existsStmt.get(plan.host, plan.path)) continue;  // already generated
+
+        // Per-business directory cap on advocatemcp.com — keeps any single
+        // tenant from monopolizing our central directory at the expense of
+        // others (anti-doorway-page heuristic).
+        if (plan.host === "advocatemcp.com") {
+          const dirCount = (directoryCountStmt.get(biz.id) as { n: number } | undefined)?.n ?? 0;
+          if (dirCount >= MAX_DIRECTORY_PAGES_PER_BIZ) continue;
+        }
 
         const out = await generateOnePage(biz, plan);
         result.cost_cents_total += out.cost_cents;
@@ -410,6 +452,24 @@ export async function runSyntheticPagesBuilder(
         if (!validation.ok) {
           result.rejected++;
           console.warn(`[synthetic-pages] ${biz.slug} ${plan.path}: rejected — ${validation.reason}`);
+          // Persist the rejection so the post-hoc audit story works
+          // (reviewer HIGH-3): rejection_reason lives inside
+          // source_facts_json under `rejected_reason`. The public route
+          // filters on status='live' so these never serve.
+          insertRejectedStmt.run(
+            biz.id,
+            plan.intent,
+            plan.serviceSlug,
+            plan.locationSlug,
+            plan.host,
+            plan.path,
+            out.title.slice(0, 70),  // best-effort; may be empty when generator returned skip
+            out.body_md,
+            "{}",                     // no schema for rejected rows
+            JSON.stringify({ rejected_reason: validation.reason, source_facts: out.source_facts_json }),
+            Date.now(),
+            GENERATOR_VERSION,
+          );
           continue;
         }
 

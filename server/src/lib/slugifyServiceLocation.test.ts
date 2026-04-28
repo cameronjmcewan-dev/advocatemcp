@@ -70,4 +70,25 @@ describe("parsePath edge cases", () => {
   it("accepts a trailing slash", () => {
     expect(parsePath("/best-x-in-y/")?.intent).toBe("best_top");
   });
+
+  // Reviewer LOW-1 lockdown — multi-token service AND multi-token location
+  // must round-trip through the non-greedy regex without the location
+  // swallowing service tokens. The first '-in-' wins for the boundary.
+  it("round-trips multi-token service AND multi-token location", () => {
+    const path = "/best-emergency-plumbing-in-round-rock";
+    expect(parsePath(path)).toEqual({
+      intent:       "best_top",
+      serviceSlug:  "emergency-plumbing",
+      locationSlug: "round-rock",
+    });
+  });
+
+  it("round-trips emergency + multi-token location with -near-", () => {
+    const path = "/emergency-water-heater-near-cedar-park";
+    expect(parsePath(path)).toEqual({
+      intent:       "emergency",
+      serviceSlug:  "water-heater",
+      locationSlug: "cedar-park",
+    });
+  });
 });

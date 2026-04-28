@@ -104,6 +104,9 @@ syntheticPagesRouter.get("/synthetic/:host/*", (req: Request, res: Response) => 
 
   const flag = (process.env.FEATURE_SYNTHETIC_PAGES ?? "").toLowerCase();
   if (flag !== "true" && flag !== "1") {
+    // 404s are deliberately not cached — once the feature flag flips on,
+    // Pages should appear immediately rather than waiting for a TTL.
+    res.setHeader("Cache-Control", "no-store");
     res.status(404).json({ error: "feature_disabled", flag: "FEATURE_SYNTHETIC_PAGES" });
     return;
   }
@@ -120,6 +123,9 @@ syntheticPagesRouter.get("/synthetic/:host/*", (req: Request, res: Response) => 
     .get(host, path) as SyntheticPageRow | undefined;
 
   if (!row) {
+    // No-store on misses so a fresh row going live is reachable on the
+    // next request (the worker also bypasses cache on 404).
+    res.setHeader("Cache-Control", "no-store");
     res.status(404).json({ error: "not_found", host, path });
     return;
   }
