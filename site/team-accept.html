@@ -165,6 +165,12 @@
           showError('This invitation link is invalid. Make sure you copied the full URL from your email.');
         } else if (err.indexOf('invalid_password') === 0) {
           showError('Password must be 8–200 characters.');
+        } else if (res.status === 503 || err === 'service_unavailable' || err === 'invite_unavailable') {
+          // Worker returns 503 when INVITE_SIGNING_KEY isn't configured
+          // — a deploy issue, not the user's fault. Don't show the raw
+          // technical string; tell them to retry and reach out if it
+          // sticks. (Apr 28 2026: closes audit finding #7.)
+          showError('Team invitations are temporarily unavailable. Try again in a moment, or email max@advocate-mcp.com.');
         } else {
           showError(err);
         }

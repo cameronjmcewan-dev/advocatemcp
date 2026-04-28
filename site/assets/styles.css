@@ -168,6 +168,9 @@ p { margin: 0; line-height: 1.55; color: var(--ink-2); text-wrap: pretty; }
 .chip.maroon { background: var(--maroon-tint); border-color: transparent; color: var(--maroon); }
 .chip.sage { background: var(--sage-tint); border-color: transparent; color: var(--sage); }
 .chip.amber { background: var(--amber-tint); border-color: transparent; color: var(--amber); }
+/* Enterprise plan chip: solid dark/inverted to distinguish from the
+   maroon Pro chip at a glance. Dark = premium tier. */
+.chip.enterprise { background: var(--ink); border-color: transparent; color: var(--paper); font-weight: 600; }
 .chip .dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
 
 /* --- Card --- */

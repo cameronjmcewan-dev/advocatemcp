@@ -344,6 +344,17 @@
         const locations = data.locations;
         btn.removeAttribute('hidden');
 
+        // Stale-id cleanup. If localStorage still has a location id that
+        // was removed (deleted, renamed, etc.), drop it now so labelFor()
+        // doesn't fall back to "All locations" while the underlying state
+        // still points at a ghost. Without this, refreshLabel() shows the
+        // wrong text and the menu can render checkmarks against a row
+        // that no longer exists.
+        const storedId = window.AMCP_LOCATION.get();
+        if (storedId && !locations.find((l) => l.id === storedId)) {
+          window.AMCP_LOCATION.set(null);
+        }
+
         function labelFor(id) {
           if (!id) return 'All locations';
           const m = locations.find((l) => l.id === id);
@@ -363,7 +374,17 @@
           menu = document.createElement('div');
           menu.className = 'loc-menu';
           menu.style.top = (rect.bottom + 6) + 'px';
-          menu.style.left = (rect.right - 240) + 'px';
+          // Anchor the menu's right edge to the button's right edge while
+          // clamping to the viewport so we don't render off-screen on
+          // narrow widths. On mobile the button sits far left, so the
+          // pre-clamp left could go negative — `Math.max(8, ...)` keeps
+          // an 8px gutter from the left edge of the screen, which the
+          // 240px-wide menu fits within on every mobile viewport ≥256px.
+          const MENU_WIDTH = 240;
+          const GUTTER = 8;
+          const desiredLeft = rect.right - MENU_WIDTH;
+          const maxLeft = Math.max(GUTTER, window.innerWidth - MENU_WIDTH - GUTTER);
+          menu.style.left = Math.min(maxLeft, Math.max(GUTTER, desiredLeft)) + 'px';
           const current = window.AMCP_LOCATION.get();
           const items = [{ id: null, name: 'All locations' }].concat(locations);
           menu.innerHTML = items.map((l) => {

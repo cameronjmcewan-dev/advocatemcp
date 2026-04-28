@@ -171,7 +171,7 @@
       <div class="row single">
         <div class="card-dash">
           <div class="card-head">
-            <div><h3>Team <span class="chip ${plan === 'enterprise' ? 'maroon' : plan === 'pro' ? 'maroon' : 'sage'}" style="margin-left:6px">${plan === 'enterprise' ? 'Enterprise' : plan === 'pro' ? 'Pro' : 'Base'}</span></h3>
+            <div><h3>Team <span class="chip ${plan === 'enterprise' ? 'enterprise' : plan === 'pro' ? 'maroon' : 'sage'}" style="margin-left:6px">${plan === 'enterprise' ? 'Enterprise' : plan === 'pro' ? 'Pro' : 'Base'}</span></h3>
               <div class="sub" id="team-cap-sub">Loading…</div>
             </div>
             <button class="btn btn-primary btn-sm" id="btn-invite-member" type="button" style="display:none">Invite team member</button>
@@ -191,7 +191,7 @@
       <div class="row single">
         <div class="card-dash">
           <div class="card-head">
-            <div><h3>Locations <span class="chip ${plan === 'enterprise' ? 'maroon' : plan === 'pro' ? 'maroon' : 'sage'}" style="margin-left:6px">${plan === 'enterprise' ? 'Enterprise' : plan === 'pro' ? 'Pro' : 'Base'}</span></h3>
+            <div><h3>Locations <span class="chip ${plan === 'enterprise' ? 'enterprise' : plan === 'pro' ? 'maroon' : 'sage'}" style="margin-left:6px">${plan === 'enterprise' ? 'Enterprise' : plan === 'pro' ? 'Pro' : 'Base'}</span></h3>
               <div class="sub" id="loc-cap-sub">Loading…</div>
             </div>
             <button class="btn btn-primary btn-sm" id="btn-add-location" type="button" style="display:none">Add location</button>
