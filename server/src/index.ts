@@ -9,6 +9,7 @@ import { createTestApp } from "./testApp.js";
 import { getDb } from "./db.js";
 import { startReputationRollupSchedule } from "./jobs/reputationRollup.js";
 import { startFaqBackfillSchedule } from "./jobs/faqBackfill.js";
+import { startSyntheticPagesBuilderSchedule } from "./jobs/syntheticPagesBuilder.js";
 import { pollAll } from "./jobs/competitorRadar.js";
 import { startWeeklyDigestSchedule } from "./jobs/weeklyDigest.js";
 import { startBetaEndingSchedule } from "./jobs/betaEndingEmail.js";
@@ -148,6 +149,13 @@ startMonthlyPerformanceReviewSchedule();
 // faqs_json so existing tenants get the multi-entry FAQPage schema
 // without re-onboarding.
 startFaqBackfillSchedule();
+
+// Synthetic landing pages builder (Apr 28 2026 — Phase 3 grey-hat).
+// Daily 02:00 UTC. Gated on FEATURE_SYNTHETIC_PAGES + ANTHROPIC_API_KEY.
+// Generates up to tier-cap pages per Pro+ tenant: Base 10, Pro 40,
+// Enterprise 150 soft / 500 hard. Per-service + per-location sub-caps
+// keep content distinct. Each row is fact-validated before going live.
+startSyntheticPagesBuilderSchedule();
 
 app.listen(PORT, () => {
   console.log(`

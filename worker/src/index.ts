@@ -399,6 +399,91 @@ export default Sentry.withSentry(
       }
     }
 
+    // ── 1b''. Synthetic landing pages (Phase 3 grey-hat, Apr 28 2026) ─────
+    // Match three intent prefixes on every host:
+    //   /best-{service}-in-{location}        → best_top
+    //   /affordable-{service}-in-{location}  → affordable
+    //   /emergency-{service}-near-{location} → emergency
+    //
+    // The catch-all /{service}-in-{location} (specific_service) is NOT
+    // matched here — it would collide with arbitrary marketing paths
+    // on customer domains (e.g. /about-in-portland). Those rows are
+    // reachable directly via the server route /synthetic/:host/* but
+    // the worker only forwards the three explicit prefixes.
+    //
+    // Forward to api.advocatemcp.com/synthetic/{host}{path}; the server
+    // looks up status='live' rows and renders the stored body. 24-hour
+    // edge cache (the plan's "host + path" key — no profile_version
+    // appended because synthetic pages regenerate on a quarterly cron,
+    // not on every profile PATCH).
+    {
+      const m = url.pathname.match(
+        /^\/(best-[a-z0-9-]+-in-[a-z0-9-]+|affordable-[a-z0-9-]+-in-[a-z0-9-]+|emergency-[a-z0-9-]+-near-[a-z0-9-]+)\/?$/,
+      );
+      if (m && request.method === "GET") {
+        const cacheKey = `https://cache.advocatemcp.com/v1/synthetic/${domain}${url.pathname}`;
+        let cacheStatus: "HIT" | "MISS" = "MISS";
+        try {
+          const cached = await caches.default.match(cacheKey);
+          if (cached) {
+            cacheStatus = "HIT";
+            const headers = new Headers(cached.headers);
+            headers.set("X-Synthetic-Host", domain);
+            headers.set("X-Cache-Status",   "HIT");
+            return new Response(cached.body, { status: cached.status, headers });
+          }
+        } catch (_) { /* cache infra blip — fall through to fresh fetch */ }
+
+        // Pass the request hostname as :host (URL-encoded). The server
+        // looks up the row by (host, path) where status='live'. Customer
+        // domains and advocatemcp.com both work because the server stores
+        // the host on every row at generation time.
+        const target = `${apiBase(env)}/synthetic/${encodeURIComponent(domain)}${url.pathname}`;
+        try {
+          const resp = await fetch(target, {
+            method:  "GET",
+            headers: env.API_KEY ? { "X-API-Key": env.API_KEY } : {},
+          });
+          // 404 from the server means no row matches this (host, path).
+          // Return the 404 directly without caching — generation may
+          // populate it before the next request, and we don't want to
+          // pin a "missing" verdict for 24 hours.
+          if (resp.status === 404) {
+            return new Response(await resp.text(), {
+              status: 404,
+              headers: {
+                "Content-Type": resp.headers.get("content-type") ?? "application/json",
+                "X-Cache-Status": cacheStatus,
+              },
+            });
+          }
+          const html = await resp.text();
+          const cacheableResp = new Response(html, {
+            status: resp.status,
+            headers: {
+              "Content-Type": resp.headers.get("content-type") ?? "text/html; charset=utf-8",
+              "Cache-Control": "public, max-age=86400, s-maxage=86400",
+            },
+          });
+          ctx.waitUntil(caches.default.put(cacheKey, cacheableResp.clone()));
+
+          return new Response(html, {
+            status: resp.status,
+            headers: {
+              "Content-Type":     resp.headers.get("content-type") ?? "text/html; charset=utf-8",
+              "X-Synthetic-Host": domain,
+              "X-Cache-Status":   cacheStatus,
+              // Public 24h cache — these change on quarterly regen so
+              // long TTLs at downstream caches are fine.
+              "Cache-Control":    "public, max-age=86400",
+            },
+          });
+        } catch (err) {
+          return jsonError(502, "Synthetic page unreachable.", { target, error: String(err) });
+        }
+      }
+    }
+
     // ── 1c. Referral-click redirect — GET /track ─────────────────────────
     // Dual-path: signed token (?t=) preferred, legacy cleartext (?to=) fallback.
     // Bot-filtered: click logging only fires for non-crawler User-Agents.
