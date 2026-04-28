@@ -10,7 +10,7 @@
     "db:seed": "tsx src/seed.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.36.0",
+    "@anthropic-ai/sdk": "^0.91.1",
     "@modelcontextprotocol/sdk": "^1.10.0",
     "@sentry/node": "^10.50.0",
     "better-sqlite3": "^12.8.0",
