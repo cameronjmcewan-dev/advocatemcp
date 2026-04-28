@@ -778,15 +778,35 @@ export default Sentry.withSentry(
     // wrapping — bots get raw HTML, which is the whole point.
     const upstreamContentType = agentResponse.headers.get("content-type") ?? "";
     if (htmlRenderingEnabled && upstreamContentType.includes("text/html")) {
-      const html = await agentResponse.text();
+      let html = await agentResponse.text();
       const attributionTokenHdr = agentResponse.headers.get("x-attribution-token") ?? null;
       const rendererVariant = agentResponse.headers.get("x-renderer-variant") ?? "default";
+      const referralUrlHdr = agentResponse.headers.get("x-referral-url") ?? null;
       // Build the tracking URL in case downstream wants it as a header
       // (no longer surfaces in the response body since there's no body
       // shape to inject it into for HTML).
       const trackingHeader = attributionTokenHdr
         ? `${url.origin}/track?t=${encodeURIComponent(attributionTokenHdr)}`
         : null;
+
+      // Rewrite the body's bare-href anchors to point at the tracking
+      // redirect endpoint. Without this rewrite AI bots cite the bare
+      // referral URL and clicks bypass attribution entirely — the
+      // citation→click loop is the whole product moat. We rewrite ONLY
+      // anchor href values matching the canonical referral URL; JSON-LD
+      // @id / url fields stay canonical so schema.org consumers see the
+      // un-redirected URL (which is correct for entity identity).
+      // (Apr 28 2026.)
+      if (trackingHeader && referralUrlHdr) {
+        // Escape regex specials in the URL before building the matcher.
+        const escapedUrl = referralUrlHdr.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        // Match: <a ... href="<url>"...> or <a ... href='<url>'...>
+        const anchorPattern = new RegExp(
+          `(<a\\s[^>]*?href=)(?:"${escapedUrl}"|'${escapedUrl}')`,
+          "g",
+        );
+        html = html.replace(anchorPattern, `$1"${trackingHeader}"`);
+      }
 
       ctx.waitUntil(
         Promise.resolve(

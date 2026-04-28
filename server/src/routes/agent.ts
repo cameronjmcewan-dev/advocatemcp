@@ -677,6 +677,11 @@ agentRouter.post("/agents/:slug/query", requireApiKey, async (req: Request, res:
         res.setHeader("Content-Type", "text/html; charset=utf-8");
         res.setHeader("X-Renderer-Variant", renderer_id);
         if (attributionToken) res.setHeader("X-Attribution-Token", attributionToken);
+        // Surface the referral URL so the worker can rewrite the
+        // body's bare href links to the tracking redirect endpoint.
+        // Without this, AI bots cite the bare URL and clicks bypass
+        // the attribution loop entirely. (Apr 28 2026.)
+        if (result.referral_url) res.setHeader("X-Referral-Url", result.referral_url);
         res.send(html);
         return;
       } catch (renderErr) {
