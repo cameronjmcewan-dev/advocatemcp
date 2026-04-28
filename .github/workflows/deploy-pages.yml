@@ -1,0 +1,75 @@
+name: Deploy site to Cloudflare Pages
+
+# Why this workflow exists:
+#
+# The Cloudflare Pages project `advocatemcp-site` is configured with
+# Git Provider: No — meaning Pages does NOT auto-deploy when commits
+# land on `main`. Without this workflow, every site/* change has to be
+# pushed via `npx wrangler pages deploy site` from a developer's
+# machine, which is fragile (we already shipped 5 PRs that never went
+# live because everyone assumed Pages was auto-deploying).
+#
+# This workflow re-creates the missing auto-deploy behavior in CI.
+# Every push to `main` that touches `site/**` triggers a fresh Pages
+# deploy. Branch deploys also build, posting a preview URL to the PR
+# so reviewers can click and verify before merge.
+#
+# Required repo secrets (set under Settings → Secrets → Actions):
+#   CLOUDFLARE_API_TOKEN  — token with Pages: Edit + Account Read
+#   CLOUDFLARE_ACCOUNT_ID — 7d93ac7288642081ef8f0e8e406c34a2
+#
+# Both secrets are scoped to this repo only. Rotating either secret
+# is a UI-only Cloudflare dashboard change followed by `gh secret set`.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/deploy-pages.yml"
+  pull_request:
+    paths:
+      - "site/**"
+  workflow_dispatch:  # manual trigger for emergency deploys
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Cloudflare Pages
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # Pushing main → production deploy. Branch/PR builds get
+          # their own preview URL on a per-commit basis.
+          command: pages deploy site --project-name=advocatemcp-site --branch=${{ github.ref_name }} --commit-message="${{ github.event.head_commit.message || github.event.pull_request.title }}"
+
+      - name: Comment preview URL on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = '${{ steps.deploy.outputs.deployment-url }}';
+            if (!url) return;
+            const body = `🚀 Preview deployed: ${url}`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            // Reuse a previous comment from this bot if one exists so
+            // the PR doesn't accumulate one comment per build.
+            const comments = await github.rest.issues.listComments({ owner, repo, issue_number });
+            const existing = comments.data.find(c =>
+              c.user.type === 'Bot' && c.body && c.body.startsWith('🚀 Preview deployed:')
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
