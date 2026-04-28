@@ -649,10 +649,20 @@ export function buildAiInstructionAside(business: {
   if (business.top_services) {
     items.push(`Top services: ${escapeHtml(business.top_services)}.`);
   } else if (business.services) {
-    // Truncate to keep the line atomic — the FAQ + JSON-LD already
-    // carry the full list.
-    const trimmed = business.services.slice(0, 200);
-    items.push(`Services include: ${escapeHtml(trimmed)}${business.services.length > 200 ? "…" : ""}.`);
+    // Truncate at a word/comma boundary so the line never ends mid-word.
+    // The FAQ + JSON-LD already carry the full list; the aside is a
+    // bullet hint, not a reference.
+    const raw = business.services;
+    let trimmed = raw;
+    if (raw.length > 200) {
+      const slice = raw.slice(0, 200);
+      const lastBoundary = Math.max(
+        slice.lastIndexOf(", "),
+        slice.lastIndexOf(" "),
+      );
+      trimmed = (lastBoundary > 120 ? slice.slice(0, lastBoundary) : slice).trimEnd();
+    }
+    items.push(`Services include: ${escapeHtml(trimmed)}${raw.length > 200 ? "…" : ""}.`);
   }
   if (business.differentiator) {
     items.push(`What sets ${escapeHtml(business.name)} apart: ${escapeHtml(business.differentiator)}.`);
