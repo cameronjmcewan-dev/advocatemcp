@@ -45,6 +45,24 @@ adminFaqsRouter.post("/businesses/:slug/regenerate-faqs", async (req: Request, r
     return;
   }
 
+  // Slug-ownership gate. The router-level requireApiKey middleware
+  // accepts EITHER the SERVER_API_KEY (admin / CI / worker) OR any
+  // business's own api_key. Without this gate, customer A could
+  // regenerate customer B's FAQs with their own key. Compare the
+  // provided key against:
+  //   - process.env.API_KEY (admin override)
+  //   - business.api_key (slug-bound caller)
+  // Either passes.
+  const providedKey =
+    (req.headers["x-api-key"] as string | undefined) ??
+    req.headers.authorization?.replace(/^Bearer\s+/i, "") ?? "";
+  const isAdmin = !!process.env.API_KEY && providedKey === process.env.API_KEY;
+  const isOwner = providedKey === business.api_key;
+  if (!isAdmin && !isOwner) {
+    res.status(403).json({ error: "key_mismatch", slug });
+    return;
+  }
+
   // Refuse to run when the feature flag is off — keeps an operator from
   // accidentally generating FAQs against a tenant whose plan doesn't
   // expect them, and matches the cron's gate.
