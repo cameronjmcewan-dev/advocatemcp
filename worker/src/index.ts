@@ -219,12 +219,14 @@ export default Sentry.withSentry(
     dsn:               env.SENTRY_DSN,
     environment:       env.SENTRY_ENVIRONMENT ?? "production",
     release:           "advocatemcp-worker",
-    // Apr 28 2026: bumped from 0.1 → 1.0 during initial verification
-    // so every request produces a trace. Drop back to 0.1 once Sentry
-    // dashboards confirm wiring + you want to conserve free-tier
-    // transaction quota.
     tracesSampleRate:  1.0,
     sendDefaultPii:    false,
+    // Apr 28 2026 debug mode — logs every Sentry operation + the
+    // exact DSN host being used to `wrangler tail`. Lets us see
+    // whether the event is being POSTed, the response code, and
+    // whether the inbound filter dropped it. Drop back to false
+    // once events are confirmed visible.
+    debug:             true,
   }),
   {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -250,20 +252,31 @@ export default Sentry.withSentry(
     // We expose the flushed status in the response so we can tell
     // 'event accepted by SDK' apart from 'event delivered to Sentry'.
     if (url.pathname === "/__sentry-test" && request.method === "GET") {
-      // captureException always creates an Issue; captureMessage at
-      // 'info' level often gets deprioritized and doesn't surface in
-      // the default Issues view. Synthesizing a real Error object
-      // gives us a deterministic, easy-to-find Issue every time.
       const id = Sentry.captureException(
         new Error(`worker test event ${new Date().toISOString()}`),
       );
       const flushed = await Sentry.flush(5000);
+      // Echo back the DSN host (NOT the full DSN with key) so we can
+      // confirm the worker is sending to the project we expect. The
+      // host contains the org-id slug and the project-id is the last
+      // path segment. If host is wrong, events go to the wrong org.
+      let dsn_host = "unknown";
+      let project_id = "unknown";
+      try {
+        if (env.SENTRY_DSN) {
+          const u = new URL(env.SENTRY_DSN);
+          dsn_host = u.host;                                    // o<orgId>.ingest.us.sentry.io
+          project_id = u.pathname.replace(/^\//, "");           // 4511295...
+        }
+      } catch (_) { /* malformed DSN */ }
       return new Response(
         JSON.stringify({
           ok:               true,
           sentry_event_id:  id,
           flushed,
           dsn_configured:   !!env.SENTRY_DSN,
+          dsn_host,
+          project_id,
         }),
         { headers: { "Content-Type": "application/json" } },
       );
