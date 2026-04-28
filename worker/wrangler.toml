@@ -2,6 +2,12 @@ name               = "advocatemcp-worker"
 main               = "src/index.ts"
 compatibility_date = "2026-04-07"
 
+# Required by @sentry/cloudflare for AsyncLocalStorage support. Sentry
+# uses async-context to propagate request-scoped state (trace IDs,
+# breadcrumbs) without threading it through every function call.
+# Apr 28 2026.
+compatibility_flags = ["nodejs_compat"]
+
 # ── Observability ───────────────────────────────────────────────────────────
 [observability]
 enabled = true

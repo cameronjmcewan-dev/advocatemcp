@@ -1,4 +1,9 @@
 import "dotenv/config";
+// Sentry MUST come before any other imports so it can auto-instrument
+// http, express, fs, etc. on the way in. The instrument module is a
+// sideeffect-only import — it calls Sentry.init() at module-eval time.
+import "./instrument.js";
+import * as Sentry from "@sentry/node";
 import cron from "node-cron";
 import { createTestApp } from "./testApp.js";
 import { getDb } from "./db.js";
@@ -50,6 +55,13 @@ app.get("/", (_req, res) => {
 app.use((_req, res) => {
   res.status(404).json({ error: "Not found" });
 });
+
+// Sentry's express error handler. Captures any unhandled error from
+// route handlers + the cron jobs above. Must come AFTER all the
+// `app.use(...)` and route definitions but BEFORE any user-defined
+// error handler. (We don't have one today, but this position is the
+// canonical Sentry placement.)
+Sentry.setupExpressErrorHandler(app);
 
 // Session 11: kick off the 15-minute agent_reputation rollup so /admin/agents
 // has fresh data without depending on an external cron. Idempotent + unref'd.

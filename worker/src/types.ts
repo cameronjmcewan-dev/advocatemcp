@@ -148,4 +148,19 @@ export interface Env {
    * that don't define the binding; callers must fail-open in that case.
    */
   MCP_RATE_LIMITER?: DurableObjectNamespace;
+
+  // ── Error tracking (Apr 28 2026) ─────────────────────────────────────
+  /**
+   * Sentry DSN for the worker. When unset, the Sentry wrapper short-
+   * circuits to a no-op so dev/test deploys don't ship errors anywhere.
+   * Set via: `cd worker && npx wrangler secret put SENTRY_DSN`
+   */
+  SENTRY_DSN?: string;
+
+  /**
+   * Optional environment label (production, staging, etc.) attached to
+   * every Sentry event so the dashboard can filter. Defaults to
+   * "production" when unset since the worker only deploys to one env.
+   */
+  SENTRY_ENVIRONMENT?: string;
 }
