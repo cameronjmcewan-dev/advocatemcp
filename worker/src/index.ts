@@ -699,8 +699,46 @@ export default Sentry.withSentry(
     const htmlRenderingEnabled =
       String(env.BOT_HTML_RENDERING_ENABLED ?? "false").toLowerCase() === "true";
 
-    let agentResponse: Response;
-    try {
+    // Edge-cache the per-bot HTML response so the cold-generate latency
+    // (~5-8s for the Claude API roundtrip) is paid once per (slug × bot
+    // family × path) per cache TTL, and every other bot in the same
+    // window gets a sub-100ms response.
+    //
+    // Cache key — includes slug + botType + pathname so different
+    // surfaces and different bot tunings each get their own cache.
+    // We do NOT include the User-Agent string verbatim because every
+    // crawler version-bumps frequently; the canonical botType is
+    // stable across versions.
+    //
+    // TTL — 600s (10 min). Bots crawl in bursts; 10 min covers a typical
+    // crawl pass without holding stale data long enough for a profile
+    // edit to take effect. Short enough that a tenant can edit their
+    // profile and see the change reflected in the next crawl.
+    //
+    // Trade-off — the response body includes a signed attribution token.
+    // When we serve from cache the same token is reused for every
+    // request in the cache window. That means click attribution gets
+    // concentrated on the query_id captured at cache-fill time. We
+    // accept that for the latency win; tenants get aggregate click
+    // counts either way.
+    const cacheKey = htmlRenderingEnabled
+      ? `https://cache.advocatemcp.com/v1/${slug}/${botType ?? "default"}${url.pathname}`
+      : null;
+    let agentResponse: Response | null = null;
+    let cacheStatus: "HIT" | "MISS" | "BYPASS" = "BYPASS";
+    if (cacheKey) {
+      try {
+        const cached = await caches.default.match(cacheKey);
+        if (cached) {
+          agentResponse = cached;
+          cacheStatus = "HIT";
+        } else {
+          cacheStatus = "MISS";
+        }
+      } catch (_) { /* ignore — fall through to fetch */ }
+    }
+
+    if (!agentResponse) try {
       agentResponse = await fetch(agentUrl, {
         method: "POST",
         headers: {
@@ -756,6 +794,27 @@ export default Sentry.withSentry(
         )
       );
 
+      // Persist fresh response into the edge cache for the next bot in
+      // the same TTL window. Cache.put requires a request-scoped store,
+      // and the response object must be cloneable (we use the html
+      // string, which is). max-age is in the persisted Response's
+      // Cache-Control — the actual public-facing response below stays
+      // no-store so downstream bots don't double-cache through their
+      // own infra.
+      if (cacheKey && cacheStatus === "MISS") {
+        const cacheResp = new Response(html, {
+          status: 200,
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+            ...(attributionTokenHdr ? { "X-Attribution-Token": attributionTokenHdr } : {}),
+            "X-Renderer-Variant": rendererVariant,
+            // 600s = 10 min cache window per (slug × bot × path).
+            "Cache-Control": "public, max-age=600, s-maxage=600",
+          },
+        });
+        ctx.waitUntil(caches.default.put(cacheKey, cacheResp));
+      }
+
       return new Response(html, {
         status: 200,
         headers: {
@@ -763,7 +822,11 @@ export default Sentry.withSentry(
           "X-Powered-By":      "AdvocateMCP",
           "X-Agent-Slug":      slug,
           "X-Renderer-Variant": rendererVariant,
+          "X-Cache-Status":    cacheStatus,  // HIT/MISS/BYPASS — observability
           ...(trackingHeader ? { "X-Tracking-Url": trackingHeader } : {}),
+          // no-store on the public response so downstream caches (CDNs,
+          // bots, etc.) don't double-cache. Our cache is the source of
+          // truth and lives in-Worker.
           "Cache-Control":     "no-store",
           "Access-Control-Allow-Origin": "*",
         },
