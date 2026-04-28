@@ -305,6 +305,50 @@ export default Sentry.withSentry(
     const demoResponse = await handleDemo(request, env);
     if (demoResponse) return demoResponse;
 
+    // ── 1b'. Per-platform context URLs (Phase 2 grey-hat, Apr 28 2026) ────
+    // /(claude|perplexity|openai|google)-context on every customer host
+    // (and advocatemcp.com) maps to the platform-context server route,
+    // which forces the matching renderer regardless of the request UA.
+    // The slug is the BUSINESS_MAP value for the request hostname.
+    {
+      const m = url.pathname.match(/^\/(claude|perplexity|openai|google)-context\/?$/);
+      if (m && request.method === "GET") {
+        const platform = m[1]!;
+        const slug = await env.BUSINESS_MAP.get(domain);
+        if (!slug) {
+          return new Response(
+            JSON.stringify({
+              error: "no_slug_for_host",
+              hint:  "This host has no AdvocateMCP business mapping in KV.",
+              host:  domain,
+            }),
+            { status: 404, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        const target = `${apiBase(env)}/agents/${slug}/context/${platform}`;
+        try {
+          const resp = await fetch(target, {
+            method:  "GET",
+            headers: env.API_KEY ? { "X-API-Key": env.API_KEY } : {},
+          });
+          // Stream Railway's HTML through unchanged. Worker observability
+          // headers added; do NOT layer worker cache on top of this since
+          // the platform-context route is itself rendered fresh per call
+          // (Railway internals will own caching when warranted).
+          return new Response(resp.body, {
+            status: resp.status,
+            headers: {
+              ...Object.fromEntries(resp.headers),
+              "X-Platform-Context": platform,
+              "X-Agent-Slug":       slug,
+            },
+          });
+        } catch (err) {
+          return jsonError(502, "Platform context unreachable.", { target, error: String(err) });
+        }
+      }
+    }
+
     // ── 1c. Referral-click redirect — GET /track ─────────────────────────
     // Dual-path: signed token (?t=) preferred, legacy cleartext (?to=) fallback.
     // Bot-filtered: click logging only fires for non-crawler User-Agents.

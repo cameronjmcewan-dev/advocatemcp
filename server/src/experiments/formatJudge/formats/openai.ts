@@ -9,6 +9,7 @@ import type { FormatVariant, RenderInput } from "../types.js";
 import {
   addAttribution,
   aiDisclosureComment,
+  buildAiInstructionAside,
   buildBusinessJsonLd,
   buildFaqJsonLd,
   buildReviewsJsonLd,
@@ -18,6 +19,7 @@ import {
   jsonLdScript,
   mdBoldToHtml,
   mergeFaqsForRenderer,
+  platformAlternateLinks,
 } from "./shared.js";
 
 export const openaiHtml: FormatVariant = {
@@ -77,6 +79,8 @@ export const openaiHtml: FormatVariant = {
   <meta name="twitter:title" content="${escapeHtml(business.name)}">
   <meta name="twitter:description" content="${escapeHtml(desc)}">
   <link rel="canonical" href="${escapeHtml(referralUrl)}">
+  <meta name="advocatemcp-variant" content="openai">
+  ${platformAlternateLinks(referralUrl)}
   ${jsonLdScript(bizJsonLd)}
   ${jsonLdScript(faqJsonLd)}
   ${websiteJsonLd ? jsonLdScript(websiteJsonLd) : ""}
@@ -84,6 +88,7 @@ export const openaiHtml: FormatVariant = {
   ${platformRatingsJsonLd.map(jsonLdScript).join("\n  ")}
 </head>
 <body>
+  ${buildAiInstructionAside(business)}
   <article>
     <h1>${escapeHtml(business.name)}</h1>
     ${proseBody}

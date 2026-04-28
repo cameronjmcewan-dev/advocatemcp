@@ -16,6 +16,7 @@ import { demoRouter } from "./routes/demo.js";
 import { decodeRouter } from "./routes/decode.js";
 import { auditRouter } from "./routes/audit.js";
 import { jsonLdRouter } from "./routes/jsonLd.js";
+import { platformContextRouter } from "./routes/platformContext.js";
 import { rateLimitMiddleware } from "./middleware/rateLimit.js";
 import { requestIdMiddleware } from "./lib/requestId.js";
 
@@ -90,6 +91,11 @@ export function createTestApp(): express.Express {
   app.use(wellknownRouter);
   app.use(wellknownMcpRouter);
   app.use(registerRouter);
+  // Platform-context (Phase 2 grey-hat). Mount BEFORE agentRouter so its
+  // GET /agents/:slug/context/:platform pattern matches first; agentRouter
+  // has a more permissive GET /agents/:slug/* set that would otherwise
+  // claim it. Public, no auth — same posture as /agents/:slug/profile.
+  app.use(platformContextRouter);
   app.use(agentRouter);
   app.use(analyticsRouter);
   app.use(mcpRouter);
