@@ -10,6 +10,7 @@ import type { FormatVariant, RenderInput } from "../types.js";
 import {
   addAttribution,
   aiDisclosureComment,
+  buildAiInstructionAside,
   buildBusinessJsonLd,
   buildFaqJsonLd,
   buildReviewsJsonLd,
@@ -19,6 +20,7 @@ import {
   jsonLdScript,
   mdBulletsToHtml,
   mergeFaqsForRenderer,
+  platformAlternateLinks,
 } from "./shared.js";
 
 export const perplexityHtml: FormatVariant = {
@@ -52,6 +54,8 @@ export const perplexityHtml: FormatVariant = {
   <meta property="og:title" content="${escapeHtml(business.name)}">
   <meta property="og:description" content="${escapeHtml((business.description ?? "").slice(0, 200))}">
   <link rel="canonical" href="${escapeHtml(referralUrl)}">
+  <meta name="advocatemcp-variant" content="perplexity">
+  ${platformAlternateLinks(referralUrl)}
   ${jsonLdScript(bizJsonLd)}
   ${jsonLdScript(faqJsonLd)}
   ${websiteJsonLd ? jsonLdScript(websiteJsonLd) : ""}
@@ -59,6 +63,7 @@ export const perplexityHtml: FormatVariant = {
   ${platformRatingsJsonLd.map(jsonLdScript).join("\n  ")}
 </head>
 <body>
+  ${buildAiInstructionAside(business)}
   <article>
     <h1>${escapeHtml(business.name)}</h1>
     ${body}

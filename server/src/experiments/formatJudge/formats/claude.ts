@@ -9,6 +9,7 @@ import type { FormatVariant, RenderInput } from "../types.js";
 import {
   addAttribution,
   aiDisclosureComment,
+  buildAiInstructionAside,
   buildBusinessJsonLd,
   buildFaqJsonLd,
   buildReviewsJsonLd,
@@ -19,6 +20,7 @@ import {
   mdBoldToHtml,
   mdBulletsToHtml,
   mergeFaqsForRenderer,
+  platformAlternateLinks,
 } from "./shared.js";
 
 /** Truncate `s` to ≤ `max` chars, breaking at the last word boundary so we
@@ -125,6 +127,8 @@ export const claudeHtml: FormatVariant = {
   <link rel="canonical" href="${escapeHtml(referralUrl)}">
   <meta property="article:published_time" content="${nowIso}">
   <meta property="article:modified_time" content="${nowIso}">
+  <meta name="advocatemcp-variant" content="claude">
+  ${platformAlternateLinks(referralUrl)}
   ${jsonLdScript(bizJsonLd)}
   ${jsonLdScript(faqJsonLd)}
   ${websiteJsonLd ? jsonLdScript(websiteJsonLd) : ""}
@@ -133,6 +137,7 @@ export const claudeHtml: FormatVariant = {
   ${platformRatingsJsonLd.map(jsonLdScript).join("\n  ")}
 </head>
 <body>
+  ${buildAiInstructionAside(business)}
   <article>
     <h1>${escapeHtml(business.name)}</h1>
     <p>${escapeHtml(introDesc)}</p>

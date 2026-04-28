@@ -10,6 +10,7 @@ import type { FormatVariant, RenderInput } from "../types.js";
 import {
   addAttribution,
   aiDisclosureComment,
+  buildAiInstructionAside,
   buildBusinessJsonLd,
   buildFaqJsonLd,
   buildReviewsJsonLd,
@@ -19,6 +20,7 @@ import {
   jsonLdScript,
   mdBulletsToHtml,
   mergeFaqsForRenderer,
+  platformAlternateLinks,
 } from "./shared.js";
 
 export const googleHtml: FormatVariant = {
@@ -107,6 +109,8 @@ export const googleHtml: FormatVariant = {
   <link rel="canonical" href="${escapeHtml(referralUrl)}">
   <meta property="og:title" content="${escapeHtml(business.name)}">
   <meta property="og:description" content="${escapeHtml(firstSentence)}">
+  <meta name="advocatemcp-variant" content="google">
+  ${platformAlternateLinks(referralUrl)}
   ${jsonLdScript(bizJsonLd)}
   ${jsonLdScript(faqJsonLd)}
   ${jsonLdScript(speakable)}
@@ -117,6 +121,7 @@ export const googleHtml: FormatVariant = {
   ${platformRatingsJsonLd.map(jsonLdScript).join("\n  ")}
 </head>
 <body>
+  ${buildAiInstructionAside(business)}
   <article>
     <h1>${escapeHtml(business.name)}</h1>
     <p class="lead speakable">${escapeHtml(firstSentence)}</p>

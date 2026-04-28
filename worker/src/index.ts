@@ -305,6 +305,100 @@ export default Sentry.withSentry(
     const demoResponse = await handleDemo(request, env);
     if (demoResponse) return demoResponse;
 
+    // ── 1b'. Per-platform context URLs (Phase 2 grey-hat, Apr 28 2026) ────
+    // /(claude|perplexity|openai|google)-context on every customer host
+    // (and advocatemcp.com) maps to the platform-context server route,
+    // which forces the matching renderer regardless of the request UA.
+    // The slug is the BUSINESS_MAP value for the request hostname.
+    //
+    // Edge-cached (TTL 600s) per the plan's "(host × path)" key. Each
+    // call to the server fires a fresh Anthropic call (~3-7s) so without
+    // the worker cache, every bot crawl pays full latency. Cache key
+    // includes domain + pathname; invalidation is implicit on TTL
+    // expiry. Profile edits land in the next 10-min window.
+    {
+      const m = url.pathname.match(/^\/(claude|perplexity|openai|google)-context\/?$/);
+      if (m && request.method === "GET") {
+        const platform = m[1]!;
+        const slug = await env.BUSINESS_MAP.get(domain);
+        if (!slug) {
+          return new Response(
+            JSON.stringify({
+              error: "no_slug_for_host",
+              hint:  "This host has no AdvocateMCP business mapping in KV.",
+              host:  domain,
+            }),
+            { status: 404, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        // Edge-cache key. Same shape as the existing per-bot HTML cache
+        // at line ~724 — slug × platform × pathname. Use a synthetic
+        // host so the key is independent of incoming protocol/zone
+        // quirks (the cache.match() / put() on Cloudflare requires a
+        // valid Request to use as key).
+        const cacheKey = `https://cache.advocatemcp.com/v1/platform-context/${slug}/${platform}${url.pathname}`;
+        let cacheStatus: "HIT" | "MISS" = "MISS";
+        try {
+          const cached = await caches.default.match(cacheKey);
+          if (cached) {
+            cacheStatus = "HIT";
+            // Add observability header on cache hit; otherwise stream
+            // the cached response through unchanged.
+            const headers = new Headers(cached.headers);
+            headers.set("X-Platform-Context", platform);
+            headers.set("X-Agent-Slug",       slug);
+            headers.set("X-Cache-Status",     "HIT");
+            return new Response(cached.body, { status: cached.status, headers });
+          }
+        } catch (_) { /* cache infra blip — fall through to fresh fetch */ }
+
+        const target = `${apiBase(env)}/agents/${slug}/context/${platform}`;
+        try {
+          const resp = await fetch(target, {
+            method:  "GET",
+            headers: env.API_KEY ? { "X-API-Key": env.API_KEY } : {},
+          });
+          // Buffer the body once so we can both put it in cache AND
+          // return it. Streaming response bodies are single-use.
+          const html = await resp.text();
+          // Persist to edge cache with 600s TTL — matches plan's
+          // "host + path + ?v={profile_version}" intent. Bumping
+          // profile_version on PATCH is a future refinement; current
+          // 10-min TTL is short enough that profile edits propagate
+          // within the same cron tick window.
+          const cacheableResp = new Response(html, {
+            status: resp.status,
+            headers: {
+              "Content-Type": resp.headers.get("content-type") ?? "text/html; charset=utf-8",
+              "Cache-Control": "public, max-age=600, s-maxage=600",
+              ...(resp.headers.get("x-renderer-variant")
+                ? { "X-Renderer-Variant": resp.headers.get("x-renderer-variant")! }
+                : {}),
+            },
+          });
+          ctx.waitUntil(caches.default.put(cacheKey, cacheableResp.clone()));
+
+          return new Response(html, {
+            status: resp.status,
+            headers: {
+              "Content-Type":       resp.headers.get("content-type") ?? "text/html; charset=utf-8",
+              "X-Platform-Context": platform,
+              "X-Agent-Slug":       slug,
+              "X-Cache-Status":     cacheStatus,
+              // no-store on the public response so downstream CDNs
+              // don't double-cache. Our edge is the source of truth.
+              "Cache-Control":      "no-store",
+              ...(resp.headers.get("x-renderer-variant")
+                ? { "X-Renderer-Variant": resp.headers.get("x-renderer-variant")! }
+                : {}),
+            },
+          });
+        } catch (err) {
+          return jsonError(502, "Platform context unreachable.", { target, error: String(err) });
+        }
+      }
+    }
+
     // ── 1c. Referral-click redirect — GET /track ─────────────────────────
     // Dual-path: signed token (?t=) preferred, legacy cleartext (?to=) fallback.
     // Bot-filtered: click logging only fires for non-crawler User-Agents.
