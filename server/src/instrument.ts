@@ -19,6 +19,20 @@
  */
 import * as Sentry from "@sentry/node";
 
+// Log the DSN's project ID at boot so Railway logs show definitively
+// which Sentry project this server is reporting to. Strips the public
+// key so the secret never lands in logs. (Apr 28 2026 diagnostic.)
+{
+  const dsn = process.env.SENTRY_DSN ?? "";
+  let projectId = "unknown";
+  try {
+    if (dsn) {
+      projectId = new URL(dsn).pathname.replace(/^\//, "");
+    }
+  } catch (_) { /* malformed */ }
+  console.log(`[sentry] init starting. project_id=${projectId} dsn_set=${!!dsn}`);
+}
+
 Sentry.init({
   dsn:               process.env.SENTRY_DSN,
   environment:       process.env.SENTRY_ENVIRONMENT ?? "production",
