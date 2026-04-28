@@ -312,7 +312,7 @@
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button type="button" class="btn btn-ghost btn-sm" id="btn-replay-welcome">Replay welcome</button>
             <button type="button" class="btn btn-ghost btn-sm" id="btn-restart-tour">Restart tour</button>
-            <a class="btn btn-ghost btn-sm" href="/app.html#get-started">Open Get Started</a>
+            <a class="btn btn-ghost btn-sm" href="/app.html">Open Get Started</a>
           </div>
         </div>
 
