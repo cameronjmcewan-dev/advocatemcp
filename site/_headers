@@ -1,27 +1,26 @@
 # Cloudflare Pages cache headers.
 #
 # Default Pages serves with `max-age=14400` (4 hours), which means a
-# JS/CSS bug ships and customers don't see the fix for up to 4 hours
-# unless they hard-refresh. We hit this on Apr 27 with the dashboard
-# logo bug — fix was in main, deployed, but cached browsers held the
-# broken version.
+# JS/CSS bug ships and customers don't see the fix for up to 4 hours.
+# We hit this on Apr 27 with the dashboard logo bug.
 #
-# Strategy:
-#  - JS / CSS / fonts → 5 min cache + must-revalidate (etag still
-#    serves 304 most of the time, so bandwidth is unchanged but a
-#    real change propagates fast)
-#  - HTML pages → no cache (always revalidate, cheap CDN hit anyway)
-#  - Hashed/static assets that don't change (icons, OG images) →
-#    long cache (the URL changes if the content changes)
+# IMPORTANT: this file works on the Pages-managed domains
+# (*.pages.dev) but Cloudflare's ZONE-LEVEL Page Rules and Cache
+# Rules can override it for the custom domain (advocatemcp.com).
+# If you change a value here and don't see it on advocatemcp.com:
+#   1. Check the live header via `curl -I https://advocatemcp-site.pages.dev/<path>`
+#      (Pages domain — _headers always wins here)
+#   2. Compare with `curl -I https://advocatemcp.com/<path>`
+#   3. If they differ, the zone has a Page Rule. Open Cloudflare
+#      dashboard → advocatemcp.com → Rules → Page Rules / Cache Rules
+#      and remove or relax the override.
 #
-# Format docs: https://developers.cloudflare.com/pages/configuration/headers/
+# Patterns are most-specific first. Cloudflare Pages stops at the
+# first match, so /assets/*.js doesn't fire if /assets/* fires above
+# it. Avoid duplicate cache-control by using non-overlapping globs.
 
-/*.js
-  Cache-Control: public, max-age=300, must-revalidate
-
-/*.css
-  Cache-Control: public, max-age=300, must-revalidate
-
+# JS / CSS / fonts under /assets, /js, /css → 5 min cache, must-revalidate.
+# etag still serves 304 most of the time — bandwidth same, propagation fast.
 /assets/*
   Cache-Control: public, max-age=300, must-revalidate
 
@@ -31,14 +30,11 @@
 /css/*
   Cache-Control: public, max-age=300, must-revalidate
 
-# HTML pages — always revalidate. The 308 clean-URL redirects mean
-# /Pricing.html → /Pricing on first hit, but the redirect itself
-# is cached short. Browsers will check freshness on every load.
+# HTML pages — always revalidate. Cheap CDN hit on every load.
 /*.html
   Cache-Control: public, max-age=0, must-revalidate
 
-# Long-cache the truly immutable: icons, OG image, favicons. URL
-# changes if you ship a new variant; otherwise these never change.
+# Long-cache the truly immutable: icons, OG image, favicons.
 /icon-192.png
   Cache-Control: public, max-age=86400, immutable
 /og-image.png
