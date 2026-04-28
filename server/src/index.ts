@@ -45,20 +45,29 @@ app.get("/__sentry-test", async (_req, res) => {
   // server is sending events to the project we expect.
   let dsn_host = "unknown";
   let project_id = "unknown";
+  let parse_err = "none";
+  const dsn = process.env.SENTRY_DSN ?? "";
   try {
-    if (process.env.SENTRY_DSN) {
-      const u = new URL(process.env.SENTRY_DSN);
+    if (dsn) {
+      const u = new URL(dsn);
       dsn_host = u.host;
       project_id = u.pathname.replace(/^\//, "");
     }
-  } catch (_) { /* malformed DSN */ }
+  } catch (e: any) { parse_err = String(e?.message ?? e); }
+  const dsn_redacted = dsn
+    .replace(/(\/\/)[^@]+@/, "$1<KEY>@")
+    .slice(0, 200);
   res.json({
     ok:               true,
     sentry_event_id:  id,
     flushed,
     dsn_configured:   !!process.env.SENTRY_DSN,
+    dsn_length:       dsn.length,
+    dsn_starts_with:  dsn.slice(0, 8),
+    dsn_redacted,
     dsn_host,
     project_id,
+    parse_err,
   });
 });
 

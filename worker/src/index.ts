@@ -262,21 +262,32 @@ export default Sentry.withSentry(
       // path segment. If host is wrong, events go to the wrong org.
       let dsn_host = "unknown";
       let project_id = "unknown";
+      let parse_err = "none";
+      const dsn = env.SENTRY_DSN ?? "";
       try {
-        if (env.SENTRY_DSN) {
-          const u = new URL(env.SENTRY_DSN);
-          dsn_host = u.host;                                    // o<orgId>.ingest.us.sentry.io
-          project_id = u.pathname.replace(/^\//, "");           // 4511295...
+        if (dsn) {
+          const u = new URL(dsn);
+          dsn_host = u.host;
+          project_id = u.pathname.replace(/^\//, "");
         }
-      } catch (_) { /* malformed DSN */ }
+      } catch (e: any) { parse_err = String(e?.message ?? e); }
+      // Reveal the structure without leaking the public key. The
+      // public key is the part between `://` and `@` — masked.
+      const dsn_redacted = dsn
+        .replace(/(\/\/)[^@]+@/, "$1<KEY>@")
+        .slice(0, 200);
       return new Response(
         JSON.stringify({
           ok:               true,
           sentry_event_id:  id,
           flushed,
           dsn_configured:   !!env.SENTRY_DSN,
+          dsn_length:       dsn.length,
+          dsn_starts_with:  dsn.slice(0, 8),
+          dsn_redacted,
           dsn_host,
           project_id,
+          parse_err,
         }),
         { headers: { "Content-Type": "application/json" } },
       );
