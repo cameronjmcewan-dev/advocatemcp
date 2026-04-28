@@ -219,14 +219,11 @@ export default Sentry.withSentry(
     dsn:               env.SENTRY_DSN,
     environment:       env.SENTRY_ENVIRONMENT ?? "production",
     release:           "advocatemcp-worker",
-    tracesSampleRate:  1.0,
+    // 10% sample rate keeps perf tracing on for hot paths while
+    // staying well under the free-tier 10k transactions/month quota.
+    // Errors are always captured at 100%.
+    tracesSampleRate:  0.1,
     sendDefaultPii:    false,
-    // Apr 28 2026 debug mode — logs every Sentry operation + the
-    // exact DSN host being used to `wrangler tail`. Lets us see
-    // whether the event is being POSTed, the response code, and
-    // whether the inbound filter dropped it. Drop back to false
-    // once events are confirmed visible.
-    debug:             true,
   }),
   {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
