@@ -250,9 +250,12 @@ export default Sentry.withSentry(
     // We expose the flushed status in the response so we can tell
     // 'event accepted by SDK' apart from 'event delivered to Sentry'.
     if (url.pathname === "/__sentry-test" && request.method === "GET") {
-      const id = Sentry.captureMessage(
-        `worker test event ${new Date().toISOString()}`,
-        "info",
+      // captureException always creates an Issue; captureMessage at
+      // 'info' level often gets deprioritized and doesn't surface in
+      // the default Issues view. Synthesizing a real Error object
+      // gives us a deterministic, easy-to-find Issue every time.
+      const id = Sentry.captureException(
+        new Error(`worker test event ${new Date().toISOString()}`),
       );
       const flushed = await Sentry.flush(5000);
       return new Response(

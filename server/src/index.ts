@@ -37,9 +37,12 @@ const app = createTestApp();
 // running Express process the queue eventually drains, but we want
 // the test to confirm delivery before responding.
 app.get("/__sentry-test", async (_req, res) => {
-  const id = Sentry.captureMessage(
-    `server test event ${new Date().toISOString()}`,
-    "info",
+  // captureException always creates an Issue; captureMessage at
+  // 'info' level often gets deprioritized and doesn't surface in
+  // the default Issues view. Synthesizing a real Error object gives
+  // us a deterministic, easy-to-find Issue every time.
+  const id = Sentry.captureException(
+    new Error(`server test event ${new Date().toISOString()}`),
   );
   // Wait up to 5s for the event to reach Sentry. If the DSN is wrong,
   // flush returns false and the response surfaces it cleanly.
