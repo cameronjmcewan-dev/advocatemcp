@@ -23,12 +23,11 @@ Sentry.init({
   dsn:               process.env.SENTRY_DSN,
   environment:       process.env.SENTRY_ENVIRONMENT ?? "production",
   release:           "advocatemcp-server",
-  tracesSampleRate:  1.0,
+  // 10% sample rate keeps perf tracing on for hot paths while
+  // staying well under the free-tier 10k transactions/month quota.
+  // Errors are always captured at 100%.
+  tracesSampleRate:  0.1,
   sendDefaultPii:    false,
-  // Apr 28 2026 debug mode — logs every Sentry op to stdout so
-  // Railway logs surface what's happening. Drop to false once
-  // events are confirmed visible in Sentry.
-  debug:             true,
 });
 
 // Synthetic startup event so we can verify the DSN works without
