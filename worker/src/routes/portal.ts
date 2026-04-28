@@ -75,6 +75,45 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/auth/login"          && method === "POST") return authLogin(request, env);
   if (pathname === "/auth/logout"         && method === "POST") return authLogout(request, env);
   if (pathname === "/dashboard"           && method === "GET")  return Response.redirect("https://advocatemcp.com/dashboard.html", 301);
+
+  // HTML-page redirects (Apr 27 2026 hotfix). Pages serves the actual
+  // dashboard / billing / team-accept / etc. HTML on advocatemcp.com.
+  // Without these redirects, customers.advocatemcp.com/<path>.html
+  // falls through to the worker's bot-detection catch-all and a real
+  // human user sees a JSON error response. Redirect everything that's
+  // a known HTML page in site/ to its Pages-hosted equivalent. Query
+  // strings + hash fragments are preserved automatically by the
+  // browser when it follows a 301 (the URL components survive across
+  // origin redirects).
+  if (method === "GET") {
+    const htmlRedirects: Record<string, string> = {
+      "/app":               "https://advocatemcp.com/app.html",
+      "/app.html":          "https://advocatemcp.com/app.html",
+      "/billing":           "https://advocatemcp.com/Billing.html",
+      "/Billing.html":      "https://advocatemcp.com/Billing.html",
+      "/team-accept":       "https://advocatemcp.com/team-accept.html",
+      "/team-accept.html":  "https://advocatemcp.com/team-accept.html",
+      "/onboarding":        "https://advocatemcp.com/onboarding.html",
+      "/onboarding.html":   "https://advocatemcp.com/onboarding.html",
+      "/admin":             "https://advocatemcp.com/admin.html",
+      "/admin.html":        "https://advocatemcp.com/admin.html",
+      "/Contact":           "https://advocatemcp.com/Contact.html",
+      "/Contact.html":      "https://advocatemcp.com/Contact.html",
+      "/FAQs":              "https://advocatemcp.com/FAQs.html",
+      "/FAQs.html":         "https://advocatemcp.com/FAQs.html",
+      "/Pricing":           "https://advocatemcp.com/Pricing.html",
+      "/Pricing.html":      "https://advocatemcp.com/Pricing.html",
+      "/Features":          "https://advocatemcp.com/Features.html",
+      "/Features.html":     "https://advocatemcp.com/Features.html",
+    };
+    const target = htmlRedirects[pathname];
+    if (target) {
+      // Preserve query string on the redirect — the team-accept link
+      // depends on `?t=<token>` surviving across origin.
+      const search = new URL(request.url).search ?? "";
+      return Response.redirect(target + search, 301);
+    }
+  }
   if (pathname === "/api/client/me"       && method === "GET")  return apiMe(request, env);
   if (pathname === "/api/client/metrics"  && method === "GET")  return apiMetrics(request, env);
   if (pathname === "/api/client/activity"   && method === "GET")  return apiActivity(request, env);
