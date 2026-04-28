@@ -23,6 +23,19 @@ Sentry.init({
   dsn:               process.env.SENTRY_DSN,
   environment:       process.env.SENTRY_ENVIRONMENT ?? "production",
   release:           "advocatemcp-server",
-  tracesSampleRate:  0.1,
+  // Apr 28 2026: bumped from 0.1 → 1.0 during initial verification
+  // so every request produces a trace. Drop back to 0.1 once Sentry
+  // confirms wiring + you want to conserve free-tier transaction
+  // quota.
+  tracesSampleRate:  1.0,
   sendDefaultPii:    false,
 });
+
+// Synthetic startup event so we can verify the DSN works without
+// waiting for organic traffic. Fires once per server boot. Look for
+// the "advocatemcp-server boot ping" message in Sentry → Issues to
+// confirm the connection is live.
+Sentry.captureMessage(
+  `advocatemcp-server boot ping ${new Date().toISOString()}`,
+  "info",
+);
