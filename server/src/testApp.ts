@@ -17,6 +17,7 @@ import { decodeRouter } from "./routes/decode.js";
 import { auditRouter } from "./routes/audit.js";
 import { jsonLdRouter } from "./routes/jsonLd.js";
 import { platformContextRouter } from "./routes/platformContext.js";
+import { syntheticPagesRouter } from "./routes/syntheticPages.js";
 import { rateLimitMiddleware } from "./middleware/rateLimit.js";
 import { requestIdMiddleware } from "./lib/requestId.js";
 
@@ -96,6 +97,11 @@ export function createTestApp(): express.Express {
   // has a more permissive GET /agents/:slug/* set that would otherwise
   // claim it. Public, no auth — same posture as /agents/:slug/profile.
   app.use(platformContextRouter);
+  // Synthetic landing pages (Phase 3 grey-hat). GET /synthetic/:host/*
+  // serves pre-rendered (intent × service × location) pages. Public, no
+  // auth. Worker proxies inbound /best-{service}-(in|near)-{location}
+  // patterns through to this route.
+  app.use(syntheticPagesRouter);
   app.use(agentRouter);
   app.use(analyticsRouter);
   app.use(mcpRouter);
