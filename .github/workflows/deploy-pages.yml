@@ -47,6 +47,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Compute a single-line commit message. The previous
+       # `head_commit.message` substitution broke when commit bodies had
+      # newlines — wrangler saw the body lines as positional args and
+      # rejected the whole deploy. Pin to subject + SHA, which always
+      # round-trips cleanly through YAML, shell, and wrangler.
+      - name: Compute deploy message
+        id: msg
+        run: |
+          if [ -n "${{ github.event.head_commit.message }}" ]; then
+            subject=$(echo "${{ github.event.head_commit.message }}" | head -1)
+          else
+            subject="${{ github.event.pull_request.title }}"
+          fi
+          # Strip any double quotes to be extra safe; truncate to 100
+          # chars so the Cloudflare UI displays the whole thing.
+          clean=$(echo "$subject" | tr -d '"' | cut -c1-100)
+          echo "msg=$clean (${{ github.sha }})" >> "$GITHUB_OUTPUT"
+
       - name: Deploy to Cloudflare Pages
         id: deploy
         uses: cloudflare/wrangler-action@v3
@@ -55,7 +73,7 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           # Pushing main → production deploy. Branch/PR builds get
           # their own preview URL on a per-commit basis.
-          command: pages deploy site --project-name=advocatemcp-site --branch=${{ github.ref_name }} --commit-message="${{ github.event.head_commit.message || github.event.pull_request.title }}"
+          command: pages deploy site --project-name=advocatemcp-site --branch=${{ github.ref_name }} --commit-message="${{ steps.msg.outputs.msg }}"
 
       - name: Comment preview URL on PR
         if: github.event_name == 'pull_request'
