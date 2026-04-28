@@ -29,6 +29,29 @@ const BASE = process.env.API_BASE_URL ?? `http://localhost:${PORT}`;
 
 const app = createTestApp();
 
+// Apr 28 2026 verification endpoint. GET /__sentry-test forces a
+// synthetic captureMessage + flush so we can verify the DSN is wired
+// correctly without waiting for organic traffic OR boot timing. The
+// flush is critical — `captureMessage` queues the event and returns
+// an ID synchronously, but the transport delivers async; on a long-
+// running Express process the queue eventually drains, but we want
+// the test to confirm delivery before responding.
+app.get("/__sentry-test", async (_req, res) => {
+  const id = Sentry.captureMessage(
+    `server test event ${new Date().toISOString()}`,
+    "info",
+  );
+  // Wait up to 5s for the event to reach Sentry. If the DSN is wrong,
+  // flush returns false and the response surfaces it cleanly.
+  const flushed = await Sentry.flush(5000);
+  res.json({
+    ok:               true,
+    sentry_event_id:  id,
+    flushed,
+    dsn_configured:   !!process.env.SENTRY_DSN,
+  });
+});
+
 app.get("/", (_req, res) => {
   res.json({
     service: "AdvocateMCP Agent API",
