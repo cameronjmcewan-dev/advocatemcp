@@ -1,0 +1,46 @@
+# Dependabot config.
+#
+# Catches CVEs in npm dependencies on three trees: server (Railway),
+# worker (Cloudflare), GitHub Actions. Weekly cadence keeps PR noise
+# low while still surfacing real security issues within a week.
+#
+# Security-only updates are filed regardless of the schedule, so a
+# critical CVE doesn't wait for Monday.
+#
+# Note: enabling this YAML automatically enables Dependabot version
+# updates. Dependabot security alerts (the API endpoint we couldn't
+# query earlier — "alerts are disabled") need to be enabled
+# separately in the repo Settings → Code security and analysis page.
+# That UI toggle is independent of this file.
+
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/server"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "server"
+
+  - package-ecosystem: "npm"
+    directory: "/worker"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "worker"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "ci"
