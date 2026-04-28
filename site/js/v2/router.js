@@ -122,6 +122,15 @@
           const p = parseFloat(getComputedStyle(el).paddingTop);
           if (p >= 32) el.style.paddingTop = (p - 32) + 'px';
         });
+        // If a beta banner was sitting at top:32px (because the
+        // impersonation banner used to be above it), slide it up to
+        // top:0 now that nothing sits above it. Without this, the
+        // beta banner would float with a 32px empty gap above it.
+        // (Apr 28 2026 audit fix.)
+        const beta = document.getElementById('amcp-beta-banner');
+        if (beta && beta.style.top === '32px') {
+          beta.style.top = '0px';
+        }
       }
     }
   }
@@ -207,7 +216,15 @@
     }
 
     if (root) {
-      root.innerHTML = mod.render(data);
+      // If fetchReal rejected, show the same error UI shell.js renders
+      // on first paint instead of silently rendering empty data. The
+      // user gets a clear "we hit a snag" message + a refresh button
+      // rather than a dashboard full of zeros. (Apr 28 2026 audit fix.)
+      if (data && data.__error && typeof window.AMCP_SHELL_RENDER_ERROR === 'function') {
+        root.innerHTML = window.AMCP_SHELL_RENDER_ERROR(data.__error);
+      } else {
+        root.innerHTML = mod.render(data);
+      }
       delete root.dataset.pending;
     }
     if (typeof mod.afterMount === 'function') {

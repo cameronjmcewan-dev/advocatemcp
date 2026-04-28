@@ -58,12 +58,20 @@
   /** Find the marketing nav's CTA cluster (the "Sign in" / "Get started"
    * pair). The marketing site uses a few different markup patterns
    * across its pages, so we look for the most specific selectors first
-   * and fall back to common ones. */
+   * and fall back to common ones.
+   *
+   * Hardening (Apr 28 2026): a page can opt in explicitly by tagging
+   * its CTA container with `data-cta-cluster`. That short-circuits the
+   * heuristic so future template changes can't silently break the
+   * avatar dropdown — if the data attribute is present, we trust it. */
   function findCtaCluster() {
+    var explicit = document.querySelector('[data-cta-cluster]');
+    if (explicit) return explicit;
     // Most pages: a div with both buttons in a flex/grid container.
     // Look for the "Get started" CTA by text since it's the most
-    // unambiguous anchor.
-    var anchors = document.querySelectorAll('header a, nav a, .nav a, .navbar a, .nav-cta a, .header a');
+    // unambiguous anchor. Selectors are intentionally broad — every
+    // header/nav/navbar variant we've shipped is covered.
+    var anchors = document.querySelectorAll('header a, nav a, .nav a, .navbar a, .nav-cta a, .header a, .top-nav a, [data-nav] a');
     for (var i = 0; i < anchors.length; i++) {
       var a = anchors[i];
       var text = (a.textContent || '').trim().toLowerCase();
