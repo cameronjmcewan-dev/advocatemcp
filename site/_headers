@@ -1,0 +1,54 @@
+# Cloudflare Pages cache headers.
+#
+# Default Pages serves with `max-age=14400` (4 hours), which means a
+# JS/CSS bug ships and customers don't see the fix for up to 4 hours
+# unless they hard-refresh. We hit this on Apr 27 with the dashboard
+# logo bug — fix was in main, deployed, but cached browsers held the
+# broken version.
+#
+# Strategy:
+#  - JS / CSS / fonts → 5 min cache + must-revalidate (etag still
+#    serves 304 most of the time, so bandwidth is unchanged but a
+#    real change propagates fast)
+#  - HTML pages → no cache (always revalidate, cheap CDN hit anyway)
+#  - Hashed/static assets that don't change (icons, OG images) →
+#    long cache (the URL changes if the content changes)
+#
+# Format docs: https://developers.cloudflare.com/pages/configuration/headers/
+
+/*.js
+  Cache-Control: public, max-age=300, must-revalidate
+
+/*.css
+  Cache-Control: public, max-age=300, must-revalidate
+
+/assets/*
+  Cache-Control: public, max-age=300, must-revalidate
+
+/js/*
+  Cache-Control: public, max-age=300, must-revalidate
+
+/css/*
+  Cache-Control: public, max-age=300, must-revalidate
+
+# HTML pages — always revalidate. The 308 clean-URL redirects mean
+# /Pricing.html → /Pricing on first hit, but the redirect itself
+# is cached short. Browsers will check freshness on every load.
+/*.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+# Long-cache the truly immutable: icons, OG image, favicons. URL
+# changes if you ship a new variant; otherwise these never change.
+/icon-192.png
+  Cache-Control: public, max-age=86400, immutable
+/og-image.png
+  Cache-Control: public, max-age=86400, immutable
+/favicon.ico
+  Cache-Control: public, max-age=86400, immutable
+
+# Security headers (apply to everything).
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), microphone=(), camera=()

@@ -32,6 +32,11 @@ on:
       - "site/**"
   workflow_dispatch:  # manual trigger for emergency deploys
 
+# Opt into Node.js 24 ahead of GitHub's forced upgrade to silence
+# the per-run deprecation warning. See deploy-worker.yml for context.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   deploy:
     runs-on: ubuntu-latest

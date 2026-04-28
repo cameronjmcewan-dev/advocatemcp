@@ -29,6 +29,12 @@ on:
       - "worker/**"
   workflow_dispatch:
 
+# Opt into Node.js 24 for GitHub Actions runtimes ahead of GitHub's
+# June 2026 forced upgrade. Silences the per-run deprecation warning
+# without waiting for actions/* to publish v5 releases.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
