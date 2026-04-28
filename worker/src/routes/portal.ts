@@ -86,25 +86,65 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   // browser when it follows a 301 (the URL components survive across
   // origin redirects).
   if (method === "GET") {
+    // Every dashboard / marketing HTML page Pages serves needs a
+    // worker-side redirect for the customers.advocatemcp.com host.
+    // Without this the page falls through to the bot-detection
+    // catch-all and a real human user gets a JSON error response.
+    // (Apr 28 2026: audit caught Settings.html + every dashboard
+    // section page that wasn't in the original list.)
     const htmlRedirects: Record<string, string> = {
-      "/app":               "https://advocatemcp.com/app.html",
-      "/app.html":          "https://advocatemcp.com/app.html",
-      "/billing":           "https://advocatemcp.com/Billing.html",
-      "/Billing.html":      "https://advocatemcp.com/Billing.html",
-      "/team-accept":       "https://advocatemcp.com/team-accept.html",
-      "/team-accept.html":  "https://advocatemcp.com/team-accept.html",
-      "/onboarding":        "https://advocatemcp.com/onboarding.html",
-      "/onboarding.html":   "https://advocatemcp.com/onboarding.html",
-      "/admin":             "https://advocatemcp.com/admin.html",
-      "/admin.html":        "https://advocatemcp.com/admin.html",
-      "/Contact":           "https://advocatemcp.com/Contact.html",
-      "/Contact.html":      "https://advocatemcp.com/Contact.html",
-      "/FAQs":              "https://advocatemcp.com/FAQs.html",
-      "/FAQs.html":         "https://advocatemcp.com/FAQs.html",
-      "/Pricing":           "https://advocatemcp.com/Pricing.html",
-      "/Pricing.html":      "https://advocatemcp.com/Pricing.html",
-      "/Features":          "https://advocatemcp.com/Features.html",
-      "/Features.html":     "https://advocatemcp.com/Features.html",
+      // Dashboard surfaces
+      "/app":                  "https://advocatemcp.com/app.html",
+      "/app.html":             "https://advocatemcp.com/app.html",
+      "/dashboard":            "https://advocatemcp.com/dashboard.html",
+      "/dashboard.html":       "https://advocatemcp.com/dashboard.html",
+      "/Settings":             "https://advocatemcp.com/Settings.html",
+      "/Settings.html":        "https://advocatemcp.com/Settings.html",
+      "/Billing":              "https://advocatemcp.com/Billing.html",
+      "/billing":              "https://advocatemcp.com/Billing.html",
+      "/Billing.html":         "https://advocatemcp.com/Billing.html",
+      "/BusinessProfile":      "https://advocatemcp.com/BusinessProfile.html",
+      "/BusinessProfile.html": "https://advocatemcp.com/BusinessProfile.html",
+      "/BotTraffic":           "https://advocatemcp.com/BotTraffic.html",
+      "/BotTraffic.html":      "https://advocatemcp.com/BotTraffic.html",
+      "/Mentions":             "https://advocatemcp.com/Mentions.html",
+      "/Mentions.html":        "https://advocatemcp.com/Mentions.html",
+      "/ClickThroughs":        "https://advocatemcp.com/ClickThroughs.html",
+      "/ClickThroughs.html":   "https://advocatemcp.com/ClickThroughs.html",
+      "/CompetitorRadar":      "https://advocatemcp.com/CompetitorRadar.html",
+      "/CompetitorRadar.html": "https://advocatemcp.com/CompetitorRadar.html",
+      "/A2APipeline":          "https://advocatemcp.com/A2APipeline.html",
+      "/A2APipeline.html":     "https://advocatemcp.com/A2APipeline.html",
+      "/ActivityFeed":         "https://advocatemcp.com/ActivityFeed.html",
+      "/ActivityFeed.html":    "https://advocatemcp.com/ActivityFeed.html",
+      // Onboarding + auth flows
+      "/team-accept":          "https://advocatemcp.com/team-accept.html",
+      "/team-accept.html":     "https://advocatemcp.com/team-accept.html",
+      "/onboarding":           "https://advocatemcp.com/onboarding.html",
+      "/onboarding.html":      "https://advocatemcp.com/onboarding.html",
+      "/activate":             "https://advocatemcp.com/activate.html",
+      "/activate.html":        "https://advocatemcp.com/activate.html",
+      "/login":                "https://advocatemcp.com/login.html",
+      "/login.html":           "https://advocatemcp.com/login.html",
+      "/admin":                "https://advocatemcp.com/admin.html",
+      "/admin.html":           "https://advocatemcp.com/admin.html",
+      // Marketing pages
+      "/Contact":              "https://advocatemcp.com/Contact.html",
+      "/Contact.html":         "https://advocatemcp.com/Contact.html",
+      "/FAQs":                 "https://advocatemcp.com/FAQs.html",
+      "/FAQs.html":            "https://advocatemcp.com/FAQs.html",
+      "/Pricing":              "https://advocatemcp.com/Pricing.html",
+      "/Pricing.html":         "https://advocatemcp.com/Pricing.html",
+      "/Features":             "https://advocatemcp.com/Features.html",
+      "/Features.html":        "https://advocatemcp.com/Features.html",
+      "/Industries":           "https://advocatemcp.com/Industries.html",
+      "/Industries.html":      "https://advocatemcp.com/Industries.html",
+      "/methodology":          "https://advocatemcp.com/methodology.html",
+      "/methodology.html":     "https://advocatemcp.com/methodology.html",
+      "/privacy":              "https://advocatemcp.com/privacy.html",
+      "/privacy.html":         "https://advocatemcp.com/privacy.html",
+      "/terms":                "https://advocatemcp.com/terms.html",
+      "/terms.html":           "https://advocatemcp.com/terms.html",
     };
     const target = htmlRedirects[pathname];
     if (target) {
