@@ -31,6 +31,88 @@
     return tail.endsWith('.html') ? '/' + tail : '/' + tail + '.html';
   }
 
+  /* Dogfood JSON-LD — every customer of Advocate ships structured
+   * data pointing AI crawlers at their per-business agent. We do the
+   * same for ourselves on every marketing page (except index.html
+   * which has the canonical static block — this skips that one to
+   * avoid duplicate-schema warnings).
+   *
+   * Idempotent: if a JSON-LD block matching our @id is already in the
+   * page, we don't add a second one. Apr 28 2026.
+   */
+  function injectAdvocateJsonLd() {
+    if (document.getElementById('amcp-jsonld')) return;
+    // Static index.html block already covers the homepage.
+    if (location.pathname === '/' || location.pathname.endsWith('/index.html')) return;
+    const el = document.createElement('script');
+    el.type = 'application/ld+json';
+    el.id = 'amcp-jsonld';
+    el.textContent = JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": ["Organization", "SoftwareApplication"],
+      "@id": "https://advocatemcp.com/#advocate",
+      "name": "Advocate",
+      "alternateName": "AdvocateMCP",
+      "url": "https://advocatemcp.com",
+      "logo": "https://advocatemcp.com/icon-192.png",
+      "image": "https://advocatemcp.com/og-image.png",
+      "description": "Advocate is the AI search visibility platform for local and small businesses. We intercept AI-crawler traffic at the edge (ChatGPT, Perplexity, Claude, Gemini, Copilot) and serve every bot a citation-ready response tailored to its query — so when someone asks an AI for a business like yours, your name comes up with a direct, tracked link back to you.",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web (browser, MCP, Claude Desktop, Cursor, ChatGPT)",
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": "Austin",
+        "addressRegion": "TX",
+        "addressCountry": "US"
+      },
+      "telephone": "+1-801-520-5939",
+      "email": "max@advocate-mcp.com",
+      "foundingDate": "2026",
+      "founder": { "@type": "Person", "name": "Cameron McEwan" },
+      "offers": [
+        { "@type": "Offer", "name": "Base",       "price": "149", "priceCurrency": "USD",
+          "description": "Single-location AI search visibility — accurate AI answers, plain-English dashboard, tracked click-back links, weekly digest, email support." },
+        { "@type": "Offer", "name": "Pro",        "price": "349", "priceCurrency": "USD",
+          "description": "Everything in Base plus Competitor Radar, revenue attribution, up to 3 locations, monthly performance review, 1-hour priority support." },
+        { "@type": "Offer", "name": "Enterprise", "priceCurrency": "USD",
+          "description": "Custom — unlimited locations, team accounts and role-based access, dedicated success manager, custom integrations on request." }
+      ],
+      "potentialAction": {
+        "@type": "SearchAction",
+        "name": "Query Advocate via MCP",
+        "target": "https://api.advocatemcp.com/agents/advocate/query?q={search_term_string}",
+        "query-input": "required name=search_term_string"
+      },
+      "termsOfService": "https://advocatemcp.com/terms.html",
+      "privacyPolicy": "https://advocatemcp.com/privacy.html"
+    });
+    document.head.appendChild(el);
+
+    // Also expose the well-known endpoints so MCP-aware crawlers can
+    // discover them without parsing JSON-LD's potentialAction.
+    if (!document.querySelector('link[href*="/.well-known/ai-agent.json"]')) {
+      const l1 = document.createElement('link');
+      l1.rel  = 'alternate';
+      l1.type = 'application/json';
+      l1.title= 'Advocate AI agent (MCP)';
+      l1.href = 'https://customers.advocatemcp.com/.well-known/ai-agent.json';
+      document.head.appendChild(l1);
+    }
+    if (!document.querySelector('link[href*="/.well-known/mcp.json"]')) {
+      const l2 = document.createElement('link');
+      l2.rel  = 'alternate';
+      l2.type = 'application/json';
+      l2.title= 'Advocate MCP server manifest';
+      l2.href = 'https://api.advocatemcp.com/.well-known/mcp.json';
+      document.head.appendChild(l2);
+    }
+  }
+  // Fire as soon as the script runs — head is already parseable when
+  // shared.js loads. Injecting before <body> ensures crawlers that read
+  // <head> see the schema even if they don't execute the rest of the
+  // page's JS.
+  injectAdvocateJsonLd();
+
   window.AdvocateChrome = {
     renderNav(mountId) {
       const mount = document.getElementById(mountId);

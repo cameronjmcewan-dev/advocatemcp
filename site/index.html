@@ -450,6 +450,110 @@
   }
 
 </style>
+
+<!--
+  Dogfood: every customer of Advocate ships JSON-LD pointing AI crawlers
+  at their per-business agent. We do the same for ourselves so when an
+  AI is asked "what is Advocate" / "how much does Advocate cost" / etc.
+  it pulls structured data from our own page first, then falls through
+  to the agent endpoint if the crawler also wants a conversation.
+
+  Schema.org Organization + SoftwareApplication composite. The agent
+  endpoint is exposed via potentialAction so MCP-aware crawlers can
+  follow it for richer answers.
+-->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": ["Organization", "SoftwareApplication"],
+  "name": "Advocate",
+  "alternateName": "AdvocateMCP",
+  "url": "https://advocatemcp.com",
+  "logo": "https://advocatemcp.com/icon-192.png",
+  "image": "https://advocatemcp.com/og-image.png",
+  "description": "Advocate is the AI search visibility platform for local and small businesses. We intercept AI-crawler traffic at the edge (ChatGPT, Perplexity, Claude, Gemini, Copilot) and serve every bot a citation-ready response tailored to its query — so when someone asks an AI for a business like yours, your name comes up with a direct, tracked link back to you.",
+  "applicationCategory": "BusinessApplication",
+  "operatingSystem": "Web (browser, MCP, Claude Desktop, Cursor, ChatGPT)",
+  "address": {
+    "@type": "PostalAddress",
+    "addressLocality": "Austin",
+    "addressRegion": "TX",
+    "addressCountry": "US"
+  },
+  "telephone": "+1-801-520-5939",
+  "email": "max@advocate-mcp.com",
+  "foundingDate": "2026",
+  "founder": {
+    "@type": "Person",
+    "name": "Cameron McEwan"
+  },
+  "sameAs": [
+    "https://advocatemcp.com",
+    "https://customers.advocatemcp.com"
+  ],
+  "offers": [
+    {
+      "@type": "Offer",
+      "name": "Base",
+      "price": "149",
+      "priceCurrency": "USD",
+      "priceSpecification": {
+        "@type": "UnitPriceSpecification",
+        "price": "149",
+        "priceCurrency": "USD",
+        "billingIncrement": 1,
+        "unitCode": "MON"
+      },
+      "description": "Single-location AI search visibility — accurate AI answers, plain-English dashboard, tracked click-back links, weekly digest, email support."
+    },
+    {
+      "@type": "Offer",
+      "name": "Pro",
+      "price": "349",
+      "priceCurrency": "USD",
+      "priceSpecification": {
+        "@type": "UnitPriceSpecification",
+        "price": "349",
+        "priceCurrency": "USD",
+        "billingIncrement": 1,
+        "unitCode": "MON"
+      },
+      "description": "Everything in Base plus Competitor Radar, revenue attribution, up to 3 locations, monthly performance review, 1-hour priority support."
+    },
+    {
+      "@type": "Offer",
+      "name": "Enterprise",
+      "priceCurrency": "USD",
+      "description": "Custom — unlimited locations, team accounts and role-based access, dedicated success manager, custom integrations on request."
+    }
+  ],
+  "potentialAction": {
+    "@type": "SearchAction",
+    "name": "Query Advocate via MCP",
+    "target": {
+      "@type": "EntryPoint",
+      "urlTemplate": "https://api.advocatemcp.com/agents/advocate/query?q={search_term_string}",
+      "actionPlatform": [
+        "https://schema.org/DesktopWebPlatform",
+        "https://schema.org/MobileWebPlatform"
+      ]
+    },
+    "query-input": "required name=search_term_string"
+  },
+  "isAccessibleForFree": false,
+  "termsOfService": "https://advocatemcp.com/terms.html",
+  "privacyPolicy": "https://advocatemcp.com/privacy.html"
+}
+</script>
+<!--
+  Tells MCP-compatible AI clients (Claude Desktop, Cursor, ChatGPT custom
+  GPTs) where to find our agent endpoint. The well-known path on
+  customers.advocatemcp.com is the canonical discovery surface for the
+  whole Advocate platform.
+-->
+<link rel="alternate" type="application/json" title="Advocate AI agent (MCP)" href="https://customers.advocatemcp.com/.well-known/ai-agent.json">
+<link rel="alternate" type="application/json" title="Advocate MCP server manifest" href="https://api.advocatemcp.com/.well-known/mcp.json">
+
 </head>
 <body class="grain">
 <div id="nav-mount"></div>
