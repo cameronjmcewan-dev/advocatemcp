@@ -236,18 +236,32 @@ export default Sentry.withSentry(
     const botType    = crawlerName(userAgent);
 
     // Apr 28 2026 verification endpoint. GET /__sentry-test forces a
-    // synthetic captureMessage so we can verify the DSN is wired
-    // correctly without waiting for organic traffic to hit the 10%
-    // (or 100%) sample rate. Returns immediately so the test event
-    // doesn't depend on the rest of the handler. Safe to leave in
-    // place — only fires when the exact path is requested.
+    // synthetic captureMessage with explicit flush + waitUntil so the
+    // event actually reaches Sentry before the worker terminates.
+    //
+    // Critical detail for Cloudflare Workers: captureMessage returns
+    // an event ID synchronously, but the underlying transport sends
+    // the event over the network — async. Without `ctx.waitUntil()`
+    // the Worker runtime kills the request after the response goes
+    // out, dropping the in-flight Sentry event.
+    //
+    // Sentry.flush() returns a Promise<boolean> — true if the queue
+    // drained successfully, false if there was a transport error.
+    // We expose the flushed status in the response so we can tell
+    // 'event accepted by SDK' apart from 'event delivered to Sentry'.
     if (url.pathname === "/__sentry-test" && request.method === "GET") {
       const id = Sentry.captureMessage(
         `worker test event ${new Date().toISOString()}`,
         "info",
       );
+      const flushed = await Sentry.flush(5000);
       return new Response(
-        JSON.stringify({ ok: true, sentry_event_id: id, dsn_configured: !!env.SENTRY_DSN }),
+        JSON.stringify({
+          ok:               true,
+          sentry_event_id:  id,
+          flushed,
+          dsn_configured:   !!env.SENTRY_DSN,
+        }),
         { headers: { "Content-Type": "application/json" } },
       );
     }
