@@ -85,16 +85,8 @@ PAYLOAD=$(cat <<'JSON'
   "availability":          "Sales and onboarding 9-6 CT weekdays. AI agent endpoints run 24/7. Customer support replies same business day.",
   "service_area_keywords": "United States, Canada, English-speaking markets",
 
-  "pricing": "$149/mo Base · $349/mo Pro · Custom Enterprise",
+  "pricing": "Base $149/month · Pro $349/month · Enterprise custom — see pricing page for the full feature breakdown",
   "pricing_tier": "mid-range",
-  "pricing_json_v2": {
-    "currency": "USD",
-    "ranges": [
-      { "label": "Base",       "low_cents": 14900,  "high_cents": 14900,  "unit": "/month" },
-      { "label": "Pro",        "low_cents": 34900,  "high_cents": 34900,  "unit": "/month" },
-      { "label": "Enterprise", "low_cents": 99900,  "high_cents": 999900, "unit": "/month — custom" }
-    ]
-  },
 
   "certifications":    "GDPR-compliant data handling, privacy-first attribution.",
   "years_in_business": 0,
@@ -105,12 +97,10 @@ PAYLOAD=$(cat <<'JSON'
   "differentiator":       "The only platform that intercepts AI traffic at the edge AND tracks attribution end-to-end. Static GEO tools (Scrunch, Profound, Peec, Otterly, Athena HQ) only monitor citations after the fact — Advocate generates the citation in real-time AND tracks the resulting click, booking, or conversation back to the originating AI.",
 
   "lead_routing_json": {
-    "primary_email":   "max@advocate-mcp.com",
-    "secondary_email": null,
-    "primary_phone":   "(801) 520-5939",
-    "after_hours_mode":"voicemail",
-    "calendly":        "https://calendly.com/cameronjmcewan/new-meeting",
-    "preferred_contact":"email"
+    "preferred_channel": "email",
+    "email": "max@advocate-mcp.com",
+    "phone": "(801) 520-5939",
+    "form_url": "https://calendly.com/cameronjmcewan/new-meeting"
   }
 }
 JSON

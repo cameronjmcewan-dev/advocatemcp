@@ -129,3 +129,22 @@ zone_name = "advocatemcp.com"
 pattern   = "www.workmancopyco.com/*"
 zone_name = "advocatemcp.com"
 
+# AdvocateMCP itself — full-stack dogfood (Apr 28 2026). Routing
+# advocatemcp.com (+ www) through this worker means AI crawlers
+# hitting our own marketing site get the Claude-generated agent
+# response with end-to-end attribution, exactly like every customer.
+# Human visitors are proxied straight to the Cloudflare Pages site
+# at advocatemcp-site.pages.dev (hardcoded fallback in index.ts).
+#
+# Apr 13 2026 incident note: a wildcard at *.advocatemcp.com once
+# shadowed the apex Pages project and killed the marketing site.
+# These two patterns are EXACT — no wildcard at apex level — so
+# the previous failure mode can't recur.
+[[routes]]
+pattern   = "advocatemcp.com/*"
+zone_name = "advocatemcp.com"
+
+[[routes]]
+pattern   = "www.advocatemcp.com/*"
+zone_name = "advocatemcp.com"
+
