@@ -17,6 +17,7 @@ import {
   escapeHtml,
   jsonLdScript,
   mdBoldToHtml,
+  mergeFaqsForRenderer,
 } from "./shared.js";
 
 export const openaiHtml: FormatVariant = {
@@ -32,7 +33,9 @@ export const openaiHtml: FormatVariant = {
       includeKnowsAbout: true,
       includeServiceArray: true,
     }));
-    const faqJsonLd = buildFaqJsonLd(query, answerText);
+    // Phase 1 grey-hat: merge active query/answer with pre-generated
+    // leading-question Q&As (faqs_json on the business).
+    const faqJsonLd = buildFaqJsonLd(mergeFaqsForRenderer(business, query, answerText));
     const websiteJsonLd = buildWebsiteJsonLd(business);
     const reviewsJsonLd = buildReviewsJsonLd(business);
     const platformRatingsJsonLd = buildPlatformRatingsJsonLd(business);

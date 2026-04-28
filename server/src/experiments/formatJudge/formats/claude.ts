@@ -18,6 +18,7 @@ import {
   jsonLdScript,
   mdBoldToHtml,
   mdBulletsToHtml,
+  mergeFaqsForRenderer,
 } from "./shared.js";
 
 /** Truncate `s` to ≤ `max` chars, breaking at the last word boundary so we
@@ -48,7 +49,10 @@ export const claudeHtml: FormatVariant = {
       includeKnowsAbout: true,
       includeServiceArray: true,
     }));
-    const faqJsonLd = buildFaqJsonLd(query, answerText);
+    // Phase 1 grey-hat: merge active query/answer with any pre-generated
+    // leading-question Q&As on the business. Falls back to single-pair
+    // when faqs_json is empty/null.
+    const faqJsonLd = buildFaqJsonLd(mergeFaqsForRenderer(business, query, answerText));
     const websiteJsonLd = buildWebsiteJsonLd(business);
     const reviewsJsonLd = buildReviewsJsonLd(business);
     const platformRatingsJsonLd = buildPlatformRatingsJsonLd(business);

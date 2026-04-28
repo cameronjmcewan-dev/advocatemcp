@@ -5,6 +5,8 @@ import crypto from "crypto";
 import { requireApiKey } from "../middleware/auth.js";
 import { OnboardingPayloadSchema } from "../schemas/business.js";
 import { getApiBaseUrl } from "../lib/baseUrl.js";
+import { generateLeadingFaqs } from "../agent/faqGenerator.js";
+import type { BusinessRow } from "../db.js";
 
 export const registerRouter = Router();
 
@@ -168,6 +170,34 @@ registerRouter.post("/register", requireApiKey, (req: Request, res: Response) =>
       message: "could not allocate unique slug; retry",
     });
     return;
+  }
+
+  // Fire-and-forget FAQ generation (Phase 1 grey-hat optimization, Apr 28
+  // 2026). The /register response returns immediately with the slug +
+  // api_key — generation runs after, takes ~3-5s, lands in `faqs_json`
+  // when complete. Gated on FEATURE_FAQS_V2; if disabled or the call
+  // throws, the row stays NULL and the daily cron picks it up later.
+  // No await — onboarding latency is fixed, generation is best-effort.
+  const flag = (process.env.FEATURE_FAQS_V2 ?? "").toLowerCase();
+  if ((flag === "true" || flag === "1") && process.env.ANTHROPIC_API_KEY) {
+    const newRow = db.prepare("SELECT * FROM businesses WHERE slug = ?").get(insertedSlug) as BusinessRow | undefined;
+    if (newRow) {
+      void (async () => {
+        try {
+          const out = await generateLeadingFaqs(newRow);
+          if (out.faqs.length >= 3) {
+            db.prepare(
+              "UPDATE businesses SET faqs_json = ?, faqs_generated_at = ?, faqs_source = 'claude' WHERE id = ?",
+            ).run(JSON.stringify(out.faqs), Date.now(), newRow.id);
+            console.log(`[register-faqs] ${newRow.slug}: ${out.faqs.length} FAQs (rejected ${out.rejected}; ${out.cost_cents.toFixed(2)}¢)`);
+          } else {
+            console.warn(`[register-faqs] ${newRow.slug}: only ${out.faqs.length} valid FAQs; leaving NULL for cron retry.`);
+          }
+        } catch (err) {
+          console.error(`[register-faqs] ${newRow.slug}: error`, err);
+        }
+      })();
+    }
   }
 
   const base = getApiBaseUrl();

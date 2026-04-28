@@ -123,6 +123,13 @@ export interface BusinessRow {
   // and null as equivalent everywhere.
   last_score_json?: string | null;
   score_history_json?: string | null;
+  // Migration 033 (Apr 28 2026): aggressive FAQ array — Phase 1 of
+  // the grey-hat AI optimization layer. JSON-stringified array of
+  // {question, answer, intent} entries; renderers parse and emit
+  // as a multi-entry FAQPage. See server/src/agent/faqGenerator.ts.
+  faqs_json?: string | null;
+  faqs_generated_at?: number | null;
+  faqs_source?: string | null;
 }
 
 export interface ReservationRow {

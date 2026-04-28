@@ -8,6 +8,7 @@ import cron from "node-cron";
 import { createTestApp } from "./testApp.js";
 import { getDb } from "./db.js";
 import { startReputationRollupSchedule } from "./jobs/reputationRollup.js";
+import { startFaqBackfillSchedule } from "./jobs/faqBackfill.js";
 import { pollAll } from "./jobs/competitorRadar.js";
 import { startWeeklyDigestSchedule } from "./jobs/weeklyDigest.js";
 import { startBetaEndingSchedule } from "./jobs/betaEndingEmail.js";
@@ -140,6 +141,13 @@ startBetaEndingSchedule();
 // digest's beta variant instead so they don't double-up. Same RESEND
 // gate as the schedules above.
 startMonthlyPerformanceReviewSchedule();
+
+// FAQ backfill (Apr 28 2026 — Phase 1 grey-hat AI optimization).
+// Daily 03:00 UTC. Gated on FEATURE_FAQS_V2 + ANTHROPIC_API_KEY.
+// Generates leading-question Q&As for every business with NULL
+// faqs_json so existing tenants get the multi-entry FAQPage schema
+// without re-onboarding.
+startFaqBackfillSchedule();
 
 app.listen(PORT, () => {
   console.log(`

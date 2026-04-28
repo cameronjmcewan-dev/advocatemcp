@@ -447,23 +447,109 @@ function stripMarkdown(s: string): string {
     .trim();
 }
 
-export function buildFaqJsonLd(
+/**
+ * Merge the active query/answer pair with any pre-generated `faqs_json`
+ * entries on the business into one array suitable for `buildFaqJsonLd`.
+ *
+ * The active pair always lands first (its citation value to the current
+ * crawler is highest — the bot just asked this exact question). Pre-
+ * generated leading-question Q&As land after, deduplicated by question
+ * text in case the active query matches a stored entry.
+ *
+ * Skips merging when `business.faqs_json` is null/empty/malformed —
+ * caller falls back to the legacy single-pair path. Keeps the renderer
+ * one-liner: `const faqJsonLd = buildFaqJsonLd(mergeFaqsForRenderer(business, query, answerText));`
+ *
+ * Apr 28 2026 — Phase 1 of grey-hat AI optimization layer.
+ */
+export function mergeFaqsForRenderer(
+  business: { faqs_json?: string | null | undefined },
   query: string,
   answerText: string,
+): Array<{ question: string; answer: string }> {
+  const merged: Array<{ question: string; answer: string }> = [
+    { question: query, answer: answerText },
+  ];
+  const raw = business.faqs_json;
+  if (!raw) return merged;
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { return merged; }
+  if (!Array.isArray(parsed)) return merged;
+  const seen = new Set<string>([query.trim().toLowerCase()]);
+  for (const e of parsed) {
+    if (
+      e &&
+      typeof e === "object" &&
+      typeof (e as Record<string, unknown>).question === "string" &&
+      typeof (e as Record<string, unknown>).answer === "string"
+    ) {
+      const q = (e as { question: string }).question.trim();
+      const k = q.toLowerCase();
+      if (!seen.has(k)) {
+        seen.add(k);
+        merged.push({
+          question: q,
+          answer:   (e as { answer: string }).answer.trim(),
+        });
+      }
+    }
+  }
+  return merged;
+}
+
+/**
+ * Build a Schema.org FAQPage block. Two call shapes:
+ *
+ *   1. Legacy (single query/answer pair) — used by the per-bot renderers
+ *      to wrap the active query/response into FAQPage so each query gets
+ *      a citation-shaped Q&A entry. Unchanged behavior; preserves all
+ *      existing call sites.
+ *
+ *   2. Aggressive multi-entry (Apr 28 2026, Phase 1 grey-hat layer) —
+ *      pass an array of {question, answer} pairs from `business.faqs_json`
+ *      and the renderer emits a single FAQPage with N mainEntity entries.
+ *      The receiving validator (FaqSchema in schemas/business.ts) caps
+ *      each answer at 280 chars; the helper applies stripMarkdown the
+ *      same way it does for the legacy path.
+ *
+ * Either shape returns a single FAQPage block — never two; Google's docs
+ * explicitly say multiple FAQPage blocks on one page are ignored. The
+ * caller is expected to merge legacy + aggressive into one call (see
+ * the per-bot renderer change in iter9).
+ */
+export function buildFaqJsonLd(
+  queryOrPairs: string | Array<{ question: string; answer: string }>,
+  answerText?: string,
 ): Record<string, unknown> {
+  if (typeof queryOrPairs === "string") {
+    // Legacy single-pair signature.
+    return {
+      "@context": "https://schema.org",
+      "@type":    "FAQPage",
+      mainEntity: [
+        {
+          "@type": "Question",
+          name:    queryOrPairs,
+          acceptedAnswer: {
+            "@type": "Answer",
+            text:    stripMarkdown(answerText ?? ""),
+          },
+        },
+      ],
+    };
+  }
+  // Multi-entry array signature.
   return {
     "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: [
-      {
-        "@type": "Question",
-        name: query,
-        acceptedAnswer: {
-          "@type": "Answer",
-          text: stripMarkdown(answerText),
-        },
+    "@type":    "FAQPage",
+    mainEntity: queryOrPairs.map((p) => ({
+      "@type": "Question",
+      name:    p.question,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text:    stripMarkdown(p.answer),
       },
-    ],
+    })),
   };
 }
 
