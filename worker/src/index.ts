@@ -580,8 +580,18 @@ export default Sentry.withSentry(
     if (!isAiCrawler(userAgent)) {
       try {
         const tenant = await getTenant(env, domain);
-        if (tenant?.origin_url) {
-          const proxyRes = await proxyToOrigin(request, tenant.origin_url, domain);
+        // Hardcoded fallback for our own marketing site (the dogfood
+        // configuration). When advocatemcp.com is added to the worker
+        // routes for AI-crawler interception, human visitors still need
+        // to reach the actual Pages-hosted marketing site. We don't want
+        // to clutter the tenant DB with a record for ourselves, so the
+        // worker falls back to the canonical Pages URL when the request
+        // is for our own apex/www. (Apr 28 2026.)
+        const ADVOCATE_OWN_HOSTS = ["advocatemcp.com", "www.advocatemcp.com"];
+        const originUrl = tenant?.origin_url
+          || (ADVOCATE_OWN_HOSTS.includes(domain) ? "https://advocatemcp-site.pages.dev" : null);
+        if (originUrl) {
+          const proxyRes = await proxyToOrigin(request, originUrl, domain);
           ctx.waitUntil(
             Promise.resolve(
               logEvent({ ...baseEvent, status: proxyRes.status, referralUrl: null, taggedReferralUrl: null, latencyMs: Date.now() - startMs, error: null })

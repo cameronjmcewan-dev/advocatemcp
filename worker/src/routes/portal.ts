@@ -67,9 +67,27 @@ import {
 // Returns a Response if this is a portal path, or null to fall through to
 // the existing AI-crawler logic.
 
+// Portal routes are hostname-scoped to the customers + workers.dev preview
+// hosts. Without this guard, adding advocatemcp.com to the worker's route
+// list (so we can intercept AI crawlers on our own domain — full dogfood)
+// would have the worker also hijack /api/client/*, /auth/*, /Pricing.html
+// etc on advocatemcp.com — which would either 401 the whole marketing
+// site (auth endpoints) or trigger the customers→advocatemcp.com HTML
+// redirect loop. Apr 28 2026.
+const PORTAL_HOSTS = new Set([
+  "customers.advocatemcp.com",
+  "advocatecameron.workers.dev",
+  "advocatemcp-worker.advocatecameron.workers.dev",
+]);
+
 export async function handlePortal(request: Request, env: Env): Promise<Response | null> {
-  const { pathname } = new URL(request.url);
+  const url = new URL(request.url);
+  const { pathname } = url;
   const method = request.method;
+
+  // Fall through if this isn't the portal host — let the bot-detection /
+  // human-proxy logic in index.ts handle it.
+  if (!PORTAL_HOSTS.has(url.hostname)) return null;
 
   if (pathname === "/login"               && method === "GET")  return Response.redirect("https://advocatemcp.com/login.html", 301);
   if (pathname === "/auth/login"          && method === "POST") return authLogin(request, env);
