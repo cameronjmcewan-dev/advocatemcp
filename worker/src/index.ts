@@ -219,7 +219,11 @@ export default Sentry.withSentry(
     dsn:               env.SENTRY_DSN,
     environment:       env.SENTRY_ENVIRONMENT ?? "production",
     release:           "advocatemcp-worker",
-    tracesSampleRate:  0.1,
+    // Apr 28 2026: bumped from 0.1 → 1.0 during initial verification
+    // so every request produces a trace. Drop back to 0.1 once Sentry
+    // dashboards confirm wiring + you want to conserve free-tier
+    // transaction quota.
+    tracesSampleRate:  1.0,
     sendDefaultPii:    false,
   }),
   {
@@ -230,6 +234,23 @@ export default Sentry.withSentry(
     const userAgent  = request.headers.get("User-Agent") ?? "";
     const timestamp  = new Date(startMs).toISOString();
     const botType    = crawlerName(userAgent);
+
+    // Apr 28 2026 verification endpoint. GET /__sentry-test forces a
+    // synthetic captureMessage so we can verify the DSN is wired
+    // correctly without waiting for organic traffic to hit the 10%
+    // (or 100%) sample rate. Returns immediately so the test event
+    // doesn't depend on the rest of the handler. Safe to leave in
+    // place — only fires when the exact path is requested.
+    if (url.pathname === "/__sentry-test" && request.method === "GET") {
+      const id = Sentry.captureMessage(
+        `worker test event ${new Date().toISOString()}`,
+        "info",
+      );
+      return new Response(
+        JSON.stringify({ ok: true, sentry_event_id: id, dsn_configured: !!env.SENTRY_DSN }),
+        { headers: { "Content-Type": "application/json" } },
+      );
+    }
 
     const baseEvent = {
       timestamp, hostname: domain, path: url.pathname,
