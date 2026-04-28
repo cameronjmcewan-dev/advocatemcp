@@ -56,9 +56,20 @@ body { background: var(--paper-2); }
   position: sticky; top: 0; height: 100vh;
   overflow-y: auto;
 }
-.sb-brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 12px; border-bottom: 1px solid var(--line); }
+/* Sidebar logo links back to the marketing homepage. The anchor reset
+   strips default link styling so it visually matches the old <div>;
+   hover/focus add a subtle paper-2 wash to signal it's clickable. */
+.sb-brand {
+  display: flex; align-items: center; gap: 10px;
+  padding: 4px 8px 12px; border-bottom: 1px solid var(--line);
+  text-decoration: none; color: inherit; cursor: pointer;
+  border-radius: 8px 8px 0 0;
+  transition: background-color .15s;
+}
+.sb-brand:hover { background: var(--paper-2); }
+.sb-brand:focus-visible { outline: 2px solid var(--maroon); outline-offset: 2px; }
 .sb-brand .brand-mark { width: 32px; height: 32px; border-radius: 8px; background: var(--maroon) url('/icon-192.png') center / cover no-repeat; color: transparent; font-size: 0; display: grid; place-items: center; box-shadow: 0 1px 2px rgba(26,24,22,.12), 0 0 0 1px rgba(92,26,60,.25); }
-.sb-brand .name { font-family: var(--serif); font-size: 22px; }
+.sb-brand .name { font-family: var(--serif); font-size: 22px; color: var(--ink); }
 
 .sb-biz {
   padding: 12px; border-radius: var(--r-md); background: var(--paper-2);

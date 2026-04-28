@@ -106,10 +106,10 @@
     const bizSub = biz.location ? `${escHtml(biz.location)} · ${escHtml(biz.plan)}` : escHtml(biz.plan);
     return `
     <aside class="sidebar" id="amcp-sidebar">
-      <div class="sb-brand">
+      <a class="sb-brand" href="/" aria-label="Advocate — back to homepage">
         <span class="brand-mark" aria-hidden="true">A</span>
         <span class="name">Advocate</span>
-      </div>
+      </a>
       <div class="sb-biz" title="Switch business">
         <div class="sq">${escHtml(biz.letter)}</div>
         <div class="info">
