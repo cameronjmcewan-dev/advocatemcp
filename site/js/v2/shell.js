@@ -239,6 +239,19 @@
 
       // Wait for data, then merge into AMCP_DATA and swap main content.
       data = await dataPromise;
+      // If fetchReal threw (script-load order issue, network down, or a
+      // module's fetch rejected), show an explicit error card so the
+      // user knows the dashboard didn't successfully load — instead of
+      // silently rendering zeros and looking like a dead account.
+      // (Apr 28 2026 audit fix.)
+      if (data && data.__error) {
+        const root = document.getElementById('page-content');
+        if (root) root.innerHTML = renderErrorCard(data.__error);
+        if (typeof opts.afterMount === 'function') {
+          try { opts.afterMount(data); } catch (_) { /* error UI is the priority */ }
+        }
+        return;
+      }
       const m = (data && (data.metrics || data)) || {};
       Object.assign(window.AMCP_DATA, m);
 
@@ -325,6 +338,31 @@
       <style>
         @keyframes amcp-spin { to { transform: rotate(360deg); } }
       </style>
+    `;
+  }
+
+  /* Error card — shown when fetchReal() rejects so the dashboard
+     doesn't silently render zeros and look like a broken account.
+     Refresh button is the simplest recovery; the support email is the
+     fallback when the failure persists. */
+  function renderErrorCard(message) {
+    const safe = String(message || 'Unknown error').replace(/[<>&]/g, (c) => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+    return `
+      <div class="row single">
+        <div class="card-dash" style="padding:36px;text-align:center;max-width:560px;margin:0 auto">
+          <div style="font-size:28px;margin-bottom:12px">⚠️</div>
+          <h3 style="font-family:var(--serif);font-weight:400;font-size:24px;margin:0 0 8px;color:var(--ink)">Couldn't load your dashboard</h3>
+          <p style="font-size:13.5px;color:var(--ink-2);line-height:1.55;margin:0 0 20px">
+            We hit a snag fetching your data. This is usually a transient blip — refresh the page and it'll likely work.
+            If it sticks, email <a href="mailto:max@advocate-mcp.com" style="color:var(--maroon)">max@advocate-mcp.com</a> with the message below.
+          </p>
+          <button type="button" onclick="window.location.reload()" class="btn btn-primary btn-sm" style="margin-bottom:16px">Refresh page</button>
+          <details style="font-size:12px;color:var(--muted);text-align:left;margin-top:12px">
+            <summary style="cursor:pointer">Technical details</summary>
+            <pre style="background:var(--paper-2);border:1px solid var(--line);border-radius:6px;padding:10px;margin-top:8px;font-family:var(--mono);font-size:11.5px;overflow-x:auto;white-space:pre-wrap">${safe}</pre>
+          </details>
+        </div>
+      </div>
     `;
   }
 
@@ -418,7 +456,10 @@
         `aria-label="Dismiss for this session">×</button>`;
     document.body.appendChild(b);
     // Push down chrome so the fixed banner doesn't cover the topbar.
-    const offset = hasImpersonation ? 64 : 32;
+    // Each banner adds its own +32; the impersonation banner (if any)
+    // already pushed +32 when it mounted, so we just add the beta
+    // banner's +32 here. The previously-computed `offset` const was
+    // dead code — removed Apr 28 2026 audit fix.
     document.querySelectorAll('.app, .sidebar, .main').forEach(el => {
       el.style.paddingTop = (parseFloat(getComputedStyle(el).paddingTop) + 32) + 'px';
     });
@@ -437,6 +478,11 @@
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
+
+  // Re-exported on window so the SPA router can show the same error UI
+  // when client-side fetchReal calls reject mid-navigation. Keeps the
+  // visual treatment consistent between first-paint and SPA-nav errors.
+  window.AMCP_SHELL_RENDER_ERROR = renderErrorCard;
 
   window.AMCP_SHELL = { boot, isPreviewHost };
 })();

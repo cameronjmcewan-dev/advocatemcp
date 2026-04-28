@@ -93,11 +93,17 @@ body { background: var(--paper-2); }
 
 .topbar {
   display: flex; justify-content: space-between; align-items: center;
-  margin-bottom: 28px; gap: 16px;
+  margin-bottom: 28px; gap: 16px; flex-wrap: wrap;
 }
 .tb-left h1 { font-family: var(--serif); font-weight: 400; font-size: 32px; line-height: 1.1; }
 .tb-left .crumb { color: var(--muted); font-size: 13px; margin-bottom: 4px; }
-.tb-right { display: flex; gap: 10px; align-items: center; }
+/* `min-width:0` lets `.tb-right` shrink below its content size when the
+   topbar wraps; without it, the flex child stays at intrinsic width and
+   forces a horizontal scroll on viewports between 1024–1280px when the
+   FAB, location selector, date range, and share/invite buttons all show
+   together. `flex-wrap:wrap` on the inner cluster lets buttons stack
+   onto a second line gracefully. */
+.tb-right { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; min-width: 0; justify-content: flex-end; }
 .date-range {
   display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px;
   background: var(--paper); border: 1px solid var(--line); border-radius: 999px;

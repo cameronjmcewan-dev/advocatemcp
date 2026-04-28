@@ -239,8 +239,9 @@
               <input type="text" id="rev-webhook-secret" readonly placeholder="Secret appears here on generate/rotate"
                      value=""
                      class="key-input" style="width:100%;font-family:var(--mono);font-size:12px">
-              <div style="display:flex;gap:6px">
+              <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
                 <button class="btn btn-ghost btn-sm" id="btn-gen-revenue-secret" type="button">${d.revenue && d.revenue.webhook_configured ? 'Rotate secret' : 'Generate'}</button>
+                <button class="btn btn-ghost btn-sm" id="btn-copy-rev-secret" type="button" disabled style="opacity:.5" title="Generate a secret first">Copy secret</button>
                 <button class="btn btn-ghost btn-sm" id="btn-copy-rev-curl" type="button">Copy test curl</button>
               </div>
               <div id="rev-secret-status" style="font-size:11.5px;color:var(--muted);max-width:340px;text-align:right;line-height:1.5"></div>
@@ -566,6 +567,16 @@
     const aovBtn = document.getElementById('btn-save-aov');
     const aovInput = document.getElementById('rev-aov-input');
     if (aovBtn && aovInput && af) {
+      // Reset the button label as soon as the user touches the field
+      // again. Without this, a stale "Saved ✓" label could linger from
+      // a previous save, making the user wonder whether their fresh
+      // edit got persisted. (Apr 28 2026 audit fix.)
+      aovInput.addEventListener('input', () => {
+        if (aovBtn.textContent !== 'Saving…') {
+          aovBtn.textContent = 'Save';
+          aovBtn.disabled = false;
+        }
+      });
       aovBtn.addEventListener('click', async () => {
         const dollars = aovInput.value.trim();
         const cents = dollars === '' ? null : Math.round(parseFloat(dollars) * 100);
@@ -624,11 +635,40 @@
           secretInput.value = data.secret || '';
           genBtn.textContent = 'Rotate secret';
           genBtn.disabled = false;
+          // Enable the Copy-secret button now that there's content to
+          // copy. The secret is shown ONCE, so giving the user a single
+          // click to grab it (vs triple-click select-all on a 64-char
+          // input) closes a real friction point.
+          const copySecretBtnNow = document.getElementById('btn-copy-rev-secret');
+          if (copySecretBtnNow) {
+            copySecretBtnNow.disabled = false;
+            copySecretBtnNow.style.opacity = '1';
+            copySecretBtnNow.removeAttribute('title');
+          }
           setRevStatus('Secret shown above — copy it now. We won\'t show it again. Re-rotate if you lose it.', false);
         } catch (_) {
           genBtn.textContent = isRotate ? 'Rotate failed' : 'Generate failed';
           genBtn.disabled = false;
           setRevStatus('Could not generate. Try again or contact max@advocate-mcp.com.', true);
+        }
+      });
+    }
+
+    // Copy secret — single-click grab of the freshly-generated secret.
+    // The input is only populated for the lifetime of the page after a
+    // generate/rotate (we never re-show it on subsequent loads), so the
+    // button stays disabled until then.
+    const copySecretBtn = document.getElementById('btn-copy-rev-secret');
+    if (copySecretBtn && secretInput) {
+      copySecretBtn.addEventListener('click', async () => {
+        if (!secretInput.value) return;
+        try {
+          await navigator.clipboard.writeText(secretInput.value);
+          copySecretBtn.textContent = 'Copied!';
+          setTimeout(() => { copySecretBtn.textContent = 'Copy secret'; }, 2000);
+        } catch (_) {
+          copySecretBtn.textContent = 'Copy failed';
+          setTimeout(() => { copySecretBtn.textContent = 'Copy secret'; }, 2000);
         }
       });
     }
@@ -908,7 +948,15 @@
           </div>`;
         }).join('');
 
-        // Optional add-form below the list.
+        // Optional add-form below the list. Prefill state and (optionally)
+        // phone from the primary location — most multi-location tenants
+        // are expanding within the same state, so we save the user a
+        // typing pass while still leaving city/address blank for them
+        // to fill (which they have to anyway). City stays blank because
+        // assuming a duplicate would be misleading. (Apr 28 2026.)
+        const primary = (locations || []).find((l) => l.is_primary) || null;
+        const preState = primary ? esc(primary.state || '') : '';
+        const prePhone = primary ? esc(primary.phone || '') : '';
         const addFormHtml = adding
           ? `<div class="set-row" data-loc-id="__new" style="align-items:flex-start;gap:12px;flex-wrap:wrap;background:var(--paper-2)">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:1;min-width:280px">
@@ -916,9 +964,9 @@
                 <input type="text" class="key-input" data-field="address_line1" placeholder="Address line 1">
                 <input type="text" class="key-input" data-field="address_line2" placeholder="Address line 2 (opt.)">
                 <input type="text" class="key-input" data-field="city" placeholder="City *">
-                <input type="text" class="key-input" data-field="state" placeholder="State *">
+                <input type="text" class="key-input" data-field="state" placeholder="State *" value="${preState}">
                 <input type="text" class="key-input" data-field="postal_code" placeholder="ZIP/Postal">
-                <input type="text" class="key-input" data-field="phone" placeholder="Phone">
+                <input type="text" class="key-input" data-field="phone" placeholder="Phone" value="${prePhone}">
               </div>
               <div style="display:flex;gap:6px;flex-direction:column">
                 <button class="btn btn-primary btn-sm" data-act="save-new">Add location</button>
