@@ -1,0 +1,61 @@
+name: Deploy worker to Cloudflare
+
+# Why this workflow exists:
+#
+# The worker is deployed via `npx wrangler deploy` from worker/. There
+# is no built-in auto-deploy on push (unlike the Pages git provider
+# integration). Without this workflow, every worker change has to be
+# pushed manually from a developer's machine — same fragility class
+# as the Pages issue: easy to forget, easy to ship code that never
+# reaches production.
+#
+# This workflow auto-deploys the worker whenever push to main touches
+# worker/**. Pull requests run a dry-run typecheck + smoke-test build
+# but do NOT deploy to production — preview deploys for the worker
+# would require per-PR routes which we don't manage today.
+#
+# Required repo secrets (same set as deploy-pages.yml):
+#   CLOUDFLARE_API_TOKEN  — token with Workers Scripts: Edit
+#   CLOUDFLARE_ACCOUNT_ID — 7d93ac7288642081ef8f0e8e406c34a2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "worker/**"
+      - ".github/workflows/deploy-worker.yml"
+  pull_request:
+    paths:
+      - "worker/**"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: worker/package-lock.json
+
+      - run: npm ci
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Deploy worker (main only)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          command: deploy
