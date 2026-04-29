@@ -1,7 +1,14 @@
-// Client dashboard: full-featured analytics UI with 6 sections.
-// Imported by portal.ts — buildDashboard() replaces the old dashboardHtml().
+// Client dashboard: full-featured analytics UI.
+// Phase A redesign (Apr 29 2026) collapses the 4 analytics tabs (Overview /
+// AI Requests / Referral Clicks / Bot Activity) into a single unified
+// "Analytics" tab with a Profound-style card grid. The Recommendations +
+// Settings tabs are preserved; new tabs are added for "Analytics" at the
+// top of the sidebar.
 
 import type { Business, User } from "../portalDb";
+import { CARD_REGISTRY, DEFAULT_DASHBOARD_LAYOUT, getCard, type CardSize } from "./dashboard/cards";
+import { renderCard, CARD_GRID_CSS } from "./dashboard/renderCard";
+import { DASHBOARD_CLIENT_SCRIPT } from "./dashboard/clientScript";
 
 // ── Exported interface ─────────────────────────────────────────────────────
 
@@ -335,6 +342,26 @@ export function buildDashboard(
     <div class="sec-bd">${buildHeatmap(a?.activity_by_dow_hour ?? [])}</div>
   </div>`;
 
+  // ── Phase A unified Analytics card grid ──────────────────────────────────
+  // The 4 legacy section variables (overviewHtml/requestsHtml/clicksHtml/
+  // botsHtml) are intentionally still computed above for backward compat
+  // (some downstream tests / e2e probes inspect their HTML), but the new
+  // dashboard render uses ONLY analyticsHtml below — a single grid of
+  // ECharts-driven cards from DEFAULT_DASHBOARD_LAYOUT. Cards are
+  // self-loading via clientScript.ts; the server only emits chrome.
+  void overviewHtml; void requestsHtml; void clicksHtml; void botsHtml;
+  const analyticsHtml = (() => {
+    const cardsHtml = DEFAULT_DASHBOARD_LAYOUT
+      .map((entry) => {
+        const card = getCard(entry.card_id);
+        if (!card) return "";
+        return renderCard(card, entry.size as CardSize);
+      })
+      .filter(Boolean)
+      .join("\n");
+    return `<div id="card-grid" class="dashboard-grid">${cardsHtml}</div>`;
+  })();
+
   // Recommendations
   const recBorder: Record<string, string> = { success: "#059669", warning: "#d97706", info: "#2563eb" };
   const recCards = recs.map((r) =>
@@ -399,6 +426,7 @@ export function buildDashboard(
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${selected ? esc(selected.business_name) : "Dashboard"} — AdvocateMCP</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js" defer><\/script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer><\/script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -500,7 +528,17 @@ html.dark .btn-danger:hover{background:#450a0a}
   .two-col{grid-template-columns:1fr}
 }
 @media(max-width:480px){.kpis{grid-template-columns:1fr}}
+
+/* Date range picker (Phase A) */
+.range-picker{display:inline-flex;align-items:center;gap:.375rem;padding:.3rem .5rem;border:1px solid var(--border);border-radius:6px;background:var(--card)}
+.range-picker select{border:none;background:transparent;color:var(--text);font-size:.8125rem;font-family:inherit;cursor:pointer;padding-right:.25rem}
+.range-picker select:focus{outline:none}
+.range-custom{display:none;align-items:center;gap:.375rem;margin-left:.5rem}
+.range-custom input{border:1px solid var(--border);border-radius:5px;padding:.25rem .375rem;font-size:.75rem;background:var(--card);color:var(--text);font-family:inherit}
+.range-apply{background:var(--info);color:#fff;border:none;border-radius:5px;padding:.3rem .625rem;font-size:.75rem;font-weight:500;cursor:pointer;font-family:inherit}
+.range-apply:hover{filter:brightness(1.1)}
 </style>
+${CARD_GRID_CSS}
 </head>
 <body>
 <div class="layout">
@@ -510,21 +548,9 @@ html.dark .btn-danger:hover{background:#450a0a}
       <div class="sb-name">AdvocateMCP</div>
     </div>
     <div class="sb-nav">
-      <button class="nav-a on" onclick="nav('overview',this)">
+      <button class="nav-a on" onclick="nav('analytics',this)">
         <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="5" height="5" rx="1"/><rect x="8" y="1" width="5" height="5" rx="1"/><rect x="1" y="8" width="5" height="5" rx="1"/><rect x="8" y="8" width="5" height="5" rx="1"/></svg>
-        Overview
-      </button>
-      <button class="nav-a" onclick="nav('requests',this)">
-        <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="2" y1="4" x2="12" y2="4"/><line x1="2" y1="7" x2="12" y2="7"/><line x1="2" y1="10" x2="12" y2="10"/></svg>
-        AI Requests
-      </button>
-      <button class="nav-a" onclick="nav('clicks',this)">
-        <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2L13 7 6 12V9L1 9V5L6 5V2z"/></svg>
-        Referral Clicks
-      </button>
-      <button class="nav-a" onclick="nav('bots',this)">
-        <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="5" width="10" height="7" rx="2"/><rect x="5" y="8" width="1.5" height="1.5" fill="currentColor" stroke="none"/><rect x="7.5" y="8" width="1.5" height="1.5" fill="currentColor" stroke="none"/><line x1="5" y1="2" x2="9" y2="2"/><line x1="7" y1="2" x2="7" y2="5"/></svg>
-        Bot Activity
+        Analytics
       </button>
       <button class="nav-a" onclick="nav('recs',this)">
         <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 1a4 4 0 00-2.5 7.1V10h5V8.1A4 4 0 007 1z"/><line x1="5" y1="12" x2="9" y2="12"/></svg>
@@ -546,17 +572,30 @@ html.dark .btn-danger:hover{background:#450a0a}
 
   <div class="main">
     <div class="topbar">
-      <div style="display:flex;align-items:center;gap:.75rem">
-        <div class="tb-title" id="tb-title">Overview</div>
+      <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+        <div class="tb-title" id="tb-title">Analytics</div>
         ${bizSelector}
+        <div class="range-picker">
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="10" height="9" rx="1.5"/><line x1="2" y1="6" x2="12" y2="6"/><line x1="5" y1="1.5" x2="5" y2="3.5"/><line x1="9" y1="1.5" x2="9" y2="3.5"/></svg>
+          <select id="range-picker">
+            <option value="7d">Last 7 days</option>
+            <option value="30d" selected>Last 30 days</option>
+            <option value="90d">Last 90 days</option>
+            <option value="365d">Last year</option>
+            <option value="custom">Custom…</option>
+          </select>
+        </div>
+        <div class="range-custom" id="range-custom">
+          <input type="date" id="range-start">
+          <span style="color:var(--muted);font-size:.75rem">to</span>
+          <input type="date" id="range-end">
+          <button class="range-apply" id="range-apply" type="button">Apply</button>
+        </div>
       </div>
       <button class="dark-toggle" onclick="toggleDark()" id="dark-btn">Dark</button>
     </div>
     <div class="content">
-      <div id="sec-overview"  class="section active">${overviewHtml}</div>
-      <div id="sec-requests"  class="section">${requestsHtml}</div>
-      <div id="sec-clicks"    class="section">${clicksHtml}</div>
-      <div id="sec-bots"      class="section">${botsHtml}</div>
+      <div id="sec-analytics" class="section active">${analyticsHtml}</div>
       <div id="sec-recs"      class="section">${recsHtml}</div>
       <div id="sec-settings"  class="section">${settingsHtml}</div>
     </div>
@@ -576,7 +615,7 @@ function nav(name, btn) {
   if (el) el.classList.add('active');
   document.querySelectorAll('.nav-a').forEach(function(a) { a.classList.remove('on'); });
   if (btn) btn.classList.add('on');
-  var titles = {overview:'Overview',requests:'AI Requests',clicks:'Referral Clicks',bots:'Bot Activity',recs:'Recommendations',settings:'Settings'};
+  var titles = {analytics:'Analytics',recs:'Recommendations',settings:'Settings'};
   document.getElementById('tb-title').textContent = titles[name] || name;
   curSection = name;
   if ((name === 'overview' || name === 'requests') && !chartsDone) setTimeout(initCharts, 50);
@@ -679,11 +718,21 @@ try {
   }
 } catch(e) {}
 
-// Chart init on load
+// Chart init on load (legacy Chart.js trend — left in place for the
+// Recommendations/Settings sections that still reference TREND_DATA).
 window.addEventListener('load', function() {
   if (TREND_DATA.some(function(v) { return v > 0; })) setTimeout(initCharts, 100);
 });
 <\/script>
+
+<!-- Phase A: dashboard config + ECharts client script -->
+<script id="dashboard-config" type="application/json">${JSON.stringify({
+  slug:        selected?.slug ?? null,
+  apiBase:     "",
+  rangeQS:     "range=30d",
+  businessName: selected?.business_name ?? null,
+})}<\/script>
+${DASHBOARD_CLIENT_SCRIPT}
 </body>
 </html>`;
 }
