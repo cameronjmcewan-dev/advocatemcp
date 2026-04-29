@@ -192,22 +192,14 @@
       const authed = await window.AMCP.requireAuth();
       if (!authed) return;  // AMCP.requireAuth already redirected
 
-      // Fire all three in parallel. Catch per-promise so one slow/failed
-      // request doesn't stall the others.
+      // Fire both in parallel. Catch per-promise so one slow/failed
+      // request doesn't stall the other.
       const mePromise = window.AMCP.authedFetch('/api/client/me')
         .then((r) => (r.ok ? r.json() : null))
         .catch(() => null);
       const dataPromise = typeof opts.fetchReal === 'function'
         ? opts.fetchReal().catch((err) => ({ __error: String(err && err.message || err) }))
         : Promise.resolve({});
-      // Dashboards CRUD list (course-correction Apr 29 2026 — multi-
-      // dashboard sidebar section). Fire alongside /me + opts.fetchReal so
-      // the chrome can render the dashboards list on first paint without a
-      // round-trip waterfall. Old workers that don't have the endpoint
-      // (pre-#146) gracefully degrade to an empty list.
-      const dashboardsPromise = window.AMCP.authedFetch('/api/client/dashboards')
-        .then((r) => (r.ok ? r.json() : null))
-        .catch(() => null);
 
       const me = await mePromise;
 
@@ -223,24 +215,6 @@
         user_role:     (me && me.role) || null,
         full_name:     (me && me.full_name) || null,
         impersonating: impersonating,
-      };
-
-      // Resolve the dashboards list (if available) before mounting chrome
-      // so the sidebar's "Dashboards" section renders on first paint
-      // rather than flickering in. The list is small + cheap; it's worth
-      // the few-ms wait. If the worker is old or the user has no
-      // business yet, this resolves to null and the section is hidden.
-      const dashboardsRes = await dashboardsPromise;
-      const dashboardsList = (dashboardsRes && Array.isArray(dashboardsRes.dashboards))
-        ? dashboardsRes.dashboards : [];
-      const activeDashboardIdQS = (() => {
-        const n = Number.parseInt(new URL(location.href).searchParams.get('dashboardId') || '', 10);
-        return Number.isFinite(n) ? n : null;
-      })();
-      const defaultDashboard = dashboardsList.find((d) => d.is_default === 1) || dashboardsList[0] || null;
-      window.AMCP_DASHBOARDS = {
-        list:               dashboardsList,
-        activeDashboardId:  activeDashboardIdQS != null ? activeDashboardIdQS : (defaultDashboard ? defaultDashboard.id : null),
       };
 
       // Mount chrome with a loading card BEFORE data arrives. The
