@@ -52,33 +52,110 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-/** Same minimal markdown→HTML as syntheticPagesRouter — keeps the
- *  comparison pages locked to the same anti-XSS posture (no scripts,
- *  no embeds, no images). Bullets, headings, paragraphs, **bold**. */
+/** Markdown→HTML renderer for comparison pages. Same anti-XSS posture
+ *  as syntheticPagesRouter: no scripts, no embeds, no images. Handles:
+ *    - `## ` / `### ` headings (h2 / h3, no level-bump)
+ *    - `- ` / `* ` bullet lists
+ *    - `---` horizontal rule on a line by itself
+ *    - Markdown tables (`| a | b |\n|---|---|\n| c | d |`)
+ *    - `**bold**` inline
+ *
+ *  Each block is escaped before any HTML is injected so embedded user
+ *  content can't break out of attributes or inject tags. */
 function renderBody(md: string): string {
+  const inline = (s: string): string =>
+    escapeHtml(s).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+
   const blocks = md.split(/\n{2,}/);
   const out: string[] = [];
+
   for (const block of blocks) {
+    const trimmed = block.trim();
+    if (!trimmed) continue;
+
+    // Horizontal rule — `---` (or `***`) alone on a line.
+    if (/^(?:-{3,}|\*{3,})$/.test(trimmed)) {
+      out.push("<hr>");
+      continue;
+    }
+
     const lines = block.split("\n");
+
+    // Markdown table. Detect: every line starts and ends with `|`, and
+    // the second line is the separator row (`| --- | --- |`-ish).
+    const isTable = lines.length >= 2
+      && lines.every((l) => /^\s*\|.*\|\s*$/.test(l))
+      && /^\s*\|(?:\s*:?-{2,}:?\s*\|)+\s*$/.test(lines[1] ?? "");
+    if (isTable) {
+      const cells = (l: string): string[] =>
+        l.replace(/^\s*\||\|\s*$/g, "").split("|").map((c) => c.trim());
+      const headers = cells(lines[0]!);
+      const rows = lines.slice(2).map(cells);
+      out.push(
+        '<table style="border-collapse:collapse;margin:1rem 0;width:100%">' +
+        "<thead><tr>" +
+        headers.map((h) => `<th style="text-align:left;padding:0.4rem 0.75rem;border-bottom:2px solid #d4ccbf">${inline(h)}</th>`).join("") +
+        "</tr></thead><tbody>" +
+        rows.map((r) =>
+          "<tr>" +
+          r.map((c) => `<td style="padding:0.4rem 0.75rem;border-bottom:1px solid #ece6db">${inline(c)}</td>`).join("") +
+          "</tr>",
+        ).join("") +
+        "</tbody></table>",
+      );
+      continue;
+    }
+
+    // Bullet list — every non-blank line starts with `- ` or `* `.
     if (lines.every((l) => /^[-*]\s+/.test(l.trim()))) {
       out.push(
         "<ul>" +
-        lines.map((l) => `<li>${escapeHtml(l.replace(/^[-*]\s+/, "")).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")}</li>`).join("") +
+        lines.map((l) => `<li>${inline(l.replace(/^[-*]\s+/, ""))}</li>`).join("") +
         "</ul>",
       );
-    } else if (/^#{1,3}\s+/.test(lines[0]?.trim() ?? "")) {
-      const m = lines[0].trim().match(/^(#{1,3})\s+(.+)$/);
-      if (m) {
-        const level = Math.min(m[1].length + 1, 4);
-        out.push(`<h${level}>${escapeHtml(m[2])}</h${level}>`);
-        const rest = lines.slice(1).join("\n").trim();
-        if (rest) out.push(`<p>${escapeHtml(rest).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")}</p>`);
-      }
-    } else {
-      out.push(`<p>${escapeHtml(block).replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")}</p>`);
+      continue;
     }
+
+    // Heading — `## ` / `### ` (or `# `). The body's title heading
+    // is the only `##`; section headings inside use `###`. We map
+    // 1:1 (no level-bump) — the page already declares <h1> in the
+    // article wrapper, so `##` → `<h2>` and `###` → `<h3>` is the
+    // canonical SEO-friendly nesting.
+    const headingMatch = lines[0]?.trim().match(/^(#{1,4})\s+(.+)$/);
+    if (headingMatch) {
+      const level = Math.min(Math.max(headingMatch[1].length, 2), 4);
+      out.push(`<h${level}>${inline(headingMatch[2])}</h${level}>`);
+      const rest = lines.slice(1).join("\n").trim();
+      if (rest) out.push(`<p>${inline(rest)}</p>`);
+      continue;
+    }
+
+    // Default: paragraph.
+    out.push(`<p>${inline(block)}</p>`);
   }
   return out.join("\n  ");
+}
+
+/** Drop the body's first markdown heading. We render a real <h1> from
+ *  the JSON-LD `name` at the top of the article, so the body's `##`
+ *  title heading would otherwise duplicate. */
+function stripFirstHeading(md: string): string {
+  const blocks = md.split(/\n{2,}/);
+  let removed = false;
+  const out: string[] = [];
+  for (const block of blocks) {
+    if (!removed && /^#{1,4}\s+/.test(block.trim())) {
+      removed = true;
+      // If the heading block has trailing content (intro paragraph
+      // glued to the heading), preserve that content.
+      const lines = block.split("\n");
+      const rest = lines.slice(1).join("\n").trim();
+      if (rest) out.push(rest);
+      continue;
+    }
+    out.push(block);
+  }
+  return out.join("\n\n");
 }
 
 comparisonPagesRouter.get("/compare/:host/*", (req: Request, res: Response) => {
@@ -119,16 +196,29 @@ comparisonPagesRouter.get("/compare/:host/*", (req: Request, res: Response) => {
     return;
   }
 
-  // Title is the first H1 / first sentence — comparison body always
-  // starts with the comparison title as a heading.
+  // Title — pulled from the persisted JSON-LD `name` field, NOT from
+  // the body markdown. The generator already wrote a clean title to
+  // schema_jsonld.name; reading it from there avoids the literal `## `
+  // markdown chars showing up in <title>. Fall through to a heading
+  // scan + first sentence if the schema is malformed.
   const title = (() => {
-    const m = row.body_md.match(/^#\s+(.+)$/m);
+    try {
+      const schema = JSON.parse(row.schema_jsonld) as { name?: string };
+      if (typeof schema.name === "string" && schema.name.trim()) {
+        return schema.name.trim();
+      }
+    } catch { /* fall through */ }
+    const m = row.body_md.match(/^#{1,3}\s+(.+)$/m);
     if (m) return m[1].trim();
     return row.body_md.split(/[.!?]/)[0]?.trim().slice(0, 70) ?? "Comparison";
   })();
 
+  // Description — first sentence, but skip any leading heading line
+  // so we don't pull "## Advocate vs Scrunch AI" into the meta tag.
   const desc = (() => {
-    const sentence = row.body_md.split(/[.!?]/)[0]?.trim() ?? "";
+    const lines = row.body_md.split("\n");
+    const firstNonHeading = lines.find((l) => l.trim() && !/^#{1,4}\s+/.test(l.trim())) ?? "";
+    const sentence = firstNonHeading.split(/[.!?]/)[0]?.trim() ?? "";
     if (sentence.length <= 160) return sentence + ".";
     const slice = sentence.slice(0, 160);
     const lastSpace = slice.lastIndexOf(" ");
@@ -159,7 +249,8 @@ ${row.schema_jsonld}
 </head>
 <body>
   <article>
-    ${renderBody(row.body_md)}
+    <h1>${escapeHtml(title)}</h1>
+    ${renderBody(stripFirstHeading(row.body_md))}
   </article>
 </body>
 </html>`;
