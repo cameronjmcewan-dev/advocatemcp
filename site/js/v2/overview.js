@@ -756,10 +756,70 @@
     }
   }
 
+  // ── Dashboard-grid fork (Profound parity, Apr 29 2026) ──────────────────
+  // The legacy `render` + `afterMount` above are the existing hardcoded
+  // Overview. When ?dashboardId=N is in the URL AND a saved dashboard
+  // matches that id, we instead render the configurable Profound-style
+  // ECharts card grid via window.AMCP_DASHBOARD_GRID.mountGrid (loaded
+  // from /js/v2/dashboardGrid.js). The fork lives in this file (not in
+  // app.html's boot script) because the SPA router calls AMCP_OVERVIEW.
+  // render directly on every internal navigation — bypassing app.html's
+  // boot fork. Sharing the fork here guarantees both code paths agree.
+  function getActiveDashboardRow() {
+    const dash = window.AMCP_DASHBOARDS;
+    if (!dash || !Array.isArray(dash.list)) return null;
+    const id = (() => {
+      const n = Number.parseInt(new URL(location.href).searchParams.get('dashboardId') || '', 10);
+      return Number.isFinite(n) ? n : null;
+    })();
+    if (id != null) return dash.list.find((d) => d.id === id) || null;
+    return dash.list.find((d) => d.is_default === 1) || dash.list[0] || null;
+  }
+  function wantsGridRender() {
+    const id = (() => {
+      const n = Number.parseInt(new URL(location.href).searchParams.get('dashboardId') || '', 10);
+      return Number.isFinite(n) ? n : null;
+    })();
+    return id != null && getActiveDashboardRow() != null;
+  }
+
+  function renderForked(data) {
+    if (wantsGridRender()) {
+      // Placeholder — the real grid is mounted in afterMount once
+      // ECharts has finished loading from CDN.
+      return '<div id="page-content-grid-mount"></div>';
+    }
+    return render(data);
+  }
+
+  function afterMountForked(data) {
+    if (wantsGridRender() && window.AMCP_DASHBOARD_GRID) {
+      const row = getActiveDashboardRow();
+      let layout = [];
+      try { layout = (row && JSON.parse(row.layout_json)) || []; } catch (_) { layout = []; }
+      if (!Array.isArray(layout) || !layout.length) {
+        // Fallback to the same default seed the worker uses.
+        layout = [
+          { card_id: 'visibilityScore',    size: 'sm' },
+          { card_id: 'clickRate',          size: 'sm' },
+          { card_id: 'queriesOverTime',    size: 'lg' },
+          { card_id: 'botMix',             size: 'md' },
+          { card_id: 'intentDistribution', size: 'md' },
+          { card_id: 'activityHeatmap',    size: 'lg' },
+          { card_id: 'topQueries',         size: 'md' },
+          { card_id: 'agentReputation',    size: 'md' },
+        ];
+      }
+      window.AMCP_DASHBOARD_GRID.mountGrid(layout);
+      return;
+    }
+    return afterMount(data);
+  }
+
   window.AMCP_OVERVIEW = {
     demo:   () => DEMO,
     fetch:  fetchReal,
-    render,
-    afterMount,
+    render: renderForked,
+    afterMount: afterMountForked,
   };
 })();
