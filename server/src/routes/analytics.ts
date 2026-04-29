@@ -3,8 +3,24 @@ import type { Request, Response } from "express";
 import { requireSlugApiKey, requireApiKey } from "../middleware/auth.js";
 import { getDb, type QueryRow } from "../db.js";
 import { findByRequestId, setOutcome } from "../repos/agentRequests.js";
+import { parseDateRange, sqlBounds, type DateRange } from "../lib/dateRange.js";
 
 export const analyticsRouter = Router();
+
+/** Wrap parseDateRange with a 400-on-error response. Used by every
+ *  analytics endpoint that supports the global date range filter. */
+function parseRangeOr400(req: Request, res: Response): DateRange | null {
+  try {
+    return parseDateRange(req.query as Record<string, unknown>);
+  } catch (e: unknown) {
+    if (e instanceof Error && (e as { code?: string }).code === "invalid_date_range") {
+      res.status(400).json({ error: e.message });
+    } else {
+      res.status(400).json({ error: "invalid_date_range" });
+    }
+    return null;
+  }
+}
 
 /**
  * GET /analytics/:slug
@@ -20,62 +36,76 @@ analyticsRouter.get(
     const { slug } = req.params;
     const db = getDb();
 
-    // ── Total query count ──
+    // Phase A: every aggregate now respects the global date range filter.
+    // Range comes from ?start_date=&end_date= or ?range=7d|30d|90d|365d.
+    // Default = last 30 days (preserves pre-Phase-A behavior).
+    const range = parseRangeOr400(req, res);
+    if (!range) return;
+    const { startSql, endSql } = sqlBounds(range);
+
+    // Lifetime totals (NOT date-bounded — these are headline KPIs the
+    // dashboard renders at the top of the page).
     const { count: totalQueries } = db
       .prepare("SELECT COUNT(*) AS count FROM queries WHERE business_slug = ?")
       .get(slug) as { count: number };
 
-    // ── Breakdown by crawler ──
+    // ── Breakdown by crawler (within range) ──
     const crawlerRows = db
       .prepare(
         `SELECT COALESCE(crawler_agent, 'unknown') AS crawler, COUNT(*) AS count
          FROM queries
          WHERE business_slug = ?
+           AND timestamp >= ? AND timestamp <= ?
          GROUP BY crawler_agent
          ORDER BY count DESC`
       )
-      .all(slug) as { crawler: string; count: number }[];
+      .all(slug, startSql, endSql) as { crawler: string; count: number }[];
 
     const queriesByCrawler: Record<string, number> = {};
     for (const row of crawlerRows) {
       queriesByCrawler[row.crawler] = row.count;
     }
 
-    // ── Top queries by frequency ──
+    // ── Top queries by frequency (within range) ──
     const topQueryRows = db
       .prepare(
         `SELECT query_text, COUNT(*) AS count
          FROM queries
          WHERE business_slug = ?
+           AND timestamp >= ? AND timestamp <= ?
          GROUP BY query_text
          ORDER BY count DESC
          LIMIT 10`
       )
-      .all(slug) as { query_text: string; count: number }[];
+      .all(slug, startSql, endSql) as { query_text: string; count: number }[];
 
     const topQueries = topQueryRows.map((r) => r.query_text);
 
-    // ── Daily counts for last 30 days ──
-    const last30Days = db
+    // ── Daily counts (within range) ──
+    // The result key stays `queries_last_30_days` for backwards compat with
+    // the existing client; consumers that key on the date array shape (not
+    // the count) keep working.
+    const queriesInRange = db
       .prepare(
         `SELECT DATE(timestamp) AS date, COUNT(*) AS count
          FROM queries
          WHERE business_slug = ?
-           AND timestamp >= DATE('now', '-29 days')
+           AND timestamp >= ? AND timestamp <= ?
          GROUP BY DATE(timestamp)
          ORDER BY date ASC`
       )
-      .all(slug) as { date: string; count: number }[];
+      .all(slug, startSql, endSql) as { date: string; count: number }[];
 
-    // ── Referral clicks in last 30 days ──
-    const { clicks30 } = db
+    // ── Referral clicks within range ──
+    const { clicksInRange } = db
       .prepare(
-        `SELECT COUNT(*) AS clicks30 FROM click_events
-         WHERE business_slug = ? AND timestamp >= DATE('now', '-29 days')`
+        `SELECT COUNT(*) AS clicksInRange FROM click_events
+         WHERE business_slug = ?
+           AND timestamp >= ? AND timestamp <= ?`
       )
-      .get(slug) as { clicks30: number };
+      .get(slug, startSql, endSql) as { clicksInRange: number };
 
-    // ── Activity by day-of-week and hour (UTC) ──
+    // ── Activity by day-of-week and hour (within range) ──
     const dowHourRows = db
       .prepare(
         `SELECT CAST(strftime('%w', timestamp) AS INTEGER) AS dow,
@@ -83,38 +113,41 @@ analyticsRouter.get(
                 COUNT(*) AS count
          FROM queries
          WHERE business_slug = ?
+           AND timestamp >= ? AND timestamp <= ?
          GROUP BY dow, hour`
       )
-      .all(slug) as { dow: number; hour: number; count: number }[];
+      .all(slug, startSql, endSql) as { dow: number; hour: number; count: number }[];
 
-    // ── 50 most recent queries ──
+    // ── 50 most recent queries (within range) ──
     const recentQueries = db
       .prepare(
         `SELECT id, crawler_agent, query_text, response_text, referral_clicked, timestamp, intent
          FROM queries
          WHERE business_slug = ?
+           AND timestamp >= ? AND timestamp <= ?
          ORDER BY timestamp DESC
          LIMIT 50`
       )
-      .all(slug) as Omit<QueryRow, "business_slug">[];
+      .all(slug, startSql, endSql) as Omit<QueryRow, "business_slug">[];
 
-    // ── Referral click count (from deduplicated click_events log) ──
+    // ── Referral click count (lifetime) ──
     const { clicks: referralClicks } = db
       .prepare(
         `SELECT COUNT(*) AS clicks FROM click_events WHERE business_slug = ?`
       )
       .get(slug) as { clicks: number };
 
-    // ── Breakdown by intent ──
+    // ── Breakdown by intent (within range) ──
     const intentRows = db
       .prepare(
         `SELECT COALESCE(intent, 'unknown') AS intent, COUNT(*) AS count
          FROM queries
          WHERE business_slug = ?
+           AND timestamp >= ? AND timestamp <= ?
          GROUP BY COALESCE(intent, 'unknown')
          ORDER BY count DESC`
       )
-      .all(slug) as { intent: string; count: number }[];
+      .all(slug, startSql, endSql) as { intent: string; count: number }[];
 
     const queriesByIntent: Record<string, number> = {};
     for (const row of intentRows) {
@@ -123,13 +156,18 @@ analyticsRouter.get(
 
     res.json({
       slug,
-      total_queries: totalQueries,
-      referral_clicks: referralClicks,
-      referral_clicks_last_30_days: clicks30,
+      // Range echo so the client can confirm what it asked for + render the
+      // selected pill state on the picker without a second source of truth.
+      date_range: { start: range.start, end: range.end, days: range.days },
+      total_queries: totalQueries,                  // lifetime
+      referral_clicks: referralClicks,              // lifetime
+      // Field name preserved for backward compat — the value is now the
+      // bounded count, not always-30-day. Documented at the consumer.
+      referral_clicks_last_30_days: clicksInRange,
       queries_by_crawler: queriesByCrawler,
       queries_by_intent: queriesByIntent,
       top_queries: topQueries,
-      queries_last_30_days: last30Days,
+      queries_last_30_days: queriesInRange,         // see field-name note above
       activity_by_dow_hour: dowHourRows,
       recent_queries: recentQueries,
     });
@@ -341,9 +379,20 @@ analyticsRouter.get(
     const { slug } = req.params;
     const db = getDb();
 
-    // Reservations — last 20. Timestamps are INTEGER unix seconds in the
-    // schema (migration 006); convert to ISO strings so the dashboard can
-    // pass them through `new Date(iso)` without special-casing.
+    // Phase A: same date-range filter as /analytics/:slug. The "recent N"
+    // lists (last 20 reservations / handoffs / agent_requests) are now
+    // bounded by the date range too — combined with the LIMIT, they give
+    // "the last 20 within the selected window" rather than always the
+    // 20 most recent absolutely.
+    const range = parseRangeOr400(req, res);
+    if (!range) return;
+    const { startSql, endSql } = sqlBounds(range);
+
+    // Reservations — last 20 within range. Timestamps are INTEGER unix
+    // seconds in the schema (migration 006); convert to ISO strings so the
+    // dashboard can `new Date(iso)` without special-casing. Date-bound
+    // requested_at since that's the column the existing index covers
+    // (idx_reservations_business_requested).
     const reservations = db
       .prepare(
         `SELECT id, agent_id, status,
@@ -353,10 +402,12 @@ analyticsRouter.get(
                 datetime(expires_at,   'unixepoch') AS expires_at
          FROM reservations
          WHERE business_slug = ?
+           AND requested_at >= strftime('%s', ?)
+           AND requested_at <= strftime('%s', ?)
          ORDER BY requested_at DESC
          LIMIT 20`,
       )
-      .all(slug) as Array<{
+      .all(slug, startSql, endSql) as Array<{
         id: string;
         agent_id: string | null;
         status: string;
@@ -366,17 +417,19 @@ analyticsRouter.get(
         expires_at: string;
       }>;
 
-    // Handoffs — last 20. Same timestamp treatment as reservations.
+    // Handoffs — last 20 within range. Same timestamp treatment as reservations.
     const handoffs = db
       .prepare(
         `SELECT id, mode, delivered_via, reservation_id, agent_id,
                 datetime(created_at, 'unixepoch') AS created_at
          FROM handoffs
          WHERE business_slug = ?
+           AND created_at >= strftime('%s', ?)
+           AND created_at <= strftime('%s', ?)
          ORDER BY created_at DESC
          LIMIT 20`,
       )
-      .all(slug) as Array<{
+      .all(slug, startSql, endSql) as Array<{
         id: string;
         mode: string;
         delivered_via: string | null;
@@ -385,17 +438,18 @@ analyticsRouter.get(
         created_at: string;
       }>;
 
-    // Agent requests — last 30 identified-agent MCP tool calls
+    // Agent requests — last 30 identified-agent MCP tool calls within range.
     const agent_requests = db
       .prepare(
         `SELECT id, tool_called, agent_id, agent_id_source, outcome_signal,
                 latency_ms, cost_cents, timestamp
          FROM agent_requests
          WHERE business_slug = ?
+           AND timestamp >= ? AND timestamp <= ?
          ORDER BY timestamp DESC
          LIMIT 30`,
       )
-      .all(slug) as Array<{
+      .all(slug, startSql, endSql) as Array<{
         id: number;
         tool_called: string;
         agent_id: string;
@@ -442,10 +496,11 @@ analyticsRouter.get(
                 citation_count
          FROM competitor_polls
          WHERE slug = ?
+           AND polled_at >= ? AND polled_at <= ?
          ORDER BY polled_at DESC
          LIMIT 10`,
       )
-      .all(slug) as Array<{
+      .all(slug, startSql, endSql) as Array<{
         id: number;
         query_phrasing: string;
         polled_at: string;
@@ -486,6 +541,7 @@ analyticsRouter.get(
 
     res.json({
       slug,
+      date_range: { start: range.start, end: range.end, days: range.days },
       reservations,
       handoffs,
       agent_requests,

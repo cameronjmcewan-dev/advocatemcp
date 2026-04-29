@@ -372,3 +372,91 @@ competitorRadarRouter.delete(
     res.json({ ok: true });
   },
 );
+
+/**
+ * GET /api/competitor-radar/:slug/share-of-voice/weekly?weeks=12
+ *
+ * Phase A of the dashboard redesign. Returns a weekly time series of
+ * citation share — what % of polls cited the tenant's domain — for the
+ * past N weeks (default 12, max 52). Bucketed by ISO week start (Monday).
+ *
+ * Response shape:
+ *   {
+ *     range_weeks: 12,
+ *     series: [
+ *       { week_start: "2026-02-09", polls: 14, cited: 6, share: 0.43 },
+ *       { week_start: "2026-02-16", polls: 18, cited: 8, share: 0.44 },
+ *       ...
+ *     ]
+ *   }
+ *
+ * Powers the "Share of Voice" line chart card on the customer dashboard
+ * (renders `share` over time). Weeks with zero polls are emitted with
+ * `share: 0` and a flag so the renderer can dot-mark them as "no data".
+ */
+competitorRadarRouter.get(
+  "/api/competitor-radar/:slug/share-of-voice/weekly",
+  requireSlugOrAdminKey,
+  (req: Request, res: Response) => {
+    const { slug } = req.params;
+    const weeks = (() => {
+      const n = Number(req.query.weeks);
+      return Number.isFinite(n) && n > 0 && n <= 52 ? Math.floor(n) : 12;
+    })();
+    const db = getDb();
+
+    // SQLite weekday: %w returns 0=Sun..6=Sat. We want Monday-anchored
+    // weeks (ISO 8601). Convert to Monday by subtracting (weekday + 6) % 7
+    // days from each row's polled_at; SQLite makes that idiomatic via
+    // strftime + julianday math.
+    const rows = db.prepare(
+      `SELECT
+         DATE(polled_at, 'weekday 0', '-6 days') AS week_start,
+         COUNT(*)                                AS polls,
+         SUM(our_domain_cited)                   AS cited
+       FROM competitor_polls
+       WHERE slug = ?
+         AND polled_at >= DATE('now', ?)
+       GROUP BY week_start
+       ORDER BY week_start ASC`,
+    ).all(slug, `-${weeks * 7} days`) as Array<{
+      week_start: string; polls: number; cited: number;
+    }>;
+
+    // Pad missing weeks so the chart is contiguous. Walk from N weeks ago
+    // to today in 7-day strides; for each week not present in `rows`,
+    // emit a zero-poll entry. The padding ensures the line chart's x-axis
+    // is uniform regardless of polling cadence gaps.
+    const byWeek = new Map<string, { polls: number; cited: number }>();
+    for (const r of rows) byWeek.set(r.week_start, { polls: r.polls, cited: r.cited ?? 0 });
+
+    // Resolve "this week's Monday" — the most recent Monday on or before
+    // today, in UTC.
+    const todayMs = Date.now();
+    const today = new Date(todayMs);
+    const dow = today.getUTCDay();                 // 0=Sun..6=Sat
+    const daysToMon = (dow + 6) % 7;               // 0 if today is Mon
+    const thisMonday = new Date(today);
+    thisMonday.setUTCDate(today.getUTCDate() - daysToMon);
+    thisMonday.setUTCHours(0, 0, 0, 0);
+
+    const series: Array<{
+      week_start: string; polls: number; cited: number; share: number;
+    }> = [];
+    for (let i = weeks - 1; i >= 0; i--) {
+      const d = new Date(thisMonday);
+      d.setUTCDate(thisMonday.getUTCDate() - i * 7);
+      const key = d.toISOString().slice(0, 10);
+      const bucket = byWeek.get(key) ?? { polls: 0, cited: 0 };
+      const share = bucket.polls > 0 ? bucket.cited / bucket.polls : 0;
+      series.push({
+        week_start: key,
+        polls:      bucket.polls,
+        cited:      bucket.cited,
+        share:      Number(share.toFixed(4)),
+      });
+    }
+
+    res.json({ range_weeks: weeks, series });
+  },
+);
