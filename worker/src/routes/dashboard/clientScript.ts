@@ -395,10 +395,72 @@ export const DASHBOARD_CLIENT_SCRIPT = `<script>
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
+  // ── Phase C: drag-and-drop card rearrangement ──────────────────────────
+  // Sortable.js is loaded via CDN (defer). On drop, persist the new order
+  // to dashboards.layout_json via PATCH. Optimistic UI: the DOM is moved
+  // immediately by Sortable; we reconcile by re-reading DOM order and
+  // sending it. On failure, log and refresh — the source of truth is the
+  // DB, so a reload restores the last-saved order.
+  function initDragDrop(){
+    if (!window.Sortable) return;
+    if (!dashboardId) return;  // no multi-dashboard, nothing to persist against
+    var grid = document.getElementById('card-grid');
+    if (!grid) return;
+    new window.Sortable(grid, {
+      animation: 150,
+      handle: '.card-hd',
+      ghostClass: 'sortable-ghost',
+      chosenClass: 'sortable-chosen',
+      onEnd: persistLayout,
+    });
+  }
+  function persistLayout(){
+    if (!dashboardId) return;
+    var layout = [];
+    document.querySelectorAll('#card-grid .card[data-card-id]').forEach(function(el){
+      var span = parseInt((el.style.gridColumn || '').replace(/^span\\s+/, ''), 10) || 1;
+      var size = span === 4 ? 'xl' : span === 3 ? 'lg' : span === 2 ? 'md' : 'sm';
+      layout.push({ card_id: el.dataset.cardId, size: size });
+    });
+    fetch('/api/client/dashboards/' + dashboardId, {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ layout: layout }),
+    })
+      .then(function(r){ if (!r.ok) throw new Error('persist failed: ' + r.status); })
+      .catch(function(err){ console.warn('[dashboard] layout persist failed', err); });
+  }
+
+  // ── Phase D: PDF export ────────────────────────────────────────────────
+  function exportPdf(){
+    if (!window.html2pdf){ window.alert('PDF library still loading. Please try again.'); return; }
+    // Wait briefly for ECharts animations to settle.
+    setTimeout(function(){
+      var node = document.getElementById('card-grid');
+      if (!node) return;
+      var name = (config.businessName || 'dashboard').replace(/[^a-z0-9-]+/gi, '-');
+      var stamp = new Date().toISOString().slice(0,10);
+      var opt = {
+        margin:       0.5,
+        filename:     name + '-' + stamp + '.pdf',
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+        jsPDF:        { unit: 'in', format: 'letter', orientation: 'landscape' },
+      };
+      window.html2pdf().set(opt).from(node).save();
+    }, 300);
+  }
+  function initPdfExport(){
+    var btn = document.getElementById('pdf-export');
+    if (btn) btn.addEventListener('click', exportPdf);
+  }
+
   // ── Boot ────────────────────────────────────────────────────────────────
   function boot(){
     bootTheme();
     initRangePicker();
+    initDragDrop();
+    initPdfExport();
     loadAll();
   }
   if (window.echarts) {

@@ -5,10 +5,16 @@
 // Settings tabs are preserved; new tabs are added for "Analytics" at the
 // top of the sidebar.
 
-import type { Business, User } from "../portalDb";
+import type { Business, Dashboard, User } from "../portalDb";
 import { CARD_REGISTRY, DEFAULT_DASHBOARD_LAYOUT, getCard, type CardSize } from "./dashboard/cards";
 import { renderCard, CARD_GRID_CSS } from "./dashboard/renderCard";
 import { DASHBOARD_CLIENT_SCRIPT } from "./dashboard/clientScript";
+
+/** Phase B: optional dashboards bundle for the multi-dashboard sidebar. */
+export interface DashboardsBundle {
+  dashboards:        Dashboard[];
+  activeDashboardId: number | null;
+}
 
 // ── Exported interface ─────────────────────────────────────────────────────
 
@@ -190,7 +196,8 @@ export function buildDashboard(
   user: User,
   businesses: Business[],
   selected: Business | null,
-  analytics: AnalyticsData | null
+  analytics: AnalyticsData | null,
+  bundle?: DashboardsBundle,
 ): string {
   const a          = analytics;
   const displayName = user.full_name ?? user.email.split("@")[0];
@@ -342,20 +349,33 @@ export function buildDashboard(
     <div class="sec-bd">${buildHeatmap(a?.activity_by_dow_hour ?? [])}</div>
   </div>`;
 
-  // ── Phase A unified Analytics card grid ──────────────────────────────────
+  // ── Phase A unified Analytics card grid (Phase B picks active layout) ───
   // The 4 legacy section variables (overviewHtml/requestsHtml/clicksHtml/
   // botsHtml) are intentionally still computed above for backward compat
   // (some downstream tests / e2e probes inspect their HTML), but the new
   // dashboard render uses ONLY analyticsHtml below — a single grid of
-  // ECharts-driven cards from DEFAULT_DASHBOARD_LAYOUT. Cards are
-  // self-loading via clientScript.ts; the server only emits chrome.
+  // ECharts-driven cards. The active layout source is, in order:
+  //   1. The active dashboard's layout_json (Phase B — multi-dashboard)
+  //   2. The DEFAULT_DASHBOARD_LAYOUT seed (Phase A — single-dashboard)
   void overviewHtml; void requestsHtml; void clicksHtml; void botsHtml;
+  const activeDashboard = bundle?.dashboards.find((d) => d.id === bundle?.activeDashboardId)
+    ?? bundle?.dashboards.find((d) => d.is_default === 1)
+    ?? null;
+  const layoutForRender: Array<{ card_id: string; size: CardSize }> = (() => {
+    if (activeDashboard) {
+      try {
+        const parsed = JSON.parse(activeDashboard.layout_json) as Array<{ card_id: string; size: CardSize }>;
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch { /* fall through */ }
+    }
+    return DEFAULT_DASHBOARD_LAYOUT as Array<{ card_id: string; size: CardSize }>;
+  })();
   const analyticsHtml = (() => {
-    const cardsHtml = DEFAULT_DASHBOARD_LAYOUT
+    const cardsHtml = layoutForRender
       .map((entry) => {
         const card = getCard(entry.card_id);
         if (!card) return "";
-        return renderCard(card, entry.size as CardSize);
+        return renderCard(card, entry.size);
       })
       .filter(Boolean)
       .join("\n");
@@ -427,6 +447,8 @@ export function buildDashboard(
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${selected ? esc(selected.business_name) : "Dashboard"} — AdvocateMCP</title>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js" defer><\/script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js" defer><\/script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer><\/script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer><\/script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -529,6 +551,30 @@ html.dark .btn-danger:hover{background:#450a0a}
 }
 @media(max-width:480px){.kpis{grid-template-columns:1fr}}
 
+/* Phase D — PDF print stylesheet. html2pdf.js renders the #card-grid
+ * node at 2× scale, but using browser print as a fallback also gives a
+ * clean output. Hide chrome, force light theme, expand cards. */
+@media print {
+  .sidebar, .topbar, .card-actions, .nav-a, .sb-add { display: none !important; }
+  .main { margin-left: 0 !important; }
+  body { background: #fff !important; color: #111827 !important; }
+  .card { border-color: #d1d5db !important; box-shadow: none !important; break-inside: avoid; }
+  .card-bd { min-height: auto !important; }
+  .dashboard-grid { gap: 0.5rem !important; }
+}
+
+/* Sidebar dashboards list (Phase B) */
+.sb-section{padding:.5rem .25rem;border-top:1px solid rgba(255,255,255,.08);margin-top:.5rem}
+.sb-section-hd{display:flex;align-items:center;justify-content:space-between;padding:.25rem .75rem .375rem;color:rgba(255,255,255,.45);font-size:.6875rem;text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.sb-add{background:rgba(255,255,255,.07);border:none;color:rgba(255,255,255,.6);font-size:.875rem;width:18px;height:18px;border-radius:4px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;font-family:inherit}
+.sb-add:hover{background:rgba(255,255,255,.15);color:#fff}
+.sb-dashboards{display:flex;flex-direction:column;gap:1px}
+.sb-dash{display:flex;align-items:center;justify-content:space-between;padding:.3125rem .875rem;color:rgba(255,255,255,.55);font-size:.75rem;border:none;background:none;cursor:pointer;text-align:left;border-left:3px solid transparent;transition:all .1s;font-family:inherit;width:100%}
+.sb-dash:hover{background:rgba(255,255,255,.06);color:rgba(255,255,255,.85)}
+.sb-dash.on{background:rgba(255,255,255,.08);color:#fff;border-left-color:rgba(255,255,255,.6)}
+.sb-dash-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-dash-pin{font-size:.625rem;color:rgba(255,255,255,.45);margin-left:.375rem;flex-shrink:0}
+
 /* Date range picker (Phase A) */
 .range-picker{display:inline-flex;align-items:center;gap:.375rem;padding:.3rem .5rem;border:1px solid var(--border);border-radius:6px;background:var(--card)}
 .range-picker select{border:none;background:transparent;color:var(--text);font-size:.8125rem;font-family:inherit;cursor:pointer;padding-right:.25rem}
@@ -552,6 +598,25 @@ ${CARD_GRID_CSS}
         <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="5" height="5" rx="1"/><rect x="8" y="1" width="5" height="5" rx="1"/><rect x="1" y="8" width="5" height="5" rx="1"/><rect x="8" y="8" width="5" height="5" rx="1"/></svg>
         Analytics
       </button>
+
+      ${bundle ? `<div class="sb-section">
+        <div class="sb-section-hd">
+          <span>Dashboards</span>
+          <button class="sb-add" id="sb-add-dashboard" type="button" title="New dashboard">+</button>
+        </div>
+        <div class="sb-dashboards">
+          ${bundle.dashboards.map((d) => `
+            <button class="sb-dash${d.id === bundle.activeDashboardId ? " on" : ""}"
+              data-dashboard-id="${d.id}"
+              onclick="switchDashboard(${d.id})"
+              type="button">
+              <span class="sb-dash-name">${esc(d.name)}</span>
+              ${d.is_default === 1 ? '<span class="sb-dash-pin" title="Default">★</span>' : ""}
+            </button>
+          `).join("")}
+        </div>
+      </div>` : ""}
+
       <button class="nav-a" onclick="nav('recs',this)">
         <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7 1a4 4 0 00-2.5 7.1V10h5V8.1A4 4 0 007 1z"/><line x1="5" y1="12" x2="9" y2="12"/></svg>
         Recommendations
@@ -592,7 +657,10 @@ ${CARD_GRID_CSS}
           <button class="range-apply" id="range-apply" type="button">Apply</button>
         </div>
       </div>
-      <button class="dark-toggle" onclick="toggleDark()" id="dark-btn">Dark</button>
+      <div style="display:flex;align-items:center;gap:.5rem">
+        <button class="dark-toggle" id="pdf-export" type="button" title="Export as PDF">PDF</button>
+        <button class="dark-toggle" onclick="toggleDark()" id="dark-btn">Dark</button>
+      </div>
     </div>
     <div class="content">
       <div id="sec-analytics" class="section active">${analyticsHtml}</div>
@@ -723,14 +791,78 @@ try {
 window.addEventListener('load', function() {
   if (TREND_DATA.some(function(v) { return v > 0; })) setTimeout(initCharts, 100);
 });
+
+// ── Phase B: dashboard switcher + create/rename/delete ────────────────────
+function switchDashboard(id) {
+  var u = new URL(window.location.href);
+  u.searchParams.set('dashboardId', id);
+  window.location.href = u.toString();
+}
+
+window.addEventListener('load', function(){
+  var addBtn = document.getElementById('sb-add-dashboard');
+  if (!addBtn) return;
+  addBtn.addEventListener('click', function(){
+    var name = window.prompt('Name your new dashboard:', '');
+    if (!name) return;
+    fetch('/api/client/dashboards', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name }),
+    })
+      .then(function(r){ return r.json().then(function(b){ return { ok: r.ok, status: r.status, body: b }; }); })
+      .then(function(out){
+        if (out.ok && out.body.dashboard) {
+          switchDashboard(out.body.dashboard.id);
+        } else {
+          window.alert('Could not create dashboard: ' + (out.body.error || 'unknown error'));
+        }
+      })
+      .catch(function(err){ window.alert('Network error: ' + err.message); });
+  });
+
+  // Right-click on a dashboard pill → context menu (rename / delete / set default)
+  document.querySelectorAll('.sb-dash').forEach(function(el){
+    el.addEventListener('contextmenu', function(e){
+      e.preventDefault();
+      var id = Number(el.dataset.dashboardId);
+      if (!id) return;
+      var action = window.prompt('Action: "rename", "delete", or "default"');
+      if (!action) return;
+      action = action.trim().toLowerCase();
+      if (action === 'rename'){
+        var newName = window.prompt('New name:', el.querySelector('.sb-dash-name').textContent);
+        if (!newName) return;
+        fetch('/api/client/dashboards/' + id, {
+          method: 'PATCH', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newName }),
+        }).then(function(){ window.location.reload(); });
+      } else if (action === 'delete'){
+        if (!window.confirm('Delete this dashboard? It must not be the default.')) return;
+        fetch('/api/client/dashboards/' + id, { method: 'DELETE', credentials: 'include' })
+          .then(function(r){ return r.json().then(function(b){ return { ok: r.ok, body: b }; }); })
+          .then(function(out){
+            if (out.ok) window.location.reload();
+            else window.alert('Could not delete: ' + (out.body.error || 'unknown'));
+          });
+      } else if (action === 'default'){
+        fetch('/api/client/dashboards/' + id + '/promote-default', { method: 'POST', credentials: 'include' })
+          .then(function(){ window.location.reload(); });
+      }
+    });
+  });
+});
 <\/script>
 
 <!-- Phase A: dashboard config + ECharts client script -->
 <script id="dashboard-config" type="application/json">${JSON.stringify({
-  slug:        selected?.slug ?? null,
-  apiBase:     "",
-  rangeQS:     "range=30d",
-  businessName: selected?.business_name ?? null,
+  slug:           selected?.slug ?? null,
+  apiBase:        "",
+  rangeQS:        "range=30d",
+  businessName:   selected?.business_name ?? null,
+  dashboardId:    activeDashboard?.id ?? null,
+  isDefault:      activeDashboard?.is_default === 1,
 })}<\/script>
 ${DASHBOARD_CLIENT_SCRIPT}
 </body>

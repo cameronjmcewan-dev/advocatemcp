@@ -11,6 +11,7 @@ import {
   deleteSession, getUserBusinesses, getAllBusinesses, getActiveBusinesses, getBusinessBySlug, createBusiness,
   grantAccess, checkRateLimit, recordLoginAttempt, updateBusinessApiKey,
   getOnboardingState, markOnboardingStep, touchFirstDashboardIfNull,
+  getDashboards, getOrSeedDefaultDashboard,
   type OnboardingSnapshot, type OnboardingState,
 } from "../portalDb";
 import type { Business, User, SessionWithUser } from "../portalDb";
@@ -43,6 +44,7 @@ import {
   handleRetryRailwayRegistration,
 } from "./stripe";
 import { handleSaveDraft, handleLoadDraft } from "./onboardDraft";
+import * as dashboardApi from "./dashboard/api";
 import { handleContact, handleContactPreflight } from "./contact";
 import { handleSupportChat, handleSupportChatPreflight } from "./supportChat";
 import { handleRevenueEvent, ensureRevenueWebhookSecret } from "./revenueEvent";
@@ -180,6 +182,16 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/profile"         && method === "GET")  return apiGetProfile(request, env);
   if (pathname === "/api/client/profile"         && method === "POST") return apiUpdateProfile(request, env);
   if (pathname === "/api/client/rotate-key" && method === "POST") return apiRotateKey(request, env);
+
+  // Dashboards CRUD (Phase B of the dashboard redesign).
+  if (pathname === "/api/client/dashboards"      && method === "GET")  return dashboardApi.listDashboards(request, env);
+  if (pathname === "/api/client/dashboards"      && method === "POST") return dashboardApi.postDashboard(request, env);
+  const dashIdMatch = pathname.match(/^\/api\/client\/dashboards\/(\d+)$/);
+  if (dashIdMatch && method === "GET")    return dashboardApi.getOneDashboard(request, env, dashIdMatch[1]);
+  if (dashIdMatch && method === "PATCH")  return dashboardApi.patchDashboard(request, env, dashIdMatch[1]);
+  if (dashIdMatch && method === "DELETE") return dashboardApi.deleteOneDashboard(request, env, dashIdMatch[1]);
+  const dashPromoteMatch = pathname.match(/^\/api\/client\/dashboards\/(\d+)\/promote-default$/);
+  if (dashPromoteMatch && method === "POST") return dashboardApi.promoteDashboard(request, env, dashPromoteMatch[1]);
 
   // Revenue attribution (Pro feature, Apr 27 2026). Three tenant-side
   // endpoints — read summary, set/clear AOV, generate-or-rotate the
@@ -561,6 +573,27 @@ async function dashboard(request: Request, env: Env): Promise<Response> {
   const selected = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   const analytics = selected ? await fetchAnalytics(selected, env) : null;
 
+  // Phase B: hydrate the user's dashboards list for the active business.
+  // Auto-seeds the Default dashboard on first call so a brand-new user
+  // never lands on an empty sidebar. Failures are non-fatal — the
+  // dashboard still renders without the multi-dashboard sidebar.
+  let dashboards: import("../portalDb").Dashboard[] = [];
+  let activeDashboardId: number | null = null;
+  if (selected) {
+    try {
+      const seeded = await getOrSeedDefaultDashboard(env.DB, ctx.user_id, selected.id);
+      activeDashboardId = seeded.id;
+      const dashboardIdQS = new URL(request.url).searchParams.get("dashboardId");
+      if (dashboardIdQS) {
+        const n = Number.parseInt(dashboardIdQS, 10);
+        if (Number.isFinite(n)) activeDashboardId = n;
+      }
+      dashboards = await getDashboards(env.DB, ctx.user_id, selected.id);
+    } catch (err) {
+      console.warn("[dashboard] failed to load dashboards list:", err);
+    }
+  }
+
   // Synthesize a minimal User object for buildDashboard. buildDashboard
   // (see worker/src/routes/dashboard.ts) only reads user.full_name and
   // user.email from this parameter — verified via grep during Phase C
@@ -577,7 +610,13 @@ async function dashboard(request: Request, env: Env): Promise<Response> {
     created_at:    "",
     updated_at:    "",
   };
-  return html(buildDashboard(userForDashboard, businesses, selected, analytics));
+  return html(buildDashboard(
+    userForDashboard,
+    businesses,
+    selected,
+    analytics,
+    { dashboards, activeDashboardId },
+  ));
 }
 
 // ── GET /api/client/me ─────────────────────────────────────────────────────
