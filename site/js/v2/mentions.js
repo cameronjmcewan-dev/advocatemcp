@@ -2,21 +2,54 @@
  * Earned since we don't track dollar attribution yet). */
 (function () {
 
-  // Intent → brand-meaningful colors. Same hue logic as the bot-family
-  // donut on /app: high-contrast, semantically loaded so the donut reads
-  // at a glance instead of being a wall of similar maroon. Apr 29 2026.
+  // Intent → brand-meaningful colors. Covers BOTH the legacy `intent`
+  // keys (price_led, brand_direct, best_top, specific_service, general,
+  // affordable) AND the canonical INTENT_V2 keys (brand, pricing, hours,
+  // location, emergency, comparison, service, reviews, contact, research,
+  // other) since both flow through queries_by_intent depending on which
+  // column has data.
+  //
+  // High-contrast hues chosen so distinct slices read at a glance even
+  // on dark backgrounds. Anything not in this map falls through to a
+  // categorical fallback palette by slot index — every intent gets a
+  // unique color regardless of whether we predeclared it.
+  // Apr 29 2026.
   const INTENT_COLOR = {
-    brand_direct:  '#7d2550',  // maroon — most valuable: they asked for you
-    comparison:    '#5a9bd4',  // blue — cool, deliberative
-    price_led:     '#d29922',  // amber — money-related
-    emergency:     '#ea4335',  // red — urgent
-    research:      '#9b59b6',  // purple — exploratory
-    booking:       '#10a37f',  // green — conversion intent
-    location:      '#3a8c7c',  // teal — geo-bound
-    unknown:       '#766f63',  // muted brown
+    // Canonical INTENT_V2
+    brand:            '#7d2550',  // maroon — they asked for you by name
+    pricing:          '#d29922',  // amber — money-related
+    hours:            '#3a8c7c',  // teal — temporal
+    location:         '#5a7eaa',  // slate-blue — geo-bound
+    emergency:        '#ea4335',  // red — urgent
+    comparison:       '#5a9bd4',  // bright blue — deliberative
+    service:          '#10a37f',  // green — direct purchase intent
+    reviews:          '#fa520f',  // orange — reputation-shaped
+    contact:          '#9b59b6',  // purple — direct-action
+    research:         '#c87b9b',  // dusty rose — exploratory
+    other:            '#766f63',  // muted brown — uncategorized
+    // Legacy `intent` column values (still appear in older rows)
+    brand_direct:     '#7d2550',
+    price_led:        '#d29922',
+    'price-led':      '#d29922',
+    affordable:       '#d29922',
+    booking:          '#10a37f',
+    best_top:         '#5a9bd4',
+    specific_service: '#10a37f',
+    general:          '#9b9b9b',  // grey — not specific
+    unknown:          '#766f63',
   };
-  function intentColor(key) {
-    return INTENT_COLOR[String(key || 'unknown').toLowerCase()] || INTENT_COLOR.unknown;
+  // Fallback palette — used when a never-before-seen intent shows up.
+  // Picks by stable index so the same intent always gets the same
+  // color across renders.
+  const INTENT_FALLBACK = [
+    '#7d2550', '#10a37f', '#5a9bd4', '#d29922', '#ea4335',
+    '#9b59b6', '#3a8c7c', '#fa520f', '#0078d4', '#c87b9b',
+    '#1877f2', '#fbb03b', '#e07a5f', '#5b8e7d', '#a85aa3',
+  ];
+  function intentColor(key, idx) {
+    const k = String(key || 'unknown').toLowerCase();
+    if (INTENT_COLOR[k]) return INTENT_COLOR[k];
+    return INTENT_FALLBACK[(idx || 0) % INTENT_FALLBACK.length];
   }
   'use strict';
 
@@ -174,10 +207,12 @@
       const byIntent = m.queries_by_intent || {};
       const entries = Object.entries(byIntent)
         .sort((a, b) => b[1] - a[1])
-        .map(([k, v]) => ({
+        .map(([k, v], idx) => ({
           name: intentLabel(k),
           value: v,
-          itemStyle: { color: intentColor(k) },
+          // Pass the rank so unmapped intents pick a stable color
+          // from the fallback palette by index.
+          itemStyle: { color: intentColor(k, idx) },
         }));
       if (!entries.length) return;
       const total = entries.reduce((s, e) => s + e.value, 0) || 1;
