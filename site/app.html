@@ -93,79 +93,26 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
 <script src="/js/v2/dashboardGrid.js" defer></script>
 <script>
-// Boot path forks on ?dashboardId= — present means render the
-// configurable card-grid (Profound-parity), absent means the legacy
-// hardcoded Overview. The fork happens via swapping render +
-// afterMount; fetchReal still calls the same endpoints because the
-// grid renderer reads from window.AMCP_DASHBOARDS for the layout.
-(function () {
-  const dashboardId = (() => {
-    const n = Number.parseInt(new URL(location.href).searchParams.get('dashboardId') || '', 10);
-    return Number.isFinite(n) ? n : null;
-  })();
-
-  // Helper to look up the active dashboard's row in the cached list
-  // populated by shell.js. Returns null when the user has no saved
-  // dashboards yet (pre-#146 worker, or anonymous preview mode).
-  function getActiveDashboardRow() {
-    const dash = window.AMCP_DASHBOARDS;
-    if (!dash || !Array.isArray(dash.list)) return null;
-    if (dashboardId != null) return dash.list.find((d) => d.id === dashboardId) || null;
-    return dash.list.find((d) => d.is_default === 1) || dash.list[0] || null;
-  }
-
-  window.AMCP_SHELL.boot({
-    activeId: 'overview',
-    crumb:    'Dashboard · Overview',
-    title:    d => `Welcome back${
-      window.AMCP_DATA && window.AMCP_DATA.full_name
-        ? ', ' + window.AMCP_DATA.full_name.split(' ')[0]
-        : ''
-    }.`,
-    showDateRange: true,  // make the topbar date-range button visible
-    demo:       window.AMCP_OVERVIEW.demo,
-    fetchReal:  window.AMCP_OVERVIEW.fetch,
-    // Render: fork on whether a dashboard layout is available + the
-    // user explicitly requested ?dashboardId=. If neither, fall back
-    // to the legacy hardcoded Overview. This preserves the existing
-    // welcome screen for users who haven't customized anything yet.
-    render: (data) => {
-      const row = getActiveDashboardRow();
-      const wantsGrid = dashboardId != null && row;
-      if (wantsGrid) {
-        // Placeholder; the real grid render happens in afterMount once
-        // ECharts has loaded. Render an empty mount point so the layout
-        // grid CSS reserves space.
-        return '<div id="page-content-grid-mount"></div>';
-      }
-      return window.AMCP_OVERVIEW.render(data);
-    },
-    afterMount: (data) => {
-      const row = getActiveDashboardRow();
-      const wantsGrid = dashboardId != null && row;
-      if (wantsGrid && window.AMCP_DASHBOARD_GRID) {
-        let layout = [];
-        try { layout = JSON.parse(row.layout_json) || []; } catch (_) { layout = []; }
-        if (!Array.isArray(layout) || !layout.length) {
-          // Fallback: same default seed as the worker uses.
-          layout = [
-            { card_id: 'visibilityScore',    size: 'sm' },
-            { card_id: 'clickRate',          size: 'sm' },
-            { card_id: 'queriesOverTime',    size: 'lg' },
-            { card_id: 'botMix',             size: 'md' },
-            { card_id: 'intentDistribution', size: 'md' },
-            { card_id: 'activityHeatmap',    size: 'lg' },
-            { card_id: 'topQueries',         size: 'md' },
-            { card_id: 'agentReputation',    size: 'md' },
-          ];
-        }
-        window.AMCP_DASHBOARD_GRID.mountGrid(layout);
-      } else if (typeof window.AMCP_OVERVIEW.afterMount === 'function') {
-        window.AMCP_OVERVIEW.afterMount(data);
-      }
-    },
-  });
-})();
+// Boot uses the standard AMCP_OVERVIEW callbacks. The dashboardId fork
+// is INSIDE overview.js's render/afterMount itself (see the bottom of
+// /js/v2/overview.js) so that the SPA router's internal navigations
+// also pick it up. Without that, clicking a sidebar Dashboards pill
+// would re-render the legacy Overview because the router calls
+// AMCP_OVERVIEW.render directly, bypassing this boot script.
+window.AMCP_SHELL.boot({
+  activeId: 'overview',
+  crumb:    'Dashboard · Overview',
+  title:    d => `Welcome back${
+    window.AMCP_DATA && window.AMCP_DATA.full_name
+      ? ', ' + window.AMCP_DATA.full_name.split(' ')[0]
+      : ''
+  }.`,
+  showDateRange: true,  // make the topbar date-range button visible
+  demo:       window.AMCP_OVERVIEW.demo,
+  fetchReal:  window.AMCP_OVERVIEW.fetch,
+  render:     window.AMCP_OVERVIEW.render,
+  afterMount: window.AMCP_OVERVIEW.afterMount,
+});
 </script>
 <script src="/js/support-chat.js" defer></script>
 </body>
