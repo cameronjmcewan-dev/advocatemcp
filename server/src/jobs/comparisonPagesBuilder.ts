@@ -53,10 +53,12 @@ const SYSTEM_PROMPT = `You generate factual head-to-head comparison pages betwee
 ABSOLUTE RULES (no exceptions):
 1. Use ONLY the verified facts provided in the input. NEVER invent capabilities, prices, certifications, awards, hours, or service areas for either side.
 2. If the verified-facts list contains fewer than 3 distinct differentiators, return EXACTLY: { "skip": "insufficient_differentiators" }
-3. Banned phrases (any case) → return SKIP: scam, fraud, worst, terrible, avoid, inferior, ripoff, beware. Comparison is factual, not pejorative.
-4. Each comparison row must cite both sides: "{customer} reports X (source: {url_us}); {competitor} reports Y (source: {url_them})." If either source URL is missing, omit that differentiator row.
-5. End with a footer paragraph: "Comparison based on publicly available information as of {today_iso_date}. Sources: {url_us}, {url_them}."
-6. Body length 350-600 words. Atomic-fact sentences AI summarizers latch onto. NO marketing fluff.
+3. NEVER use disparaging language. Banned (any case) → SKIP: scam, fraud, worst, terrible, avoid, inferior, ripoff, beware.
+4. NEVER use subjective comparative language. Banned (any case) → SKIP: "better than", "superior to", "cheaper than", "faster than", "premium", "elite", "the best", "number one". Use neutral framings like "X reports A; Y reports B" — let the reader draw conclusions from the numbers.
+5. Each comparison row must cite both sides: "{customer} reports X (source: {url_us}); {competitor} reports Y (source: {url_them})." If either source URL is missing, omit that differentiator row.
+6. URLs in the body are RESTRICTED to the source_us / source_them values present in the differentiator list. NEVER emit any other URL — the validator rejects fabricated links.
+7. End with a footer paragraph EXACTLY of this shape: "Comparison based on publicly available information as of {today_iso_date}. Sources: {url_us}, {url_them}." The validator looks for "Sources: https://..." in the body and rejects pages that omit it.
+8. Body length 350-600 words. Atomic-fact sentences AI summarizers latch onto. NO marketing fluff.
 
 OUTPUT FORMAT (strict JSON, no prose, no markdown fence):
 {
@@ -210,39 +212,65 @@ Generate a head-to-head comparison page using ONLY the differentiators above. Bo
   if (parsed.skip) {
     return { ok: false, skip_reason: parsed.skip, title: "", body_md: "", fact_diff_json: "[]", cost_cents: costCents };
   }
-  if (!parsed.title || !parsed.body_md || !Array.isArray(parsed.differentiators_used)) {
+  if (!parsed.title || !parsed.body_md) {
     return { ok: false, skip_reason: "missing_fields", title: "", body_md: "", fact_diff_json: "[]", cost_cents: costCents };
   }
-  if (parsed.differentiators_used.length < MIN_DIFFERENTIATORS) {
-    return { ok: false, skip_reason: "fewer_than_3_differentiators", title: "", body_md: "", fact_diff_json: "[]", cost_cents: costCents };
-  }
+  // Reviewer HIGH-5: persist the deterministic pre-validated `differentiators`
+  // array we passed into the prompt — not the model's echoed copy. Claude
+  // could fabricate or drop fields in the round-trip; the persisted
+  // provenance must match what we actually authorized as comparable.
   return {
     ok:          true,
     skip_reason: null,
     title:       parsed.title.slice(0, 70),
     body_md:     parsed.body_md,
-    fact_diff_json: JSON.stringify({ differentiators: parsed.differentiators_used }),
+    fact_diff_json: JSON.stringify({ differentiators }),
     cost_cents:  costCents,
   };
 }
 
 /**
  * Validate the generated body against the differentiator provenance.
- * Same posture as syntheticPagesBuilder.validateBodyAgainstFacts:
- *   - Every 4-digit year in body must appear in business OR competitor verified data
- *   - Every dollar amount must appear in the differentiators
- *   - Banned-phrase regex: any match → reject
+ *
+ * The validator is the last legal-defense layer. Each check below maps
+ * to a reviewer-flagged risk:
+ *   H1 — Footer must contain "Sources: https://..." disclosure.
+ *   H2 — Comparison must not be one-sided slam (customer wins ≥1).
+ *   H3 — sourceBlob built ONLY from differentiators, not the full
+ *        business row (so unrelated business numerics like phone digits
+ *        can't "validate" a fabricated competitor claim).
+ *   H4 — Banned-phrase regex extends to subjective comparatives
+ *        ("better than", "superior", "premium", etc.) — the actual
+ *        Lanham-Act risk surface.
+ *   M2 — Every "source: https://..." cited in body must appear in the
+ *        differentiator list (no fabricated source URLs).
  */
 function validateComparisonBody(
   body: string,
-  business: BusinessRow,
-  competitorFacts: Record<string, string | number | boolean>,
+  differentiators: DifferentiatorEntry[],
 ): { ok: boolean; reason: string | null } {
+  // H4 — banned-phrase regex (extended). Two layers:
+  //   1. Outright disparaging language (Phase 3 list)
+  //   2. Subjective comparative claims (Lanham-Act surface)
   if (/\b(scam|fraud|worst|terrible|avoid|inferior|ripoff|beware)\b/i.test(body)) {
-    return { ok: false, reason: "banned_phrase" };
+    return { ok: false, reason: "banned_phrase_disparagement" };
+  }
+  if (/\b(better than|superior to|cheaper than|faster than|premium|elite|the best|number one)\b/i.test(body)) {
+    return { ok: false, reason: "banned_phrase_subjective" };
   }
 
-  const sourceBlob = JSON.stringify({ ...business, ...competitorFacts });
+  // H1 — Footer disclosure required. Body must contain a Sources: URL
+  // line so any reader (or auditor) can trace claims back to public
+  // artifacts. The system prompt asks for it; this enforces it landed.
+  if (!/Sources?:\s*https?:\/\//i.test(body)) {
+    return { ok: false, reason: "missing_sources_footer" };
+  }
+
+  // H3 — sourceBlob restricted to differentiator-only data. Each
+  // differentiator has {ours, theirs, source_us, source_them} — that's
+  // the full comparable surface. Anything else in the body that cites a
+  // year or dollar amount is unsourced.
+  const sourceBlob = JSON.stringify(differentiators);
   const claimedYears = Array.from(body.matchAll(/\b(19|20)\d{2}\b/g)).map((m) => m[0]);
   for (const y of claimedYears) {
     if (!sourceBlob.includes(y)) {
@@ -256,6 +284,54 @@ function validateComparisonBody(
       return { ok: false, reason: `unsourced_dollar:${d}` };
     }
   }
+
+  // M2 — Every URL of the form `https://...` in the body must appear in
+  // either source_us or source_them on at least one differentiator.
+  // Stops Claude from emitting a footer with a fabricated link.
+  const allowedUrls = new Set<string>();
+  for (const d of differentiators) {
+    if (d.source_us)   allowedUrls.add(d.source_us);
+    if (d.source_them) allowedUrls.add(d.source_them);
+  }
+  const claimedUrls = Array.from(body.matchAll(/https?:\/\/[^\s)>"']+/gi)).map((m) =>
+    m[0].replace(/[.,;:)\]>"']+$/, ""),  // trim trailing punctuation
+  );
+  for (const u of claimedUrls) {
+    if (!allowedUrls.has(u)) {
+      return { ok: false, reason: `unsourced_url:${u.slice(0, 80)}` };
+    }
+  }
+
+  // H2 — Balance check. Reject one-sided slam pieces where the customer
+  // doesn't "win" on any numeric dimension. We compare ours vs theirs
+  // numerically per row when both parse as numbers; if every numeric
+  // row goes to the competitor, this is a one-sided take we don't ship.
+  let ourWins = 0;
+  let theirWins = 0;
+  for (const d of differentiators) {
+    const ours = Number(String(d.ours).replace(/[^\d.-]/g, ""));
+    const theirs = Number(String(d.theirs).replace(/[^\d.-]/g, ""));
+    if (Number.isNaN(ours) || Number.isNaN(theirs)) continue;
+    // For most fields, higher is "winning" (rating, review_count,
+    // years_in_business, certifications count). Pricing fields are the
+    // inverse — lower wins. The generator handles framing; here we just
+    // count strict wins on either side without assuming directionality.
+    if (ours !== theirs) {
+      // We can't know directionality without per-field metadata. So:
+      // require BOTH sides to have at least one strictly-higher numeric
+      // row. That blocks the pathological case (customer numerically
+      // identical or worse on every field) without making assumptions
+      // about which direction "better" is.
+      if (ours > theirs)   ourWins++;
+      else                 theirWins++;
+    }
+  }
+  // Only enforce when there's at least 2 numeric comparisons to draw
+  // signal from. With 0-1 numeric rows, we can't tell, so allow.
+  if (ourWins + theirWins >= 2 && ourWins === 0) {
+    return { ok: false, reason: "one_sided_no_customer_wins" };
+  }
+
   return { ok: true, reason: null };
 }
 
@@ -325,9 +401,14 @@ export async function runComparisonPagesBuilder(
       const competitors = competitorsStmt.all(biz.id, MAX_COMPETITORS_PER_TENANT) as CompetitorRow[];
       if (competitors.length === 0) continue;
 
+      // MEDIUM-4 normalize: customer hostname stripped of leading www.
+      // so requests to either www.foo.com OR foo.com resolve. The
+      // worker needs the matching normalization (followup PR).
       const customerHost = (() => {
-        try { return new URL(biz.referral_url ?? biz.website ?? "").hostname; }
-        catch { return null; }
+        try {
+          const h = new URL(biz.referral_url ?? biz.website ?? "").hostname;
+          return h.replace(/^www\./i, "");
+        } catch { return null; }
       })();
       const customerSlug = slugifyOne(biz.name ?? biz.slug);
 
@@ -358,10 +439,11 @@ export async function runComparisonPagesBuilder(
             continue;
           }
 
-          let competitorFacts: Record<string, string | number | boolean> = {};
-          try { competitorFacts = JSON.parse(comp.verified_facts_json); } catch { /* keep empty */ }
-
-          const validation = validateComparisonBody(out.body_md, biz, competitorFacts);
+          // Validator runs against the deterministic pre-validated
+          // differentiator list, NOT against the model-echoed copy
+          // (HIGH-3 + HIGH-5 from reviewer). The fact_diff_json on
+          // the row records the SAME deterministic list.
+          const validation = validateComparisonBody(out.body_md, differentiators);
           if (!validation.ok) {
             result.rejected++;
             console.warn(`[comparison-pages] ${biz.slug} vs ${comp.competitor_slug}: rejected — ${validation.reason}`);

@@ -497,7 +497,11 @@ export default Sentry.withSentry(
     {
       const m = url.pathname.match(/^\/compare\/[a-z0-9-]+-vs-[a-z0-9-]+\/?$/);
       if (m && request.method === "GET") {
-        const cacheKey = `https://cache.advocatemcp.com/v1/compare/${domain}${url.pathname}`;
+        // MEDIUM-4 normalize: strip leading www. so a request to
+        // www.foo.com finds the same row as foo.com. The server stores
+        // host without the www. prefix (see comparisonPagesBuilder).
+        const normalizedHost = domain.replace(/^www\./i, "");
+        const cacheKey = `https://cache.advocatemcp.com/v1/compare/${normalizedHost}${url.pathname}`;
         let cacheStatus: "HIT" | "MISS" = "MISS";
         try {
           const cached = await caches.default.match(cacheKey);
@@ -510,7 +514,7 @@ export default Sentry.withSentry(
           }
         } catch (_) { /* cache infra blip — fall through to fresh fetch */ }
 
-        const target = `${apiBase(env)}/compare/${encodeURIComponent(domain)}${url.pathname}`;
+        const target = `${apiBase(env)}/compare/${encodeURIComponent(normalizedHost)}${url.pathname}`;
         try {
           const resp = await fetch(target, {
             method:  "GET",
