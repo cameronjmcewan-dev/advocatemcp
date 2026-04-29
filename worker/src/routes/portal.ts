@@ -184,13 +184,21 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/rotate-key" && method === "POST") return apiRotateKey(request, env);
 
   // Dashboards CRUD (Phase B of the dashboard redesign).
-  if (pathname === "/api/client/dashboards"      && method === "GET")  return dashboardApi.listDashboards(request, env);
-  if (pathname === "/api/client/dashboards"      && method === "POST") return dashboardApi.postDashboard(request, env);
+  // CORS preflight first — every cross-origin call from advocatemcp.com
+  // (the static-site /app dashboard) sends an OPTIONS preflight that
+  // must be answered with the proper Allow-* headers before the real
+  // request is dispatched. credentials:true so the bearer cookie can
+  // travel with the request.
+  if (pathname === "/api/client/dashboards" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/dashboards" && method === "GET")  return dashboardApi.listDashboards(request, env);
+  if (pathname === "/api/client/dashboards" && method === "POST") return dashboardApi.postDashboard(request, env);
   const dashIdMatch = pathname.match(/^\/api\/client\/dashboards\/(\d+)$/);
+  if (dashIdMatch && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (dashIdMatch && method === "GET")    return dashboardApi.getOneDashboard(request, env, dashIdMatch[1]);
   if (dashIdMatch && method === "PATCH")  return dashboardApi.patchDashboard(request, env, dashIdMatch[1]);
   if (dashIdMatch && method === "DELETE") return dashboardApi.deleteOneDashboard(request, env, dashIdMatch[1]);
   const dashPromoteMatch = pathname.match(/^\/api\/client\/dashboards\/(\d+)\/promote-default$/);
+  if (dashPromoteMatch && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (dashPromoteMatch && method === "POST") return dashboardApi.promoteDashboard(request, env, dashPromoteMatch[1]);
 
   // Revenue attribution (Pro feature, Apr 27 2026). Three tenant-side

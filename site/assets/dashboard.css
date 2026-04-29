@@ -381,3 +381,119 @@ body { background: var(--paper-2); }
   margin: -8px 0 16px 0; padding: 0 4px;
   font-style: italic; line-height: 1.5;
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   Profound-parity dashboard card grid (course-correction Apr 29 2026).
+   Used by /app.html when ?dashboardId= is in the URL — replaces the
+   legacy Overview render with a configurable Profound-style canvas.
+   ───────────────────────────────────────────────────────────────────── */
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0 0 24px 0;
+}
+@media (max-width: 1100px) { .dashboard-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px)  { .dashboard-grid { grid-template-columns: minmax(0, 1fr); } }
+.dashboard-grid .card {
+  grid-column: span 1;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  transition: border-color .15s, box-shadow .15s;
+}
+.dashboard-grid .card:hover { border-color: var(--line-2, var(--maroon-tint)); }
+.dashboard-grid .card.is-dragging { opacity: .5; cursor: grabbing; }
+
+.card-hd {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; flex-shrink: 0; cursor: grab;
+}
+.card-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.card-title h3 {
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--ink);
+  margin: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.card-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.card-action {
+  background: none; border: 1px solid transparent; border-radius: 5px;
+  color: var(--muted); font-size: 14px;
+  padding: 2px 6px; cursor: pointer; line-height: 1;
+  transition: all .1s; font-family: inherit;
+}
+.card-action:hover { background: var(--paper-2); color: var(--ink); border-color: var(--line); }
+
+.card-bd { padding: 16px; flex: 1; position: relative; }
+.card-mount { font-size: 14px; color: var(--ink); }
+.card-skeleton { display: flex; flex-direction: column; gap: 10px; padding: 8px 0; }
+.skel-bar {
+  height: 12px;
+  background: linear-gradient(90deg, var(--paper-2) 0%, var(--line) 50%, var(--paper-2) 100%);
+  background-size: 200% 100%;
+  border-radius: 4px;
+  animation: skel-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes skel-shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }
+.card-error {
+  padding: 16px; color: var(--maroon); font-size: 13px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+}
+.card-error p { margin: 0; }
+.card-retry {
+  background: var(--paper); border: 1px solid var(--line); border-radius: 5px;
+  color: var(--ink); font-size: 12px; padding: 4px 10px; cursor: pointer; font-family: inherit;
+}
+.card-retry:hover { background: var(--paper-2); }
+
+.kpi-card-body { display: flex; flex-direction: column; gap: 4px; }
+.kpi-value {
+  font-family: var(--serif); font-size: 30px; font-weight: 400;
+  color: var(--ink); line-height: 1; font-variant-numeric: tabular-nums;
+}
+.kpi-sub { font-size: 11px; color: var(--muted); }
+
+.kpi-table { width: 100%; font-size: 13px; border-collapse: collapse; }
+.kpi-table th {
+  text-align: left; color: var(--muted); font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .04em;
+  padding: 6px 0; border-bottom: 1px solid var(--line);
+}
+.kpi-table td {
+  padding: 8px 0; border-bottom: 1px solid var(--line); color: var(--ink);
+}
+.kpi-table tr:last-child td { border-bottom: none; }
+
+.echarts-host { width: 100%; height: 100%; min-height: 240px; }
+
+/* Sidebar dashboards section star marker — extends the existing
+   sb-nav rules without forking them. */
+.dash-default-star {
+  font-size: 10px; color: var(--maroon);
+  margin-left: 4px; opacity: .8;
+}
+
+/* Sortable.js drag-state classes. Match the existing card chrome
+   so the dragged card looks like itself, just translucent. */
+.sortable-ghost { opacity: .4; background: var(--paper-2); }
+.sortable-chosen { cursor: grabbing; }
+
+/* Print stylesheet for native browser PDF export (fallback when
+   html2pdf.js doesn't load). Hides chrome, forces light theme,
+   expands cards to natural height. */
+@media print {
+  .sidebar, .topbar, .card-actions, .fab, .fab-menu { display: none !important; }
+  .main { margin-left: 0 !important; padding: 0 !important; }
+  body { background: #fbf9f5 !important; color: #141210 !important; }
+  .card { border-color: #d4ccbf !important; box-shadow: none !important; break-inside: avoid; }
+  .card-bd { min-height: auto !important; }
+  .dashboard-grid { gap: 8px !important; }
+}

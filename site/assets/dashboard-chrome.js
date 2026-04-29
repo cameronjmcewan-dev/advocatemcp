@@ -101,6 +101,42 @@
     `;
   }
 
+  /* Custom dashboards section (course-correction Apr 29 2026 — Profound
+     parity). Reads from window.AMCP_DASHBOARDS (populated by shell.js
+     after the /api/client/dashboards fetch resolves). Renders one nav
+     entry per saved dashboard + a "+ New" button.
+
+     Active state: the dashboard whose id matches AMCP_DASHBOARDS.
+     activeDashboardId. The default dashboard gets a ★ marker.
+
+     Empty state: if the user has zero dashboards (rare — auto-seeded
+     on first load by getOrSeedDefaultDashboard server-side), the
+     section still renders the "+ New" button so they can create one. */
+  function renderDashboardsSection(activeId) {
+    const dash = window.AMCP_DASHBOARDS;
+    if (!dash || !Array.isArray(dash.list)) return '';
+    if (dash.list.length === 0) return '';
+    const items = dash.list.map((d) => {
+      const isActive = activeId === 'overview' && d.id === dash.activeDashboardId;
+      const cls = isActive ? ' class="active"' : '';
+      const star = d.is_default === 1 ? ' <span class="dash-default-star" title="Default">★</span>' : '';
+      const href = `/app.html?dashboardId=${d.id}`;
+      return `<li><a href="${href}" data-dashboard-id="${d.id}"${cls}>
+        <span class="g">◇</span> ${escHtml(d.name)}${star}
+      </a></li>`;
+    }).join('');
+    return `
+      <div>
+        <div class="sb-section" style="display:flex;align-items:center;justify-content:space-between">
+          <span>Dashboards</span>
+          <button id="amcp-new-dashboard" type="button" title="New dashboard"
+            style="background:rgba(255,255,255,.06);border:none;color:var(--muted);font-size:14px;width:18px;height:18px;border-radius:4px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">+</button>
+        </div>
+        <ul class="sb-nav">${items}</ul>
+      </div>
+    `;
+  }
+
   function renderSidebar(activeId) {
     const biz = currentBiz();
     const bizSub = biz.location ? `${escHtml(biz.location)} · ${escHtml(biz.plan)}` : escHtml(biz.plan);
@@ -119,6 +155,7 @@
         <span class="caret">⌄</span>
       </div>
       ${renderAdminSection(activeId)}
+      ${renderDashboardsSection(activeId)}
       <div>
         <div class="sb-section">Main</div>
         <ul class="sb-nav">${NAV_MAIN.map(i => navItem(i, activeId)).join('')}</ul>
@@ -315,10 +352,79 @@
     wireFab();
     wireLocationSelector();
     wireBrandLogo();
+    wireDashboardsSection();
     injectSpeculationRules();
     loadCommandPaletteIfAdmin();
     loadRouter();
   };
+
+  /** Click + context-menu handlers for the Dashboards sidebar section.
+   *  + New → POST /api/client/dashboards then redirect to its dashboardId.
+   *  Right-click on a dashboard pill → window.prompt for "rename",
+   *  "delete", or "default" action. Quick + functional; richer modal
+   *  is a follow-up polish pass. */
+  function wireDashboardsSection() {
+    const newBtn = document.getElementById('amcp-new-dashboard');
+    if (newBtn) {
+      newBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const name = window.prompt('Name your new dashboard:', '');
+        if (!name) return;
+        try {
+          const r = await window.AMCP.authedFetch('/api/client/dashboards', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name }),
+          });
+          const body = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            window.alert('Could not create dashboard: ' + (body.error || r.status));
+            return;
+          }
+          if (body.dashboard && body.dashboard.id) {
+            window.location.href = '/app.html?dashboardId=' + body.dashboard.id;
+          } else {
+            window.location.reload();
+          }
+        } catch (err) {
+          window.alert('Network error: ' + (err && err.message));
+        }
+      });
+    }
+
+    document.querySelectorAll('a[data-dashboard-id]').forEach((el) => {
+      el.addEventListener('contextmenu', async (e) => {
+        e.preventDefault();
+        const id = Number(el.dataset.dashboardId);
+        if (!id) return;
+        const action = window.prompt('Action: "rename", "delete", or "default"');
+        if (!action) return;
+        const trimmed = action.trim().toLowerCase();
+        if (trimmed === 'rename') {
+          const newName = window.prompt('New name:', el.textContent.trim().replace('★', '').trim());
+          if (!newName) return;
+          await window.AMCP.authedFetch('/api/client/dashboards/' + id, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newName }),
+          });
+          window.location.reload();
+        } else if (trimmed === 'delete') {
+          if (!window.confirm('Delete this dashboard? It must not be the default.')) return;
+          const r = await window.AMCP.authedFetch('/api/client/dashboards/' + id, { method: 'DELETE' });
+          const body = await r.json().catch(() => ({}));
+          if (!r.ok) {
+            window.alert('Could not delete: ' + (body.error || r.status));
+            return;
+          }
+          window.location.href = '/app.html';
+        } else if (trimmed === 'default') {
+          await window.AMCP.authedFetch('/api/client/dashboards/' + id + '/promote-default', { method: 'POST' });
+          window.location.reload();
+        }
+      });
+    });
+  }
 
   // ── Location selector (Apr 27 2026 Section 2) ───────────────────────
   //
