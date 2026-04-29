@@ -452,20 +452,32 @@ export default Sentry.withSentry(
             return new Response(await resp.text(), {
               status: 404,
               headers: {
-                "Content-Type": resp.headers.get("content-type") ?? "application/json",
+                "Content-Type":   resp.headers.get("content-type") ?? "application/json",
                 "X-Cache-Status": cacheStatus,
+                // Heal any stale entry pinned by a previous bug or
+                // upstream blip (see compare-handler comment below).
+                "Cache-Control":  "no-store",
               },
             });
           }
           const html = await resp.text();
-          const cacheableResp = new Response(html, {
-            status: resp.status,
-            headers: {
-              "Content-Type": resp.headers.get("content-type") ?? "text/html; charset=utf-8",
-              "Cache-Control": "public, max-age=86400, s-maxage=86400",
-            },
-          });
-          ctx.waitUntil(caches.default.put(cacheKey, cacheableResp.clone()));
+          // ONLY cache 200 responses. A previous version of this handler
+          // cached every non-404 response which let a transient Railway
+          // 502 (during redeploy) get pinned for 24h. If the upstream
+          // is sick, also delete any stale entry so the cache heals on
+          // the next request rather than waiting for TTL.
+          if (resp.status === 200) {
+            const cacheableResp = new Response(html, {
+              status: 200,
+              headers: {
+                "Content-Type":  resp.headers.get("content-type") ?? "text/html; charset=utf-8",
+                "Cache-Control": "public, max-age=86400, s-maxage=86400",
+              },
+            });
+            ctx.waitUntil(caches.default.put(cacheKey, cacheableResp.clone()));
+          } else {
+            ctx.waitUntil(caches.default.delete(cacheKey));
+          }
 
           return new Response(html, {
             status: resp.status,
@@ -473,9 +485,8 @@ export default Sentry.withSentry(
               "Content-Type":     resp.headers.get("content-type") ?? "text/html; charset=utf-8",
               "X-Synthetic-Host": domain,
               "X-Cache-Status":   cacheStatus,
-              // Public 24h cache — these change on quarterly regen so
-              // long TTLs at downstream caches are fine.
-              "Cache-Control":    "public, max-age=86400",
+              // Only set a long Cache-Control when we got a real 200.
+              "Cache-Control":    resp.status === 200 ? "public, max-age=86400" : "no-store",
             },
           });
         } catch (err) {
@@ -533,15 +544,24 @@ export default Sentry.withSentry(
             });
           }
           const html = await resp.text();
-          const cacheableResp = new Response(html, {
-            status: resp.status,
-            headers: {
-              "Content-Type": resp.headers.get("content-type") ?? "text/html; charset=utf-8",
-              // 24h cache parity with synthetic pages.
-              "Cache-Control": "public, max-age=86400, s-maxage=86400",
-            },
-          });
-          ctx.waitUntil(caches.default.put(cacheKey, cacheableResp.clone()));
+          // ONLY cache 200 responses. A previous version cached every
+          // non-404 response which pinned a transient Railway 502 for
+          // 24h during the redeploy of the path-doubling fix. If the
+          // upstream is sick, delete any stale entry so the cache heals
+          // on the next request rather than waiting for TTL expiry.
+          if (resp.status === 200) {
+            const cacheableResp = new Response(html, {
+              status: 200,
+              headers: {
+                "Content-Type":  resp.headers.get("content-type") ?? "text/html; charset=utf-8",
+                // 24h cache parity with synthetic pages.
+                "Cache-Control": "public, max-age=86400, s-maxage=86400",
+              },
+            });
+            ctx.waitUntil(caches.default.put(cacheKey, cacheableResp.clone()));
+          } else {
+            ctx.waitUntil(caches.default.delete(cacheKey));
+          }
 
           return new Response(html, {
             status: resp.status,
@@ -549,7 +569,7 @@ export default Sentry.withSentry(
               "Content-Type":   resp.headers.get("content-type") ?? "text/html; charset=utf-8",
               "X-Compare-Host": domain,
               "X-Cache-Status": cacheStatus,
-              "Cache-Control":  "public, max-age=86400",
+              "Cache-Control":  resp.status === 200 ? "public, max-age=86400" : "no-store",
             },
           });
         } catch (err) {

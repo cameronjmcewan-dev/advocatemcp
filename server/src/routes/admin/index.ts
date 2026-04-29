@@ -8,6 +8,7 @@ import { adminInsightsRouter } from "./insights.js";
 import { adminExperimentsRouter } from "./experiments.js";
 import { adminRevenueEventsRouter } from "./revenueEvents.js";
 import { adminFaqsRouter } from "./faqs.js";
+import { adminCompetitorsRouter } from "./competitors.js";
 
 /**
  * Bearer-token auth gate for /admin/* — keyed on ADMIN_API_KEY env var.
@@ -54,6 +55,13 @@ adminRouter.use(adminInsightsRouter);
 // router itself does an in-handler slug-ownership check so a business
 // api_key still can't regenerate another tenant's FAQs.
 adminRouter.use("/admin", requireApiKeyEarly, adminFaqsRouter);
+
+// Competitor admin endpoints (Apr 29 2026 — Phase 4 grey-hat
+// operator tools). Same precedence reasoning as adminFaqsRouter:
+// before the requireAdmin Bearer chain so the SERVER_API_KEY
+// authenticates without needing a separate ADMIN_API_KEY. The
+// router does its own slug-ownership check inline.
+adminRouter.use("/admin", requireApiKeyEarly, adminCompetitorsRouter);
 
 adminRouter.use("/admin", requireAdmin, agentsRouter);
 adminRouter.use("/admin", requireAdmin, adminDigestRouter);
