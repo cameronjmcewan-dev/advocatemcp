@@ -18,6 +18,7 @@ import { auditRouter } from "./routes/audit.js";
 import { jsonLdRouter } from "./routes/jsonLd.js";
 import { platformContextRouter } from "./routes/platformContext.js";
 import { syntheticPagesRouter } from "./routes/syntheticPages.js";
+import { comparisonPagesRouter } from "./routes/comparisonPages.js";
 import { rateLimitMiddleware } from "./middleware/rateLimit.js";
 import { requestIdMiddleware } from "./lib/requestId.js";
 
@@ -102,6 +103,12 @@ export function createTestApp(): express.Express {
   // auth. Worker proxies inbound /best-{service}-(in|near)-{location}
   // patterns through to this route.
   app.use(syntheticPagesRouter);
+  // Comparison pages (Phase 4 grey-hat). GET /compare/:host/* serves
+  // {customer}-vs-{competitor} pages. Public, no auth, behind
+  // FEATURE_COMPARISON_PAGES (default off — strict-validator gate
+  // means no rows ship until competitors.verified_facts_json is
+  // populated by an operator).
+  app.use(comparisonPagesRouter);
   app.use(agentRouter);
   app.use(analyticsRouter);
   app.use(mcpRouter);

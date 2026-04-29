@@ -484,6 +484,76 @@ export default Sentry.withSentry(
       }
     }
 
+    // ── 1b'''. Comparison pages (Phase 4 grey-hat, Apr 28 2026) ──────────
+    // Match `/compare/{customer-slug}-vs-{competitor-slug}` on every host.
+    // Forward to api.advocatemcp.com/compare/{host}{path}; the server
+    // returns the matching status='live' row from `comparison_pages`.
+    //
+    // Strict-validator gate at generation time means the table stays
+    // empty until an operator populates competitors.verified_facts_json
+    // — so this matcher is functionally dormant until that data lands,
+    // and 404 responses are NOT cached so freshly-generated rows go
+    // live on the next request without a 24h TTL wait.
+    {
+      const m = url.pathname.match(/^\/compare\/[a-z0-9-]+-vs-[a-z0-9-]+\/?$/);
+      if (m && request.method === "GET") {
+        const cacheKey = `https://cache.advocatemcp.com/v1/compare/${domain}${url.pathname}`;
+        let cacheStatus: "HIT" | "MISS" = "MISS";
+        try {
+          const cached = await caches.default.match(cacheKey);
+          if (cached) {
+            cacheStatus = "HIT";
+            const headers = new Headers(cached.headers);
+            headers.set("X-Compare-Host",  domain);
+            headers.set("X-Cache-Status",  "HIT");
+            return new Response(cached.body, { status: cached.status, headers });
+          }
+        } catch (_) { /* cache infra blip — fall through to fresh fetch */ }
+
+        const target = `${apiBase(env)}/compare/${encodeURIComponent(domain)}${url.pathname}`;
+        try {
+          const resp = await fetch(target, {
+            method:  "GET",
+            headers: env.API_KEY ? { "X-API-Key": env.API_KEY } : {},
+          });
+          if (resp.status === 404) {
+            // 404 not cached — strict-validator failures or missing
+            // competitor facts may resolve before next request.
+            return new Response(await resp.text(), {
+              status: 404,
+              headers: {
+                "Content-Type":   resp.headers.get("content-type") ?? "application/json",
+                "X-Cache-Status": cacheStatus,
+                "Cache-Control":  "no-store",
+              },
+            });
+          }
+          const html = await resp.text();
+          const cacheableResp = new Response(html, {
+            status: resp.status,
+            headers: {
+              "Content-Type": resp.headers.get("content-type") ?? "text/html; charset=utf-8",
+              // 24h cache parity with synthetic pages.
+              "Cache-Control": "public, max-age=86400, s-maxage=86400",
+            },
+          });
+          ctx.waitUntil(caches.default.put(cacheKey, cacheableResp.clone()));
+
+          return new Response(html, {
+            status: resp.status,
+            headers: {
+              "Content-Type":   resp.headers.get("content-type") ?? "text/html; charset=utf-8",
+              "X-Compare-Host": domain,
+              "X-Cache-Status": cacheStatus,
+              "Cache-Control":  "public, max-age=86400",
+            },
+          });
+        } catch (err) {
+          return jsonError(502, "Comparison page unreachable.", { target, error: String(err) });
+        }
+      }
+    }
+
     // ── 1c. Referral-click redirect — GET /track ─────────────────────────
     // Dual-path: signed token (?t=) preferred, legacy cleartext (?to=) fallback.
     // Bot-filtered: click logging only fires for non-crawler User-Agents.
