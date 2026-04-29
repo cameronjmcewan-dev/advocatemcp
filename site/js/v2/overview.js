@@ -853,36 +853,112 @@
     window.addEventListener('resize', () => { try { inst.resize(); } catch (_) {} });
   }
 
+  /** Map each raw crawler User-Agent label (ClaudeBot, GPTBot, ChatGPT,
+   *  GPTBot/1.0, ChatGPT-User, OAI-SearchBot, Perplexity-User, Google-
+   *  Extended, etc.) to its parent AI company. Multiple variants from
+   *  the same vendor (e.g. GPTBot + GPTBot/1.0 + ChatGPT-User + OAI-
+   *  SearchBot) collapse onto one slice so the donut isn't a confetti
+   *  of near-identical maroon shades. Apr 29 2026. */
+  function botFamily(name) {
+    const s = String(name || '').toLowerCase();
+    if (s.includes('claude') || s.includes('anthropic')) return 'Anthropic';
+    if (s.includes('gpt') || s.includes('chatgpt') || s.includes('oai')) return 'OpenAI';
+    if (s.includes('perplexity'))  return 'Perplexity';
+    if (s.includes('google'))      return 'Google';
+    if (s.includes('bing') || s.includes('microsoft')) return 'Microsoft';
+    if (s.includes('meta') || s.includes('facebook'))  return 'Meta';
+    if (s.includes('apple'))       return 'Apple';
+    if (s.includes('cohere'))      return 'Cohere';
+    if (s.includes('mistral'))     return 'Mistral';
+    if (s.includes('xai') || s.includes('grok')) return 'xAI';
+    if (s.includes('mcp'))         return 'MCP clients';
+    return 'Other';
+  }
+
+  /** Brand-tinted, high-contrast palette per AI family. Uses each
+   *  vendor's flagship color where one exists (Anthropic = our maroon,
+   *  OpenAI's signature green, Google red, etc.) so the donut reads
+   *  semantically + the colors don't blur together. */
+  const BOT_FAMILY_COLOR = {
+    'Anthropic':   '#7d2550',
+    'OpenAI':      '#10a37f',
+    'Google':      '#ea4335',
+    'Perplexity':  '#5a9bd4',
+    'Microsoft':   '#0078d4',
+    'Meta':        '#1877f2',
+    'Apple':       '#9b9b9b',
+    'Cohere':      '#d29922',
+    'Mistral':     '#fa520f',
+    'xAI':         '#1a1a1a',
+    'MCP clients': '#9b59b6',
+    'Other':       '#766f63',
+  };
+
   /** Replace the horizontal bar list inside "Which AI tool?" with a
-   *  proper donut chart. Same data source: metrics.queries_by_crawler. */
+   *  family-grouped donut chart. */
   function upgradeWhichToolDonut(data) {
-    // The card-dash that contains "Which AI tool?" — find it by H3 text
-    // because the renderer doesn't tag it with a stable selector.
     const heads = document.querySelectorAll('.card-dash .card-head h3');
     let wrap = null;
     heads.forEach((h) => { if (h.textContent.trim() === 'Which AI tool?') wrap = h.closest('.card-dash'); });
     if (!wrap) return;
-    // Drop everything below the card-head (the bot-row list) and replace
-    // with an ECharts donut.
     const head = wrap.querySelector('.card-head');
     Array.from(wrap.children).forEach((c) => { if (c !== head) c.remove(); });
     const host = document.createElement('div');
-    host.style.cssText = 'width:100%;height:240px;margin-top:8px';
+    // Taller mount so the legend along the bottom gets its own row
+    // without crowding the donut. 320px ≈ donut + 60px legend strip.
+    host.style.cssText = 'width:100%;height:320px;margin-top:8px';
     wrap.appendChild(host);
 
     const by = (data && data.metrics && data.metrics.queries_by_crawler) || {};
-    let entries = Object.entries(by).map(([k, v]) => ({ name: k, value: v }));
-    if (!entries.length) entries = [{ name: 'No traffic yet', value: 1 }];
+    // Group raw crawler names by AI family + sum counts. Drops the
+    // confetti effect of GPTBot + GPTBot/1.0 + ChatGPT + ChatGPT-User
+    // + OAI-SearchBot all rendering as separate near-identical slices.
+    const byFamily = Object.create(null);
+    for (const [name, count] of Object.entries(by)) {
+      const fam = botFamily(name);
+      byFamily[fam] = (byFamily[fam] || 0) + (count || 0);
+    }
+    let entries = Object.entries(byFamily)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, value]) => ({
+        name,
+        value,
+        itemStyle: { color: BOT_FAMILY_COLOR[name] || BOT_FAMILY_COLOR.Other },
+      }));
+    if (!entries.length) {
+      entries = [{ name: 'No traffic yet', value: 1, itemStyle: { color: BOT_FAMILY_COLOR.Other } }];
+    }
+
     const inst = window.echarts.init(host, 'advocate-maroon');
     inst.setOption({
-      tooltip: { trigger: 'item' },
-      legend: { orient: 'vertical', right: 0, top: 'center', textStyle: { color: 'var(--muted)' } },
+      tooltip: {
+        trigger: 'item',
+        formatter: (p) => {
+          const total = entries.reduce((s, e) => s + e.value, 0) || 1;
+          const pct = ((p.value / total) * 100).toFixed(1);
+          return `<b>${p.name}</b><br>${p.value.toLocaleString()} mentions · ${pct}%`;
+        },
+      },
+      // Legend along the bottom (out of the donut's space + scrollable
+      // when more vendors arrive). Centered horizontally so it reads
+      // symmetrically against the card chrome.
+      legend: {
+        type: 'scroll',
+        orient: 'horizontal',
+        bottom: 0,
+        left: 'center',
+        textStyle: { color: 'var(--muted)' },
+        itemWidth: 10,
+        itemHeight: 10,
+        itemGap: 14,
+      },
       series: [{
         type: 'pie',
-        radius: ['58%', '82%'],
-        center: ['38%', '50%'],
+        radius: ['58%', '78%'],
+        center: ['50%', '42%'],   // donut centered above the legend
         label: { show: false },
         labelLine: { show: false },
+        avoidLabelOverlap: true,
         data: entries,
       }],
     });
