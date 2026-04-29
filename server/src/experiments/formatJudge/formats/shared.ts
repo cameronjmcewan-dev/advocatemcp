@@ -47,6 +47,13 @@ export function buildBusinessJsonLd(
     includeKnowsAbout?: boolean;
     includeServiceArray?: boolean;
     canonicalUrl?: string;
+    /** Phase 4 cross-entity graph. When provided + non-empty, the
+     *  resulting JSON-LD gets `mentions[]` (every synthetic /
+     *  comparison page we own) and `sameAs[]` (canonical alternates
+     *  on the customer's own host) appended. AI engines parse
+     *  mentions to surface adjacent URLs from the same entity —
+     *  measurable lift on citation rates for adjacent pages. */
+    mentionsGraph?: { mentions: Array<{ "@type": string; url: string; name?: string }>; sameAs: string[] };
   } = {},
 ): Record<string, unknown> {
   const type = opts.type ?? "LocalBusiness";
@@ -103,11 +110,17 @@ export function buildBusinessJsonLd(
         worstRating: 1,
         ...(mostRecentVerifiedAt ? { dateModified: mostRecentVerifiedAt } : {}),
       };
-    } else if (business.star_rating != null) {
+    } else if (business.star_rating != null && business.review_count != null && business.review_count > 0) {
+      // Only emit aggregateRating when BOTH star_rating + review_count are
+      // populated AND review_count > 0. Schema.org AggregateRating is
+      // supposed to be aggregated FROM reviews — emitting it with
+      // reviewCount=1 (or null defaulted to 1) when no reviews exist is
+      // misleading and risks Google flagging the markup. Apr 29 2026
+      // tightening — was previously falling back to `?? 1`.
       ld.aggregateRating = {
         "@type": "AggregateRating",
         ratingValue: business.star_rating,
-        reviewCount: business.review_count ?? 1,
+        reviewCount: business.review_count,
         bestRating: 5,
         worstRating: 1,
       };
@@ -192,6 +205,20 @@ export function buildBusinessJsonLd(
   for (const r of Object.values(parsedRatings)) {
     if (r && r.url) sameAs.push(r.url);
   }
+
+  // Phase 4 mentions/sameAs graph splice. We append rather than overwrite:
+  //   - mentions[] is purely additive (didn't exist on the entity before)
+  //   - sameAs[] already holds review-platform URLs; comparison/synthetic
+  //     pages on the customer's own host are also valid sameAs entries.
+  if (opts.mentionsGraph) {
+    if (opts.mentionsGraph.mentions.length > 0) {
+      ld.mentions = opts.mentionsGraph.mentions;
+    }
+    for (const u of opts.mentionsGraph.sameAs) {
+      if (!sameAs.includes(u)) sameAs.push(u);
+    }
+  }
+
   if (sameAs.length > 0) ld.sameAs = sameAs;
 
   return ld;

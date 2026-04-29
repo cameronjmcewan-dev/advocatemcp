@@ -31,9 +31,11 @@ import {
   claudeHtml,
   googleHtml,
 } from "../../experiments/formatJudge/formats/index.js";
+import { buildMentionsGraph } from "../../experiments/formatJudge/formats/shared.js";
 import type { FormatVariant } from "../../experiments/formatJudge/types.js";
 import type { BusinessRow } from "../../db.js";
 import type { AgentQueryResult } from "../query.js";
+import { getDb } from "../../db.js";
 
 /* Canonical bot names emitted by worker/src/lib/bot-detection.ts. Matches
  * the prompt-tuning logic in server/src/prompts/index.ts so prose and
@@ -70,12 +72,77 @@ export function pickRenderer(botType: string | null | undefined): FormatVariant 
   return BOT_RENDERER_MAP[botType] ?? DEFAULT_RENDERER;
 }
 
+/* Per-business mentions-graph cache. Holds {mentions, sameAs} arrays
+ * built from synthetic_pages + comparison_pages rows. These tables grow
+ * slowly (daily / monthly cron) so a 60s TTL is plenty.
+ *
+ * The cache is keyed on business.id; entries expire after CACHE_TTL_MS
+ * to ensure a freshly-generated synthetic page shows up in the next
+ * crawler render within a minute. Bounded to MAX_ENTRIES so memory
+ * doesn't grow unbounded across many tenants — eviction is LRU-on-write
+ * (simple Map insertion order semantics).
+ */
+const MENTIONS_CACHE_TTL_MS = 60_000;
+const MENTIONS_CACHE_MAX_ENTRIES = 256;
+type MentionsCacheEntry = {
+  expiresAt: number;
+  graph: { mentions: Array<{ "@type": string; url: string; name?: string }>; sameAs: string[] };
+};
+const mentionsCache: Map<number, MentionsCacheEntry> = new Map();
+
+interface SyntheticPageRow { host: string; path: string; title: string; }
+interface ComparisonPageRow { host: string; path: string; }
+
+function loadMentionsGraph(business: BusinessRow): { mentions: Array<{ "@type": string; url: string; name?: string }>; sameAs: string[] } {
+  const now = Date.now();
+  const cached = mentionsCache.get(business.id);
+  if (cached && cached.expiresAt > now) return cached.graph;
+
+  // Cold lookup. Wrap in try/catch so a DB hiccup degrades to "no graph"
+  // rather than 5xx-ing the bot response.
+  try {
+    const db = getDb();
+    const synthetic = db.prepare(
+      "SELECT host, path, title FROM synthetic_pages WHERE business_id = ? AND status = 'live'",
+    ).all(business.id) as SyntheticPageRow[];
+    const comparison = db.prepare(
+      "SELECT host, path FROM comparison_pages WHERE business_id = ? AND status = 'live'",
+    ).all(business.id) as ComparisonPageRow[];
+
+    const customerHost = (() => {
+      try { return new URL(business.referral_url ?? business.website ?? "").hostname.replace(/^www\./i, ""); }
+      catch { return null; }
+    })();
+    const graph = buildMentionsGraph(synthetic, comparison, customerHost);
+
+    // LRU-on-write: evict oldest entry when over cap.
+    if (mentionsCache.size >= MENTIONS_CACHE_MAX_ENTRIES) {
+      const firstKey = mentionsCache.keys().next().value;
+      if (firstKey !== undefined) mentionsCache.delete(firstKey);
+    }
+    mentionsCache.set(business.id, { expiresAt: now + MENTIONS_CACHE_TTL_MS, graph });
+    return graph;
+  } catch (_err) {
+    return { mentions: [], sameAs: [] };
+  }
+}
+
+/** Test-only — drops the cache so unit tests can assert fresh DB lookups. */
+export function _resetMentionsCacheForTests(): void {
+  mentionsCache.clear();
+}
+
 /* Render the agent's answer for a bot. Inputs come from the
  * agent endpoint after queryAgent() returns:
  *   - business: the BusinessRow (loaded for queryAgent)
  *   - result:   the AgentQueryResult (response, referral_url, etc.)
  *   - query:    the question that prompted the answer
  *   - botType:  canonical bot name (Perplexity / GPTBot / ClaudeBot / ...)
+ *
+ * Builds the Phase 4 mentions/sameAs graph from this business's live
+ * synthetic + comparison pages and threads it into the renderer so
+ * the Organization JSON-LD can splice it in. The query is bounded by
+ * a 60s in-process LRU so the render hot path stays fast.
  *
  * Returns a single string: the HTML page the bot should receive in
  * place of a JSON envelope. */
@@ -86,11 +153,13 @@ export function renderForBot(args: {
   botType?:  string | null;
 }): { html: string; renderer_id: string } {
   const renderer = pickRenderer(args.botType);
+  const mentionsGraph = loadMentionsGraph(args.business);
   const html = renderer.render({
     business:    args.business,
     answerText:  args.result.response,
     query:       args.query,
     referralUrl: args.result.referral_url ?? args.business.website ?? "",
+    mentionsGraph,
   });
   return { html, renderer_id: renderer.id };
 }

@@ -27,13 +27,14 @@ export const openaiHtml: FormatVariant = {
   label: "ChatGPT-tuned HTML (prose paragraphs, rich entity JSON-LD, OpenGraph)",
   optimizedFor: "openai",
   render: (input: RenderInput): string => {
-    const { business, answerText, query, referralUrl } = input;
+    const { business, answerText, query, referralUrl, mentionsGraph } = input;
     const bizJsonLd = addAttribution(buildBusinessJsonLd(business, {
       type: "ProfessionalService",
       includeRating: true,
       includeAddress: true,
       includeKnowsAbout: true,
       includeServiceArray: true,
+      mentionsGraph,
     }));
     // Phase 1 grey-hat: merge active query/answer with pre-generated
     // leading-question Q&As (faqs_json on the business).

@@ -48,6 +48,13 @@ export interface RenderInput {
   /** Where the variant should send the searcher (typically the tracked
    *  redirect URL or the bare website URL). */
   referralUrl: string;
+  /** Phase 4 cross-entity graph — Schema.org mentions[] + sameAs[] arrays
+   *  built from this business's live synthetic_pages + comparison_pages
+   *  rows. Populated by renderForBot from the DB; left undefined by the
+   *  format-judge experiment harness (which can't and shouldn't touch
+   *  prod DB rows). Renderers that receive this splice it into the
+   *  Organization / LocalBusiness JSON-LD. */
+  mentionsGraph?: { mentions: Array<{ "@type": string; url: string; name?: string }>; sameAs: string[] };
 }
 
 /** A single (business × query × variant × judge) trial. */
