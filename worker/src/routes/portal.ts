@@ -648,11 +648,23 @@ async function apiMetrics(request: Request, env: Env): Promise<Response> {
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
     : await getUserBusinesses(env.DB, ctx.user_id);
-  const slug = new URL(request.url).searchParams.get("slug");
+  const reqUrl = new URL(request.url);
+  const slug = reqUrl.searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
 
-  const analytics = await fetchAnalytics(biz, env);
+  // Forward the date-range filter to the server-side analytics endpoint.
+  // The static-site Overview reads ?range= from its URL and passes it on
+  // every /api/client/metrics call so charts re-fetch on filter change.
+  const rangeQS = (() => {
+    const r  = reqUrl.searchParams.get("range");
+    const s  = reqUrl.searchParams.get("start_date");
+    const e  = reqUrl.searchParams.get("end_date");
+    if (s && e) return `start_date=${encodeURIComponent(s)}&end_date=${encodeURIComponent(e)}`;
+    if (r)      return `range=${encodeURIComponent(r)}`;
+    return undefined;
+  })();
+  const analytics = await fetchAnalytics(biz, env, rangeQS);
   // Augment with tenant-type metadata the dashboard uses to gate UI (e.g.
   // hide the Domains section for hosted/wizard-signup tenants who don't
   // configure their own DNS). `is_hosted` is derived from the domain
@@ -2853,10 +2865,19 @@ tr:last-child td{border-bottom:none}
 
 // ── Analytics proxy ────────────────────────────────────────────────────────
 
-async function fetchAnalytics(biz: Business, env: Env): Promise<AnalyticsData | null> {
+async function fetchAnalytics(
+  biz: Business,
+  env: Env,
+  rangeQS?: string,
+): Promise<AnalyticsData | null> {
+  // Date range filter (Apr 29 2026). Caller passes a pre-built query
+  // string (e.g. "range=7d" or "start_date=2026-04-01&end_date=...").
+  // Server endpoint /analytics/:slug accepts these via the dateRange
+  // helper shipped in PR #145. When omitted, server defaults to 30d.
   const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  const qs = rangeQS ? `?${rangeQS}` : "";
   try {
-    const res = await fetch(`${base}/analytics/${biz.slug}`, {
+    const res = await fetch(`${base}/analytics/${biz.slug}${qs}`, {
       headers: { Authorization: `Bearer ${biz.api_key}` },
     });
     if (!res.ok) return null;

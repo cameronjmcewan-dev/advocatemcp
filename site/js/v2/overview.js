@@ -88,12 +88,20 @@
     // via the revenue summary's event_count.
     const locId = (window.AMCP_LOCATION && window.AMCP_LOCATION.get && window.AMCP_LOCATION.get()) || null;
     const locQuery = locId ? '?location_id=' + encodeURIComponent(locId) : '';
+    // Date range filter (Apr 29 2026 — replaces the static 30d default).
+    // Reads ?range=7d|30d|90d|365d from the URL set by the topbar picker.
+    // The worker forwards this to the server's /analytics/:slug endpoint
+    // which already supports it (PR #145). Old workers ignore the param
+    // and return their default 30-day window — graceful degradation.
+    const rng = new URL(location.href).searchParams.get('range') || '30d';
+    const rangeQ = '?range=' + encodeURIComponent(rng);
+    const join = (qs) => qs ? (locQuery ? locQuery + '&' + qs.slice(1) : qs) : locQuery;
     const [metrics, radar, activity, onboarding, revenue] = await Promise.all([
-      af('/api/client/metrics').then(r => r.ok ? r.json() : null).catch(() => null),
-      af('/api/client/radar').then(r => r.ok ? r.json() : null).catch(() => null),
-      af('/api/client/activity-detail').then(r => r.ok ? r.json() : null).catch(() => null),
+      af('/api/client/metrics' + rangeQ).then(r => r.ok ? r.json() : null).catch(() => null),
+      af('/api/client/radar' + rangeQ).then(r => r.ok ? r.json() : null).catch(() => null),
+      af('/api/client/activity-detail' + rangeQ).then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/onboarding').then(r => r.ok ? r.json() : null).catch(() => null),
-      af('/api/client/revenue-summary' + locQuery).then(r => r.ok ? r.json() : null).catch(() => null),
+      af('/api/client/revenue-summary' + join(rangeQ)).then(r => r.ok ? r.json() : null).catch(() => null),
     ]);
     return {
       metrics:    metrics  || {},
@@ -754,72 +762,184 @@
         }
       });
     }
+
+    // ── In-place chart upgrades (Apr 29 2026) ──────────────────────────────
+    // Replace the legacy CSS bar chart + horizontal bars with ECharts
+    // canvases. The renderXxxChart functions still emit their original
+    // mount points; here we hide those + paint richer charts inside
+    // `.echart-host` siblings injected by the new render code.
+    upgradeChartsToECharts(data);
+
+    // Wire the existing topbar `.date-range` button to a real dropdown.
+    initRangePicker();
   }
 
-  // ── Dashboard-grid fork (Profound parity, Apr 29 2026) ──────────────────
-  // The legacy `render` + `afterMount` above are the existing hardcoded
-  // Overview. When ?dashboardId=N is in the URL AND a saved dashboard
-  // matches that id, we instead render the configurable Profound-style
-  // ECharts card grid via window.AMCP_DASHBOARD_GRID.mountGrid (loaded
-  // from /js/v2/dashboardGrid.js). The fork lives in this file (not in
-  // app.html's boot script) because the SPA router calls AMCP_OVERVIEW.
-  // render directly on every internal navigation — bypassing app.html's
-  // boot fork. Sharing the fork here guarantees both code paths agree.
-  function getActiveDashboardRow() {
-    const dash = window.AMCP_DASHBOARDS;
-    if (!dash || !Array.isArray(dash.list)) return null;
-    const id = (() => {
-      const n = Number.parseInt(new URL(location.href).searchParams.get('dashboardId') || '', 10);
-      return Number.isFinite(n) ? n : null;
-    })();
-    if (id != null) return dash.list.find((d) => d.id === id) || null;
-    return dash.list.find((d) => d.is_default === 1) || dash.list[0] || null;
+  // ── ECharts upgrades on existing chart sections ────────────────────────
+  function pollEcharts(cb, attempts) {
+    attempts = attempts || 0;
+    if (window.echarts) { cb(); return; }
+    if (attempts > 50) return;
+    setTimeout(() => pollEcharts(cb, attempts + 1), 100);
   }
-  function wantsGridRender() {
-    const id = (() => {
-      const n = Number.parseInt(new URL(location.href).searchParams.get('dashboardId') || '', 10);
-      return Number.isFinite(n) ? n : null;
-    })();
-    return id != null && getActiveDashboardRow() != null;
+  function readMaroonTokens() {
+    const root = getComputedStyle(document.documentElement);
+    return {
+      maroon: (root.getPropertyValue('--maroon') || '#7d2550').trim(),
+      tint:   (root.getPropertyValue('--maroon-tint') || '#c87b9b').trim(),
+      ink:    (root.getPropertyValue('--ink') || '#141210').trim(),
+      muted:  (root.getPropertyValue('--muted') || '#766f63').trim(),
+      line:   (root.getPropertyValue('--line') || '#d4ccbf').trim(),
+    };
+  }
+  function bootMaroonTheme() {
+    if (!window.echarts) return;
+    const t = readMaroonTokens();
+    window.echarts.registerTheme('advocate-maroon', {
+      color: [t.maroon, t.tint, '#3a8c7c', '#d29922', '#5a7eaa', '#e07a5f', '#9b59b6', '#34d399'],
+      backgroundColor: 'transparent',
+      textStyle: { color: t.ink, fontFamily: 'inherit' },
+      title:    { textStyle: { color: t.ink } },
+      legend:   { textStyle: { color: t.muted } },
+      tooltip:  { backgroundColor: 'rgba(20,18,16,.92)', borderWidth: 0, textStyle: { color: '#fff', fontSize: 12 } },
+      categoryAxis: { axisLine:{ lineStyle:{ color: t.line } }, axisTick:{ lineStyle:{ color: t.line } }, axisLabel:{ color: t.muted }, splitLine:{ lineStyle:{ color: t.line } } },
+      valueAxis:    { axisLine:{ lineStyle:{ color: t.line } }, axisTick:{ lineStyle:{ color: t.line } }, axisLabel:{ color: t.muted }, splitLine:{ lineStyle:{ color: t.line } } },
+    });
+  }
+  function upgradeChartsToECharts(data) {
+    pollEcharts(() => {
+      bootMaroonTheme();
+      upgradeBotTrafficChart(data);
+      upgradeWhichToolDonut(data);
+    });
   }
 
-  function renderForked(data) {
-    if (wantsGridRender()) {
-      // Placeholder — the real grid is mounted in afterMount once
-      // ECharts has finished loading from CDN.
-      return '<div id="page-content-grid-mount"></div>';
-    }
-    return render(data);
+  /** Replace the legacy CSS-bars `.chart` inside the AI bot traffic card
+   *  with an ECharts area-line chart. Same data source as the legacy
+   *  rendering: derivedDailySeries(metrics). */
+  function upgradeBotTrafficChart(data) {
+    // The legacy renderBotChart writes a `.card-dash[data-tour="bot-traffic"]`
+    // wrapper. Inside it find the `.chart` (CSS bars) + `.chart-labels`
+    // and replace with a single ECharts mount.
+    const wrap = document.querySelector('.card-dash[data-tour="bot-traffic"]');
+    if (!wrap) return;
+    const oldChart  = wrap.querySelector('.chart');
+    const oldLabels = wrap.querySelector('.chart-labels');
+    if (!oldChart) return;
+    if (oldLabels) oldLabels.remove();
+    const host = document.createElement('div');
+    host.style.cssText = 'width:100%;height:280px;margin-top:8px';
+    oldChart.replaceWith(host);
+
+    const series = derivedDailySeries(data && data.metrics);
+    const inst = window.echarts.init(host, 'advocate-maroon');
+    inst.setOption({
+      grid: { left: 36, right: 16, top: 16, bottom: 32 },
+      tooltip: { trigger: 'axis' },
+      xAxis: {
+        type: 'category',
+        data: series.map((s) => s.day.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })),
+        boundaryGap: false,
+      },
+      yAxis: { type: 'value', minInterval: 1 },
+      series: [{
+        type: 'line',
+        data: series.map((s) => s.count),
+        smooth: true,
+        showSymbol: false,
+        areaStyle: { opacity: 0.18 },
+        lineStyle: { width: 2 },
+      }],
+    });
+    window.addEventListener('resize', () => { try { inst.resize(); } catch (_) {} });
   }
 
-  function afterMountForked(data) {
-    if (wantsGridRender() && window.AMCP_DASHBOARD_GRID) {
-      const row = getActiveDashboardRow();
-      let layout = [];
-      try { layout = (row && JSON.parse(row.layout_json)) || []; } catch (_) { layout = []; }
-      if (!Array.isArray(layout) || !layout.length) {
-        // Fallback to the same default seed the worker uses.
-        layout = [
-          { card_id: 'visibilityScore',    size: 'sm' },
-          { card_id: 'clickRate',          size: 'sm' },
-          { card_id: 'queriesOverTime',    size: 'lg' },
-          { card_id: 'botMix',             size: 'md' },
-          { card_id: 'intentDistribution', size: 'md' },
-          { card_id: 'activityHeatmap',    size: 'lg' },
-          { card_id: 'topQueries',         size: 'md' },
-          { card_id: 'agentReputation',    size: 'md' },
-        ];
-      }
-      window.AMCP_DASHBOARD_GRID.mountGrid(layout);
-      return;
-    }
-    return afterMount(data);
+  /** Replace the horizontal bar list inside "Which AI tool?" with a
+   *  proper donut chart. Same data source: metrics.queries_by_crawler. */
+  function upgradeWhichToolDonut(data) {
+    // The card-dash that contains "Which AI tool?" — find it by H3 text
+    // because the renderer doesn't tag it with a stable selector.
+    const heads = document.querySelectorAll('.card-dash .card-head h3');
+    let wrap = null;
+    heads.forEach((h) => { if (h.textContent.trim() === 'Which AI tool?') wrap = h.closest('.card-dash'); });
+    if (!wrap) return;
+    // Drop everything below the card-head (the bot-row list) and replace
+    // with an ECharts donut.
+    const head = wrap.querySelector('.card-head');
+    Array.from(wrap.children).forEach((c) => { if (c !== head) c.remove(); });
+    const host = document.createElement('div');
+    host.style.cssText = 'width:100%;height:240px;margin-top:8px';
+    wrap.appendChild(host);
+
+    const by = (data && data.metrics && data.metrics.queries_by_crawler) || {};
+    let entries = Object.entries(by).map(([k, v]) => ({ name: k, value: v }));
+    if (!entries.length) entries = [{ name: 'No traffic yet', value: 1 }];
+    const inst = window.echarts.init(host, 'advocate-maroon');
+    inst.setOption({
+      tooltip: { trigger: 'item' },
+      legend: { orient: 'vertical', right: 0, top: 'center', textStyle: { color: 'var(--muted)' } },
+      series: [{
+        type: 'pie',
+        radius: ['58%', '82%'],
+        center: ['38%', '50%'],
+        label: { show: false },
+        labelLine: { show: false },
+        data: entries,
+      }],
+    });
+    window.addEventListener('resize', () => { try { inst.resize(); } catch (_) {} });
+  }
+
+  // ── Date range picker on the topbar (Apr 29 2026) ──────────────────────
+  // The chrome's `.date-range` button is the same element across every v2
+  // page. Wire it once here so the Overview can filter by 7d/30d/90d/365d.
+  // The selection sets ?range= on the URL; reload triggers a fresh fetch
+  // with the new range. (Applying without reload requires plumbing the
+  // range into fetchReal; for v1 a reload is simplest + universally
+  // correct across legacy + ECharts paths.)
+  function initRangePicker() {
+    const btn = document.querySelector('.date-range');
+    if (!btn || btn.dataset.rangeWired) return;
+    btn.dataset.rangeWired = '1';
+
+    const u = new URL(location.href);
+    const cur = u.searchParams.get('range') || '30d';
+    const labels = { '7d': 'Last 7 days', '30d': 'Last 30 days', '90d': 'Last 90 days', '365d': 'Last year' };
+    btn.textContent = (labels[cur] || labels['30d']) + ' ⌄';
+    btn.style.cursor = 'pointer';
+
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      document.querySelectorAll('.amcp-range-menu').forEach((m) => m.remove());
+      const menu = document.createElement('div');
+      menu.className = 'amcp-range-menu';
+      menu.style.cssText = 'position:absolute;background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:4px;box-shadow:0 4px 14px rgba(0,0,0,.10);z-index:1000;min-width:160px;font-family:inherit';
+      ['7d','30d','90d','365d'].forEach((opt) => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.textContent = labels[opt];
+        item.style.cssText = 'display:block;width:100%;text-align:left;padding:7px 11px;background:none;border:none;color:var(--ink);font-family:inherit;font-size:13px;cursor:pointer;border-radius:5px';
+        item.addEventListener('mouseenter', () => { item.style.background = 'var(--paper-2)'; });
+        item.addEventListener('mouseleave', () => { item.style.background = 'none'; });
+        item.addEventListener('click', () => {
+          const u2 = new URL(location.href);
+          u2.searchParams.set('range', opt);
+          window.location.href = u2.toString();
+        });
+        menu.appendChild(item);
+      });
+      const r = btn.getBoundingClientRect();
+      menu.style.top = (r.bottom + window.scrollY + 6) + 'px';
+      menu.style.left = (r.left + window.scrollX) + 'px';
+      document.body.appendChild(menu);
+      const closer = (ev) => { if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', closer); } };
+      setTimeout(() => document.addEventListener('click', closer), 0);
+    });
   }
 
   window.AMCP_OVERVIEW = {
     demo:   () => DEMO,
     fetch:  fetchReal,
-    render: renderForked,
-    afterMount: afterMountForked,
+    render,
+    afterMount,
   };
 })();

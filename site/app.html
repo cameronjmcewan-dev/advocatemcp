@@ -83,15 +83,11 @@
 <script src="/js/v2/tour-bridge.js"></script>
 <script src="/js/v2/overview.js"></script>
 
-<!-- Profound-parity additions (course-correction Apr 29 2026):
-     ECharts for chart rendering, Sortable.js for drag-and-drop,
-     html2pdf.js for PDF export. All deferred so they don't block
-     the legacy overview's first paint when the page is opened
-     without ?dashboardId= (default Overview view). -->
+<!-- ECharts for richer chart rendering on the Overview. Deferred so
+     the legacy first-paint isn't blocked. The Overview's afterMount
+     upgrades the bar/donut placeholders to ECharts canvases when this
+     library has loaded; otherwise the static fallback renders. -->
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js" defer></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
-<script src="/js/v2/dashboardGrid.js" defer></script>
 <script>
 // Boot uses the standard AMCP_OVERVIEW callbacks. The dashboardId fork
 // is INSIDE overview.js's render/afterMount itself (see the bottom of
