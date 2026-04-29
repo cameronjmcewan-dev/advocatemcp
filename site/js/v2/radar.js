@@ -171,14 +171,7 @@
 
     const byBotBars = (s.by_bot || []).length === 0
       ? `<div style="padding:16px 0;color:var(--muted);font-size:13.5px">No per-bot breakdown yet — first weekly poll is still running.</div>`
-      : s.by_bot.map(b => {
-          const pct = Math.round((b.rate || 0) * 100);
-          return `<div class="bot-row">
-            <span class="name">${esc(b.bot)}</span>
-            <div class="track"><div class="fill" style="width:${pct}%"></div></div>
-            <span class="n">${pct}%</span>
-          </div>`;
-        }).join('');
+      : `<div data-radar-bots-bars style="width:100%;height:240px;margin-top:8px"></div>`;
 
     const basketRows = basket.length === 0
       ? `<tr><td colspan="5" style="padding:20px;color:var(--muted);font-size:13.5px;text-align:center">Your query basket is empty. Add queries below to start tracking.</td></tr>`
@@ -229,6 +222,15 @@
         <div class="card-dash">
           <div class="card-head"><div><h3>Next move</h3><div class="sub">Authority gap we'd close first</div></div></div>
           ${tipHtml || `<p style="color:var(--muted);font-size:13.5px">No authority gaps surfaced yet. Check back after next week's poll.</p>`}
+        </div>
+      </div>
+
+      <div class="row single">
+        <div class="card-dash">
+          <div class="card-head">
+            <div><h3>Share of voice — weekly trend</h3><div class="sub">% of polls where AI cited your domain, last 12 weeks</div></div>
+          </div>
+          <div data-radar-sov-trend style="width:100%;height:280px;margin-top:8px"></div>
         </div>
       </div>
 
@@ -366,6 +368,144 @@
         }
       });
     }
+
+    // Profound-style chart upgrades — fire after the form-wiring above
+    // so a chart bug can never break basket editing. Both poll for
+    // ECharts and degrade silently when the CDN script hasn't loaded.
+    upgradeRadarCharts(_data);
+  }
+
+  // ── ECharts upgrades for the Pro radar view ────────────────────────────
+  function pollEcharts(cb, attempts) {
+    attempts = attempts || 0;
+    if (window.echarts) { cb(); return; }
+    if (attempts > 50) return;
+    setTimeout(() => pollEcharts(cb, attempts + 1), 100);
+  }
+  function bootMaroonTheme() {
+    if (!window.echarts) return;
+    const root = getComputedStyle(document.documentElement);
+    const ink   = (root.getPropertyValue('--ink') || '#141210').trim();
+    const muted = (root.getPropertyValue('--muted') || '#766f63').trim();
+    const line  = (root.getPropertyValue('--line') || '#d4ccbf').trim();
+    const maroon = (root.getPropertyValue('--maroon') || '#7d2550').trim();
+    window.echarts.registerTheme('advocate-maroon', {
+      color: [maroon, '#10a37f', '#5a9bd4', '#ea4335', '#d29922', '#9b59b6'],
+      backgroundColor: 'transparent',
+      textStyle: { color: ink, fontFamily: 'inherit' },
+      tooltip: { backgroundColor: 'rgba(20,18,16,.92)', borderWidth: 0, textStyle: { color: '#fff', fontSize: 12 } },
+      categoryAxis: { axisLine:{ lineStyle:{ color: line } }, axisTick:{ lineStyle:{ color: line } }, axisLabel:{ color: muted }, splitLine:{ lineStyle:{ color: line } } },
+      valueAxis:    { axisLine:{ lineStyle:{ color: line } }, axisTick:{ lineStyle:{ color: line } }, axisLabel:{ color: muted }, splitLine:{ lineStyle:{ color: line } } },
+    });
+  }
+
+  /** Map a raw bot string to a friendly vendor name + flagship color
+   *  for the per-bot citation-rate chart. Same palette as the rest of
+   *  the dashboard so colors read consistently across pages. */
+  const BOT_VENDOR_COLOR = {
+    perplexity: '#5a9bd4',
+    openai:     '#10a37f',
+    google:     '#ea4335',
+    anthropic:  '#7d2550',
+    microsoft:  '#0078d4',
+  };
+  function vendorColor(bot) {
+    const k = String(bot || '').toLowerCase();
+    return BOT_VENDOR_COLOR[k] || '#766f63';
+  }
+
+  function upgradeRadarCharts(radar) {
+    pollEcharts(() => {
+      bootMaroonTheme();
+      drawByBotBars(radar);
+      drawSovTrend();
+    });
+  }
+
+  /** Horizontal bar chart of citation rate by AI tool. ECharts, brand-
+   *  colored per vendor. Replaces the old CSS .track/.fill row list. */
+  function drawByBotBars(radar) {
+    const host = document.querySelector('[data-radar-bots-bars]');
+    if (!host) return;
+    const byBot = (radar && radar.summary && radar.summary.by_bot) || [];
+    if (!byBot.length) return;
+    const sorted = byBot.slice().sort((a, b) => (b.rate || 0) - (a.rate || 0));
+    const inst = window.echarts.init(host, 'advocate-maroon');
+    inst.setOption({
+      grid: { left: 90, right: 24, top: 16, bottom: 24 },
+      tooltip: {
+        trigger: 'axis', axisPointer: { type: 'shadow' },
+        formatter: (p) => `<b>${p[0].axisValueLabel}</b><br>Citation rate: ${(p[0].value * 100).toFixed(1)}%`,
+      },
+      xAxis: { type: 'value', max: 1, axisLabel: { formatter: (v) => (v * 100 | 0) + '%' } },
+      yAxis: { type: 'category', data: sorted.map((b) => b.bot) },
+      series: [{
+        type: 'bar',
+        data: sorted.map((b) => ({
+          value: b.rate || 0,
+          itemStyle: { color: vendorColor(b.bot), borderRadius: [0, 3, 3, 0] },
+        })),
+      }],
+    });
+    window.addEventListener('resize', () => { try { inst.resize(); } catch (_) {} });
+  }
+
+  /** Weekly share-of-voice trend line. Pulls from the new
+   *  /api/competitor-radar/:slug/share-of-voice/weekly endpoint
+   *  (server-side aggregate added in PR #145, never wired in the UI
+   *  until now). Falls through silently if the endpoint isn't
+   *  available (old worker) or returns an empty series. */
+  async function drawSovTrend() {
+    const host = document.querySelector('[data-radar-sov-trend]');
+    if (!host) return;
+    const af = window.AMCP && window.AMCP.authedFetch;
+    if (!af) return;
+
+    const slug = new URL(location.href).searchParams.get('as')
+      || (window.AMCP_DATA && window.AMCP_DATA.slug) || '';
+    if (!slug) {
+      host.innerHTML = '<div style="padding:16px 0;color:var(--muted);font-size:13.5px">Sign in to a tenant first to see share-of-voice trend.</div>';
+      return;
+    }
+    let series = [];
+    try {
+      // Endpoint shape: { range_weeks, series: [{ week_start, polls, cited, share }] }
+      const res = await af(`/api/competitor-radar/${encodeURIComponent(slug)}/share-of-voice/weekly?weeks=12`);
+      if (res.ok) {
+        const body = await res.json();
+        series = (body && body.series) || [];
+      }
+    } catch (_) { /* fall through */ }
+
+    if (!series.length) {
+      host.innerHTML = '<div style="padding:16px 0;color:var(--muted);font-size:13.5px">No weekly polls yet. Trend appears after your first weekly run.</div>';
+      return;
+    }
+
+    const inst = window.echarts.init(host, 'advocate-maroon');
+    inst.setOption({
+      grid: { left: 44, right: 16, top: 16, bottom: 28 },
+      tooltip: {
+        trigger: 'axis',
+        formatter: (params) => {
+          const p = params[0];
+          const raw = series[p.dataIndex] || {};
+          return `<b>${p.axisValueLabel}</b><br>Share: ${(p.value * 100).toFixed(1)}%<br>Cited in ${raw.cited || 0} of ${raw.polls || 0} polls`;
+        },
+      },
+      xAxis: { type: 'category', data: series.map((r) => r.week_start), boundaryGap: false },
+      yAxis: { type: 'value', max: 1, axisLabel: { formatter: (v) => (v * 100 | 0) + '%' } },
+      series: [{
+        type: 'line',
+        data: series.map((r) => r.share),
+        smooth: true,
+        showSymbol: true,
+        symbolSize: 7,
+        areaStyle: { opacity: 0.18 },
+        lineStyle: { width: 2 },
+      }],
+    });
+    window.addEventListener('resize', () => { try { inst.resize(); } catch (_) {} });
   }
 
   window.AMCP_RADAR = { demo: () => DEMO, fetch: fetchReal, render, afterMount };

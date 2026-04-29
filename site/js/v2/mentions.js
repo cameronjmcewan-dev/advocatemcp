@@ -1,6 +1,23 @@
 /* v2 Mentions page — every citation, sortable, with Intent column (no
  * Earned since we don't track dollar attribution yet). */
 (function () {
+
+  // Intent → brand-meaningful colors. Same hue logic as the bot-family
+  // donut on /app: high-contrast, semantically loaded so the donut reads
+  // at a glance instead of being a wall of similar maroon. Apr 29 2026.
+  const INTENT_COLOR = {
+    brand_direct:  '#7d2550',  // maroon — most valuable: they asked for you
+    comparison:    '#5a9bd4',  // blue — cool, deliberative
+    price_led:     '#d29922',  // amber — money-related
+    emergency:     '#ea4335',  // red — urgent
+    research:      '#9b59b6',  // purple — exploratory
+    booking:       '#10a37f',  // green — conversion intent
+    location:      '#3a8c7c',  // teal — geo-bound
+    unknown:       '#766f63',  // muted brown
+  };
+  function intentColor(key) {
+    return INTENT_COLOR[String(key || 'unknown').toLowerCase()] || INTENT_COLOR.unknown;
+  }
   'use strict';
 
   const DEMO = {
@@ -61,16 +78,13 @@
     const byIntent = m.queries_by_intent || {};
     const intentEntries = Object.entries(byIntent).sort((a, b) => b[1] - a[1]);
     const intentTotal = intentEntries.reduce((s, [, n]) => s + n, 0);
+    // Mount point for an ECharts donut. afterMount paints the chart
+    // once ECharts has loaded; if it never does, the empty container
+    // stays — the legacy bar list isn't kept since the donut is
+    // strictly nicer.
     const intentBars = intentEntries.length === 0
       ? `<div style="padding:16px 0;color:var(--muted);font-size:13.5px">No intent data yet.</div>`
-      : intentEntries.map(([k, n]) => {
-          const pct = intentTotal ? Math.round((n / intentTotal) * 100) : 0;
-          return `<div class="bot-row">
-            <span class="name">${esc(intentLabel(k))}</span>
-            <div class="track"><div class="fill" style="width:${pct}%"></div></div>
-            <span class="n">${fmtCount(n)}</span>
-          </div>`;
-        }).join('');
+      : `<div data-mentions-intent-donut style="width:100%;height:280px;margin-top:8px"></div>`;
 
     const rowsHtml = recent.length === 0
       ? `<tr><td colspan="4" style="padding:20px;color:var(--muted);font-size:13.5px;text-align:center">No mentions yet.</td></tr>`
@@ -132,5 +146,61 @@
     `;
   }
 
-  window.AMCP_MENTIONS = { demo: () => DEMO, fetch: fetchReal, render };
+  // ── ECharts donut for "Why people are asking" ──────────────────────────
+  function pollEcharts(cb, attempts) {
+    attempts = attempts || 0;
+    if (window.echarts) { cb(); return; }
+    if (attempts > 50) return;
+    setTimeout(() => pollEcharts(cb, attempts + 1), 100);
+  }
+  function bootMaroonTheme() {
+    if (!window.echarts) return;
+    const root = getComputedStyle(document.documentElement);
+    const ink   = (root.getPropertyValue('--ink') || '#141210').trim();
+    const muted = (root.getPropertyValue('--muted') || '#766f63').trim();
+    window.echarts.registerTheme('advocate-maroon', {
+      backgroundColor: 'transparent',
+      textStyle: { color: ink, fontFamily: 'inherit' },
+      tooltip: { backgroundColor: 'rgba(20,18,16,.92)', borderWidth: 0, textStyle: { color: '#fff', fontSize: 12 } },
+      legend: { textStyle: { color: muted } },
+    });
+  }
+  function afterMount(metrics) {
+    pollEcharts(() => {
+      bootMaroonTheme();
+      const host = document.querySelector('[data-mentions-intent-donut]');
+      if (!host) return;
+      const m = metrics || {};
+      const byIntent = m.queries_by_intent || {};
+      const entries = Object.entries(byIntent)
+        .sort((a, b) => b[1] - a[1])
+        .map(([k, v]) => ({
+          name: intentLabel(k),
+          value: v,
+          itemStyle: { color: intentColor(k) },
+        }));
+      if (!entries.length) return;
+      const total = entries.reduce((s, e) => s + e.value, 0) || 1;
+      const inst = window.echarts.init(host, 'advocate-maroon');
+      inst.setOption({
+        tooltip: {
+          trigger: 'item',
+          formatter: (p) => `<b>${p.name}</b><br>${p.value.toLocaleString()} mentions · ${((p.value/total)*100).toFixed(1)}%`,
+        },
+        legend: { type: 'scroll', orient: 'horizontal', bottom: 0, left: 'center', itemWidth: 10, itemHeight: 10, itemGap: 14 },
+        series: [{
+          type: 'pie',
+          radius: ['58%', '78%'],
+          center: ['50%', '42%'],
+          label: { show: false },
+          labelLine: { show: false },
+          avoidLabelOverlap: true,
+          data: entries,
+        }],
+      });
+      window.addEventListener('resize', () => { try { inst.resize(); } catch (_) {} });
+    });
+  }
+
+  window.AMCP_MENTIONS = { demo: () => DEMO, fetch: fetchReal, render, afterMount };
 })();

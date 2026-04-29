@@ -1,6 +1,39 @@
 /* v2 Click-throughs page — uses /api/client/clicks for the raw click
  * events and /api/client/metrics for the rollup counts. */
 (function () {
+
+  // Same bot-family + brand-color logic as the Overview / Bot traffic
+  // pages — group GPTBot / GPTBot-1.0 / ChatGPT / ChatGPT-User / OAI-
+  // SearchBot onto one OpenAI slice instead of fragmenting the donut.
+  function botFamily(name) {
+    const s = String(name || '').toLowerCase();
+    if (s.includes('claude') || s.includes('anthropic')) return 'Anthropic';
+    if (s.includes('gpt') || s.includes('chatgpt') || s.includes('oai')) return 'OpenAI';
+    if (s.includes('perplexity'))  return 'Perplexity';
+    if (s.includes('google'))      return 'Google';
+    if (s.includes('bing') || s.includes('microsoft')) return 'Microsoft';
+    if (s.includes('meta') || s.includes('facebook'))  return 'Meta';
+    if (s.includes('apple'))       return 'Apple';
+    if (s.includes('cohere'))      return 'Cohere';
+    if (s.includes('mistral'))     return 'Mistral';
+    if (s.includes('xai') || s.includes('grok')) return 'xAI';
+    if (s.includes('mcp'))         return 'MCP clients';
+    return 'Other';
+  }
+  const BOT_FAMILY_COLOR = {
+    'Anthropic':   '#7d2550',
+    'OpenAI':      '#10a37f',
+    'Google':      '#ea4335',
+    'Perplexity':  '#5a9bd4',
+    'Microsoft':   '#0078d4',
+    'Meta':        '#1877f2',
+    'Apple':       '#9b9b9b',
+    'Cohere':      '#d29922',
+    'Mistral':     '#fa520f',
+    'xAI':         '#1a1a1a',
+    'MCP clients': '#9b59b6',
+    'Other':       '#766f63',
+  };
   'use strict';
 
   const DEMO = {
@@ -70,24 +103,20 @@
     const queries  = m.total_queries || null;
     const ctr      = (queries && total) ? (total / queries) : null;
 
-    // Break clicks down by bot / source
-    const bySrc = {};
+    // Break clicks down by AI vendor (family-grouped). Mirrors the
+    // Overview / Bot traffic donut treatment so the dashboard speaks
+    // one visual language across pages.
+    const byFamily = Object.create(null);
     clicks.forEach(c => {
-      const k = refBucketName(c.ref, c.user_agent);
-      bySrc[k] = (bySrc[k] || 0) + 1;
+      const raw = refBucketName(c.ref, c.user_agent);
+      const fam = botFamily(raw);
+      byFamily[fam] = (byFamily[fam] || 0) + 1;
     });
-    const srcEntries = Object.entries(bySrc).sort((a, b) => b[1] - a[1]);
+    const srcEntries = Object.entries(byFamily).sort((a, b) => b[1] - a[1]);
     const srcTotal = srcEntries.reduce((s, [, n]) => s + n, 0);
-    const srcBars = srcEntries.length === 0
+    const srcDonutMount = srcEntries.length === 0
       ? `<div style="padding:16px 0;color:var(--muted);font-size:13.5px">No clicks yet.</div>`
-      : srcEntries.map(([name, n]) => {
-          const pct = srcTotal ? Math.round((n / srcTotal) * 100) : 0;
-          return `<div class="bot-row">
-            <span class="name">${esc(name)}</span>
-            <div class="track"><div class="fill" style="width:${pct}%"></div></div>
-            <span class="n">${fmtCount(n)}</span>
-          </div>`;
-        }).join('');
+      : `<div data-clicks-source-donut style="width:100%;height:280px;margin-top:8px"></div>`;
 
     const rows = clicks.length === 0
       ? `<tr><td colspan="3" style="padding:20px;color:var(--muted);font-size:13.5px;text-align:center">No click-throughs yet. AI-cited visitors will appear here.</td></tr>`
@@ -112,8 +141,8 @@
 
       <div class="row">
         <div class="card-dash">
-          <div class="card-head"><div><h3>By AI tool</h3><div class="sub">Which assistants sent the most visitors</div></div></div>
-          ${srcBars}
+          <div class="card-head"><div><h3>By AI vendor</h3><div class="sub">Which assistants sent the most visitors</div></div></div>
+          ${srcDonutMount}
         </div>
         <div class="card-dash">
           <div class="card-head"><div><h3>How we count</h3><div class="sub">What makes a click "tracked"</div></div></div>
@@ -137,5 +166,64 @@
     `;
   }
 
-  window.AMCP_CLICKS = { demo: () => DEMO, fetch: fetchReal, render };
+  // ── ECharts donut for "By AI vendor" — same shape as the bot traffic
+//    donut, family-grouped, brand-colored, legend below. ──────────────
+function pollEcharts(cb, attempts) {
+  attempts = attempts || 0;
+  if (window.echarts) { cb(); return; }
+  if (attempts > 50) return;
+  setTimeout(() => pollEcharts(cb, attempts + 1), 100);
+}
+function bootMaroonTheme() {
+  if (!window.echarts) return;
+  const root = getComputedStyle(document.documentElement);
+  window.echarts.registerTheme('advocate-maroon', {
+    backgroundColor: 'transparent',
+    textStyle: { color: (root.getPropertyValue('--ink') || '#141210').trim(), fontFamily: 'inherit' },
+    tooltip: { backgroundColor: 'rgba(20,18,16,.92)', borderWidth: 0, textStyle: { color: '#fff', fontSize: 12 } },
+  });
+}
+function afterMount(data) {
+  pollEcharts(() => {
+    bootMaroonTheme();
+    const host = document.querySelector('[data-clicks-source-donut]');
+    if (!host) return;
+    const d = data || {};
+    const clicks = d.clicks || [];
+    const byFamily = Object.create(null);
+    clicks.forEach(c => {
+      const fam = botFamily(refBucketName(c.ref, c.user_agent));
+      byFamily[fam] = (byFamily[fam] || 0) + 1;
+    });
+    const entries = Object.entries(byFamily)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, value]) => ({
+        name,
+        value,
+        itemStyle: { color: BOT_FAMILY_COLOR[name] || BOT_FAMILY_COLOR.Other },
+      }));
+    if (!entries.length) return;
+    const total = entries.reduce((s, e) => s + e.value, 0) || 1;
+    const inst = window.echarts.init(host, 'advocate-maroon');
+    inst.setOption({
+      tooltip: {
+        trigger: 'item',
+        formatter: (p) => `<b>${p.name}</b><br>${p.value.toLocaleString()} clicks · ${((p.value/total)*100).toFixed(1)}%`,
+      },
+      legend: { type: 'scroll', orient: 'horizontal', bottom: 0, left: 'center', itemWidth: 10, itemHeight: 10, itemGap: 14, textStyle: { color: 'var(--muted)' } },
+      series: [{
+        type: 'pie',
+        radius: ['58%', '78%'],
+        center: ['50%', '42%'],
+        label: { show: false },
+        labelLine: { show: false },
+        avoidLabelOverlap: true,
+        data: entries,
+      }],
+    });
+    window.addEventListener('resize', () => { try { inst.resize(); } catch (_) {} });
+  });
+}
+
+window.AMCP_CLICKS = { demo: () => DEMO, fetch: fetchReal, render, afterMount };
 })();
