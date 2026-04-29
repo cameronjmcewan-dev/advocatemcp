@@ -648,3 +648,232 @@ export async function recordLoginAttempt(db: D1Database, identifier: string): Pr
   const cutoff = new Date(Date.now() - RATE_WINDOW_SECONDS * 2000).toISOString();
   db.prepare("DELETE FROM login_attempts WHERE attempted_at < ?").bind(cutoff).run();
 }
+
+// ── Dashboards (Phase B of dashboard redesign, Apr 29 2026) ─────────────────
+
+export interface Dashboard {
+  id:           number;
+  user_id:      string;
+  business_id:  string;
+  name:         string;
+  layout_json:  string;
+  filters_json: string;
+  is_default:   number;          // 0 | 1 (SQLite has no native bool)
+  created_at:   number;
+  updated_at:   number;
+}
+
+/** Layout entry shape — matches DEFAULT_DASHBOARD_LAYOUT in cards.ts. */
+export interface DashboardLayoutEntry {
+  card_id: string;
+  size:    "sm" | "md" | "lg" | "xl";
+}
+
+export interface DashboardFilters {
+  date_range?:    string | { start: string; end: string } | null;
+  intent_filter?: string[] | null;
+  bot_filter?:    string[] | null;
+}
+
+/** Default 8-card seed used when auto-seeding a new user's first dashboard.
+ *  Mirrored from worker/src/routes/dashboard/cards.ts so the seed doesn't
+ *  cross the route-vs-db boundary. Update both in lockstep. */
+export const DEFAULT_DASHBOARD_LAYOUT_SEED: DashboardLayoutEntry[] = [
+  { card_id: "visibilityScore",    size: "sm" },
+  { card_id: "clickRate",          size: "sm" },
+  { card_id: "queriesOverTime",    size: "lg" },
+  { card_id: "botMix",             size: "md" },
+  { card_id: "intentDistribution", size: "md" },
+  { card_id: "activityHeatmap",    size: "lg" },
+  { card_id: "topQueries",         size: "md" },
+  { card_id: "agentReputation",    size: "md" },
+];
+
+/** List a user's dashboards for a given business. */
+export async function getDashboards(
+  db: D1Database, userId: string, businessId: string,
+): Promise<Dashboard[]> {
+  const result = await db
+    .prepare(
+      `SELECT id, user_id, business_id, name, layout_json, filters_json,
+              is_default, created_at, updated_at
+         FROM dashboards
+         WHERE user_id = ? AND business_id = ?
+         ORDER BY is_default DESC, created_at ASC`,
+    )
+    .bind(userId, businessId)
+    .all<Dashboard>();
+  return result.results ?? [];
+}
+
+/** Fetch one dashboard, scoped to the caller's user + business. Returns
+ *  null when not found OR when ownership doesn't match. */
+export async function getDashboard(
+  db: D1Database, id: number, userId: string, businessId: string,
+): Promise<Dashboard | null> {
+  return db
+    .prepare(
+      `SELECT id, user_id, business_id, name, layout_json, filters_json,
+              is_default, created_at, updated_at
+         FROM dashboards
+         WHERE id = ? AND user_id = ? AND business_id = ?`,
+    )
+    .bind(id, userId, businessId)
+    .first<Dashboard>();
+}
+
+/** Resolve the user's default dashboard for a business, auto-seeding when
+ *  none exist. The seeded row uses DEFAULT_DASHBOARD_LAYOUT_SEED. */
+export async function getOrSeedDefaultDashboard(
+  db: D1Database, userId: string, businessId: string,
+): Promise<Dashboard> {
+  const existing = await db
+    .prepare(
+      `SELECT id, user_id, business_id, name, layout_json, filters_json,
+              is_default, created_at, updated_at
+         FROM dashboards
+         WHERE user_id = ? AND business_id = ? AND is_default = 1
+         LIMIT 1`,
+    )
+    .bind(userId, businessId)
+    .first<Dashboard>();
+  if (existing) return existing;
+
+  // Seed.
+  const now = Date.now();
+  const layout = JSON.stringify(DEFAULT_DASHBOARD_LAYOUT_SEED);
+  await db
+    .prepare(
+      `INSERT INTO dashboards
+         (user_id, business_id, name, layout_json, filters_json,
+          is_default, created_at, updated_at)
+       VALUES (?, ?, 'Default', ?, '{}', 1, ?, ?)`,
+    )
+    .bind(userId, businessId, layout, now, now)
+    .run();
+  // Re-read so we get the auto-generated id.
+  const seeded = await db
+    .prepare(
+      `SELECT id, user_id, business_id, name, layout_json, filters_json,
+              is_default, created_at, updated_at
+         FROM dashboards
+         WHERE user_id = ? AND business_id = ? AND is_default = 1
+         LIMIT 1`,
+    )
+    .bind(userId, businessId)
+    .first<Dashboard>();
+  if (!seeded) throw new Error("seedDefaultDashboard: insert succeeded but row not found");
+  return seeded;
+}
+
+/** Create a fresh dashboard. When `copyFromId` is provided, the new row's
+ *  layout_json + filters_json are cloned from that dashboard (which must
+ *  belong to the same user + business). Otherwise the seed layout is
+ *  used. Throws on duplicate name. */
+export async function createDashboard(
+  db: D1Database,
+  userId: string,
+  businessId: string,
+  name: string,
+  copyFromId: number | null,
+): Promise<Dashboard> {
+  let layout = JSON.stringify(DEFAULT_DASHBOARD_LAYOUT_SEED);
+  let filters = "{}";
+  if (copyFromId !== null) {
+    const src = await getDashboard(db, copyFromId, userId, businessId);
+    if (src) { layout = src.layout_json; filters = src.filters_json; }
+  }
+  const now = Date.now();
+  const result = await db
+    .prepare(
+      `INSERT INTO dashboards
+         (user_id, business_id, name, layout_json, filters_json,
+          is_default, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 0, ?, ?)`,
+    )
+    .bind(userId, businessId, name, layout, filters, now, now)
+    .run();
+  // D1 doesn't expose lastInsertRowid uniformly. Re-read by name.
+  const row = await db
+    .prepare(
+      `SELECT id, user_id, business_id, name, layout_json, filters_json,
+              is_default, created_at, updated_at
+         FROM dashboards
+         WHERE user_id = ? AND business_id = ? AND name = ?`,
+    )
+    .bind(userId, businessId, name)
+    .first<Dashboard>();
+  if (!row) throw new Error(`createDashboard: row missing after insert (name="${name}")`);
+  void result;
+  return row;
+}
+
+/** Update name + layout + filters. Each is independently optional —
+ *  caller passes only what changed. */
+export async function updateDashboard(
+  db: D1Database,
+  id: number,
+  userId: string,
+  businessId: string,
+  patch: { name?: string; layout_json?: string; filters_json?: string },
+): Promise<Dashboard | null> {
+  const sets: string[] = [];
+  const binds: (string | number)[] = [];
+  if (patch.name !== undefined)         { sets.push("name = ?");         binds.push(patch.name); }
+  if (patch.layout_json !== undefined)  { sets.push("layout_json = ?");  binds.push(patch.layout_json); }
+  if (patch.filters_json !== undefined) { sets.push("filters_json = ?"); binds.push(patch.filters_json); }
+  if (sets.length === 0) return getDashboard(db, id, userId, businessId);
+  sets.push("updated_at = ?");
+  binds.push(Date.now());
+  binds.push(id, userId, businessId);
+  await db
+    .prepare(
+      `UPDATE dashboards SET ${sets.join(", ")}
+         WHERE id = ? AND user_id = ? AND business_id = ?`,
+    )
+    .bind(...binds)
+    .run();
+  return getDashboard(db, id, userId, businessId);
+}
+
+/** Promote `id` to the default dashboard, demoting any other current
+ *  default for the same (user, business). Atomic via two-step UPDATE in
+ *  D1's prepared-statement batch — D1 doesn't support multi-statement
+ *  transactions in a single .run(), so we rely on the partial unique
+ *  index for race safety. The two updates are sequenced: demote the old
+ *  default first (so the index slot is free), then promote the target. */
+export async function promoteDashboardToDefault(
+  db: D1Database, id: number, userId: string, businessId: string,
+): Promise<Dashboard | null> {
+  await db
+    .prepare(
+      `UPDATE dashboards SET is_default = 0, updated_at = ?
+         WHERE user_id = ? AND business_id = ? AND is_default = 1 AND id <> ?`,
+    )
+    .bind(Date.now(), userId, businessId, id)
+    .run();
+  await db
+    .prepare(
+      `UPDATE dashboards SET is_default = 1, updated_at = ?
+         WHERE id = ? AND user_id = ? AND business_id = ?`,
+    )
+    .bind(Date.now(), id, userId, businessId)
+    .run();
+  return getDashboard(db, id, userId, businessId);
+}
+
+/** Delete a dashboard. Refuses when the row is currently is_default=1;
+ *  the caller must promote a different dashboard first. Returns true on
+ *  success, false when the row didn't exist OR was the default. */
+export async function deleteDashboard(
+  db: D1Database, id: number, userId: string, businessId: string,
+): Promise<{ ok: boolean; reason?: "not_found" | "is_default" }> {
+  const row = await getDashboard(db, id, userId, businessId);
+  if (!row) return { ok: false, reason: "not_found" };
+  if (row.is_default === 1) return { ok: false, reason: "is_default" };
+  await db
+    .prepare(`DELETE FROM dashboards WHERE id = ? AND user_id = ? AND business_id = ?`)
+    .bind(id, userId, businessId)
+    .run();
+  return { ok: true };
+}
