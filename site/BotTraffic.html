@@ -30,14 +30,19 @@
 <script src="/js/dashboard-auth.js"></script>
 <script src="/js/v2/shell.js"></script>
 <script src="/js/v2/bots.js"></script>
+<!-- ECharts for the Daily bot traffic chart upgrade. Deferred so it
+     doesn't block first paint; bots.js polls window.echarts in
+     afterMount until it's available. -->
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js" defer></script>
 <script>
 window.AMCP_SHELL.boot({
   activeId: 'bot-traffic',
   crumb:    'Dashboard · Bot traffic',
   title:    'Bot traffic',
-  demo:      window.AMCP_BOTS.demo,
-  fetchReal: window.AMCP_BOTS.fetch,
-  render:    window.AMCP_BOTS.render,
+  demo:       window.AMCP_BOTS.demo,
+  fetchReal:  window.AMCP_BOTS.fetch,
+  render:     window.AMCP_BOTS.render,
+  afterMount: window.AMCP_BOTS.afterMount,
 });
 </script>
 </body>
