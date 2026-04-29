@@ -28,13 +28,14 @@ export const googleHtml: FormatVariant = {
   label: "Google-tuned HTML (snippet-first lead, LocalBusiness + FAQPage + Speakable + WebSite + Breadcrumb)",
   optimizedFor: "google",
   render: (input: RenderInput): string => {
-    const { business, answerText, query, referralUrl } = input;
+    const { business, answerText, query, referralUrl, mentionsGraph } = input;
     const bizJsonLd = addAttribution(buildBusinessJsonLd(business, {
       type: "LocalBusiness",
       includeRating: true,
       includeAddress: true,
       includeKnowsAbout: true,
       includeServiceArray: true,
+      mentionsGraph,
     }));
     // Phase 1 grey-hat: merge active query/answer with pre-generated
     // leading-question Q&As (faqs_json on the business).

@@ -43,13 +43,14 @@ export const claudeHtml: FormatVariant = {
   label: "Claude-tuned HTML (semantic dl, H2 sections, FAQPage with detailed answer)",
   optimizedFor: "claude",
   render: (input: RenderInput): string => {
-    const { business, answerText, query, referralUrl } = input;
+    const { business, answerText, query, referralUrl, mentionsGraph } = input;
     const bizJsonLd = addAttribution(buildBusinessJsonLd(business, {
       type: "ProfessionalService",
       includeRating: true,
       includeAddress: true,
       includeKnowsAbout: true,
       includeServiceArray: true,
+      mentionsGraph,
     }));
     // Phase 1 grey-hat: merge active query/answer with any pre-generated
     // leading-question Q&As on the business. Falls back to single-pair
