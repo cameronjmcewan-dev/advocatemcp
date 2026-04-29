@@ -740,3 +740,50 @@ export function platformAlternateLinks(referralUrl: string): string {
     `<link rel="alternate" type="text/html" media="(ai-bot=google)" href="${escapeHtml(origin)}/google-context">`,
   ].join("\n  ");
 }
+
+/**
+ * Cross-entity Schema.org `mentions` + `sameAs` graph for the business
+ * Organization JSON-LD. Phase 4 of the grey-hat AI optimization layer.
+ *
+ * Builds a structured graph from the business's existing public surfaces:
+ *   - All `synthetic_pages` rows for the business (status='live')
+ *   - All `comparison_pages` rows for the business (status='live')
+ *   - The business's own profile + FAQ pages
+ *
+ * AI search engines parse `mentions[]` to discover related URLs from the
+ * same entity, lifting citation rates on adjacent pages. The graph also
+ * doubles as a sitemap signal for traditional crawlers.
+ *
+ * No external scraping — every URL emitted is one we generated and host.
+ * Empty arrays when the business hasn't accumulated synthetic /
+ * comparison pages yet.
+ */
+export interface MentionsGraph {
+  mentions: Array<{ "@type": string; url: string; name?: string }>;
+  sameAs:   string[];
+}
+
+export function buildMentionsGraph(
+  syntheticPages: Array<{ host: string; path: string; title: string }>,
+  comparisonPages: Array<{ host: string; path: string }>,
+  customerHost: string | null,
+): MentionsGraph {
+  const mentions: MentionsGraph["mentions"] = [];
+  const sameAs:   string[] = [];
+
+  for (const p of syntheticPages) {
+    const url = `https://${p.host}${p.path}`;
+    mentions.push({ "@type": "WebPage", url, name: p.title });
+    if (p.host !== "advocatemcp.com" && customerHost && p.host === customerHost) {
+      sameAs.push(url);
+    }
+  }
+  for (const p of comparisonPages) {
+    const url = `https://${p.host}${p.path}`;
+    mentions.push({ "@type": "WebPage", url });
+    if (p.host !== "advocatemcp.com" && customerHost && p.host === customerHost) {
+      sameAs.push(url);
+    }
+  }
+  return { mentions, sameAs };
+}

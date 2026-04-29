@@ -10,6 +10,7 @@ import { getDb } from "./db.js";
 import { startReputationRollupSchedule } from "./jobs/reputationRollup.js";
 import { startFaqBackfillSchedule } from "./jobs/faqBackfill.js";
 import { startSyntheticPagesBuilderSchedule } from "./jobs/syntheticPagesBuilder.js";
+import { startComparisonPagesBuilderSchedule } from "./jobs/comparisonPagesBuilder.js";
 import { pollAll } from "./jobs/competitorRadar.js";
 import { startWeeklyDigestSchedule } from "./jobs/weeklyDigest.js";
 import { startBetaEndingSchedule } from "./jobs/betaEndingEmail.js";
@@ -156,6 +157,14 @@ startFaqBackfillSchedule();
 // Enterprise 150 soft / 500 hard. Per-service + per-location sub-caps
 // keep content distinct. Each row is fact-validated before going live.
 startSyntheticPagesBuilderSchedule();
+
+// Comparison pages builder (Apr 28 2026 — Phase 4 grey-hat).
+// 1st of each month at 03:00 UTC. Gated on FEATURE_COMPARISON_PAGES +
+// ANTHROPIC_API_KEY. Strict validator: each row must reference ≥3
+// differentiators that pair non-null facts on BOTH sides + have a
+// public source URL on each side. Banned-phrase regex blocks
+// disparaging language.
+startComparisonPagesBuilderSchedule();
 
 app.listen(PORT, () => {
   console.log(`
