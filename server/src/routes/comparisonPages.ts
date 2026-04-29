@@ -84,11 +84,15 @@ function renderBody(md: string): string {
 comparisonPagesRouter.get("/compare/:host/*", (req: Request, res: Response) => {
   const host = req.params.host;
   const tail = (req.params as Record<string, string>)["0"] ?? "";
-  // Re-prepend `/compare/` because the route's :host param ate the
-  // first path segment. The worker forwards the full original path
-  // including `/compare/` so `synthetic_pages.path` lookups stay
-  // consistent across the two builders.
-  const path = `/compare/${tail.startsWith("/") ? tail.slice(1) : tail}`;
+  // The worker forwards `/compare/{host}{originalPathname}` where
+  // `originalPathname` already starts with `/compare/...`. Express's
+  // route pattern `/compare/:host/*` consumes the FIRST `/compare/` +
+  // the host, so `tail` = `compare/{a}-vs-{b}` (no leading slash). We
+  // simply re-add the leading slash to reconstruct the original path
+  // — DO NOT prepend `/compare/` again (that was the bug shipped in
+  // a7de058: it produced `/compare/compare/{a}-vs-{b}` and missed
+  // every DB row).
+  const path = tail.startsWith("/") ? tail : `/${tail}`;
 
   const flag = (process.env.FEATURE_COMPARISON_PAGES ?? "").toLowerCase();
   if (flag !== "true" && flag !== "1") {
