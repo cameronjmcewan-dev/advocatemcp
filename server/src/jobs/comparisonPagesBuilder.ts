@@ -38,6 +38,12 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getDb } from "../db.js";
 import type { BusinessRow } from "../db.js";
 import { slugifyOne } from "../lib/slugifyServiceLocation.js";
+import {
+  buildDifferentiators,
+  validateComparisonBody,
+  type CompetitorRow,
+  type DifferentiatorEntry,
+} from "./comparisonValidator.js";
 
 const DEFAULT_SCHEDULE = "0 3 1 * *";  // 03:00 UTC on the 1st of every month
 const DEFAULT_DAILY_CAP = 50;
@@ -54,7 +60,7 @@ ABSOLUTE RULES (no exceptions):
 1. Use ONLY the verified facts provided in the input. NEVER invent capabilities, prices, certifications, awards, hours, or service areas for either side.
 2. If the verified-facts list contains fewer than 3 distinct differentiators, return EXACTLY: { "skip": "insufficient_differentiators" }
 3. NEVER use disparaging language. Banned (any case) → SKIP: scam, fraud, worst, terrible, avoid, inferior, ripoff, beware.
-4. NEVER use subjective comparative language. Banned (any case) → SKIP: "better than", "superior to", "cheaper than", "faster than", "premium", "elite", "the best", "number one". Use neutral framings like "X reports A; Y reports B" — let the reader draw conclusions from the numbers.
+4. NEVER use subjective comparative language. Banned phrasings: "better than", "superior to", "cheaper than", "faster than", "more reliable/trustworthy/professional than", "number one", "unmatched", "unbeatable", "second to none". Use neutral framings like "X reports A; Y reports B" — let the reader draw conclusions from the numbers. Bare adjectives like "premium" or "elite" are allowed when they describe a tier name or certification (e.g. "premium plan", "ASE Elite Certified") — but not as comparative claims.
 5. Each comparison row must cite both sides: "{customer} reports X (source: {url_us}); {competitor} reports Y (source: {url_them})." If either source URL is missing, omit that differentiator row.
 6. URLs in the body are RESTRICTED to the source_us / source_them values present in the differentiator list. NEVER emit any other URL — the validator rejects fabricated links.
 7. End with a footer paragraph EXACTLY of this shape: "Comparison based on publicly available information as of {today_iso_date}. Sources: {url_us}, {url_them}." The validator looks for "Sources: https://..." in the body and rejects pages that omit it.
@@ -73,24 +79,6 @@ If the input doesn't meet the bar (insufficient verified facts, no source URLs, 
 { "skip": "<one-line reason>" }
 NEVER fabricate to fill the page.`;
 
-interface CompetitorRow {
-  id:                  number;
-  business_id:         number;
-  competitor_name:     string;
-  competitor_slug:     string;
-  competitor_url:      string | null;
-  verified_facts_json: string;
-  source_urls_json:    string;
-}
-
-interface DifferentiatorEntry {
-  field:        string;
-  ours:         string;
-  theirs:       string;
-  source_us:    string;
-  source_them:  string;
-}
-
 interface ComparisonGenerateResult {
   ok:          boolean;
   skip_reason: string | null;
@@ -100,67 +88,9 @@ interface ComparisonGenerateResult {
   cost_cents:  number;
 }
 
-/**
- * Build the differentiator list for a (business × competitor) pair. Walks
- * the competitor's verified_facts_json and pairs each field against the
- * business's same-named field (when present + non-null). Each entry must
- * have BOTH sides AND a source URL on the competitor side; otherwise the
- * row is omitted. Returns the array of validated differentiators.
- *
- * No Claude call here — this is pure deterministic comparison so we can
- * cheaply pre-check the >=3 threshold before spending tokens.
- */
-function buildDifferentiators(
-  business:   BusinessRow,
-  competitor: CompetitorRow,
-): DifferentiatorEntry[] {
-  let competitorFacts: Record<string, string | number | boolean>;
-  let sourceUrls: string[];
-  try {
-    competitorFacts = JSON.parse(competitor.verified_facts_json) as Record<string, string | number | boolean>;
-    sourceUrls      = JSON.parse(competitor.source_urls_json) as string[];
-  } catch {
-    return [];
-  }
-  if (!competitorFacts || Object.keys(competitorFacts).length === 0) return [];
-  if (!Array.isArray(sourceUrls) || sourceUrls.length === 0) return [];
-
-  // Use the FIRST source URL for the competitor side (per-fact source
-  // mapping is a v1.1 follow-up — facts_source_map_json column).
-  const competitorSource = sourceUrls[0]!;
-  const businessSource = business.referral_url ?? business.website ?? "";
-  if (!businessSource) return [];
-
-  // Map known business fields to comparable fact keys. Conservative: only
-  // include fields that are typed strings/numbers + have a stable
-  // semantic meaning. Subjective fields (description, differentiator)
-  // are excluded by design — those don't compare cleanly.
-  const businessFields: Record<string, string | number | null | undefined> = {
-    years_in_business: business.years_in_business ?? null,
-    star_rating:       business.star_rating       ?? null,
-    review_count:      business.review_count      ?? null,
-    pricing:           business.pricing           ?? null,
-    pricing_tier:      business.pricing_tier      ?? null,
-    hours_json:        business.hours_json        ?? null,
-    certifications:    business.certifications    ?? null,
-    service_radius_miles: business.service_radius_miles ?? null,
-  };
-
-  const out: DifferentiatorEntry[] = [];
-  for (const key of Object.keys(competitorFacts)) {
-    const theirs = competitorFacts[key];
-    const ours = businessFields[key];
-    if (ours === null || ours === undefined || ours === "") continue;
-    out.push({
-      field:       key,
-      ours:        String(ours),
-      theirs:      String(theirs),
-      source_us:   businessSource,
-      source_them: competitorSource,
-    });
-  }
-  return out;
-}
+// `buildDifferentiators` + `validateComparisonBody` + their types live in
+// `./comparisonValidator` so the compliance logic is pure-function unit
+// testable (review fix-1: behavioral tests, not snapshot-greps).
 
 async function generateComparisonPage(
   business:        BusinessRow,
@@ -227,112 +157,6 @@ Generate a head-to-head comparison page using ONLY the differentiators above. Bo
     fact_diff_json: JSON.stringify({ differentiators }),
     cost_cents:  costCents,
   };
-}
-
-/**
- * Validate the generated body against the differentiator provenance.
- *
- * The validator is the last legal-defense layer. Each check below maps
- * to a reviewer-flagged risk:
- *   H1 — Footer must contain "Sources: https://..." disclosure.
- *   H2 — Comparison must not be one-sided slam (customer wins ≥1).
- *   H3 — sourceBlob built ONLY from differentiators, not the full
- *        business row (so unrelated business numerics like phone digits
- *        can't "validate" a fabricated competitor claim).
- *   H4 — Banned-phrase regex extends to subjective comparatives
- *        ("better than", "superior", "premium", etc.) — the actual
- *        Lanham-Act risk surface.
- *   M2 — Every "source: https://..." cited in body must appear in the
- *        differentiator list (no fabricated source URLs).
- */
-function validateComparisonBody(
-  body: string,
-  differentiators: DifferentiatorEntry[],
-): { ok: boolean; reason: string | null } {
-  // H4 — banned-phrase regex (extended). Two layers:
-  //   1. Outright disparaging language (Phase 3 list)
-  //   2. Subjective comparative claims (Lanham-Act surface)
-  if (/\b(scam|fraud|worst|terrible|avoid|inferior|ripoff|beware)\b/i.test(body)) {
-    return { ok: false, reason: "banned_phrase_disparagement" };
-  }
-  if (/\b(better than|superior to|cheaper than|faster than|premium|elite|the best|number one)\b/i.test(body)) {
-    return { ok: false, reason: "banned_phrase_subjective" };
-  }
-
-  // H1 — Footer disclosure required. Body must contain a Sources: URL
-  // line so any reader (or auditor) can trace claims back to public
-  // artifacts. The system prompt asks for it; this enforces it landed.
-  if (!/Sources?:\s*https?:\/\//i.test(body)) {
-    return { ok: false, reason: "missing_sources_footer" };
-  }
-
-  // H3 — sourceBlob restricted to differentiator-only data. Each
-  // differentiator has {ours, theirs, source_us, source_them} — that's
-  // the full comparable surface. Anything else in the body that cites a
-  // year or dollar amount is unsourced.
-  const sourceBlob = JSON.stringify(differentiators);
-  const claimedYears = Array.from(body.matchAll(/\b(19|20)\d{2}\b/g)).map((m) => m[0]);
-  for (const y of claimedYears) {
-    if (!sourceBlob.includes(y)) {
-      return { ok: false, reason: `unsourced_year:${y}` };
-    }
-  }
-  const claimedDollars = Array.from(body.matchAll(/\$\s*\d{1,3}(?:,\d{3})*(?:\.\d+)?/g)).map((m) => m[0].replace(/\s/g, ""));
-  for (const d of claimedDollars) {
-    const numeric = d.replace(/[$,]/g, "");
-    if (!sourceBlob.includes(numeric) && !sourceBlob.includes(d)) {
-      return { ok: false, reason: `unsourced_dollar:${d}` };
-    }
-  }
-
-  // M2 — Every URL of the form `https://...` in the body must appear in
-  // either source_us or source_them on at least one differentiator.
-  // Stops Claude from emitting a footer with a fabricated link.
-  const allowedUrls = new Set<string>();
-  for (const d of differentiators) {
-    if (d.source_us)   allowedUrls.add(d.source_us);
-    if (d.source_them) allowedUrls.add(d.source_them);
-  }
-  const claimedUrls = Array.from(body.matchAll(/https?:\/\/[^\s)>"']+/gi)).map((m) =>
-    m[0].replace(/[.,;:)\]>"']+$/, ""),  // trim trailing punctuation
-  );
-  for (const u of claimedUrls) {
-    if (!allowedUrls.has(u)) {
-      return { ok: false, reason: `unsourced_url:${u.slice(0, 80)}` };
-    }
-  }
-
-  // H2 — Balance check. Reject one-sided slam pieces where the customer
-  // doesn't "win" on any numeric dimension. We compare ours vs theirs
-  // numerically per row when both parse as numbers; if every numeric
-  // row goes to the competitor, this is a one-sided take we don't ship.
-  let ourWins = 0;
-  let theirWins = 0;
-  for (const d of differentiators) {
-    const ours = Number(String(d.ours).replace(/[^\d.-]/g, ""));
-    const theirs = Number(String(d.theirs).replace(/[^\d.-]/g, ""));
-    if (Number.isNaN(ours) || Number.isNaN(theirs)) continue;
-    // For most fields, higher is "winning" (rating, review_count,
-    // years_in_business, certifications count). Pricing fields are the
-    // inverse — lower wins. The generator handles framing; here we just
-    // count strict wins on either side without assuming directionality.
-    if (ours !== theirs) {
-      // We can't know directionality without per-field metadata. So:
-      // require BOTH sides to have at least one strictly-higher numeric
-      // row. That blocks the pathological case (customer numerically
-      // identical or worse on every field) without making assumptions
-      // about which direction "better" is.
-      if (ours > theirs)   ourWins++;
-      else                 theirWins++;
-    }
-  }
-  // Only enforce when there's at least 2 numeric comparisons to draw
-  // signal from. With 0-1 numeric rows, we can't tell, so allow.
-  if (ourWins + theirWins >= 2 && ourWins === 0) {
-    return { ok: false, reason: "one_sided_no_customer_wins" };
-  }
-
-  return { ok: true, reason: null };
 }
 
 export interface ComparisonPagesBuilderResult {
