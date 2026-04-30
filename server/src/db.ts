@@ -134,6 +134,11 @@ export interface BusinessRow {
   // Optional+nullable like the other late-added columns so test fixtures
   // pre-migration-013 keep compiling.
   plan?: string | null;
+  // Migration 037 (Apr 30 2026): cancellation/refund policy surfaced
+  // by get_cancellation_policy MCP tool. Distinct from guarantee_text
+  // (positive promise) — this is the operational rule the agent quotes
+  // when a user asks "what if I need to cancel?".
+  cancellation_policy_text?: string | null;
   // Migration 033 (Apr 28 2026): aggressive FAQ array — Phase 1 of
   // the grey-hat AI optimization layer. JSON-stringified array of
   // {question, answer, intent} entries; renderers parse and emit

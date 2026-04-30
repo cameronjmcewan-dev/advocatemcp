@@ -57,9 +57,36 @@ describe("zodToJsonSchema — minimal converter", () => {
     expect(zodToJsonSchema(z.number())).toEqual({ type: "number" });
   });
 
+  it("converts z.boolean() to { type: 'boolean' }", () => {
+    // Apr 30 2026 — added when output schemas for the Phase 1 tools needed
+    // boolean fields (has_credentials, has_policy, insured, bonded).
+    expect(zodToJsonSchema(z.boolean())).toEqual({ type: "boolean" });
+  });
+
+  it("converts z.array(z.string()) to { type: 'array', items: { type: 'string' } }", () => {
+    // Apr 30 2026 — added for subscribe_to_updates.topics input field.
+    expect(zodToJsonSchema(z.array(z.string()))).toEqual({
+      type: "array",
+      items: { type: "string" },
+    });
+  });
+
+  it("unwraps ZodEffects (.refine) to the inner schema", () => {
+    // Apr 30 2026 — added for request_callback.contact, which uses
+    // .refine() to enforce email|phone presence at runtime. The refinement
+    // is invisible to JSON Schema consumers (they get the structural shape).
+    const refined = z.object({ a: z.string() }).refine((v) => v.a.length > 0);
+    expect(zodToJsonSchema(refined)).toEqual({
+      type: "object",
+      properties: { a: { type: "string" } },
+      required: ["a"],
+      additionalProperties: false,
+    });
+  });
+
   it("throws on unsupported zod types", () => {
-    expect(() => zodToJsonSchema(z.array(z.string()))).toThrow(/unsupported zod type/i);
-    expect(() => zodToJsonSchema(z.boolean())).toThrow(/unsupported zod type/i);
+    // ZodMap is not in the converter and shouldn't sneak in silently.
+    expect(() => zodToJsonSchema(z.map(z.string(), z.string()))).toThrow(/unsupported zod type/i);
   });
 
   it("converts z.enum([...]) to { type: 'string', enum: [...] }", () => {

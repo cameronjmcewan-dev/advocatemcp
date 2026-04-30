@@ -5,6 +5,10 @@ import {
   getQuoteInput,
   reserveSlotInput,
   initiateHandoffInput,
+  getCredentialsInput,
+  getCancellationPolicyInput,
+  requestCallbackInput,
+  subscribeToUpdatesInput,
 } from "./tools.js";
 import {
   zodToJsonSchema,
@@ -41,7 +45,17 @@ export interface ToolAnnotations {
 export interface ToolDescriptor {
   name: string;
   description: string;
-  inputZod: typeof queryBusinessAgentInput | typeof searchBusinessesInput | typeof getAvailabilityInput | typeof getQuoteInput | typeof reserveSlotInput | typeof initiateHandoffInput;
+  inputZod:
+    | typeof queryBusinessAgentInput
+    | typeof searchBusinessesInput
+    | typeof getAvailabilityInput
+    | typeof getQuoteInput
+    | typeof reserveSlotInput
+    | typeof initiateHandoffInput
+    | typeof getCredentialsInput
+    | typeof getCancellationPolicyInput
+    | typeof requestCallbackInput
+    | typeof subscribeToUpdatesInput;
   outputSchema: JsonSchemaNode;
   idempotent: boolean;
   estimated_latency_ms: number;
@@ -227,6 +241,127 @@ export const DESCRIPTORS: ToolDescriptor[] = [
       // has a real side effect that tenants can see on their calendar.
       destructiveHint: true,
       openWorldHint: true,
+    },
+  },
+  // ── Apr 30 2026 — tool surface expansion (Phase 1) ───────────────────────
+  {
+    name: "get_credentials",
+    description:
+      "Returns the business's self-reported licenses, insurance, bonding, and certifications. " +
+      "Use for trust-sensitive verticals (contractors, healthcare, legal, locksmiths) when a user asks " +
+      "'are they licensed?' or 'are they insured?'. Response is explicitly framed as 'self-reported' so " +
+      "agents don't upgrade tenant claims to verified facts.",
+    inputZod: getCredentialsInput,
+    outputSchema: {
+      type: "object",
+      properties: {
+        slug:            { type: "string" },
+        has_credentials: { type: "boolean" },
+        licenses:        { type: "array", items: { type: "object" } },
+        insured:         { type: "boolean" },
+        bonded:          { type: "boolean" },
+        certifications:  { type: "array", items: { type: "string" } },
+        summary:         { type: "string" },
+      },
+      required: ["slug", "has_credentials", "summary"],
+    },
+    idempotent: true,
+    estimated_latency_ms: 50,
+    estimated_cost_cents: 0,
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false,
+    },
+  },
+  {
+    name: "get_cancellation_policy",
+    description:
+      "Returns the business's cancellation / refund / no-show policy as a verbatim string the agent can quote. " +
+      "When the business hasn't posted one, returns guidance directing the agent to acknowledge the gap and " +
+      "tell the user to confirm at booking time. High-leverage for medspas, restaurants, contractors with deposits.",
+    inputZod: getCancellationPolicyInput,
+    outputSchema: {
+      type: "object",
+      properties: {
+        slug:               { type: "string" },
+        has_policy:         { type: "boolean" },
+        policy_text:        { type: "string" },
+        guidance_for_agent: { type: "string" },
+      },
+      required: ["slug", "has_policy", "guidance_for_agent"],
+    },
+    idempotent: true,
+    estimated_latency_ms: 50,
+    estimated_cost_cents: 0,
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false,
+    },
+  },
+  {
+    name: "request_callback",
+    description:
+      "Push a user's contact info to a business so they can call/email/text back. " +
+      "Use when a question can't be answered without human contact (custom quote, after-hours scheduling, complaint). " +
+      "Idempotent on idempotency_key within 24h — agent retries don't spam the business. " +
+      "Returns delivery status the agent can quote to the user verbatim.",
+    inputZod: requestCallbackInput,
+    outputSchema: {
+      type: "object",
+      properties: {
+        callback_id:    { type: "string" },
+        status:         { type: "string" },
+        delivered_via:  { type: "string" },
+        form_url:       { type: "string" },
+        reason:         { type: "string" },
+        acknowledgment: { type: "string" },
+      },
+      required: ["callback_id", "status", "acknowledgment"],
+    },
+    idempotent: true, // dedup via idempotency_key
+    estimated_latency_ms: 250,
+    estimated_cost_cents: 1,
+    annotations: {
+      readOnlyHint: false,
+      // destructive: true — fires real-world SMS/email to the tenant + writes
+      // a callback_requests row that surfaces in their dashboard. Idempotency
+      // key prevents replay storms but the FIRST call has side effects.
+      destructiveHint: true,
+      openWorldHint: true,
+    },
+  },
+  {
+    name: "subscribe_to_updates",
+    description:
+      "Subscribe an end-user's email to topical updates from a business (deals, schedule changes, new services). " +
+      "Returns a confirmation_token + confirmation_url; the user MUST click the URL within 7 days to activate — " +
+      "no auto-confirmation (CAN-SPAM/GDPR-compliant double opt-in). Re-subscribing an already-confirmed email " +
+      "merges topics without re-confirming.",
+    inputZod: subscribeToUpdatesInput,
+    outputSchema: {
+      type: "object",
+      properties: {
+        subscription_id:    { type: "string" },
+        status:             { type: "string" },
+        confirmation_token: { type: "string" },
+        confirmation_url:   { type: "string" },
+        expires_at:         { type: "number" },
+        topics:             { type: "array", items: { type: "string" } },
+        acknowledgment:     { type: "string" },
+      },
+      required: ["subscription_id", "status", "confirmation_url", "topics", "acknowledgment"],
+    },
+    idempotent: true, // (slug, email) UNIQUE — re-subscribe merges topics
+    estimated_latency_ms: 100,
+    estimated_cost_cents: 0,
+    annotations: {
+      readOnlyHint: false,
+      // destructive: true — writes a subscriptions row and (in v2) sends a
+      // confirmation email. Even at v1 the row creation is a real side effect.
+      destructiveHint: true,
+      openWorldHint: false,
     },
   },
 ];

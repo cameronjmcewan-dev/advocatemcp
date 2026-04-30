@@ -101,3 +101,45 @@ export const initiateHandoffInput = z.discriminatedUnion("mode", [
   }),
 ]);
 export type InitiateHandoffInput = z.infer<typeof initiateHandoffInput>;
+
+// ── Apr 30 2026 — tool surface expansion (Phase 1) ─────────────────────────
+
+export const getCredentialsInput = z.object({
+  slug: z.string().min(1).describe("business slug"),
+});
+export type GetCredentialsInput = z.infer<typeof getCredentialsInput>;
+
+export const getCancellationPolicyInput = z.object({
+  slug: z.string().min(1).describe("business slug"),
+});
+export type GetCancellationPolicyInput = z.infer<typeof getCancellationPolicyInput>;
+
+export const requestCallbackInput = z.object({
+  slug: z.string().min(1).describe("business slug"),
+  contact: z.object({
+    name:  z.string().max(120).optional().describe("end-user's name"),
+    email: z.string().email().optional().describe("end-user's email — at least one of email/phone required"),
+    phone: z.string().max(40).optional().describe("end-user's phone number — at least one of email/phone required"),
+  }).refine((c) => c.email || c.phone, { message: "Either email or phone must be provided" }),
+  preferred_channel: z.enum(["phone", "email", "sms", "any"]).optional()
+    .describe("channel the user prefers to be contacted on (default: any)"),
+  reason: z.string().max(800).optional()
+    .describe("Why the user wants the callback — passed verbatim to the business so they can prep"),
+  urgency: z.enum(["low", "normal", "high", "emergency"]).optional()
+    .describe("how time-sensitive the request is (default: normal)"),
+  agent_id: z.string().optional()
+    .describe("Optional caller-asserted agent identifier; recorded for attribution"),
+  idempotency_key: z.string().min(1)
+    .describe("Idempotency key — same key returns the same callback_request_id without dup-creating"),
+});
+export type RequestCallbackInput = z.infer<typeof requestCallbackInput>;
+
+export const subscribeToUpdatesInput = z.object({
+  slug: z.string().min(1).describe("business slug"),
+  contact_email: z.string().email().describe("Email to subscribe — must be confirmed via the returned token before any updates send"),
+  topics: z.array(z.string().min(1).max(40)).min(1).max(10)
+    .describe("Topic tags the user wants updates on (e.g., ['deals', 'schedule_changes', 'new_services'])"),
+  agent_id: z.string().optional()
+    .describe("Optional caller-asserted agent identifier; recorded for attribution"),
+});
+export type SubscribeToUpdatesInput = z.infer<typeof subscribeToUpdatesInput>;

@@ -196,6 +196,10 @@ agentRouter.patch("/agents/:slug/profile", (req: Request, res: Response) => {
     // deduction in the format-judge harness).
     "ratings_json","customer_quotes_json","credentials_json","case_stories_json",
     "differentiators_text","guarantee_text",
+    // Apr 30 2026 — Phase 1 tool surface expansion. Edited via the
+    // existing wizard / Settings UI surfaces; surfaced to AI agents
+    // via the new get_cancellation_policy MCP tool.
+    "cancellation_policy_text",
   ] as const;
 
   const jsonValidators: Record<string, z.ZodTypeAny> = {
@@ -221,6 +225,10 @@ agentRouter.patch("/agents/:slug/profile", (req: Request, res: Response) => {
   const PROMPT_TEXT_FIELDS = new Set([
     "description", "differentiator", "differentiators_text",
     "guarantee_text", "tone", "pricing",
+    // Apr 30 2026 — get_cancellation_policy surfaces this field
+    // verbatim to AI agents. Same prompt-injection scan as the rest
+    // of the free-text fields.
+    "cancellation_policy_text",
   ]);
 
   for (const field of allowed) {

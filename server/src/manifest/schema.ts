@@ -20,6 +20,7 @@ import { z, ZodTypeAny } from "zod";
 export type JsonSchemaNode =
   | { type: "string"; description?: string; minLength?: number; enum?: string[] }
   | { type: "number"; description?: string }
+  | { type: "boolean"; description?: string }
   | { type: "array"; items?: JsonSchemaNode; description?: string }
   | {
       type: "object";
@@ -50,6 +51,16 @@ export function zodToJsonSchema(node: ZodTypeAny): JsonSchemaNode {
     return zodToJsonSchema(def.innerType);
   }
 
+  // ZodEffects wraps an inner schema with a .refine()/.transform() — the
+  // runtime check is invisible to JSON Schema consumers, so we just unwrap
+  // and emit the inner shape. Refinements like "email or phone required" on
+  // request_callback's contact are enforced at zod parse time, not in the
+  // published manifest.
+  if (def.typeName === "ZodEffects") {
+    const schema = (def as { schema?: ZodTypeAny }).schema;
+    if (schema) return zodToJsonSchema(schema);
+  }
+
   if (def.typeName === "ZodString") {
     const out: JsonSchemaNode = { type: "string" };
     if (def.description) out.description = def.description;
@@ -63,6 +74,25 @@ export function zodToJsonSchema(node: ZodTypeAny): JsonSchemaNode {
 
   if (def.typeName === "ZodNumber") {
     const out: JsonSchemaNode = { type: "number" };
+    if (def.description) out.description = def.description;
+    return out;
+  }
+
+  if (def.typeName === "ZodBoolean") {
+    const out: JsonSchemaNode = { type: "boolean" };
+    if (def.description) out.description = def.description;
+    return out;
+  }
+
+  // ZodArray — used by subscribe_to_updates.topics. zod stores the element
+  // type at `_def.type`. We don't surface min/max bounds in JSON Schema today
+  // (zod's `.min(1)` is a runtime check; agents that consume the manifest
+  // for client-side validation get the constraint at parse time, not as a
+  // schema-level keyword).
+  if (def.typeName === "ZodArray") {
+    const innerArr = (def as { type?: ZodTypeAny }).type;
+    if (!innerArr) throw new Error("zodToJsonSchema: ZodArray missing element type");
+    const out: JsonSchemaNode = { type: "array", items: zodToJsonSchema(innerArr) };
     if (def.description) out.description = def.description;
     return out;
   }

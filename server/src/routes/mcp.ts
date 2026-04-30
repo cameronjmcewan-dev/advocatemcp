@@ -13,6 +13,11 @@ import { registerGetAvailability } from "../mcp/tools/getAvailability.js";
 import { registerGetQuote } from "../mcp/tools/getQuote.js";
 import { registerReserveSlot } from "../mcp/tools/reserveSlot.js";
 import { registerInitiateHandoff } from "../mcp/tools/initiateHandoff.js";
+// Apr 30 2026 — tool surface expansion (Phase 1).
+import { registerGetCredentials } from "../mcp/tools/getCredentials.js";
+import { registerGetCancellationPolicy } from "../mcp/tools/getCancellationPolicy.js";
+import { registerRequestCallback } from "../mcp/tools/requestCallback.js";
+import { registerSubscribeToUpdates } from "../mcp/tools/subscribeToUpdates.js";
 import { resolveAgentId } from "../lib/agentIdentity.js";
 import { withAgentRequestLog } from "../lib/agentRequestLogger.js";
 import { getApiBaseUrl } from "../lib/baseUrl.js";
@@ -209,6 +214,18 @@ export function createMcpServer(requestId?: string, req?: Request): McpServer {
 
   // ── Tool 6: initiate_handoff ──────────────────────────────────────────────
   registerInitiateHandoff(server, req, requestId);
+
+  // ── Tool 7: get_credentials (Apr 30 2026) ────────────────────────────────
+  registerGetCredentials(server, req, requestId);
+
+  // ── Tool 8: get_cancellation_policy (Apr 30 2026) ────────────────────────
+  registerGetCancellationPolicy(server, req, requestId);
+
+  // ── Tool 9: request_callback (Apr 30 2026) ───────────────────────────────
+  registerRequestCallback(server, req, requestId);
+
+  // ── Tool 10: subscribe_to_updates (Apr 30 2026) ──────────────────────────
+  registerSubscribeToUpdates(server, req, requestId);
 
   // Decorate initialize responses with an A2A manifest summary under `_meta`.
   // MCP clients that don't understand `_meta` ignore it; clients that do (ours
