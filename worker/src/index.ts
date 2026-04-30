@@ -995,8 +995,26 @@ export default Sentry.withSentry(
     // concentrated on the query_id captured at cache-fill time. We
     // accept that for the latency win; tenants get aggregate click
     // counts either way.
+    // Cache key includes a per-slug version segment that the server
+    // bumps via POST /admin/cache/bump-version on every successful
+    // PATCH /agents/:slug/profile. Effect: a profile edit instantly
+    // invalidates ALL cached (botType × pathname) entries for the
+    // slug — old keys orphan and age out via 600s TTL, new keys hit
+    // a cold render and capture the fresh JSON-LD + system prompt.
+    //
+    // Apr 30 2026: closes the "schema served to AI is stale up to 10
+    // min after profile edit" gap. KV read is ~1-5ms, well under the
+    // ~5-8s cold-render fallback that would otherwise dominate
+    // latency on a cache miss.
+    let cacheVersion = "v0";
+    if (htmlRenderingEnabled) {
+      try {
+        const v = await env.BUSINESS_MAP.get(`version:${slug}`);
+        if (typeof v === "string" && v.length > 0) cacheVersion = v;
+      } catch (_) { /* KV blip — fall back to v0 (safe stable key) */ }
+    }
     const cacheKey = htmlRenderingEnabled
-      ? `https://cache.advocatemcp.com/v1/${slug}/${botType ?? "default"}${url.pathname}`
+      ? `https://cache.advocatemcp.com/v1/${slug}/${cacheVersion}/${botType ?? "default"}${url.pathname}`
       : null;
     let agentResponse: Response | null = null;
     let cacheStatus: "HIT" | "MISS" | "BYPASS" = "BYPASS";

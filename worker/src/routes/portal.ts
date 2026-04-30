@@ -250,6 +250,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/profile-score"   && method === "POST") return apiProfileScore(request, env);
   if (pathname === "/api/client/ai-recommendations" && method === "GET")  return apiAIRecommendations(request, env);
   if (pathname === "/api/client/ai-recommendations" && method === "POST") return apiAIRecommendations(request, env);
+  if (pathname === "/admin/cache/bump-version"     && method === "POST") return apiBumpCacheVersion(request, env);
   if (pathname === "/api/client/verify-rating"   && method === "POST") return apiVerifyRating(request, env);
   if (pathname === "/admin/create-client"      && method === "POST") return adminCreateClient(request, env);
   // Magic-login: admin issues a 5-min token, opens it in incognito, gets a
@@ -2166,6 +2167,62 @@ async function apiProfileScore(request: Request, env: Env): Promise<Response> {
   } catch (err) {
     return withCors(jsonErr(502, `Profile score backend unreachable: ${String(err)}`), request, { credentials: true });
   }
+}
+
+// ── POST /admin/cache/bump-version ────────────────────────────────────────
+//
+// Bumps the per-slug cache version stored in BUSINESS_MAP KV under
+// `version:<slug>`. The bot-dispatch path (worker/src/index.ts) reads
+// this value and includes it in the (slug × botType × pathname) cache
+// key for rendered bot HTML. Bumping the version on every successful
+// PATCH /agents/:slug/profile means profile edits propagate to AI
+// crawlers IMMEDIATELY — old cache keys orphan and age out via the
+// 600s TTL, new requests hit a cold render with the fresh JSON-LD.
+//
+// Auth: SERVER_API_KEY only (X-API-Key header). Called by the Railway
+// PATCH handler after a successful UPDATE; not exposed to tenants.
+//
+// Body: optional { reason?: string } — recorded in logs for ops
+// triage but not enforced.
+//
+// Returns: { slug, prev_version, new_version }.
+//
+// Apr 30 2026.
+
+async function apiBumpCacheVersion(request: Request, env: Env): Promise<Response> {
+  // Server-key only. Tenant Bearer tokens MUST NOT reach this — a
+  // leaked tenant key shouldn't be able to nuke another tenant's
+  // cache.
+  const xKey = request.headers.get("X-API-Key");
+  if (!env.API_KEY || xKey !== env.API_KEY) {
+    return jsonErr(401, "server_key_required");
+  }
+
+  const slug = new URL(request.url).searchParams.get("slug");
+  if (!slug || !/^[a-z0-9][a-z0-9-]{0,62}$/i.test(slug)) {
+    return jsonErr(400, "invalid_slug");
+  }
+
+  const key = `version:${slug}`;
+  const prevRaw = await env.BUSINESS_MAP.get(key);
+  // Use a date-encoded version string so two concurrent bumps don't
+  // collide (unlike a counter which races on read-modify-write). The
+  // worker's KV writes are eventually consistent globally, but the
+  // string itself is monotonic per-bump regardless of write order.
+  const next = `v${Date.now().toString(36)}`;
+  await env.BUSINESS_MAP.put(key, next);
+
+  console.log(JSON.stringify({
+    cache_version_bump: true,
+    slug,
+    prev_version: prevRaw ?? "v0",
+    new_version: next,
+  }));
+
+  return new Response(
+    JSON.stringify({ slug, prev_version: prevRaw ?? "v0", new_version: next }),
+    { status: 200, headers: { "Content-Type": "application/json" } },
+  );
 }
 
 // ── /api/client/ai-recommendations ────────────────────────────────────────

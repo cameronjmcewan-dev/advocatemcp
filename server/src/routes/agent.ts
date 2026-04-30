@@ -20,6 +20,7 @@ import {
 import { buildToken } from "../lib/tracked-url.js";
 import { resolveAgentId } from "../lib/agentIdentity.js";
 import { verifyGoogleRating } from "../lib/googlePlaces.js";
+import { invalidateBotCache } from "../lib/botCacheInvalidation.js";
 import { checkLimit } from "../middleware/costRateLimit.js";
 import {
   reserve as budgetReserve,
@@ -293,6 +294,16 @@ agentRouter.patch("/agents/:slug/profile", (req: Request, res: Response) => {
 
   values.push(slug);
   db.prepare(`UPDATE businesses SET ${updates.join(", ")} WHERE slug = ?`).run(...values);
+
+  // Bump the worker's cache version for this slug so the bot-HTML
+  // edge cache (rendered JSON-LD + system-prompt-derived prose) is
+  // INSTANTLY invalidated. Without this, AI crawlers can serve stale
+  // schema for up to 600s after a profile edit. Best-effort: a 2s
+  // timeout + caught fetch error means a worker outage doesn't block
+  // the customer's profile save; the cache will age out via TTL
+  // anyway. See worker/src/routes/portal.ts apiBumpCacheVersion.
+  // Apr 30 2026.
+  void invalidateBotCache(slug);
 
   // Audit trail: every PATCH to a tenant profile is logged with the
   // caller's identity (Bearer key prefix), the fields touched, and
@@ -940,6 +951,9 @@ agentRouter.post("/agents/:slug/locations", requireSlugOrAdminKey, (req: Request
     res.status(400).json({ error: "validation", field: result.field });
     return;
   }
+  // Locations feed into the agent's prompt + JSON-LD blocks. Bump the
+  // worker bot-cache so AI crawlers see the new location immediately.
+  void invalidateBotCache(slug);
   res.status(201).json({ location: result.row });
 });
 
@@ -980,6 +994,7 @@ agentRouter.patch(
       res.status(400).json({ error: "validation", field: result.field });
       return;
     }
+    void invalidateBotCache(slug);
     res.json({ location: result.row });
   },
 );
@@ -1008,6 +1023,7 @@ agentRouter.delete(
       });
       return;
     }
+    void invalidateBotCache(slug);
     res.json({ ok: true });
   },
 );
@@ -1028,6 +1044,7 @@ agentRouter.post(
       res.status(404).json({ error: result.code });
       return;
     }
+    void invalidateBotCache(slug);
     res.json({ ok: true });
   },
 );
