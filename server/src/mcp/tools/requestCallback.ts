@@ -26,6 +26,7 @@
  */
 
 import { z } from "zod";
+import { createHash } from "node:crypto";
 import type { Request } from "express";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { randomUUID } from "crypto";
@@ -84,10 +85,10 @@ function findExistingCallback(
 function derivedCallbackId(slug: string, idempotencyKey: string): string {
   // SHA1 of (slug || ':' || idempotencyKey) gives a stable 40-char
   // hash; we prefix and truncate to land in our `cb_<24>` namespace.
-  // Crypto.createHash is sync-safe in Node + node:crypto polyfill.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const crypto = require("node:crypto") as typeof import("node:crypto");
-  const h = crypto.createHash("sha1")
+  // Top-level import — never `require()` in ESM build, which crashes
+  // at runtime with "require is not defined" (caught Apr 30 2026 by
+  // the Phase 1 verification probe).
+  const h = createHash("sha1")
     .update(`${slug}:${idempotencyKey}`)
     .digest("hex").slice(0, 24);
   return `cb_${h}`;
