@@ -1,0 +1,156 @@
+name: Server CI (typecheck + tests + boot smoke)
+
+# Why this workflow exists:
+#
+# On Apr 30 2026 a chore(deps) commit added an npm `overrides` entry
+# that pinned `uuid` to ^14.0.0 to silence GHSA-w5hq-g745-h8pq. uuid v14
+# is ESM-only; node-cron v3 (still in use) loads it via `require()`.
+# Result: a fatal startup crash —
+#
+#   Error: require() of ES Module .../uuid/dist-node/index.js from
+#          .../node-cron/src/scheduled-task.js not supported
+#
+# — that took Railway down for ~5 minutes. The error happens during
+# module load, before app.listen(), so any process that actually
+# imports the built bundle would have caught it. Typecheck didn't,
+# unit tests didn't (vitest mocks node-cron), and `tsc --noEmit`
+# happily reports clean because TS allows .js imports to anywhere.
+#
+# The single thing that would have stopped the bad deploy at the door:
+# spawn `node dist/index.js` with the real production import graph and
+# verify it doesn't crash before listen.
+#
+# This workflow runs that test on every push to main and every PR. It
+# also runs the existing typecheck + vitest suite for completeness.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/**"
+      - ".github/workflows/server-ci.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "server/**"
+      - ".github/workflows/server-ci.yml"
+
+# Cancel any in-flight run on the same ref when a new push lands. CI
+# velocity matters more than seeing every commit individually.
+concurrency:
+  group: server-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: server
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+
+      - name: Setup Node 22
+        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+        with:
+          # Match the runtime version Railway boots (Node 22.11 per the
+          # crash trace's `runtime = node v22.11.0` tag). Pinning to 22
+          # rather than 20 keeps the CI environment honest about the
+          # exact CommonJS/ESM resolution rules production sees.
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies (npm ci)
+        run: npm ci
+
+      - name: Typecheck
+        # tsc --noEmit doesn't catch ESM/CJS interop issues but does
+        # catch every other class of TS error, so still runs.
+        run: npx tsc --noEmit
+
+      - name: Tests (vitest)
+        # Vitest mocks node-cron + most network deps, so this won't
+        # catch the ESM/CJS interop bug — but it does catch logic
+        # regressions across every other unit. Runs in parallel with
+        # the typecheck step in CI scheduler practice; we run
+        # sequentially here for clarity.
+        run: npx vitest run
+
+      - name: Build (compile to dist/)
+        # The boot smoke step needs the compiled dist/ to actually
+        # exercise the prod-shape import graph, so build runs before
+        # the smoke step (not in parallel).
+        run: npm run build
+
+      - name: Boot smoke (catches ESM/CJS interop crashes)
+        # The single test that would have caught the Apr 30 incident.
+        # Spawns the built server the same way `npm start` does, with
+        # minimal fake env so startup-required vars don't trigger a
+        # different crash.
+        #
+        # Success criteria: the process stays up for at least 8 seconds.
+        # Failure: any non-timeout exit before 8s.
+        #
+        # Why timeout's exit code 124 is success: `timeout` sends
+        # SIGTERM after the duration elapses, which terminates the
+        # otherwise-healthy server. Code 124 from the timeout wrapper
+        # means "the process was running fine and we killed it" —
+        # exactly the signal we want.
+        env:
+          # Minimum env to clear the require-or-die guards in
+          # server/src/index.ts (lines 22-29). Real values stay in
+          # Railway env vars; CI just needs non-empty strings to
+          # progress past the guard rails to the real import graph.
+          ANTHROPIC_API_KEY: "ci-fake-not-a-real-key"
+          API_KEY: "ci-fake-server-api-key"
+          TOKEN_SIGNING_KEY: "ci-fake-token-signing-key"
+          ACTIVATION_SIGNING_KEY: "ci-fake-activation-signing-key"
+          ACCESS_TOKEN_SIGNING_KEY: "ci-fake-access-token-signing-key"
+          DATABASE_PATH: "/tmp/advocate-ci.db"
+          PORT: "3001"
+          # NODE_ENV=production triggers a guard in lib/baseUrl.ts that
+          # refuses fallback API_BASE_URL — supply a non-fallback value
+          # so the manifest descriptor can boot without throwing.
+          NODE_ENV: "production"
+          API_BASE_URL: "http://localhost:3001"
+        run: |
+          # Run the same entrypoint Railway uses (`npm start` =>
+          # `node --import ./dist/instrument.js dist/index.js`).
+          # `timeout 8s` SIGTERMs after 8 seconds; exit code 124
+          # indicates a healthy "still running when we killed it"
+          # state. Any other non-zero exit means the server crashed
+          # (the failure mode we're guarding against).
+          set +e
+          timeout 8s node --import ./dist/instrument.js dist/index.js > /tmp/boot.log 2>&1
+          EXIT=$?
+          set -e
+
+          echo "── Boot log (first 80 lines) ──"
+          head -80 /tmp/boot.log || true
+          echo "──"
+          echo "Boot exit code: $EXIT"
+
+          if [ "$EXIT" -eq 124 ]; then
+            echo "✅ Boot smoke passed — server stayed up for the full 8s window."
+            exit 0
+          fi
+
+          if [ "$EXIT" -eq 0 ]; then
+            # Highly unusual — server normally listens until killed.
+            # Treat clean exit 0 as suspicious but not a failure here.
+            echo "⚠️  Server exited cleanly (code 0). Unusual but not crashing."
+            exit 0
+          fi
+
+          echo "❌ Boot smoke failed — server crashed during startup."
+          echo "   This is the failure mode that took Railway down on Apr 30 2026."
+          echo "   Common causes:"
+          echo "   - npm overrides pinned a transitive dep to an ESM-only major while a CJS parent still requires() it"
+          echo "   - A required env var guard rejecting a CI fake value (update the env above)"
+          echo "   - A migration that throws on an empty DB"
+          exit 1
