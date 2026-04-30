@@ -547,6 +547,32 @@ export async function setActivationTokenIfMissing(
 }
 
 /**
+ * Unconditionally overwrite a slug's activation token + reset status
+ * + stamp a fresh issued_at. Used by the admin "resend activation"
+ * endpoint so a re-send always goes out with a fresh 7-day TTL window
+ * instead of re-mailing the original (potentially expired) token.
+ *
+ * Returns true when the row exists and was updated; false when the
+ * slug doesn't exist (caller surfaces this as 404).
+ */
+export async function setActivationToken(
+  db: D1Database,
+  slug: string,
+  token: string,
+  issuedAt: string,
+): Promise<boolean> {
+  const result = await db
+    .prepare(
+      `UPDATE businesses
+         SET activation_token = ?, activation_status = ?, activation_issued_at = ?
+         WHERE slug = ?`,
+    )
+    .bind(token, "pending_send", issuedAt, slug)
+    .run();
+  return (result.meta?.changes ?? 0) === 1;
+}
+
+/**
  * Read the activation token record for a business. Returns null when
  * the businesses row itself does not exist (used by the admin retrieval
  * endpoint to distinguish 404 from "200 with token=null"). Returns a

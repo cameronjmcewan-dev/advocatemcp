@@ -83,36 +83,40 @@ export async function verifyToken(
   const encodedPayload = token.slice(0, dotIdx);
   const encodedSig = token.slice(dotIdx + 1);
 
-  // Import key material once per verification
+  // AMC-008: Use crypto.subtle.verify for constant-time HMAC verification.
+  // The previous byte-by-byte XOR loop *intended* to be constant time but
+  // V8 can branch-predict / optimize the comparison in ways that leak
+  // timing. Web Crypto's verify() is constant-time by spec.
+  //
+  // Note we import the key with both ["sign", "verify"] usages so the
+  // same keyMaterial works for both signing (in buildToken) and verify
+  // here. Importing for "verify" alone would fail on the signer side.
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
     enc.encode(signingKey),
     { name: "HMAC", hash: "SHA-256" },
     false,
-    ["sign"]
+    ["verify"],
   );
 
-  // HMAC is computed over the ASCII bytes of the encoded payload string (see file header).
-  const expectedSigBuf = await crypto.subtle.sign(
+  // Decode the signature bytes; malformed base64url is a malformed token.
+  let actualSigBytes: Uint8Array;
+  try {
+    actualSigBytes = base64urlToBytes(encodedSig);
+  } catch {
+    throw "malformed" satisfies TokenError;
+  }
+
+  // HMAC is computed over the ASCII bytes of the encoded payload string
+  // (see file header). verify() returns true iff the supplied signature
+  // matches the HMAC of the data — constant time, no early exit.
+  const ok = await crypto.subtle.verify(
     "HMAC",
     keyMaterial,
-    enc.encode(encodedPayload)
+    actualSigBytes as BufferSource,
+    enc.encode(encodedPayload),
   );
-
-  // Constant-time comparison via HMAC of both sigs with a fresh ephemeral key
-  // is overkill here since tokens are not session secrets, but we do a
-  // byte-by-byte comparison to avoid obvious early-exit leaks.
-  const actualSigBytes = base64urlToBytes(encodedSig);
-  const expectedSigBytes = new Uint8Array(expectedSigBuf);
-
-  if (actualSigBytes.length !== expectedSigBytes.length) {
-    throw "bad_signature" satisfies TokenError;
-  }
-  let mismatch = 0;
-  for (let i = 0; i < expectedSigBytes.length; i++) {
-    mismatch |= (actualSigBytes[i]! ^ expectedSigBytes[i]!);
-  }
-  if (mismatch !== 0) {
+  if (!ok) {
     throw "bad_signature" satisfies TokenError;
   }
 

@@ -71,6 +71,13 @@ export interface Env {
   STRIPE_SECRET_KEY?: string;
   /** Stripe webhook signing secret (whsec_...) */
   STRIPE_WEBHOOK_SECRET?: string;
+  /**
+   * Previous Stripe webhook signing secret. Set during a rotation window
+   * so in-flight webhook retries signed with the old secret continue to
+   * verify until Stripe finishes rolling. Leave unset outside of
+   * rotations. AMC-001 (Apr 29 2026).
+   */
+  STRIPE_WEBHOOK_SECRET_PREVIOUS?: string;
   /** Stripe Price ID for $100/mo base plan */
   STRIPE_PRICE_ID_BASE?: string;
   /** Stripe Price ID for $250/mo pro plan */

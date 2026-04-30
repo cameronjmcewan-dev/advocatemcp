@@ -80,6 +80,7 @@
 import type { Env } from "../types";
 import {
   verifyPassword,
+  verifyAndMaybeRehash,
   generateSessionToken,
   hashToken,
   getSessionToken,
@@ -313,12 +314,17 @@ export async function handleAuthLogin(request: Request, env: Env): Promise<Respo
   // Fetch the user — may return null if no such email.
   const userRow = await getUserByEmailWithTenant(env.DB, identifier);
 
-  // Constant-time password verification: ALWAYS call verifyPassword,
-  // either with the real salt/hash or with the dummy constants. This
-  // prevents timing-based email enumeration.
+  // Constant-time password verification: ALWAYS call verify*, either
+  // with the real salt/hash or with the dummy constants. This prevents
+  // timing-based email enumeration.
+  //
+  // AMC-007: verifyAndMaybeRehash returns a rehash payload alongside
+  // the boolean so legacy 100k-iteration hashes upgrade transparently
+  // on the next login.
   const salt = userRow?.salt          ?? DUMMY_SALT;
   const hash = userRow?.password_hash ?? DUMMY_HASH;
-  const passwordOk = await verifyPassword(password, salt, hash);
+  const verify = await verifyAndMaybeRehash(password, salt, hash);
+  const passwordOk = verify.ok;
 
   if (!userRow || !passwordOk) {
     // Record the failed attempt for rate limiting. Best-effort: if the
@@ -334,6 +340,23 @@ export async function handleAuthLogin(request: Request, env: Env): Promise<Respo
       }));
     }
     return jsonErr(401, "invalid_credentials", request);
+  }
+
+  // AMC-007: Best-effort upgrade legacy 100k-iteration hashes. Salt
+  // column is set to "" since the new encoded format is self-contained.
+  // Failure here is non-fatal — login still proceeds; next login will
+  // retry the upgrade.
+  if (verify.needsRehash && verify.rehashedEncoded) {
+    try {
+      await env.DB
+        .prepare("UPDATE users SET password_hash = ?, salt = ?, updated_at = ? WHERE id = ?")
+        .bind(verify.rehashedEncoded, "", new Date().toISOString(), userRow.id)
+        .run();
+    } catch (err) {
+      console.warn(JSON.stringify({
+        auth: true, event: "pbkdf2_rehash_failed", user_id: userRow.id, error: String(err),
+      }));
+    }
   }
 
   // Success path — mint a new refresh session row and a new access token.

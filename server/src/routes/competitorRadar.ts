@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { requireSlugOrAdminKey, requireApiKey } from "../middleware/auth.js";
+// AMC-004: removed requireApiKey usage — every endpoint here is slug-scoped.
+import { requireSlugOrAdminKey } from "../middleware/auth.js";
 import { getDb } from "../db.js";
 import { canonicalDomain } from "../lib/domainMatch.js";
 
@@ -301,7 +302,7 @@ const QUERY_MAX  = 200;
  */
 competitorRadarRouter.get(
   "/api/competitor-basket/:slug",
-  requireApiKey,
+  requireSlugOrAdminKey,
   (req: Request, res: Response) => {
     const { slug } = req.params;
     const db = getDb();
@@ -319,7 +320,7 @@ competitorRadarRouter.get(
  */
 competitorRadarRouter.post(
   "/api/competitor-basket/:slug/queries",
-  requireApiKey,
+  requireSlugOrAdminKey,
   (req: Request, res: Response) => {
     const { slug } = req.params;
     const raw = typeof req.body?.query === "string" ? req.body.query.trim() : "";
@@ -358,7 +359,7 @@ competitorRadarRouter.post(
  */
 competitorRadarRouter.delete(
   "/api/competitor-basket/:slug/queries/:id",
-  requireApiKey,
+  requireSlugOrAdminKey,
   (req: Request, res: Response) => {
     const { slug, id } = req.params;
     const numId = Number(id);

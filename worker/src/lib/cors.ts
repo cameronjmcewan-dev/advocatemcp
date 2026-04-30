@@ -100,6 +100,62 @@ function isAllowedOrigin(origin: string): boolean {
   }
 }
 
+/** Public — exported for the rare consumer that needs to make its own
+ * decision (e.g. logging a rejection metric). */
+export function isAllowedOriginPublic(origin: string): boolean {
+  return isAllowedOrigin(origin);
+}
+
+/**
+ * AMC-003 CSRF defense. Reject state-changing requests whose Origin (or
+ * Referer, when Origin is absent — Safari sometimes drops Origin on
+ * same-origin POSTs) is not in the allowlist. Designed for /api/client/*
+ * endpoints that mutate user-owned state.
+ *
+ * Returns null when the request is safe to handle. Returns a 403
+ * Response (already CORS-wrapped) when it should be rejected.
+ *
+ * Why this matters even with SameSite=Strict on the session cookie:
+ * Safari's SameSite enforcement has historically lagged Chrome /
+ * Firefox, and intermediate redirects can sometimes degrade Strict to
+ * Lax. The Origin check is a belt-and-suspenders second layer.
+ *
+ * Idempotent reads (GET, HEAD, OPTIONS) skip the check — they don't
+ * mutate state, so CSRF doesn't apply. (HEAD/OPTIONS could leak data
+ * via response timing but the corsHeadersFor allowlist already gates
+ * Allow-Origin to safe origins.)
+ */
+export function assertSafeOrigin(request: Request): Response | null {
+  const method = request.method.toUpperCase();
+  if (method === "GET" || method === "HEAD" || method === "OPTIONS") {
+    return null;
+  }
+  const origin = request.headers.get("Origin");
+  // No Origin header on a state-changing request from a browser is
+  // deeply unusual today (every modern browser sends Origin on POST
+  // since 2020). Fall back to Referer's origin component so server-
+  // side code that proxies through unusual hops doesn't immediately
+  // 403, but reject when neither is present.
+  let candidate: string | null = origin;
+  if (!candidate) {
+    const referer = request.headers.get("Referer");
+    if (referer) {
+      try { candidate = new URL(referer).origin; } catch { candidate = null; }
+    }
+  }
+  if (!candidate || !isAllowedOrigin(candidate)) {
+    return withCors(
+      new Response(
+        JSON.stringify({ error: "forbidden_origin", origin: candidate ?? "(none)" }),
+        { status: 403, headers: { "Content-Type": "application/json" } },
+      ),
+      request,
+      { credentials: true },
+    );
+  }
+  return null;
+}
+
 export function corsHeadersFor(
   request: Request,
   opts: CorsOptions = {},

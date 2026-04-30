@@ -134,19 +134,15 @@ export async function verifyActivationToken(
   const encodedPayload = token.slice(0, dotIdx);
   const encodedSig = token.slice(dotIdx + 1);
 
+  // AMC-008: crypto.subtle.verify is constant time by spec. The pre-fix
+  // byte-by-byte XOR loop intended to be constant time but V8 can
+  // optimize branches in ways that leak signature bytes via timing.
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
     enc.encode(signingKey),
     { name: "HMAC", hash: "SHA-256" },
     false,
-    ["sign"],
-  );
-
-  // HMAC over the ASCII bytes of the encoded payload string (see file header).
-  const expectedSigBuf = await crypto.subtle.sign(
-    "HMAC",
-    keyMaterial,
-    enc.encode(encodedPayload),
+    ["verify"],
   );
 
   let actualSigBytes: Uint8Array;
@@ -155,18 +151,15 @@ export async function verifyActivationToken(
   } catch {
     throw "malformed" satisfies ActivationTokenError;
   }
-  const expectedSigBytes = new Uint8Array(expectedSigBuf);
 
-  if (actualSigBytes.length !== expectedSigBytes.length) {
-    throw "bad_signature" satisfies ActivationTokenError;
-  }
-  // Constant-time-ish comparison. Not defending against sophisticated timing
-  // attacks, but avoids the obvious early-exit leak.
-  let mismatch = 0;
-  for (let i = 0; i < expectedSigBytes.length; i++) {
-    mismatch |= (actualSigBytes[i]! ^ expectedSigBytes[i]!);
-  }
-  if (mismatch !== 0) {
+  // HMAC over the ASCII bytes of the encoded payload string (see file header).
+  const ok = await crypto.subtle.verify(
+    "HMAC",
+    keyMaterial,
+    actualSigBytes as BufferSource,
+    enc.encode(encodedPayload),
+  );
+  if (!ok) {
     throw "bad_signature" satisfies ActivationTokenError;
   }
 

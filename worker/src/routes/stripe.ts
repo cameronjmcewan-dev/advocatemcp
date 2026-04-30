@@ -7,6 +7,7 @@
 //   POST /api/stripe/webhook             — Stripe webhook (checkout.session.completed)
 //   GET  /api/onboard/session/:session_id — poll payment status after Stripe redirect (CORS)
 
+import * as Sentry from "@sentry/cloudflare";
 import type { Env } from "../types";
 import {
   CNAME_TARGET,
@@ -112,6 +113,18 @@ async function stripeApi(
 
 // ── Stripe webhook signature verification (Workers-compatible) ───────────────
 
+/** Constant-time hex string compare. Both sides must already be lowercase
+ * hex of equal length — verifyStripeSignature normalizes that before
+ * calling. AMC-008 hardening. */
+function constantTimeHexEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < a.length; i++) {
+    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return mismatch === 0;
+}
+
 async function verifyStripeSignature(
   rawBody: string,
   sigHeader: string,
@@ -151,7 +164,34 @@ async function verifyStripeSignature(
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 
-  return expected === signature;
+  // Constant-time compare protects against signature-recovery timing
+  // attacks. The replay window above already limits attack throughput
+  // but defense-in-depth is cheap here.
+  return constantTimeHexEqual(expected, signature.toLowerCase());
+}
+
+/**
+ * Verify a Stripe webhook signature against the current secret AND, if
+ * configured, the previous secret. Used during a planned rotation so
+ * in-flight retries signed with the old whsec keep verifying until
+ * Stripe rolls onto the new one. Outside a rotation, only the current
+ * secret is checked.
+ *
+ * AMC-001 (Apr 29 2026).
+ */
+async function verifyStripeSignatureWithRotation(
+  rawBody: string,
+  sigHeader: string,
+  current: string,
+  previous: string | undefined,
+): Promise<{ valid: boolean; matched: "current" | "previous" | "none" }> {
+  if (await verifyStripeSignature(rawBody, sigHeader, current)) {
+    return { valid: true, matched: "current" };
+  }
+  if (previous && await verifyStripeSignature(rawBody, sigHeader, previous)) {
+    return { valid: true, matched: "previous" };
+  }
+  return { valid: false, matched: "none" };
 }
 
 // ── Beta cohort detection ────────────────────────────────────────────────────
@@ -1029,17 +1069,50 @@ export async function handleStripeWebhook(
   request: Request,
   env: Env,
 ): Promise<Response> {
+  // AMC-001 fail-closed: when the signing secret isn't configured we
+  // CANNOT verify any incoming webhook. The pre-fix behavior returned
+  // 500 here, which Stripe interprets as "transient — retry later" and
+  // can mask a misconfigured deploy for hours while billing state
+  // silently desyncs. 401 + structured log surfaces the misconfig
+  // immediately. Returning the response WITHOUT executing any side-
+  // effect from the unverified body is the security guarantee.
   if (!env.STRIPE_WEBHOOK_SECRET) {
-    return new Response("Webhook secret not configured", { status: 500 });
+    console.error(JSON.stringify({
+      onboarding: true,
+      event: "stripe_webhook_secret_missing",
+      action: "rejecting_until_secret_set",
+    }));
+    return new Response("Webhook secret not configured", { status: 401 });
   }
 
   const rawBody = await request.text();
   const sigHeader = request.headers.get("Stripe-Signature") ?? "";
 
-  const valid = await verifyStripeSignature(rawBody, sigHeader, env.STRIPE_WEBHOOK_SECRET);
-  if (!valid) {
+  // AMC-001 dual-secret: try the current secret first, then the
+  // previous one (if a rotation is in flight). Stripe's rotation guide
+  // recommends keeping both endpoints active for ~24h while subscribers
+  // roll. STRIPE_WEBHOOK_SECRET_PREVIOUS lets us do that without
+  // forking the handler.
+  const verification = await verifyStripeSignatureWithRotation(
+    rawBody,
+    sigHeader,
+    env.STRIPE_WEBHOOK_SECRET,
+    env.STRIPE_WEBHOOK_SECRET_PREVIOUS,
+  );
+  if (!verification.valid) {
     console.log(JSON.stringify({ onboarding: true, event: "stripe_webhook_invalid_sig" }));
     return new Response("Invalid signature", { status: 400 });
+  }
+  // When the previous-secret path matches, surface it loudly — operations
+  // can use this signal to confirm rotation is still in flight and remove
+  // STRIPE_WEBHOOK_SECRET_PREVIOUS once the volume drops to zero. Mirrors
+  // the dual-rotation playbook in docs/incident-response.md.
+  if (verification.matched === "previous") {
+    console.warn(JSON.stringify({
+      onboarding: true,
+      event: "stripe_webhook_matched_previous_secret",
+      hint: "Rotation in progress — retire STRIPE_WEBHOOK_SECRET_PREVIOUS once Stripe stops signing with old key.",
+    }));
   }
 
   let event: Record<string, unknown>;
@@ -1310,6 +1383,24 @@ export async function handleStripeWebhook(
       if (regResult.ok) {
         railwayResult = "registered";
         await updateBusinessApiKey(env.DB, tenant.slug, regResult.api_key);
+        // Stamp the synced marker so the cron reconciler doesn't pick
+        // this tenant up on its next tick. Best-effort — if the UPDATE
+        // fails the reconciler will redundantly retry registration on
+        // the next sweep, which is idempotent (Railway returns the same
+        // api_key for an already-registered slug).
+        try {
+          await env.DB
+            .prepare("UPDATE businesses SET railway_synced_at = ? WHERE slug = ?")
+            .bind(new Date().toISOString(), tenant.slug)
+            .run();
+        } catch (markerErr) {
+          console.warn(JSON.stringify({
+            onboarding: true,
+            event: "stripe_webhook_railway_marker_failed",
+            slug: tenant.slug,
+            error: String(markerErr),
+          }));
+        }
         console.log(JSON.stringify({
           onboarding: true,
           event: "stripe_webhook_railway_register_success",
@@ -1326,6 +1417,23 @@ export async function handleStripeWebhook(
           slug: tenant.slug,
           error: regResult.error,
         }));
+        // Sentry alert so this doesn't go unnoticed until a customer
+        // emails support. Fingerprinted by slug so the same tenant
+        // failing repeatedly groups into a single issue. The cron
+        // reconciler will retry within 15 minutes regardless.
+        Sentry.captureMessage(
+          `stripe_webhook_railway_register_failed: ${tenant.slug}`,
+          {
+            level: "error",
+            tags:  {
+              source: "stripe_webhook",
+              slug:   tenant.slug,
+              domain,
+              error:  regResult.error,
+            },
+            fingerprint: ["stripe_webhook_railway_register_failed", tenant.slug],
+          },
+        );
       }
     } catch (err) {
       railwayResult = "failed";
@@ -1336,6 +1444,15 @@ export async function handleStripeWebhook(
         slug: tenant.slug,
         error: String(err),
       }));
+      // Same alert path for unexpected throws (timeout, etc).
+      Sentry.captureException(err, {
+        tags: {
+          source: "stripe_webhook",
+          slug:   tenant.slug,
+          domain,
+        },
+        fingerprint: ["stripe_webhook_railway_register_error", tenant.slug],
+      });
     }
   }
 
@@ -1627,6 +1744,23 @@ export async function handleRetryRailwayRegistration(
   }
 
   await updateBusinessApiKey(env.DB, slug, regResult.api_key);
+  // Stamp the synced marker so the cron reconciler stops picking up
+  // this slug. Best-effort — same fallback rationale as the webhook
+  // happy path: a marker write failure is harmless because the cron
+  // is idempotent.
+  try {
+    await env.DB
+      .prepare("UPDATE businesses SET railway_synced_at = ? WHERE slug = ?")
+      .bind(new Date().toISOString(), slug)
+      .run();
+  } catch (markerErr) {
+    console.warn(JSON.stringify({
+      onboarding: true,
+      event: "admin_retry_railway_marker_failed",
+      slug,
+      error: String(markerErr),
+    }));
+  }
   console.log(JSON.stringify({
     onboarding: true,
     event: "admin_retry_railway_success",
@@ -1640,6 +1774,128 @@ export async function handleRetryRailwayRegistration(
     slug,
     domain,
     action: "railway_registered_and_d1_api_key_updated",
+  });
+}
+
+// ── POST /admin/onboard/rotate-railway-key ──────────────────────────────────
+// Operator recovery for the slug-split failure mode where Railway holds an
+// orphan row under one slug (e.g. created during a partial onboarding) and
+// `registerBusinessOnRailway` later auto-suffixed to a different slug
+// (advocate vs advocate-1). Bot traffic dispatches to the original slug
+// (derived from the public hostname) and lands in the orphan row, while
+// the dashboard reads through the auto-suffixed row → permanently
+// disjoint.
+//
+// Recovery is to take ownership of the orphan by rotating its api_key.
+// Railway's `POST /agents/:slug/rotate-key` is gated by SERVER_API_KEY
+// (the worker's env.API_KEY), so this admin endpoint is the only way to
+// invoke it from outside the worker. On success we write the rotated
+// key to the D1 row identified by `target_slug` (the one the operator
+// wants the dashboard to read from), so subsequent /api/client/* calls
+// authenticate against the orphan that now contains all the historical
+// query rows.
+//
+// Body: { railway_slug: string, target_slug?: string }
+//   railway_slug = the slug whose api_key to rotate on Railway
+//   target_slug  = the D1 slug to write the new key into (default: same)
+// Auth: X-Admin-Secret (requireAdmin)
+//
+// Surfaces a structured 502 if the Railway rotate call fails so the
+// operator sees the actual error instead of a generic "try again."
+
+export async function handleRotateRailwayKey(
+  request: Request,
+  env: Env,
+): Promise<Response> {
+  if (!requireAdmin(request, env)) {
+    return jsonErr(401, "unauthorized", "Authentication required");
+  }
+
+  let railwaySlug: string;
+  let targetSlug: string;
+  try {
+    const body = await request.json<{ railway_slug?: string; target_slug?: string }>();
+    if (typeof body.railway_slug !== "string" || !body.railway_slug.trim()) {
+      return jsonErr(400, "bad_request", "Missing required field: railway_slug");
+    }
+    railwaySlug = body.railway_slug.trim();
+    targetSlug  = (typeof body.target_slug === "string" && body.target_slug.trim())
+      ? body.target_slug.trim()
+      : railwaySlug;
+  } catch {
+    return jsonErr(400, "bad_request", "Invalid JSON body");
+  }
+
+  if (!env.API_BASE_URL || !env.API_KEY) {
+    return jsonErr(
+      500,
+      "railway_not_configured",
+      !env.API_BASE_URL ? "API_BASE_URL not set" : "API_KEY not set",
+    );
+  }
+
+  const targetRow = await getBusinessBySlug(env.DB, targetSlug);
+  if (!targetRow) {
+    return jsonErr(404, "not_found", `No D1 business row for target_slug=${targetSlug}`);
+  }
+
+  // Rotate Railway's api_key. SERVER_API_KEY auth comes from env.API_KEY,
+  // which Railway also has as process.env.API_KEY — the two sides share
+  // the same secret so this Bearer token matches.
+  const rotateUrl = `${env.API_BASE_URL}/agents/${encodeURIComponent(railwaySlug)}/rotate-key`;
+  let resp: Response;
+  try {
+    resp = await fetch(rotateUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key":     env.API_KEY,
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (err) {
+    return jsonErr(502, "railway_unreachable", String(err));
+  }
+
+  if (!resp.ok) {
+    let errMsg = `Railway rotate-key ${resp.status}`;
+    try {
+      const errBody = await resp.json() as { error?: string };
+      if (errBody.error) errMsg += `: ${errBody.error}`;
+    } catch { /* non-JSON */ }
+    return jsonErr(502, "railway_rotate_failed", errMsg);
+  }
+
+  const data = await resp.json() as { ok?: boolean; slug?: string; new_api_key?: string };
+  if (!data.new_api_key) {
+    return jsonErr(502, "railway_no_key_returned", "Railway returned 200 without new_api_key");
+  }
+
+  // Write the new key into the D1 row + stamp the railway_synced_at
+  // marker so the reconciler stops considering this slug a candidate.
+  await updateBusinessApiKey(env.DB, targetSlug, data.new_api_key);
+  try {
+    await env.DB
+      .prepare("UPDATE businesses SET railway_synced_at = ? WHERE slug = ?")
+      .bind(new Date().toISOString(), targetSlug)
+      .run();
+  } catch {
+    /* non-fatal */
+  }
+
+  console.log(JSON.stringify({
+    onboarding: true,
+    event: "admin_rotate_railway_key_success",
+    railway_slug: railwaySlug,
+    target_slug:  targetSlug,
+    new_key_length: data.new_api_key.length,
+  }));
+
+  return jsonOk({
+    ok: true,
+    railway_slug: railwaySlug,
+    target_slug:  targetSlug,
+    action: "railway_key_rotated_and_d1_updated",
   });
 }
 

@@ -2,7 +2,12 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import { getDb, type BusinessRow } from "../db.js";
 import { queryAgent } from "../agent/query.js";
-import { requireApiKey } from "../middleware/auth.js";
+// AMC-004: every route in this router is slug-scoped (/agents/:slug/*),
+// so we use requireSlugOrAdminKey — server admin key works for everything,
+// tenant Bearer key works ONLY for its own slug. The previous requireApiKey
+// allowed any tenant's key to authenticate against any other tenant's
+// endpoints (privilege escalation surface). Now scoped.
+import { requireSlugOrAdminKey } from "../middleware/auth.js";
 import {
   listLocations,
   addLocation,
@@ -28,6 +33,7 @@ import {
 } from "../middleware/tenantBudget.js";
 import crypto from "crypto";
 import { z } from "zod";
+import { scanForPromptInjection } from "../lib/promptInjectionScanner.js";
 import {
   HoursSchema,
   PricingV2Schema,
@@ -82,7 +88,7 @@ export const agentRouter = Router();
  * Public structured profile for a registered business.
  * Consumed by the Cloudflare Worker and MCP clients.
  */
-agentRouter.get("/agents/:slug/profile", requireApiKey, (req: Request, res: Response) => {
+agentRouter.get("/agents/:slug/profile", requireSlugOrAdminKey, (req: Request, res: Response) => {
   const { slug } = req.params;
   const db = getDb();
   const row = db
@@ -204,6 +210,18 @@ agentRouter.patch("/agents/:slug/profile", (req: Request, res: Response) => {
   const updates: string[] = [];
   const values: unknown[] = [];
 
+  // AMC-006: Free-text fields land directly in the system prompt, so
+  // we scan them on save for known prompt-injection grammars. Catching
+  // at input gives us a clear UX (rejected with a specific error)
+  // rather than letting the bad string ship to every subsequent prompt
+  // build and depending on the in-prompt delimiter wrap to neutralize
+  // it. The two layers compose — scanner is the gate, delimiter is the
+  // failsafe.
+  const PROMPT_TEXT_FIELDS = new Set([
+    "description", "differentiator", "differentiators_text",
+    "guarantee_text", "tone", "pricing",
+  ]);
+
   for (const field of allowed) {
     if (!(field in req.body)) continue;
     let val = (req.body as Record<string, unknown>)[field];
@@ -214,6 +232,22 @@ agentRouter.patch("/agents/:slug/profile", (req: Request, res: Response) => {
     if (field === "certifications" && Array.isArray(val)) val = (val as string[]).join(", ");
     if (field === "service_area_keywords" && Array.isArray(val)) val = (val as string[]).join(", ");
     if (field === "competitors" && Array.isArray(val)) val = (val as string[]).join(", ");
+
+    if (PROMPT_TEXT_FIELDS.has(field) && typeof val === "string") {
+      const scan = scanForPromptInjection(val);
+      if (!scan.ok) {
+        res.status(400).json({
+          error: "prompt_injection_detected",
+          field,
+          matched_pattern: scan.matched_pattern,
+          message:
+            "This field contains text that looks like an instruction directive. " +
+            "Tenant profiles must be plain descriptive content. Please remove the " +
+            "instruction-style language and resubmit.",
+        });
+        return;
+      }
+    }
 
     // JSON columns: validate shape, then stringify (or null).
     if (field in jsonValidators) {
@@ -544,7 +578,26 @@ agentRouter.post("/agents/:slug/profile/verify-rating", async (req: Request, res
   }
 });
 
-agentRouter.post("/agents/:slug/query", requireApiKey, async (req: Request, res: Response) => {
+/* AMC-005: Per-tenant rate limit on /agents/:slug/query.
+ *
+ * Two stacked windows enforce a defense in depth:
+ *   - burst (60 req/min) catches a leaked api_key on a fast-loop script
+ *   - sustained (1000 req/hour) catches slow-drip exfil
+ *
+ * Using a rate limit (req/min) instead of a cost cap because a viral
+ * legitimate tenant should NOT 503 mid-traffic. The req/min ceiling is
+ * 100x the realistic peak we've seen on the busiest tenant (~0.5 RPM
+ * at peak), so honest traffic never hits it. Leaked-key abuse —
+ * thousands of concurrent requests — does.
+ *
+ * Plan-aware ceilings can layer on top later (free=tighter, pro=looser);
+ * v1 ships one ceiling for everyone. */
+const AGENT_QUERY_LIMITS = [
+  { label: "agent-query:burst",     cfg: { max: 60,   windowMs: 60_000 } },
+  { label: "agent-query:sustained", cfg: { max: 1000, windowMs: 60 * 60_000 } },
+];
+
+agentRouter.post("/agents/:slug/query", requireSlugOrAdminKey, async (req: Request, res: Response) => {
   const { slug } = req.params;
 
   const parsed = QueryBodySchema.safeParse(req.body);
@@ -556,6 +609,21 @@ agentRouter.post("/agents/:slug/query", requireApiKey, async (req: Request, res:
     return;
   }
   const { query, crawler, format } = parsed.data;
+
+  // Per-tenant rate gate — runs BEFORE the budget reserve so a runaway
+  // attacker can't drain the global budget by exhausting a single
+  // tenant's cap.
+  const gate = checkLimit({ key: `agent-query:${slug}`, limits: AGENT_QUERY_LIMITS });
+  if (!gate.allowed) {
+    const retryAfterSec = Math.ceil(gate.retryAfterMs / 1000);
+    res.setHeader("Retry-After", String(retryAfterSec));
+    res.status(429).json({
+      error: "rate_limited",
+      message: `Too many queries (${gate.label}). Try again in ${retryAfterSec}s.`,
+      retry_after_seconds: retryAfterSec,
+    });
+    return;
+  }
 
   const db = getDb();
   const business = db
@@ -721,7 +789,7 @@ agentRouter.post("/agents/:slug/query", requireApiKey, async (req: Request, res:
  * with window bounds. The worker splices `webhook_configured` from D1
  * before returning to the client.
  */
-agentRouter.get("/agents/:slug/revenue-summary", requireApiKey, (req: Request, res: Response) => {
+agentRouter.get("/agents/:slug/revenue-summary", requireSlugOrAdminKey, (req: Request, res: Response) => {
   const { slug } = req.params;
   const tenant = getDb()
     .prepare("SELECT plan FROM businesses WHERE slug = ?")
@@ -788,7 +856,7 @@ agentRouter.get("/agents/:slug/revenue-summary", requireApiKey, (req: Request, r
 /**
  * GET /agents/:slug/locations — list every location for the tenant.
  */
-agentRouter.get("/agents/:slug/locations", requireApiKey, (req: Request, res: Response) => {
+agentRouter.get("/agents/:slug/locations", requireSlugOrAdminKey, (req: Request, res: Response) => {
   const { slug } = req.params;
   const rows = listLocations(getDb(), slug);
   // Hours_json is stored as raw text; parse on the way out for callers.
@@ -836,7 +904,7 @@ agentRouter.get("/agents/:slug/locations", requireApiKey, (req: Request, res: Re
  * adding would exceed the tier's cap. UI surfaces this as an upgrade
  * CTA pointing at Pro / Enterprise.
  */
-agentRouter.post("/agents/:slug/locations", requireApiKey, (req: Request, res: Response) => {
+agentRouter.post("/agents/:slug/locations", requireSlugOrAdminKey, (req: Request, res: Response) => {
   const { slug } = req.params;
   const body = req.body as Record<string, unknown> | undefined;
   if (!body || typeof body !== "object") {
@@ -885,7 +953,7 @@ agentRouter.post("/agents/:slug/locations", requireApiKey, (req: Request, res: R
  */
 agentRouter.patch(
   "/agents/:slug/locations/:id",
-  requireApiKey,
+  requireSlugOrAdminKey,
   (req: Request, res: Response) => {
     const { slug, id } = req.params;
     const body = req.body as Record<string, unknown> | undefined;
@@ -925,7 +993,7 @@ agentRouter.patch(
  */
 agentRouter.delete(
   "/agents/:slug/locations/:id",
-  requireApiKey,
+  requireSlugOrAdminKey,
   (req: Request, res: Response) => {
     const { slug, id } = req.params;
     const result = removeLocation(getDb(), slug, id);
@@ -952,7 +1020,7 @@ agentRouter.delete(
  */
 agentRouter.post(
   "/agents/:slug/locations/:id/promote",
-  requireApiKey,
+  requireSlugOrAdminKey,
   (req: Request, res: Response) => {
     const { slug, id } = req.params;
     const result = setPrimary(getDb(), slug, id);

@@ -40,6 +40,7 @@ import { withCors } from "../lib/cors";
 import {
   getActivationRecord,
   updateActivationStatus,
+  setActivationToken,
   getUserByEmail,
   createUser,
   updateUserPassword,
@@ -736,7 +737,8 @@ export async function handleResendActivation(
     );
   }
 
-  // Look up activation record
+  // Look up the business — the row must exist, but we no longer require
+  // a pre-existing activation token. Resend always mints a fresh one.
   const record = await getActivationRecord(env.DB, slug);
   if (record === null) {
     return new Response(
@@ -744,19 +746,34 @@ export async function handleResendActivation(
       { status: 404, headers: { "Content-Type": "application/json" } },
     );
   }
-  if (!record.token) {
-    return new Response(
-      JSON.stringify({
-        error: "No activation token has been minted for this business yet — wait for the Stripe webhook to fire first",
-      }),
-      { status: 400, headers: { "Content-Type": "application/json" } },
-    );
-  }
 
-  // Check RESEND_API_KEY
+  // Check secrets — both required.
   if (!env.RESEND_API_KEY) {
     return new Response(
       JSON.stringify({ error: "RESEND_API_KEY is not configured" }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+  if (!env.ACTIVATION_SIGNING_KEY) {
+    return new Response(
+      JSON.stringify({ error: "ACTIVATION_SIGNING_KEY is not configured" }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  // Mint a fresh 7-day token and overwrite the existing one. The prior
+  // implementation re-mailed `record.token` verbatim, which silently
+  // sent expired links once the original 7-day window had elapsed —
+  // exactly the failure mode the user hit on the advocate tenant. Now
+  // every resend gets a usable link.
+  const SEVEN_DAYS = 7 * 24 * 3600;
+  const freshToken = await signActivationToken({ slug }, env.ACTIVATION_SIGNING_KEY, SEVEN_DAYS);
+  const wrote = await setActivationToken(env.DB, slug, freshToken, new Date().toISOString());
+  if (!wrote) {
+    // This shouldn't happen — getActivationRecord just confirmed the
+    // row exists. But fail closed if the UPDATE somehow doesn't land.
+    return new Response(
+      JSON.stringify({ error: "Failed to persist fresh activation token" }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
@@ -767,8 +784,8 @@ export async function handleResendActivation(
   const emailTenantType = isHosted ? "hosted" as const : "dns" as const;
   const emailHostedUrl = isHosted ? `https://${slug}.hosted.advocatemcp.com` : undefined;
 
-  // Send the email
-  const activateUrl = `https://customers.advocatemcp.com/activate?t=${encodeURIComponent(record.token)}`;
+  // Send the email with the fresh token
+  const activateUrl = `https://customers.advocatemcp.com/activate?t=${encodeURIComponent(freshToken)}`;
   const result = await sendActivationEmail(env.RESEND_API_KEY, email, activateUrl, emailTenantType, emailHostedUrl);
 
   if (result.ok) {

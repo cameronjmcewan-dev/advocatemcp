@@ -3,7 +3,7 @@
 
 import type { Env } from "../types";
 import {
-  generateSalt, hashPassword, verifyPassword,
+  generateSalt, hashPassword, verifyPassword, verifyAndMaybeRehash,
   getSessionToken, sessionCookieHeader, clearSessionCookieHeader,
 } from "../auth";
 import {
@@ -42,6 +42,7 @@ import {
   handleBillingPortal,
   handleSessionStatus,
   handleRetryRailwayRegistration,
+  handleRotateRailwayKey,
 } from "./stripe";
 import { handleSaveDraft, handleLoadDraft } from "./onboardDraft";
 import * as dashboardApi from "./dashboard/api";
@@ -263,6 +264,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/admin/domains/ensure-worker-route"   && method === "POST") return handleEnsureWorkerRoute(request, env);
   if (pathname === "/admin/domains/backfill-variants"     && method === "POST") return handleBackfillVariants(request, env);
   if (pathname === "/admin/onboard/retry-railway"         && method === "POST") return handleRetryRailwayRegistration(request, env);
+  if (pathname === "/admin/onboard/rotate-railway-key"     && method === "POST") return handleRotateRailwayKey(request, env);
   if (pathname === "/status"                   && method === "GET")  return statusPage(request, env);
   if (pathname === "/onboard"                  && method === "GET")  return handleOnboardPage(request, env);
 
@@ -529,10 +531,28 @@ async function authLogin(request: Request, env: Env): Promise<Response> {
     return redirect("/login?error=invalid");
   }
 
-  const ok = await verifyPassword(password, user.salt, user.password_hash);
-  if (!ok) {
+  // AMC-007: Use the rehash-aware verifier so legacy 100k-iteration
+  // hashes get transparently upgraded to TARGET_ITERATIONS on the next
+  // login. The user-visible behavior is unchanged.
+  const verify = await verifyAndMaybeRehash(password, user.salt, user.password_hash);
+  if (!verify.ok) {
     await recordLoginAttempt(env.DB, identifier);
     return redirect("/login?error=invalid");
+  }
+  if (verify.needsRehash && verify.rehashedEncoded) {
+    // Best-effort upgrade. If the UPDATE fails the login still succeeds
+    // (we already verified) and the next login will retry.
+    try {
+      // Salt column becomes irrelevant once the encoded format is
+      // stored — parseStoredHash detects the prefix and ignores the
+      // salt column. We pass empty string to avoid leaving a stale
+      // salt visible in the DB.
+      await updateUserPassword(env.DB, user.id, verify.rehashedEncoded, "");
+    } catch (err) {
+      console.warn(JSON.stringify({
+        auth: true, event: "pbkdf2_rehash_failed", user_id: user.id, error: String(err),
+      }));
+    }
   }
 
   const { token } = await createSession(env.DB, user.id);

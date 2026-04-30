@@ -1,0 +1,23 @@
+-- Migration 0013: railway_synced_at column on businesses.
+--
+-- Self-healing for the failure mode where the Stripe webhook
+-- successfully creates the D1 row but `registerBusinessOnRailway`
+-- silently fails. Without this column there's no way to distinguish
+-- "synced and good" from "stuck since Apr 19" — every dashboard read
+-- against the zombie tenant returns null because Railway 401s on the
+-- stale api_key.
+--
+-- The column is stamped to NOW() at two moments:
+--   1. Stripe webhook happy path, right after successful Railway register
+--   2. Reconciler's retry path, on success
+--
+-- The cron handler (every 15 minutes) scans for paid tenants
+-- (stripe_customer_id IS NOT NULL) where railway_synced_at IS NULL
+-- and replays the registration. See worker/src/lib/railwayReconciler.ts.
+--
+-- All existing rows backfill to NOW() because they're either already
+-- working (in which case stamping is harmless) or already stuck (in
+-- which case the next cron tick catches them — but we want a clean
+-- audit baseline for the new flag, so existing rows go to NULL and
+-- the reconciler does its first-pass sweep on the next tick).
+ALTER TABLE businesses ADD COLUMN railway_synced_at TEXT;

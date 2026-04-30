@@ -17,8 +17,12 @@ vi.mock("../agent/query.js", () => ({
 }));
 
 // Mock auth middleware to always pass.
+// AMC-004: agent.ts now uses requireSlugOrAdminKey; mock matches.
 vi.mock("../middleware/auth.js", () => ({
-  requireApiKey: (_req: any, _res: any, next: any) => next(),
+  requireApiKey:        (_req: any, _res: any, next: any) => next(),
+  requireSlugOrAdminKey: (_req: any, _res: any, next: any) => next(),
+  requireSlugApiKey:     (_req: any, _res: any, next: any) => next(),
+  requireServerKeyOnly:  (_req: any, _res: any, next: any) => next(),
 }));
 
 // Mock db with a minimal business row.

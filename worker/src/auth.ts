@@ -1,7 +1,31 @@
 // Auth utilities: PBKDF2 password hashing, session tokens, cookie parsing.
 // All crypto uses the Web Crypto API — available in all CF Workers environments.
 
-const PBKDF2_ITERATIONS = 100_000;
+// AMC-007: PBKDF2 iteration count migration.
+//
+// 2023 OWASP recommendation for PBKDF2-SHA256 is 600_000 iterations,
+// BUT Cloudflare Workers' Web Crypto implementation hard-caps PBKDF2
+// at 100_000 iterations as a DDoS-protection measure (any higher value
+// throws NotSupportedError at runtime). See:
+//   https://developers.cloudflare.com/workers/runtime-apis/web-crypto/
+//
+// So while the encoded-hash format and the rehash-on-login plumbing
+// stay (for future-proofing if we move auth to Railway / Argon2), the
+// actual TARGET_ITERATIONS on the Workers runtime is pinned to the
+// platform ceiling. Documented in docs/followups.md as
+// "auth iteration count blocked on Workers PBKDF2 cap — consider
+// argon2 via Railway for the verify path".
+//
+// Hash format on disk:
+//   pbkdf2-sha256$<iterations>$<saltHex>$<hashHex>
+//
+// Legacy rows (raw hex hash, no prefix) verify the same way — both
+// formats now use 100k iterations, but the encoded form remains
+// useful so a future iteration bump (e.g. when CF raises the cap or
+// when we move verify off-Workers) doesn't require a second migration.
+const TARGET_ITERATIONS = 100_000;
+const LEGACY_ITERATIONS = 100_000;
+const HASH_PREFIX = "pbkdf2-sha256";
 const SESSION_COOKIE    = "amcp_session";
 const SESSION_MAX_AGE   = 60 * 60 * 24 * 30; // 30 days in seconds
 
@@ -13,6 +37,26 @@ function bytesToHex(bytes: Uint8Array): string {
     .join("");
 }
 
+/** Run PBKDF2 with the supplied iteration count. Internal — public APIs
+ *  use hashPassword (defaults to TARGET_ITERATIONS) and verifyPassword
+ *  (uses the count embedded in the stored hash). */
+async function pbkdf2(password: string, salt: string, iterations: number): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    enc.encode(password),
+    "PBKDF2",
+    false,
+    ["deriveBits"],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt: enc.encode(salt), iterations, hash: "SHA-256" },
+    key,
+    256,
+  );
+  return bytesToHex(new Uint8Array(bits));
+}
+
 // ── Password hashing ───────────────────────────────────────────────────────
 
 export function generateSalt(): string {
@@ -21,37 +65,125 @@ export function generateSalt(): string {
   return bytesToHex(bytes);
 }
 
-export async function hashPassword(password: string, salt: string): Promise<string> {
-  const enc = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(password),
-    "PBKDF2",
-    false,
-    ["deriveBits"]
-  );
-  const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", salt: enc.encode(salt), iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
-    key,
-    256
-  );
-  return bytesToHex(new Uint8Array(bits));
+/**
+ * Hash a password at the current target iteration count and return the
+ * full encoded hash including iterations and salt:
+ *   pbkdf2-sha256$<iterations>$<saltHex>$<hashHex>
+ *
+ * The salt parameter remains for backward compat with callers that
+ * generate the salt out-of-band (e.g. registration flow that persists
+ * the salt to a separate column). When called with that legacy shape
+ * it returns just the raw hash hex (no prefix) so the existing column
+ * layout works unchanged. Pass `encoded: true` to opt into the new
+ * self-contained format.
+ *
+ * NEW callers should use `hashPasswordEncoded(password)` which generates
+ * a fresh salt and returns the full encoded string in one call.
+ */
+export async function hashPassword(
+  password: string,
+  salt: string,
+  opts: { iterations?: number } = {},
+): Promise<string> {
+  return pbkdf2(password, salt, opts.iterations ?? TARGET_ITERATIONS);
 }
 
+/** Hash a password and return the self-contained encoded form. */
+export async function hashPasswordEncoded(password: string): Promise<string> {
+  const salt = generateSalt();
+  const hash = await pbkdf2(password, salt, TARGET_ITERATIONS);
+  return `${HASH_PREFIX}$${TARGET_ITERATIONS}$${salt}$${hash}`;
+}
+
+interface ParsedStoredHash {
+  iterations: number;
+  salt: string | null;     // null = legacy raw-hash format, caller supplies salt separately
+  hashHex: string;
+}
+
+function parseStoredHash(stored: string, legacySalt: string | null): ParsedStoredHash | null {
+  if (stored.startsWith(`${HASH_PREFIX}$`)) {
+    const parts = stored.split("$");
+    if (parts.length !== 4) return null;
+    const iterations = parseInt(parts[1], 10);
+    if (!Number.isFinite(iterations) || iterations < 1000) return null;
+    return { iterations, salt: parts[2], hashHex: parts[3] };
+  }
+  // Legacy format: raw hex hash, salt comes from the column it was
+  // stored in originally. 100k iterations was the only count ever used
+  // in this format.
+  if (!legacySalt) return null;
+  return { iterations: LEGACY_ITERATIONS, salt: null, hashHex: stored };
+}
+
+/** Constant-time-ish hex string equality used internally. */
+function constantTimeHexEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < a.length; i++) mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return mismatch === 0;
+}
+
+/**
+ * Verify a password against the stored hash. Returns a plain boolean
+ * for backward compat with all existing callers. The stored hash MAY
+ * use the legacy raw-hex format (with `salt` from the column) OR the
+ * new self-contained encoded format (in which case `salt` is ignored).
+ *
+ * To opt into rehash-on-login, callers should call
+ * `verifyAndMaybeRehash` instead — that function returns the rehash
+ * payload alongside the boolean.
+ */
 export async function verifyPassword(
   password: string,
   salt: string,
-  storedHash: string
+  storedHash: string,
 ): Promise<boolean> {
-  const computed = await hashPassword(password, salt);
-  // Constant-time comparison to prevent timing attacks
-  const enc = new TextEncoder();
-  const a = enc.encode(computed);
-  const b = enc.encode(storedHash);
-  if (a.length !== b.length) return false;
-  let mismatch = 0;
-  for (let i = 0; i < a.length; i++) mismatch |= a[i] ^ b[i];
-  return mismatch === 0;
+  const parsed = parseStoredHash(storedHash, salt);
+  if (!parsed) return false;
+  const effectiveSalt = parsed.salt ?? salt;
+  const computed = await pbkdf2(password, effectiveSalt, parsed.iterations);
+  return constantTimeHexEqual(computed, parsed.hashHex);
+}
+
+export interface VerifyAndRehashResult {
+  ok: boolean;
+  /** True iff the stored hash uses an iteration count below
+   *  TARGET_ITERATIONS AND the password was correct. Caller should
+   *  persist `rehashedEncoded` to the password column and (if storing
+   *  in the legacy 2-column format) clear / migrate the salt column. */
+  needsRehash: boolean;
+  /** When `ok && needsRehash`, this is the new self-contained encoded
+   *  hash that supersedes the legacy stored value. */
+  rehashedEncoded?: string;
+}
+
+/**
+ * Verify with rehash hint. Use from new login flows to transparently
+ * upgrade legacy 100k-iteration hashes to TARGET_ITERATIONS without
+ * disturbing the user. Existing callers that just need a yes/no should
+ * keep using `verifyPassword`.
+ */
+export async function verifyAndMaybeRehash(
+  password: string,
+  salt: string,
+  storedHash: string,
+): Promise<VerifyAndRehashResult> {
+  const parsed = parseStoredHash(storedHash, salt);
+  if (!parsed) return { ok: false, needsRehash: false };
+  const effectiveSalt = parsed.salt ?? salt;
+  const computed = await pbkdf2(password, effectiveSalt, parsed.iterations);
+  if (!constantTimeHexEqual(computed, parsed.hashHex)) {
+    return { ok: false, needsRehash: false };
+  }
+  if (parsed.iterations < TARGET_ITERATIONS) {
+    return {
+      ok: true,
+      needsRehash: true,
+      rehashedEncoded: await hashPasswordEncoded(password),
+    };
+  }
+  return { ok: true, needsRehash: false };
 }
 
 // ── Session tokens ─────────────────────────────────────────────────────────
@@ -110,12 +242,22 @@ export function getSessionToken(request: Request): string | null {
 // this deploys; acceptable pre-outreach.
 const COOKIE_DOMAIN = ".advocatemcp.com";
 
+// AMC-003: SameSite=Strict on the portal session cookie. Both the
+// dashboard origin (customers.advocatemcp.com) and the marketing site
+// origin (advocatemcp.com / www.advocatemcp.com) are same-site under
+// the modern eTLD+1 definition (.advocatemcp.com), so user-initiated
+// navigation between them DOES send the cookie. What Strict blocks is
+// cross-site requests from any other origin — exactly the CSRF surface
+// the prior Lax policy left open. The Origin allowlist on
+// /api/client/* (see assertSafeOrigin) is the second defense layer.
+const SESSION_SAMESITE = "SameSite=Strict";
+
 export function sessionCookieHeader(token: string): string {
   return [
     `${SESSION_COOKIE}=${encodeURIComponent(token)}`,
     "HttpOnly",
     "Secure",
-    "SameSite=Lax",
+    SESSION_SAMESITE,
     "Path=/",
     `Domain=${COOKIE_DOMAIN}`,
     `Max-Age=${SESSION_MAX_AGE}`,
@@ -127,7 +269,7 @@ export function clearSessionCookieHeader(): string {
     `${SESSION_COOKIE}=`,
     "HttpOnly",
     "Secure",
-    "SameSite=Lax",
+    SESSION_SAMESITE,
     "Path=/",
     `Domain=${COOKIE_DOMAIN}`,
     "Max-Age=0",

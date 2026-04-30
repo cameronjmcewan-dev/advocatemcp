@@ -2,7 +2,12 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import { getDb } from "../db.js";
 import crypto from "crypto";
-import { requireApiKey } from "../middleware/auth.js";
+// AMC-004: /register is a worker-only endpoint (called from worker on
+// Stripe checkout success and from the admin/onboarding flow). It must
+// NOT be reachable with any tenant Bearer — a leaked tenant key should
+// never be able to register a new business. requireServerKeyOnly enforces
+// X-API-Key: <SERVER_API_KEY>.
+import { requireServerKeyOnly } from "../middleware/auth.js";
 import { OnboardingPayloadSchema } from "../schemas/business.js";
 import { getApiBaseUrl } from "../lib/baseUrl.js";
 import { generateLeadingFaqs } from "../agent/faqGenerator.js";
@@ -27,7 +32,7 @@ function slugify(name: string): string {
  * a slug + API key, and persists the flat profile columns plus the 9-step wizard
  * JSON blobs. Returns slug, API key, and public endpoint URLs.
  */
-registerRouter.post("/register", requireApiKey, (req: Request, res: Response) => {
+registerRouter.post("/register", requireServerKeyOnly, (req: Request, res: Response) => {
   const parsed = OnboardingPayloadSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({

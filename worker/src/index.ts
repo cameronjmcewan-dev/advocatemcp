@@ -17,6 +17,7 @@ import * as Sentry from "@sentry/cloudflare";
 import type { Env } from "./types";
 import { handlePortal } from "./routes/portal";
 import { handleDemo } from "./routes/demo";
+import { reconcileRailwaySync } from "./lib/railwayReconciler";
 import { verifyToken, base64urlToBytes } from "./lib/tracked-url";
 import { buildSignedClickBody } from "./lib/clickBody";
 import { getTenant } from "./routes/onboard";
@@ -1168,6 +1169,67 @@ export default Sentry.withSentry(
         },
       }
     );
+  },
+
+  /* ── Scheduled (cron) handler ──────────────────────────────────────────
+   *
+   * Triggered every 15 minutes by the cron in wrangler.toml. The
+   * dispatch is gated on the cron pattern so we can add more cron
+   * jobs later without crosstalk.
+   *
+   * `ctx.waitUntil` is critical: the scheduled handler returns a
+   * Promise that the Workers runtime races against a cap (~15s); the
+   * reconciler's Sentry events need ctx.waitUntil so the in-flight
+   * captures actually flush before the worker isolate is torn down.
+   * Without it the events queue inside the SDK and get dropped.
+   *
+   * Errors thrown out of the scheduled handler do NOT cause customer-
+   * facing impact (no fetch path involved), but they DO surface in
+   * Cloudflare's cron logs and Sentry. Catch + capture explicitly so
+   * we get structured context instead of a bare stack trace.
+   */
+  async scheduled(
+    controller: ScheduledController,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<void> {
+    Sentry.setTag("cron_pattern", controller.cron);
+    Sentry.setTag("cron_scheduledTime", new Date(controller.scheduledTime).toISOString());
+
+    if (controller.cron === "*/15 * * * *") {
+      ctx.waitUntil(
+        (async () => {
+          try {
+            await reconcileRailwaySync(env);
+          } catch (err) {
+            Sentry.captureException(err, {
+              tags: { cron: "railway_reconciler", phase: "top_level_throw" },
+            });
+            console.error(JSON.stringify({
+              cron: "railway_reconciler",
+              event: "top_level_throw",
+              error: String(err),
+            }));
+          } finally {
+            // Flush Sentry queue before the isolate is recycled. 5s is
+            // generous; the reconciler's Sentry events are small.
+            await Sentry.flush(5000);
+          }
+        })(),
+      );
+      return;
+    }
+
+    // Unknown cron pattern — log + alert. Should never happen unless
+    // someone adds a cron to wrangler.toml without wiring it up here.
+    console.warn(JSON.stringify({
+      cron: "unknown_pattern",
+      pattern: controller.cron,
+    }));
+    Sentry.captureMessage(`scheduled_handler_unknown_cron: ${controller.cron}`, {
+      level: "warning",
+      tags:  { pattern: controller.cron },
+    });
   },
   } satisfies ExportedHandler<Env>,
 );

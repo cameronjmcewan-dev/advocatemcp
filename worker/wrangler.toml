@@ -148,3 +148,17 @@ zone_name = "advocatemcp.com"
 pattern   = "www.advocatemcp.com/*"
 zone_name = "advocatemcp.com"
 
+# ── Scheduled handlers (cron triggers) ───────────────────────────────────────
+# Self-healing for the failure mode where the Stripe webhook succeeds
+# but `registerBusinessOnRailway` silently fails — see
+# worker/src/lib/railwayReconciler.ts. Every 15 minutes the worker
+# scans for paid tenants whose railway_synced_at marker is null and
+# replays the registration. Idempotent: Railway's POST /register
+# returns the same api_key for a slug already in its table.
+#
+# Cron format: 5-field UNIX (minute hour day month weekday). "*/15 * * * *"
+# is "every 15 minutes." The cron runs in UTC inside Cloudflare's
+# infrastructure regardless of the operator's local timezone.
+[triggers]
+crons = ["*/15 * * * *"]
+

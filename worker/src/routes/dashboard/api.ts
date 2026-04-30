@@ -24,7 +24,7 @@ import {
 } from "../../portalDb";
 import type { Business } from "../../portalDb";
 import { getSessionFromRequest } from "../authApi";
-import { withCors } from "../../lib/cors";
+import { withCors, assertSafeOrigin } from "../../lib/cors";
 
 type SessionCtx = Awaited<ReturnType<typeof getSessionFromRequest>>;
 
@@ -93,6 +93,10 @@ export async function getOneDashboard(
 
 /* ── POST /api/client/dashboards ───────────────────────────────────────── */
 export async function postDashboard(request: Request, env: Env): Promise<Response> {
+  // AMC-003 — reject state-changing requests from non-allowlisted origins.
+  // Defense-in-depth alongside SameSite=Strict on the session cookie.
+  const origin = assertSafeOrigin(request);
+  if (origin) return origin;
   const ctx = await getCtx(request, env);
   if (!ctx) return json(401, { error: "Unauthorized" }, request);
   const biz = await resolveBusiness(request, env, ctx);
@@ -123,6 +127,8 @@ export async function postDashboard(request: Request, env: Env): Promise<Respons
 export async function patchDashboard(
   request: Request, env: Env, idStr: string,
 ): Promise<Response> {
+  const origin = assertSafeOrigin(request);
+  if (origin) return origin;
   const ctx = await getCtx(request, env);
   if (!ctx) return json(401, { error: "Unauthorized" }, request);
   const biz = await resolveBusiness(request, env, ctx);
@@ -170,6 +176,8 @@ export async function patchDashboard(
 export async function promoteDashboard(
   request: Request, env: Env, idStr: string,
 ): Promise<Response> {
+  const origin = assertSafeOrigin(request);
+  if (origin) return origin;
   const ctx = await getCtx(request, env);
   if (!ctx) return json(401, { error: "Unauthorized" }, request);
   const biz = await resolveBusiness(request, env, ctx);
@@ -186,6 +194,8 @@ export async function promoteDashboard(
 export async function deleteOneDashboard(
   request: Request, env: Env, idStr: string,
 ): Promise<Response> {
+  const origin = assertSafeOrigin(request);
+  if (origin) return origin;
   const ctx = await getCtx(request, env);
   if (!ctx) return json(401, { error: "Unauthorized" }, request);
   const biz = await resolveBusiness(request, env, ctx);

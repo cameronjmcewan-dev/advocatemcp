@@ -1,6 +1,9 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { requireSlugApiKey, requireApiKey } from "../middleware/auth.js";
+// AMC-004: GET /analytics (no slug param) is admin-only — gated with
+// requireServerKeyOnly so a leaked tenant Bearer can't dump the global
+// crawler feed. /analytics/:slug stays on requireSlugApiKey (slug-bound).
+import { requireSlugApiKey, requireServerKeyOnly } from "../middleware/auth.js";
 import { getDb, type QueryRow } from "../db.js";
 import { findByRequestId, setOutcome } from "../repos/agentRequests.js";
 import { parseDateRange, sqlBounds, type DateRange } from "../lib/dateRange.js";
@@ -178,10 +181,10 @@ analyticsRouter.get(
  * GET /analytics
  *
  * Global feed — last N crawler hits across all businesses.
- * Admin-only via `requireApiKey`.
+ * Admin-only via `requireServerKeyOnly` (X-API-Key: <SERVER_API_KEY>).
  * Optional `?limit=N` query param (default 50, capped at 500).
  */
-analyticsRouter.get("/analytics", requireApiKey, (req: Request, res: Response) => {
+analyticsRouter.get("/analytics", requireServerKeyOnly, (req: Request, res: Response) => {
   const db = getDb();
 
   const rawLimit = Number(req.query.limit);

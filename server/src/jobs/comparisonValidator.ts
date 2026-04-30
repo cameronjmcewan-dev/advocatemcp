@@ -135,8 +135,28 @@ export function validateComparisonBody(
   body: string,
   differentiators: DifferentiatorEntry[],
 ): { ok: boolean; reason: string | null } {
+  // AMC-012: NFKC-normalize before regex. Without this, a generator (or
+  // attacker who controls competitor data) could slip in homoglyph
+  // substitutions like Cyrillic "о" / "а" that bypass the banned-phrase
+  // regex while still rendering as the banned word in browsers. NFKC
+  // canonicalizes compatibility look-alikes (e.g. fullwidth digits
+  // FF21–FF3A → ASCII A–Z, Cyrillic isn't covered by NFKC alone but the
+  // homoglyph map below handles those). The original `body` is still
+  // rendered downstream — we only normalize for the regex check.
+  const normalized = body.normalize("NFKC")
+    // Manual homoglyph map for the high-frequency Cyrillic/Greek
+    // look-alikes NFKC doesn't fold. Limited to letters that
+    // appear in banned phrases — over-normalization breaks legitimate
+    // competitor names containing real Cyrillic.
+    .replace(/[аΑ]/g, "a")
+    .replace(/[еΕ]/g, "e")
+    .replace(/[оΟ]/g, "o")
+    .replace(/[сϲ]/g, "c")
+    .replace(/[рΡ]/g, "p")
+    .replace(/[іΙ]/g, "i");
+
   // H4 — outright disparagement (Phase 3 list, no false-positive surface).
-  if (/\b(scam|fraud|worst|terrible|avoid|inferior|ripoff|beware)\b/i.test(body)) {
+  if (/\b(scam|fraud|worst|terrible|avoid|inferior|ripoff|beware)\b/i.test(normalized)) {
     return { ok: false, reason: "banned_phrase_disparagement" };
   }
   // H4 — subjective COMPARATIVE phrases. Bound to comparison-shape patterns
@@ -157,7 +177,9 @@ export function validateComparisonBody(
     /\bsecond to none\b/i,
   ];
   for (const pat of subjectivePatterns) {
-    if (pat.test(body)) {
+    // AMC-012: also test against normalized form so homoglyph attacks
+    // can't bypass the comparative-phrase ban.
+    if (pat.test(body) || pat.test(normalized)) {
       return { ok: false, reason: `banned_phrase_subjective:${pat.source}` };
     }
   }

@@ -38,7 +38,7 @@ describe("POST /register", () => {
   it("400 with invalid payload (missing required fields)", async () => {
     const res = await request(app)
       .post("/register")
-      .set("Authorization", "Bearer test-admin-key")
+      .set("X-API-Key", "test-admin-key")
       .send({ name: "X" });
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("validation_error");
@@ -66,7 +66,7 @@ describe("POST /register", () => {
     };
     const res = await request(app)
       .post("/register")
-      .set("Authorization", "Bearer test-admin-key")
+      .set("X-API-Key", "test-admin-key")
       .send(payload);
     expect(res.status).toBe(201);
     expect(res.body.slug).toBeDefined();
@@ -86,7 +86,7 @@ describe("POST /register", () => {
     // silently skips them — the loop never closes for paying customers.
     const res = await request(app)
       .post("/register")
-      .set("Authorization", "Bearer test-admin-key")
+      .set("X-API-Key", "test-admin-key")
       .send({
         name: "Pro Biz",
         description: "d",
@@ -109,7 +109,7 @@ describe("POST /register", () => {
   it("Session 4 followup: defaults plan='base' when omitted", async () => {
     const res = await request(app)
       .post("/register")
-      .set("Authorization", "Bearer test-admin-key")
+      .set("X-API-Key", "test-admin-key")
       .send({
         name: "Default Plan Biz",
         description: "d",
@@ -131,7 +131,7 @@ describe("POST /register", () => {
   it("Session 4 followup: rejects an unknown plan value", async () => {
     const res = await request(app)
       .post("/register")
-      .set("Authorization", "Bearer test-admin-key")
+      .set("X-API-Key", "test-admin-key")
       .send({
         name: "Bogus Plan Biz",
         description: "d",
@@ -149,7 +149,7 @@ describe("POST /register", () => {
   it("201 with minimal payload (no nested JSON)", async () => {
     const res = await request(app)
       .post("/register")
-      .set("Authorization", "Bearer test-admin-key")
+      .set("X-API-Key", "test-admin-key")
       .send({
         name: "Minimal Biz",
         description: "d",
@@ -177,7 +177,7 @@ describe("POST /register", () => {
     // First insert takes "collision-co".
     const r1 = await request(app)
       .post("/register")
-      .set("Authorization", "Bearer test-admin-key")
+      .set("X-API-Key", "test-admin-key")
       .send(payload);
     expect(r1.status).toBe(201);
     expect(r1.body.slug).toBe("collision-co");
@@ -185,7 +185,7 @@ describe("POST /register", () => {
     // Second insert with the same name must pick "collision-co-1", not 500.
     const r2 = await request(app)
       .post("/register")
-      .set("Authorization", "Bearer test-admin-key")
+      .set("X-API-Key", "test-admin-key")
       .send(payload);
     expect(r2.status).toBe(201);
     expect(r2.body.slug).toBe("collision-co-1");
@@ -205,7 +205,7 @@ describe("POST /register", () => {
 
     const res = await request(app)
       .post("/register")
-      .set("Authorization", "Bearer test-admin-key")
+      .set("X-API-Key", "test-admin-key")
       .send({
         name: "Race Biz",
         description: "d",

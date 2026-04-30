@@ -145,6 +145,26 @@ function createFakeDb(
                 return { meta: { changes: 1 } };
               }
 
+              // setActivationToken — unconditional overwrite (used by
+              // resend-activation to mint a fresh token regardless of
+              // whether a stale one is already present). Differs from
+              // setActivationTokenIfMissing in lacking the IS NULL gate.
+              if (
+                normalized.startsWith("UPDATE businesses") &&
+                normalized.includes("SET activation_token") &&
+                !normalized.includes("activation_token IS NULL")
+              ) {
+                const [token, status, issuedAt, slug] = params as [
+                  string, string, string, string,
+                ];
+                const row = table.get(slug);
+                if (!row) return { meta: { changes: 0 } };
+                row.activation_token     = token;
+                row.activation_status    = status;
+                row.activation_issued_at = issuedAt;
+                return { meta: { changes: 1 } };
+              }
+
               // updateActivationStatus — unconditional status flip
               if (
                 normalized.startsWith("UPDATE businesses") &&
@@ -474,8 +494,12 @@ describe("handleResendActivation (POST /admin/businesses/:slug/resend-activation
     expect(body.error).toContain("ghost-slug");
   });
 
-  it("returns 400 when no activation token has been minted yet", async () => {
-    const { db } = createFakeDb({ "test-biz": { activation_token: null } });
+  it("mints a fresh token even when none has been minted yet", async () => {
+    // Pre-fix this returned 400. Post-fix: resend ALWAYS mints a fresh
+    // token, so a slug with activation_token=null still gets a working
+    // link. The Stripe webhook is no longer a strict prerequisite — the
+    // admin can always trigger an activation flow on demand.
+    const { db, rows } = createFakeDb({ "test-biz": { activation_token: null } });
     const env = makeEnv(db);
 
     const response = await handleResendActivation(
@@ -484,9 +508,9 @@ describe("handleResendActivation (POST /admin/businesses/:slug/resend-activation
       "test-biz",
     );
 
-    expect(response.status).toBe(400);
-    const body = (await response.json()) as Record<string, unknown>;
-    expect(body.error).toContain("wait for the Stripe webhook");
+    expect(response.status).toBe(200);
+    expect(rows.get("test-biz")?.activation_token).toBeTruthy();
+    expect(rows.get("test-biz")?.activation_status).toBe("sent");
   });
 
   it("returns 500 when RESEND_API_KEY is not configured", async () => {
@@ -530,12 +554,18 @@ describe("handleResendActivation (POST /admin/businesses/:slug/resend-activation
     // Status should be updated to 'sent'
     expect(rows.get("test-biz")?.activation_status).toBe("sent");
 
-    // Verify sendActivationEmail was called with the right args
+    // Verify sendActivationEmail was called with the right args.
+    // Post-fix the URL contains a NEWLY-minted token (not the stored
+    // mock-tok-123), so we assert on the row's persisted token instead
+    // — which the resend handler also wrote.
     expect(mockedSend).toHaveBeenCalledTimes(1);
     const callArgs = mockedSend.mock.calls[0];
     expect(callArgs[0]).toBe("test-phase-f-key"); // RESEND_API_KEY in makeEnv
     expect(callArgs[1]).toBe("customer@example.com");
-    expect(callArgs[2]).toContain("mock-tok-123");
+    const persistedToken = rows.get("test-biz")?.activation_token as string;
+    expect(persistedToken).toBeTruthy();
+    expect(persistedToken).not.toBe("mock-tok-123"); // proves it's fresh
+    expect(callArgs[2]).toContain(encodeURIComponent(persistedToken));
   });
 
   it("returns 500 and does NOT update status on Resend failure", async () => {

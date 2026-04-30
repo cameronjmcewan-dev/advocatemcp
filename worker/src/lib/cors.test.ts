@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { corsHeadersFor, withCors, handleCorsPreflight } from "./cors.js";
+import { corsHeadersFor, withCors, handleCorsPreflight, assertSafeOrigin } from "./cors.js";
 
 /** Helper — construct a Request with a specific Origin header. */
 function makeRequest(origin: string | null): Request {
@@ -190,5 +190,76 @@ describe("cors", () => {
     const body = await wrapped.json() as { ok: boolean; answer: number };
     expect(body.ok).toBe(true);
     expect(body.answer).toBe(42);
+  });
+});
+
+describe("assertSafeOrigin (AMC-003 CSRF defense)", () => {
+  function postFromOrigin(origin: string | null, referer?: string): Request {
+    const headers = new Headers();
+    if (origin !== null) headers.set("Origin", origin);
+    if (referer) headers.set("Referer", referer);
+    return new Request("https://customers.advocatemcp.com/api/client/dashboards/1", {
+      method: "POST",
+      headers,
+    });
+  }
+
+  it("returns null (safe) for GET regardless of Origin", () => {
+    const req = new Request("https://customers.advocatemcp.com/api/client/me", {
+      method: "GET",
+      headers: { Origin: "https://evil.com" },
+    });
+    expect(assertSafeOrigin(req)).toBeNull();
+  });
+
+  it("returns null (safe) for OPTIONS preflight", () => {
+    const req = new Request("https://customers.advocatemcp.com/api/client/dashboards", {
+      method: "OPTIONS",
+      headers: { Origin: "https://evil.com" },
+    });
+    expect(assertSafeOrigin(req)).toBeNull();
+  });
+
+  it("returns null (safe) for POST from allowlisted origin", () => {
+    expect(assertSafeOrigin(postFromOrigin("https://advocatemcp.com"))).toBeNull();
+    expect(assertSafeOrigin(postFromOrigin("https://www.advocatemcp.com"))).toBeNull();
+    expect(assertSafeOrigin(postFromOrigin("http://localhost:5173"))).toBeNull();
+  });
+
+  it("returns null (safe) for POST from a Pages preview deploy", () => {
+    expect(
+      assertSafeOrigin(postFromOrigin("https://abc12345.advocatemcp-site.pages.dev"))
+    ).toBeNull();
+  });
+
+  it("returns 403 for POST from non-allowlisted origin", async () => {
+    const resp = assertSafeOrigin(postFromOrigin("https://evil.com"));
+    expect(resp).not.toBeNull();
+    expect(resp!.status).toBe(403);
+    const body = await resp!.json() as { error: string; origin: string };
+    expect(body.error).toBe("forbidden_origin");
+    expect(body.origin).toBe("https://evil.com");
+  });
+
+  it("falls back to Referer when Origin is absent (Safari edge case)", () => {
+    const ok = assertSafeOrigin(postFromOrigin(null, "https://advocatemcp.com/dashboard"));
+    expect(ok).toBeNull();
+    const bad = assertSafeOrigin(postFromOrigin(null, "https://evil.com/page"));
+    expect(bad).not.toBeNull();
+    expect(bad!.status).toBe(403);
+  });
+
+  it("rejects POST when neither Origin nor Referer is present", async () => {
+    const resp = assertSafeOrigin(postFromOrigin(null));
+    expect(resp).not.toBeNull();
+    expect(resp!.status).toBe(403);
+  });
+
+  it("rejects an attacker mirror domain (lookalike *.advocatemcp-site.pages.dev.evil.com)", () => {
+    const resp = assertSafeOrigin(
+      postFromOrigin("https://advocatemcp-site.pages.dev.evil.com"),
+    );
+    expect(resp).not.toBeNull();
+    expect(resp!.status).toBe(403);
   });
 });
