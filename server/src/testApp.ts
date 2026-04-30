@@ -11,6 +11,7 @@ import { a2aRouter } from "./routes/a2a.js";
 import { adminRouter } from "./routes/admin/index.js";
 import { competitorRadarRouter } from "./routes/competitorRadar.js";
 import { profileScoreRouter } from "./routes/profileScore.js";
+import { aiRecommendationsRouter } from "./routes/aiRecommendations.js";
 import { digestRouter } from "./routes/digest.js";
 import { demoRouter } from "./routes/demo.js";
 import { decodeRouter } from "./routes/decode.js";
@@ -116,6 +117,7 @@ export function createTestApp(): express.Express {
   app.use(adminRouter);
   app.use(competitorRadarRouter);
   app.use(profileScoreRouter);
+  app.use(aiRecommendationsRouter);
   app.use(digestRouter);
   app.use(demoRouter);
 

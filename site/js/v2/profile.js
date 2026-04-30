@@ -202,6 +202,7 @@
         <strong>Top opportunities to improve</strong>
         ${improvementsHtml}
       </div>
+      <div class="ai-insights-slot" id="ai-insights-slot">${(window.AMCP_AI_INSIGHTS ? window.AMCP_AI_INSIGHTS.renderPanel({ compact: false }) : '')}</div>
       <div class="score-real-signals" id="score-real-signals">
         <span class="score-real-signals-loading">Loading real-world signals…</span>
       </div>
@@ -722,6 +723,15 @@
             scoreBtn.textContent = body.is_stale ? 'Profile changed — re-run check →' : 'Re-run check →';
             // Async — paint score instantly, fill signals strip when ready
             loadRealSignals();
+            // AI Insights panel — bind handlers + cache-only fetch.
+            // Panel is rendered inline by renderScoreResult (the
+            // .ai-insights-slot div); this wires the click handlers
+            // and fires the GET to populate state without spending
+            // budget. See site/js/v2/aiInsights.js.
+            const aiSlot = document.getElementById('ai-insights-slot');
+            if (aiSlot && window.AMCP_AI_INSIGHTS) {
+              window.AMCP_AI_INSIGHTS.bindPanel(aiSlot, { compact: false });
+            }
           }
         } catch { /* silent */ }
       }

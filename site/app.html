@@ -81,6 +81,9 @@
 <script src="/js/v2/shell.js"></script>
 <script src="/js/v2/get-started.js"></script>
 <script src="/js/v2/tour-bridge.js"></script>
+<!-- AI Insights panel (Pro/Enterprise) — loaded BEFORE overview.js so
+     window.AMCP_AI_INSIGHTS is defined when renderOverviewScore runs. -->
+<script src="/js/v2/aiInsights.js"></script>
 <script src="/js/v2/overview.js"></script>
 
 <!-- ECharts for richer chart rendering on the Overview. Deferred so

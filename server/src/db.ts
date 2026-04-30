@@ -123,6 +123,17 @@ export interface BusinessRow {
   // and null as equivalent everywhere.
   last_score_json?: string | null;
   score_history_json?: string | null;
+  // Migration 036 (Apr 30 2026): AI Insights cache for the Pro/Enterprise
+  // /api/client/ai-recommendations surface. JSON-stringified CachedAIRecs
+  // blob — see server/src/routes/aiRecommendations.ts for the shape.
+  // Cache invalidation is composite: profile_hash + score_hash +
+  // analytics_window_id + 7-day max staleness. NULL = cold-start.
+  last_ai_recommendations_json?: string | null;
+  // Migration 013 (Apr 15 2026): Pro plan tier added at the same time
+  // as Competitor Radar polling. 'free' | 'base' | 'pro' | 'enterprise'.
+  // Optional+nullable like the other late-added columns so test fixtures
+  // pre-migration-013 keep compiling.
+  plan?: string | null;
   // Migration 033 (Apr 28 2026): aggressive FAQ array — Phase 1 of
   // the grey-hat AI optimization layer. JSON-stringified array of
   // {question, answer, intent} entries; renderers parse and emit

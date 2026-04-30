@@ -552,6 +552,7 @@
         <div class="ov-engine-list">${variantBars}</div>
       </div>
       ${improvementsHtml ? `<div class="ov-tips"><strong class="ov-tips-h">Top opportunities</strong>${improvementsHtml}</div>` : ''}
+      <div class="ai-insights-slot" id="ai-insights-slot-overview">${(window.AMCP_AI_INSIGHTS ? window.AMCP_AI_INSIGHTS.renderPanel({ compact: true }) : '')}</div>
       <style>
         .ov-score-loading { display:flex; align-items:center; gap:10px; padding:14px; color:var(--muted); font-size:13.5px; }
         .ov-score-spinner { width:14px; height:14px; border-radius:999px; border:2px solid var(--line); border-top-color:var(--maroon); animation:ov-spin 1s linear infinite; }
@@ -700,6 +701,13 @@
           const body = await res.json().catch(() => ({}));
           if (res.ok && body.has_score) {
             scoreResultEl.innerHTML = renderOverviewScore(body);
+            // AI Insights panel wires into the slot rendered by
+            // renderOverviewScore. Compact variant (3-4 cards + link
+            // through to BusinessProfile for the full set).
+            const aiSlot = document.getElementById('ai-insights-slot-overview');
+            if (aiSlot && window.AMCP_AI_INSIGHTS) {
+              window.AMCP_AI_INSIGHTS.bindPanel(aiSlot, { compact: true });
+            }
           } else {
             scoreResultEl.innerHTML = '';
           }
@@ -743,6 +751,11 @@
           }
           scoreResultEl.innerHTML = renderOverviewScore(body);
           scoreBtn.textContent = 'Re-run check →';
+          // Re-bind AI Insights after the score panel is regenerated.
+          const aiSlot2 = document.getElementById('ai-insights-slot-overview');
+          if (aiSlot2 && window.AMCP_AI_INSIGHTS) {
+            window.AMCP_AI_INSIGHTS.bindPanel(aiSlot2, { compact: true });
+          }
         } catch (err) {
           clearInterval(ticker);
           scoreResultEl.innerHTML = `<p style="color:var(--red);font-size:13.5px">Network error: ${esc(String((err && err.message) || err))}</p>`;

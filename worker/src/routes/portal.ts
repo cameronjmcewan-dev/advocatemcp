@@ -248,6 +248,8 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/preview-voice"   && method === "POST") return apiPreviewVoice(request, env);
   if (pathname === "/api/client/profile-score"   && method === "GET")  return apiProfileScore(request, env);
   if (pathname === "/api/client/profile-score"   && method === "POST") return apiProfileScore(request, env);
+  if (pathname === "/api/client/ai-recommendations" && method === "GET")  return apiAIRecommendations(request, env);
+  if (pathname === "/api/client/ai-recommendations" && method === "POST") return apiAIRecommendations(request, env);
   if (pathname === "/api/client/verify-rating"   && method === "POST") return apiVerifyRating(request, env);
   if (pathname === "/admin/create-client"      && method === "POST") return adminCreateClient(request, env);
   // Magic-login: admin issues a 5-min token, opens it in incognito, gets a
@@ -344,6 +346,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/onboarding/step" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/preview-voice"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/profile-score"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/ai-recommendations" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/verify-rating"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
 
   // ── Stripe / new onboarding API ──────────────────────────────────────────
@@ -2162,6 +2165,92 @@ async function apiProfileScore(request: Request, env: Env): Promise<Response> {
     );
   } catch (err) {
     return withCors(jsonErr(502, `Profile score backend unreachable: ${String(err)}`), request, { credentials: true });
+  }
+}
+
+// ── /api/client/ai-recommendations ────────────────────────────────────────
+//
+// Pro/Enterprise AI Insights surface. Mirrors apiProfileScore (above)
+// but pre-checks the tenant's plan in D1 before round-tripping Railway —
+// Base/Free tenants get 402 plan_required immediately, saving ~80-150ms
+// + a fraction of a Railway compute slot per locked-tier hit. The
+// pattern matches apiRevenueSetAov around line 1370.
+//
+// Server-side gate: Railway's POST /agents/:slug/ai-recommendations
+// uses requireServerKeyOnly. Only the worker (with env.API_KEY) can
+// reach it. Direct curl with a leaked tenant Bearer can't bypass the
+// proxy.
+//
+// Apr 30 2026.
+
+async function apiAIRecommendations(request: Request, env: Env): Promise<Response> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  // Plan pre-check. Reads businesses.plan from D1 directly (the row is
+  // already loaded, but the access list type doesn't always carry the
+  // plan column on impersonation paths — re-query is safest). Returns
+  // 402 with a structured body the frontend uses to render the upsell
+  // card. The Railway endpoint ALSO does its own plan check as defense-
+  // in-depth; this just saves the round-trip on the locked path.
+  const planRow = await env.DB
+    .prepare("SELECT plan FROM businesses WHERE slug = ?")
+    .bind(biz.slug)
+    .first<{ plan: string | null }>();
+  const plan = planRow?.plan ?? "base";
+  if (plan !== "pro" && plan !== "enterprise") {
+    return withCors(
+      jsonErr(402, "AI Insights is a Pro feature. Upgrade to enable."),
+      request,
+      { credentials: true },
+    );
+  }
+
+  if (!biz.api_key || biz.api_key === "pending") {
+    return withCors(
+      jsonErr(409, "Tenant has no usable api_key (Stripe webhook may still be in flight). Try again in a minute."),
+      request, { credentials: true },
+    );
+  }
+
+  // GET = fast cache read (no API spend). POST = run on cache miss
+  // unless body.force=true. Both forwarded transparently — Railway is
+  // the source of truth for cache and validation.
+  const isGet = request.method === "GET";
+  let body = "{}";
+  if (!isGet) {
+    try { body = await request.text(); } catch { /* empty body OK */ }
+    if (!body || !body.trim()) body = "{}";
+  }
+
+  const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  try {
+    const r = await fetch(`${base}/agents/${biz.slug}/ai-recommendations`, {
+      method: isGet ? "GET" : "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization:  `Bearer ${biz.api_key}`,
+        ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}),
+      },
+      ...(isGet ? {} : { body }),
+    });
+    const text = await r.text();
+    return withCors(
+      new Response(text, {
+        status: r.status,
+        headers: { "Content-Type": r.headers.get("content-type") ?? "application/json" },
+      }),
+      request, { credentials: true },
+    );
+  } catch (err) {
+    return withCors(jsonErr(502, `AI recommendations backend unreachable: ${String(err)}`), request, { credentials: true });
   }
 }
 

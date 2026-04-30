@@ -1,0 +1,33 @@
+-- Migration 036: businesses.last_ai_recommendations_json cache column.
+--
+-- Backs the Pro/Enterprise AI Insights surface
+-- (server/src/routes/aiRecommendations.ts).
+--
+-- Mirrors the cache pattern from migration 023 (last_score_json) and
+-- migration 022 (competitor_mentions): a TEXT column holding the
+-- JSON-encoded CachedAIRecs blob. Read-modify-write inside a single
+-- prepared-statement UPDATE is race-safe at the SQLite layer.
+--
+-- Blob shape (see CachedAIRecs in server/src/routes/aiRecommendations.ts):
+--   {
+--     profile_hash:        string,
+--     score_hash:          string,
+--     analytics_window_id: string,   // 24h-rolling, derived from windowStart/end
+--     generated_at:        ISO8601,
+--     recommendations:     AIRecommendation[],   // 6-10 items, see zod schema
+--     model:               "claude-sonnet-4-6",
+--     cost_cents:          number,
+--     trial_id:            ULID
+--   }
+--
+-- Cache invalidation (composite, OR-merged):
+--   - profile_hash mismatch (tenant edited their profile)
+--   - score_hash mismatch (citation re-run produced different per_variant)
+--   - analytics_window_id mismatch (24h passed, last-30d window rolled)
+--   - generated_at older than 7 days (max staleness)
+-- ANY mismatch marks is_stale=true; next read auto-regenerates.
+--
+-- Default NULL → pre-existing tenants behave as cold-start. The Railway
+-- aiRecommendations route handles NULL same as cache miss.
+
+ALTER TABLE businesses ADD COLUMN last_ai_recommendations_json TEXT;
