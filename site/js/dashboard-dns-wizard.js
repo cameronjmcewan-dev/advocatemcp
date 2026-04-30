@@ -55,7 +55,16 @@
   }
 
   function currentDomain() {
-    return (window.AMCP_DATA && window.AMCP_DATA.domain) || '';
+    // window.AMCP_DATA.domain landed as a STRING in v0 of the shell
+    // boot, but v2 (Apr 2026 onward) populates it as an object
+    // { hostname, status, ... } since callers needed the status
+    // signals. The DNS wizard predates that shape change — without
+    // this unwrap, escHtml(domain) renders "[object Object]" inside
+    // the instructions panel. Handle both shapes for back-compat.
+    var d = window.AMCP_DATA && window.AMCP_DATA.domain;
+    if (!d) return '';
+    if (typeof d === 'string') return d;
+    return d.hostname || '';
   }
 
   function getSavedProvider() {
@@ -68,9 +77,29 @@
     catch (_) { /* no-op */ }
   }
 
+  /* Detect hosted tenants so callers (or stray paths) can't pop up the
+   * Namecheap-style provider picker for a tenant whose subdomain we
+   * already manage end-to-end. Defense-in-depth alongside the gates
+   * already present in get-started.js / dashboard-onboarding.js /
+   * settings.js — those should prevent the wizard from being invoked
+   * for hosted tenants at all, but if any future surface forgets the
+   * check the wizard itself short-circuits to a friendly note. */
+  function _isHostedTenant() {
+    var d = window.AMCP_DATA || {};
+    if (typeof d.is_hosted === 'boolean') return d.is_hosted;
+    var host = '';
+    if (typeof d.domain === 'string') host = d.domain;
+    else if (d.domain && typeof d.domain.hostname === 'string') host = d.domain.hostname;
+    return /\.hosted\.advocatemcp\.com$/i.test(host);
+  }
+
   /* ── Public API ─────────────────────────────────────────────────────────── */
   function open(initialProvider) {
     _stopPolling();
+    if (_isHostedTenant()) {
+      _openHostedNotice();
+      return;
+    }
     var saved = initialProvider || getSavedProvider();
     if (saved) {
       _provider = saved;
@@ -80,6 +109,36 @@
       _stage    = STAGE_PICKER;
     }
     _openDrawer();
+  }
+
+  /* Render a "you're all set" panel for hosted tenants instead of the
+   * Namecheap CNAME wizard. Same drawer chrome, different body. */
+  function _openHostedNotice() {
+    var d = window.AMCP_DATA || {};
+    var host = (d.domain && d.domain.hostname) || (typeof d.domain === 'string' ? d.domain : '');
+    var displayHost = host || 'your subdomain';
+    var body = (
+      '<div class="amcp-dns-step">' +
+        '<div class="amcp-dns-step-title">No DNS setup needed</div>' +
+        '<div class="amcp-dns-step-copy" style="margin-bottom:18px">' +
+          'Your subdomain <strong>' + escHtml(displayHost) + '</strong> is hosted by Advocate ' +
+          'and routed automatically through our Cloudflare edge. There’s nothing for ' +
+          'you to configure at a domain registrar — bots already reach your agent.' +
+        '</div>' +
+        '<div class="amcp-dns-step-copy" style="font-size:13px;color:var(--muted)">' +
+          'Want to use your own domain (e.g. <code>advocate.com</code>) instead? ' +
+          'Reach out to support and we’ll move you to the custom-domain tier.' +
+        '</div>' +
+        '<div style="margin-top:24px;display:flex;justify-content:flex-end">' +
+          '<button id="amcp-dns-close" class="amcp-welcome-btn amcp-welcome-btn-primary" type="button">Got it</button>' +
+        '</div>' +
+      '</div>'
+    );
+    if (window.AMCP_UI && typeof window.AMCP_UI.openDrawer === 'function') {
+      window.AMCP_UI.openDrawer('DNS setup', body);
+      var btn = document.getElementById('amcp-dns-close');
+      if (btn) btn.addEventListener('click', close);
+    }
   }
 
   function close() {
@@ -228,44 +287,54 @@
 
   /* Generic DNS records table mock, shown above the real instructions as
    * a visual anchor ("this is what the UI you're looking for looks like").
-   * Provider-agnostic on purpose: most DNS dashboards share this layout. */
+   * Provider-agnostic on purpose: most DNS dashboards share this layout.
+   *
+   * Brand-token mapping (Apr 29 2026 fix): the original implementation
+   * referenced --surface, --bg, --accent, --surface-2, --accent-bright,
+   * --accent-dim, --accent-ring, --border, --text — none of which exist
+   * in styles.css. The SVG was rendering as a black rectangle with only
+   * the maroon-fill regions (DNS tab, + Add button) visible. Mapped
+   * onto the real palette: --paper / --ink / --muted / --line / --maroon
+   * / --maroon-tint / --maroon-wash. */
   function _schematicSVG() {
     return (
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 180" style="width:100%;height:auto;max-width:360px;display:block;margin:0 auto 18px" aria-hidden="true">' +
-        '<rect x="4" y="4" width="352" height="172" rx="8" style="fill:var(--surface);stroke:var(--border)" stroke-width="1.5"/>' +
-        '<rect x="4" y="4" width="352" height="24" rx="8" style="fill:var(--bg)"/>' +
-        '<circle cx="18" cy="16" r="3" style="fill:var(--muted)" opacity=".4"/>' +
-        '<circle cx="28" cy="16" r="3" style="fill:var(--muted)" opacity=".4"/>' +
-        '<circle cx="38" cy="16" r="3" style="fill:var(--muted)" opacity=".4"/>' +
-        /* tabs */
-        '<rect x="16" y="36" width="52" height="16" rx="3" style="fill:var(--accent)"/>' +
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 180" style="width:100%;height:auto;max-width:360px;display:block;margin:0 auto 18px;border-radius:8px" aria-hidden="true">' +
+        /* outer card frame */
+        '<rect x="4" y="4" width="352" height="172" rx="8" style="fill:var(--paper);stroke:var(--line)" stroke-width="1.5"/>' +
+        /* faux window chrome */
+        '<rect x="4" y="4" width="352" height="24" rx="8" style="fill:var(--maroon-wash)"/>' +
+        '<circle cx="18" cy="16" r="3" style="fill:var(--muted)" opacity=".5"/>' +
+        '<circle cx="28" cy="16" r="3" style="fill:var(--muted)" opacity=".5"/>' +
+        '<circle cx="38" cy="16" r="3" style="fill:var(--muted)" opacity=".5"/>' +
+        /* tabs row */
+        '<rect x="16" y="36" width="52" height="16" rx="3" style="fill:var(--maroon)"/>' +
         '<text x="42" y="47" text-anchor="middle" font-size="9" fill="#fff" font-family="\'General Sans\',system-ui,sans-serif">DNS</text>' +
-        '<rect x="74" y="36" width="52" height="16" rx="3" style="fill:var(--surface-2)" opacity=".65"/>' +
-        '<rect x="132" y="36" width="52" height="16" rx="3" style="fill:var(--surface-2)" opacity=".65"/>' +
+        '<rect x="74" y="36" width="52" height="16" rx="3" style="fill:var(--maroon-wash)"/>' +
+        '<rect x="132" y="36" width="52" height="16" rx="3" style="fill:var(--maroon-wash)"/>' +
         /* add button */
-        '<rect x="296" y="36" width="50" height="16" rx="3" style="fill:var(--accent-bright)"/>' +
+        '<rect x="296" y="36" width="50" height="16" rx="3" style="fill:var(--maroon)"/>' +
         '<text x="321" y="47" text-anchor="middle" font-size="9" fill="#fff" font-family="\'General Sans\',system-ui,sans-serif">+ Add</text>' +
         /* table header */
-        '<rect x="16" y="60" width="330" height="14" rx="2" style="fill:var(--surface-2)"/>' +
+        '<rect x="16" y="60" width="330" height="14" rx="2" style="fill:var(--maroon-wash)"/>' +
         '<text x="26" y="70" font-size="8" fill="var(--muted)" font-family="\'General Sans\',system-ui,sans-serif" font-weight="600" letter-spacing=".7">TYPE</text>' +
         '<text x="78" y="70" font-size="8" fill="var(--muted)" font-family="\'General Sans\',system-ui,sans-serif" font-weight="600" letter-spacing=".7">NAME</text>' +
         '<text x="186" y="70" font-size="8" fill="var(--muted)" font-family="\'General Sans\',system-ui,sans-serif" font-weight="600" letter-spacing=".7">VALUE</text>' +
         '<text x="316" y="70" font-size="8" fill="var(--muted)" font-family="\'General Sans\',system-ui,sans-serif" font-weight="600" letter-spacing=".7">TTL</text>' +
-        /* highlighted CNAME row */
-        '<rect x="16" y="82" width="330" height="22" rx="2" style="fill:var(--accent-dim);stroke:var(--accent-ring)" stroke-width="1.5"/>' +
-        '<text x="26" y="97" font-size="10" fill="var(--accent-bright)" font-family="\'SF Mono\',monospace" font-weight="700">CNAME</text>' +
-        '<text x="78" y="97" font-size="10" fill="var(--text)" font-family="\'SF Mono\',monospace">www</text>' +
-        '<text x="186" y="97" font-size="10" fill="var(--text)" font-family="\'SF Mono\',monospace">' + CNAME_TARGET + '</text>' +
-        '<text x="316" y="97" font-size="10" fill="var(--text)" font-family="\'SF Mono\',monospace">Auto</text>' +
-        /* placeholder rows */
-        '<line x1="26" y1="120" x2="68" y2="120" stroke="var(--border)" stroke-width="4" opacity=".7"/>' +
-        '<line x1="78" y1="120" x2="150" y2="120" stroke="var(--border)" stroke-width="4" opacity=".7"/>' +
-        '<line x1="186" y1="120" x2="268" y2="120" stroke="var(--border)" stroke-width="4" opacity=".7"/>' +
-        '<line x1="316" y1="120" x2="340" y2="120" stroke="var(--border)" stroke-width="4" opacity=".7"/>' +
-        '<line x1="26" y1="140" x2="58" y2="140" stroke="var(--border)" stroke-width="4" opacity=".4"/>' +
-        '<line x1="78" y1="140" x2="130" y2="140" stroke="var(--border)" stroke-width="4" opacity=".4"/>' +
-        '<line x1="186" y1="140" x2="250" y2="140" stroke="var(--border)" stroke-width="4" opacity=".4"/>' +
-        '<line x1="316" y1="140" x2="340" y2="140" stroke="var(--border)" stroke-width="4" opacity=".4"/>' +
+        /* highlighted CNAME row — what the user is about to add */
+        '<rect x="16" y="82" width="330" height="22" rx="2" style="fill:var(--maroon-tint);stroke:var(--maroon)" stroke-width="1.5"/>' +
+        '<text x="26" y="97" font-size="10" fill="var(--maroon)" font-family="\'SF Mono\',ui-monospace,monospace" font-weight="700">CNAME</text>' +
+        '<text x="78" y="97" font-size="10" fill="var(--ink)" font-family="\'SF Mono\',ui-monospace,monospace">www</text>' +
+        '<text x="186" y="97" font-size="10" fill="var(--ink)" font-family="\'SF Mono\',ui-monospace,monospace">' + CNAME_TARGET + '</text>' +
+        '<text x="316" y="97" font-size="10" fill="var(--ink)" font-family="\'SF Mono\',ui-monospace,monospace">Auto</text>' +
+        /* placeholder skeleton rows below */
+        '<line x1="26" y1="120" x2="68" y2="120" stroke="var(--line)" stroke-width="4" opacity=".8"/>' +
+        '<line x1="78" y1="120" x2="150" y2="120" stroke="var(--line)" stroke-width="4" opacity=".8"/>' +
+        '<line x1="186" y1="120" x2="268" y2="120" stroke="var(--line)" stroke-width="4" opacity=".8"/>' +
+        '<line x1="316" y1="120" x2="340" y2="120" stroke="var(--line)" stroke-width="4" opacity=".8"/>' +
+        '<line x1="26" y1="140" x2="58" y2="140" stroke="var(--line)" stroke-width="4" opacity=".5"/>' +
+        '<line x1="78" y1="140" x2="130" y2="140" stroke="var(--line)" stroke-width="4" opacity=".5"/>' +
+        '<line x1="186" y1="140" x2="250" y2="140" stroke="var(--line)" stroke-width="4" opacity=".5"/>' +
+        '<line x1="316" y1="140" x2="340" y2="140" stroke="var(--line)" stroke-width="4" opacity=".5"/>' +
       '</svg>'
     );
   }
