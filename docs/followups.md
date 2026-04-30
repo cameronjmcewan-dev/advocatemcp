@@ -499,3 +499,26 @@ Re-run the emergency and affordable intent queries against the production Railwa
 ### Rollback
 
 Worker rollback: `wrangler rollback` reverts the worker script but NOT Workers Routes — if routes were changed, redeploy from the prior wrangler.toml commit. Railway is additive-safe: the new D1/SQLite columns (`hours_json`, `services_json_v2`, `pricing_json_v2`, `credentials_json`, `ratings_json`, `customer_quotes_json`, `case_stories_json`, `lead_routing_json`) are all optional nullable columns, so the old handler simply ignores them — no data loss from reverting the Railway deploy. To fully roll back Railway, redeploy the prior git SHA via the Railway dashboard.
+
+---
+
+## Vitest baseline cleanup (added Apr 30 2026)
+
+The server vitest suite carries 43 baseline failures across ~12 test files:
+- `src/jobs/weeklyDigest.test.ts` (6 failures)
+- `src/routes/admin/tenants.test.ts` (multiple)
+- `src/routes/admin/audits.test.ts`, `auditBatch.test.ts`, `agents.test.ts`
+- `src/db/migrations.test.ts`, `006_reservations.test.ts`, `002_partial_apply.test.ts`
+- `src/lib/requestId.test.ts`
+- `src/middleware/rateLimit.tier.test.ts`
+- `src/agent/query.test.ts` (1: brittle prepare-mock assertion)
+
+These predate the AMC-001..012 security work and the AI Insights feature; none
+were caused by recent changes. The CI workflow `.github/workflows/server-ci.yml`
+currently runs vitest with `continue-on-error: true` because the boot-smoke step
+is the load-bearing gate (catches ESM/CJS interop crashes that would take Railway
+down). When the baseline drops to zero, flip `continue-on-error: false` so vitest
+becomes a hard gate again.
+
+Owner: triage one test file at a time. Most are mock-shape drift after route
+middleware changes.
