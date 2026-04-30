@@ -27,7 +27,7 @@ import "dotenv/config";
 import path from "node:path";
 import fs from "node:fs/promises";
 import Database from "better-sqlite3";
-import type { BusinessRow } from "../../db.js";
+import { getDb, type BusinessRow } from "../../db.js";
 import { queryAgent } from "../../agent/query.js";
 import { ALL_VARIANTS } from "./formats/index.js";
 import { judgeFormat, trialCost } from "./judges.js";
@@ -82,9 +82,42 @@ const DEFAULT_JUDGES = [
 
 // ── Profile loading ────────────────────────────────────────────────────────
 
+/**
+ * Load a tenant profile by slug. Originally this opened its own
+ * better-sqlite3 connection at `process.env.DB_PATH ?? cwd()/dev.db`,
+ * but in production:
+ *   - server/src/db.ts uses DATABASE_PATH (different env var name)
+ *     and defaults to /app/data/dev.db
+ *   - the runner opened a NON-existent file, returned null for every
+ *     slug, and silently produced empty profile_score results
+ *
+ * Apr 30 2026 fix: route through the canonical getDb() so the runner
+ * reads from the same SQLite file the rest of the server does. The
+ * Database direct-import + dbPath fallback path is kept for the
+ * stand-alone CLI mode (bun run src/experiments/formatJudge/runner.ts)
+ * where the server bootstrap hasn't initialized getDb yet — in that
+ * case we fall back to the legacy path lookup chain so the CLI keeps
+ * working from the local repo.
+ */
 function loadProfileFromDb(slug: string): BusinessRow | null {
+  // Production / hot-path: use the same connection getDb() returns.
+  try {
+    const db = getDb();
+    const row = db
+      .prepare("SELECT * FROM businesses WHERE slug = ?")
+      .get(slug) as BusinessRow | undefined;
+    if (row) return row;
+  } catch {
+    // getDb may throw in CLI mode if the bootstrap hasn't run; fall
+    // through to the legacy direct-open path below.
+  }
+
+  // CLI mode fallback — try DATABASE_PATH (server canon), then DB_PATH
+  // (legacy runner var), then cwd()/dev.db (legacy default).
   const dbPath =
-    process.env.DB_PATH ?? path.resolve(process.cwd(), "dev.db");
+    process.env.DATABASE_PATH ??
+    process.env.DB_PATH ??
+    path.resolve(process.cwd(), "dev.db");
   try {
     const db = new Database(dbPath, { readonly: true });
     const row = db

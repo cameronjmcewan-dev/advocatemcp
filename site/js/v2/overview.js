@@ -725,10 +725,15 @@
           if (span) span.textContent = `Running… ${elapsed}s elapsed`;
         }, 2000);
         try {
+          // The overview button is always a user click (no autosave
+          // path on this surface). Force a fresh run so the score
+          // reflects the current profile rather than the cached row,
+          // which may itself be a stale 0/0 from a partially-run
+          // earlier attempt.
           const res = await af('/api/client/profile-score', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: '{}',
+            body: JSON.stringify({ force: true }),
           });
           clearInterval(ticker);
           const body = await res.json().catch(() => ({}));

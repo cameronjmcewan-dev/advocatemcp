@@ -206,7 +206,7 @@
         <span class="score-real-signals-loading">Loading real-world signals…</span>
       </div>
       <div class="score-meta">
-        Last run: ${esc(new Date(data.run_at || Date.now()).toLocaleString())} · Re-run anytime · ~30s · ~$0.04/run
+        Last run: ${esc(new Date(data.run_at || Date.now()).toLocaleString())} · Re-run anytime · takes about 30 seconds
       </div>
     `;
   }
@@ -746,10 +746,18 @@
           if (span) span.textContent = `Running… ${elapsed}s elapsed`;
         }, 2000);
         try {
+          // When the user explicitly clicks "Re-run check", we want a
+          // fresh run regardless of profile-hash cache state — the
+          // existing cached row may itself be stale (e.g. an earlier
+          // run errored mid-flight and stored an empty 0/0 result).
+          // The autosave path (fromSave=true) keeps cache semantics
+          // because rapid profile edits shouldn't burn budget on
+          // every keystroke.
+          const force = !opts.fromSave;
           const res = await af('/api/client/profile-score', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({}),
+            body: JSON.stringify(force ? { force: true } : {}),
           });
           clearInterval(ticker);
           const body = await res.json().catch(() => ({}));
