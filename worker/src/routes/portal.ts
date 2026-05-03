@@ -633,14 +633,15 @@ async function dashboard(request: Request, env: Env): Promise<Response> {
   // created_at, updated_at) are provided as empty strings to satisfy the
   // User interface without doing an extra getUserById D1 query.
   const userForDashboard: User = {
-    id:            ctx.user_id,
-    email:         ctx.email,
-    password_hash: "",
-    salt:          "",
-    full_name:     ctx.full_name,
-    role:          ctx.role,
-    created_at:    "",
-    updated_at:    "",
+    id:             ctx.user_id,
+    email:          ctx.email,
+    password_hash:  "",
+    salt:           "",
+    full_name:      ctx.full_name,
+    role:           ctx.role,
+    email_verified: ctx.email_verified,
+    created_at:     "",
+    updated_at:     "",
   };
   return html(buildDashboard(
     userForDashboard,
