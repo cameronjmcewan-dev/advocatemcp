@@ -336,12 +336,16 @@ describe("handleActivateHosted (POST /api/activate/hosted)", () => {
     expect(sessions.length).toBe(1);
   });
 
-  it("updates password for existing user and returns 200", async () => {
+  it("verifies email for existing user (fast path) and returns 200 — password unchanged", async () => {
+    // Post-May-2-2026 behavior: when a user already has a password_hash
+    // (set during signup by handlePublicOnboard), activation only flips
+    // email_verified=1 and mints a session. The password is NOT touched
+    // even if a different one is sent in the body.
     mockedGetTenant.mockResolvedValue(makeHostedTenant());
 
     const { db, users } = createFakeDb({
       businesses: { "test-hosted": { id: "biz-123" } },
-      users: { "customer@example.com": { id: "existing-user-1", password_hash: "old", salt: "old" } },
+      users: { "customer@example.com": { id: "existing-user-1", password_hash: "stored-from-signup", salt: "stored-salt" } },
     });
     const env = makeEnv(db);
 
@@ -354,10 +358,10 @@ describe("handleActivateHosted (POST /api/activate/hosted)", () => {
     const body = (await resp.json()) as Record<string, unknown>;
     expect(body.ok).toBe(true);
 
-    // Password was updated (hash changed from "old")
+    // Password hash UNCHANGED — fast path ignores body.password
     const user = users.get("customer@example.com")!;
-    expect(user.password_hash).not.toBe("old");
-    expect(user.salt).not.toBe("old");
+    expect(user.password_hash).toBe("stored-from-signup");
+    expect(user.salt).toBe("stored-salt");
     // User ID preserved
     expect(user.id).toBe("existing-user-1");
   });
