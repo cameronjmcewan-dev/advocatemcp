@@ -211,10 +211,18 @@
     return typeof r === 'number' ? r : null;
   }
 
-  /* Derive a 14-point daily series from recent_queries[] timestamps. The
-     metrics endpoint doesn't return a pre-bucketed daily chart today, so
-     we roll our own from the timestamps we have. Returns an array of
-     { day, count } oldest-first. */
+  /* Build a 14-point daily series oldest-first. Prefer the server-bucketed
+     `queries_last_30_days: [{date, count}, ...]` field (returned by
+     /api/client/metrics → Railway /analytics/:slug), since it's authoritative
+     across all queries in the date window. Falls back to bucketing from the
+     limited `recent_queries[]` list (max 50) only when the server didn't
+     return the pre-bucketed array — which used to be the case before the
+     analytics endpoint was upgraded.
+
+     Critical: a day with zero queries MUST still appear in the output as
+     {count: 0}. Server-side `GROUP BY DATE(...)` skips empty days, so we
+     always seed all 14 buckets first and then merge counts in. Otherwise
+     low-traffic tenants see a chart with most days visually missing. */
   function derivedDailySeries(metrics) {
     const days = 14;
     const now = new Date();
@@ -225,6 +233,30 @@
       d.setHours(0, 0, 0, 0);
       buckets.push({ day: d, count: 0, label: d.toLocaleDateString(undefined, { weekday: 'short' })[0] });
     }
+
+    // Preferred path: server-bucketed counts. Match by ISO date string
+    // (YYYY-MM-DD) so timezone offsets don't shift days at the boundary.
+    const serverDaily = (metrics && metrics.queries_last_30_days) || null;
+    if (Array.isArray(serverDaily) && serverDaily.length > 0) {
+      const byDate = Object.create(null);
+      for (const row of serverDaily) {
+        if (row && typeof row.date === 'string' && typeof row.count === 'number') {
+          byDate[row.date] = (byDate[row.date] || 0) + row.count;
+        }
+      }
+      for (const b of buckets) {
+        const y = b.day.getFullYear();
+        const m = String(b.day.getMonth() + 1).padStart(2, '0');
+        const d = String(b.day.getDate()).padStart(2, '0');
+        const key = `${y}-${m}-${d}`;
+        if (byDate[key]) b.count = byDate[key];
+      }
+      return buckets;
+    }
+
+    // Fallback path: derive from recent_queries[] timestamps. Lossy when
+    // the tenant has more than ~50 mentions in the window — days that
+    // existed but didn't make the recent-50 cut will undercount.
     const queries = (metrics && metrics.recent_queries) || [];
     queries.forEach(q => {
       const t = new Date(q.timestamp).getTime();
