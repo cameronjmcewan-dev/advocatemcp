@@ -1903,6 +1903,7 @@ function buildOnboardPayload() {
   const review_platform = v('biz-review-platform');
   const leadDest = v('biz-lead-dest').trim();
   const acct_email = v('acct-email').trim().toLowerCase();
+  const acct_password = v('acct-password');
   const radiusRaw = v('biz-radius');
 
   // services: split the free-text Step 2 textarea on newlines/commas, drop empties
@@ -2044,6 +2045,7 @@ function buildOnboardPayload() {
     slug: slugify(name),
     name,
     email: acct_email,
+    password: acct_password,
     plan: state.plan,
     profile,
   };
