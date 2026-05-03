@@ -107,10 +107,22 @@
         } catch { /* URL parse failure → fall back to original path */ }
       }
 
-      return fetch(`${API_BASE}${resolvedPath}`, Object.assign({}, options, {
+      const res = await fetch(`${API_BASE}${resolvedPath}`, Object.assign({}, options, {
         credentials: 'include',
         headers,
       }));
+
+      if (res.status === 403) {
+        try {
+          const body = await res.clone().json();
+          if (body.error_code === 'email_unverified') {
+            renderEmailUnverifiedSplash(body.customer_message || 'Please confirm your email — check your inbox.');
+            return res;
+          }
+        } catch (_) { /* non-JSON 403, fall through */ }
+      }
+
+      return res;
     },
 
     /* ── cachedFetch ────────────────────────────────────────────────────
@@ -180,4 +192,32 @@
   };
 
   window.AMCP = AMCP;
+
+  function renderEmailUnverifiedSplash(message) {
+    if (document.getElementById('email-unverified-splash')) return; // idempotent
+    const splash = document.createElement('div');
+    splash.id = 'email-unverified-splash';
+    splash.style.cssText = 'position:fixed;inset:0;background:var(--paper,#fff);display:grid;place-items:center;z-index:9999;padding:24px;font-family:var(--sans,system-ui)';
+    splash.innerHTML =
+      '<div style="max-width:420px;text-align:center">' +
+        '<h1 style="font-family:var(--serif,Georgia);font-weight:400;font-size:32px;margin-bottom:12px;color:var(--ink,#222)">Check your inbox</h1>' +
+        '<p style="color:var(--ink-2,#666);font-size:14.5px;line-height:1.6;margin-bottom:24px">' + message + '</p>' +
+        '<button id="resend-activation-btn" type="button" style="padding:10px 20px;background:var(--maroon,#7d2550);color:#fff;border:0;border-radius:6px;cursor:pointer;font-size:14px">Resend email</button>' +
+        '<p style="color:var(--muted,#999);font-size:12px;margin-top:16px">Wrong email? <a href="mailto:max@advocate-mcp.com" style="color:var(--maroon,#7d2550)">Contact support</a></p>' +
+      '</div>';
+    document.body.appendChild(splash);
+    const btn = splash.querySelector('#resend-activation-btn');
+    if (btn) {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        btn.textContent = 'Sending...';
+        try {
+          const r = await fetch('/api/activate/resend', { method: 'POST', credentials: 'include' });
+          btn.textContent = r.ok ? 'Sent — check your inbox' : 'Could not resend — email max@advocate-mcp.com';
+        } catch (_) {
+          btn.textContent = 'Could not resend — email max@advocate-mcp.com';
+        }
+      });
+    }
+  }
 })();
