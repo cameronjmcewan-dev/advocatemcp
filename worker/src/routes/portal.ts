@@ -28,6 +28,7 @@ import { handleActivate, handleActivateHosted, handleActivatePreview, handleActi
 import { handleCloudflareValidate, handleCloudflareApply, handleGoDaddyValidate, handleGoDaddyApply, handleNamecheapValidate, handleNamecheapApply, handleRoute53Validate, handleRoute53Apply, handleIonosValidate, handleIonosApply } from "./dnsAuto";
 import {
   getSessionFromRequest,
+  type AuthContext,
   handleAuthLogin,
   handleAuthLogout,
   handleAuthRefresh,
@@ -491,6 +492,53 @@ async function requireSession(request: Request, env: Env): Promise<SessionWithUs
   return getSessionByToken(env.DB, token);
 }
 
+// ── requireVerifiedSession ─────────────────────────────────────────────────
+
+/**
+ * Wraps getSessionFromRequest with an email_verified=1 gate. Returns the
+ * AuthContext if all good, or a pre-built 401/403 response if not. Use
+ * this on every dashboard and /api/client/* handler. Auth, activation,
+ * and team-accept routes do NOT use this — those flows are how the user
+ * becomes verified, so gating them would be a chicken-and-egg.
+ */
+async function requireVerifiedSession(
+  request: Request,
+  env: Env,
+): Promise<{ ok: true; ctx: AuthContext } | { ok: false; resp: Response }> {
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) {
+    return {
+      ok: false,
+      resp: withCors(
+        new Response(
+          JSON.stringify({ ok: false, error_code: "no_session" }),
+          { status: 401, headers: { "Content-Type": "application/json" } },
+        ),
+        request,
+        { credentials: true },
+      ),
+    };
+  }
+  if (ctx.email_verified !== 1) {
+    return {
+      ok: false,
+      resp: withCors(
+        new Response(
+          JSON.stringify({
+            ok: false,
+            error_code: "email_unverified",
+            customer_message: "Please confirm your email — check your inbox for the activation link.",
+          }),
+          { status: 403, headers: { "Content-Type": "application/json" } },
+        ),
+        request,
+        { credentials: true },
+      ),
+    };
+  }
+  return { ok: true, ctx };
+}
+
 // ── GET /login ─────────────────────────────────────────────────────────────
 
 async function loginPage(request: Request, env: Env): Promise<Response> {
@@ -655,8 +703,9 @@ async function dashboard(request: Request, env: Env): Promise<Response> {
 // ── GET /api/client/me ─────────────────────────────────────────────────────
 
 async function apiMe(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
   return withCors(
     jsonOk({ id: ctx.user_id, email: ctx.email, full_name: ctx.full_name, role: ctx.role }),
     request,
@@ -667,8 +716,9 @@ async function apiMe(request: Request, env: Env): Promise<Response> {
 // ── GET /api/client/metrics ────────────────────────────────────────────────
 
 async function apiMetrics(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
 
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
@@ -765,8 +815,9 @@ async function apiMetrics(request: Request, env: Env): Promise<Response> {
 // {slug, name, domain, analytics} objects plus aggregated totals.
 
 async function apiAllMetrics(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
   if (ctx.role !== "admin") return withCors(jsonErr(403, "Admin only"), request, { credentials: true });
 
   const businesses = await getActiveBusinesses(env.DB);
@@ -867,8 +918,9 @@ type AggregateFeedItem =
   | { type: "agent_call"; business_slug: string; business_name: string; tool_called: string; agent_id: string; outcome_signal: string; latency_ms: number | null; timestamp: string };
 
 async function apiActivityDetail(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
 
   const url = new URL(request.url);
   const scope = url.searchParams.get("scope");
@@ -1026,8 +1078,9 @@ async function apiActivityDetail(request: Request, env: Env): Promise<Response> 
 // ── GET /api/client/activity ───────────────────────────────────────────────
 
 async function apiActivity(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
 
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
@@ -1052,8 +1105,9 @@ interface ClickRow {
 }
 
 async function apiClicks(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
 
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
@@ -1205,8 +1259,9 @@ function buildRecommendations(
 }
 
 async function apiRecommendations(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
 
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
@@ -1230,8 +1285,9 @@ async function apiRecommendations(request: Request, env: Env): Promise<Response>
 // Session auth + slug scope-check via getUserBusinesses.
 
 async function apiGetProfile(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
 
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
@@ -1265,8 +1321,9 @@ async function apiGetProfile(request: Request, env: Env): Promise<Response> {
 // events; Railway's mirror is best-effort and trails by seconds.
 
 async function apiRevenueSummary(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
 
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
@@ -1357,8 +1414,9 @@ async function apiRevenueSummary(request: Request, env: Env): Promise<Response> 
 }
 
 async function apiRevenueSetAov(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
 
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
@@ -1420,8 +1478,9 @@ async function apiRevenueSetAov(request: Request, env: Env): Promise<Response> {
 }
 
 async function apiRevenueWebhookSecret(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
 
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
@@ -1465,8 +1524,9 @@ async function locationsBackendUrl(env: Env, slug: string, suffix = ""): Promise
 }
 
 async function resolveTenantSlug(request: Request, env: Env): Promise<{ slug: string; api_key: string } | { error: Response }> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return { error: withCors(jsonErr(401, "Unauthorized"), request, { credentials: true }) };
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return { error: guard.resp };
+  const ctx = guard.ctx;
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
     : await getUserBusinesses(env.DB, ctx.user_id);
@@ -1558,8 +1618,9 @@ async function apiLocationsPromote(request: Request, env: Env, locationId: strin
 // Railway endpoint declares mutable; anything else is silently dropped.
 
 async function apiUpdateProfile(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
 
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
@@ -1627,8 +1688,9 @@ async function apiUpdateProfile(request: Request, env: Env): Promise<Response> {
 // Non-admin users must be bound to the slug via getUserBusinesses.
 
 async function apiRadar(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
 
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
@@ -1669,8 +1731,9 @@ async function apiRadar(request: Request, env: Env): Promise<Response> {
 // Add a query phrasing to the tenant's radar basket. Body: { query_phrasing }.
 
 async function apiRadarBasketAdd(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
 
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
@@ -1712,8 +1775,9 @@ async function apiRadarBasketAdd(request: Request, env: Env): Promise<Response> 
 // ── DELETE /api/client/radar/basket/:basket_id ────────────────────────────
 
 async function apiRadarBasketDelete(request: Request, env: Env, basketId: string): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
 
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
@@ -1752,8 +1816,9 @@ async function apiRadarBasketDelete(request: Request, env: Env, basketId: string
 //                      (max timestamp across recent_queries).
 
 async function apiDomainInfo(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
 
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
@@ -1907,8 +1972,9 @@ async function apiDomainInfo(request: Request, env: Env): Promise<Response> {
 // the body. Only called from the authenticated portal; session-bound slug.
 
 async function apiDomainTest(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
 
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
@@ -1951,8 +2017,9 @@ async function apiDomainTest(request: Request, env: Env): Promise<Response> {
 // ── POST /api/client/rotate-key ───────────────────────────────────────────
 
 async function apiRotateKey(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
 
   const businesses = await getUserBusinesses(env.DB, ctx.user_id);
   const slug = new URL(request.url).searchParams.get("slug");
@@ -1997,8 +2064,9 @@ function isOnboardingComplete(state: OnboardingState, isHosted: boolean): boolea
 }
 
 async function apiGetOnboarding(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
 
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
@@ -2029,8 +2097,9 @@ async function apiGetOnboarding(request: Request, env: Env): Promise<Response> {
 // here yet — add one if a tenant abuses it.
 
 async function apiPreviewVoice(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
 
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
@@ -2116,8 +2185,9 @@ async function apiPreviewVoice(request: Request, env: Env): Promise<Response> {
 // Cloudflare's edge proxy timeout (~100s) is comfortably above this.
 
 async function apiProfileScore(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
 
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
@@ -2242,8 +2312,9 @@ async function apiBumpCacheVersion(request: Request, env: Env): Promise<Response
 // Apr 30 2026.
 
 async function apiAIRecommendations(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
 
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
@@ -2328,8 +2399,9 @@ async function apiAIRecommendations(request: Request, env: Env): Promise<Respons
 // Returns: { ok, rating, count, url, place_id, quotes[], verified_at }
 //          or { ok:false, reason, message } on failure.
 async function apiVerifyRating(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
 
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
@@ -2447,8 +2519,9 @@ async function handleDemoProxy(request: Request, env: Env, path: string): Promis
 }
 
 async function apiMarkOnboardingStep(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
 
   // Admin impersonation MUST NOT mutate a tenant's onboarding state.
   // Return 200 with a no-op so the dashboard JS doesn't spin on an error.
