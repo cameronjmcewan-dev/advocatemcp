@@ -16,7 +16,6 @@
     businesses: [
       { slug: 'dmre',                 name: 'DMRE',                 domain: 'dmre.com',                 plan: 'pro',  analytics: { total_queries: 412, referral_clicks: 89,  referral_clicks_last_30_days: 47 } },
       { slug: 'workman-copy-co',      name: 'Workman Copy Co',      domain: 'www.workmancopyco.com',    plan: 'base', analytics: { total_queries: 128, referral_clicks: 31,  referral_clicks_last_30_days: 18 } },
-      { slug: 'bamboo-brace',         name: 'Bamboo Brace',         domain: 'bamboobrace.com',          plan: 'pro',  analytics: { total_queries: 247, referral_clicks: 52,  referral_clicks_last_30_days: 34 } },
       { slug: 'hill-country-land-co', name: 'Hill Country Land Co', domain: null,                       plan: 'base', analytics: { total_queries: 63,  referral_clicks: 14,  referral_clicks_last_30_days: 9  } },
       { slug: 'preview-demo',         name: 'Preview Tenant',       domain: 'preview.test',             plan: 'free', analytics: { total_queries: 0,   referral_clicks: 0,   referral_clicks_last_30_days: 0  } },
     ],
