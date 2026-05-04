@@ -545,6 +545,7 @@ async function handleActivatePreviewInner(request: Request, env: Env): Promise<R
   // Look up the canonical signup domain via D1 → tenant via KV.
   let skipDns = false;
   let hostedDomain: string | null = null;
+  let tenantEmail: string | null = null;
   try {
     const row = await env.DB
       .prepare("SELECT domain FROM businesses WHERE slug = ? LIMIT 1")
@@ -556,6 +557,11 @@ async function handleActivatePreviewInner(request: Request, env: Env): Promise<R
         skipDns = true;
         hostedDomain = tenant.domain;
       }
+      // Surface tenant.email so the Pages-side hosted activation form
+      // (advocatemcp.com/activate.html, see site/js/dashboard-activate.js
+      // renderHostedPasswordForm) can pre-fill the read-only email field.
+      // Only emitted when present — DNS-tenant flow ignores this.
+      if (tenant?.email) tenantEmail = tenant.email;
     }
   } catch {
     // Fail-open: best path is the customer seeing the manual domain
@@ -566,6 +572,7 @@ async function handleActivatePreviewInner(request: Request, env: Env): Promise<R
     slug,
     skip_dns: skipDns,
     ...(hostedDomain ? { hosted_domain: hostedDomain } : {}),
+    ...(tenantEmail  ? { email: tenantEmail } : {}),
   });
 }
 

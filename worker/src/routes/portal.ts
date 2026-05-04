@@ -144,14 +144,16 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
       "/team-accept.html":     "https://advocatemcp.com/team-accept.html",
       "/onboarding":           "https://advocatemcp.com/onboarding.html",
       "/onboarding.html":      "https://advocatemcp.com/onboarding.html",
-      // /activate is handled by handleActivatePage below — it renders the
-      // hosted-tenant "Confirm and continue" page in-worker, and only
-      // 302-redirects to advocatemcp.com/activate.html for DNS tenants.
-      // Keeping /activate in this static-redirect table broke the hosted
-      // flow (May 3 2026 — bamboo-brace's activation link 301'd straight
-      // to the DNS form before handleActivatePage could check skipDns).
-      // The /activate.html alias still redirects since no in-worker
-      // dispatch covers that pathname.
+      // Activation pages are now ALL Pages-rendered with brand CSS — both
+      // the hosted "Set your password" form and the DNS "Enter your domain"
+      // form live in site/activate.html, branched at runtime by
+      // dashboard-activate.js based on /api/activate/preview.skip_dns.
+      // The brief detour through worker/handleActivatePage (May 3 2026,
+      // commit 9a855b9) is reverted now that the Pages site handles both
+      // tenant types correctly. handleActivatePage + renderHostedPage in
+      // worker/src/routes/activatePage.ts are kept as dormant fallback
+      // for one release; remove in a follow-up commit.
+      "/activate":             "https://advocatemcp.com/activate.html",
       "/activate.html":        "https://advocatemcp.com/activate.html",
       "/login":                "https://advocatemcp.com/login.html",
       "/login.html":           "https://advocatemcp.com/login.html",

@@ -34,7 +34,7 @@
     // rule sets `display: none` — clearing the inline style would let
     // the CSS rule re-apply and the panel would stay hidden. Setting
     // an explicit 'block' wins over the class rule.
-    ['no-token', 'enter', 'loading', 'success', 'error'].forEach(function (s) {
+    ['no-token', 'enter', 'hosted', 'loading', 'success', 'error'].forEach(function (s) {
       var el = document.getElementById('state-' + s);
       if (el) el.style.display = s === name ? 'block' : 'none';
     });
@@ -752,24 +752,105 @@
       }
       var data = await res.json();
       if (data && data.skip_dns === true) {
-        // Hosted tenant. They have nothing to configure. Show a brief
-        // success state and redirect to the dashboard. The hosted
-        // domain is already provisioned and active in CF SaaS.
-        renderHostedSuccess(data);
-        // Auto-redirect after a moment so the customer sees the
-        // confirmation before the dashboard loads.
-        setTimeout(function () {
-          // .replace() drops the activate ?t= token from browser history
-          // and access logs. Token is single-use server-side, but stripping
-          // it client-side closes the leak window for proxies / shoulder-surf.
-          window.location.replace('https://customers.advocatemcp.com/dashboard');
-        }, 2200);
+        // Hosted tenant — render brand-styled "Set your password" form
+        // (May 3 2026 fix). Previous behavior auto-redirected to /dashboard
+        // assuming a session existed; that broke for self-serve customers
+        // who paid via Stripe but had no users row in D1 yet. The form
+        // POSTs to /api/activate/hosted which creates the user, mints a
+        // session cookie scoped to .advocatemcp.com, and returns 200. We
+        // then redirect to dashboard.html — the cookie carries auth.
+        renderHostedPasswordForm(data);
         return;
       }
       // Custom-domain tenant — show the manual domain entry form.
       setState('enter');
     } catch (_) {
       setState('enter');
+    }
+  }
+
+  /* Render the brand-styled "Set your password" form for hosted-tenant
+     activation. Wires submit → POST customers.advocatemcp.com/api/activate/hosted
+     with credentials:include. On 200, redirect to /dashboard.html — the
+     amcp_refresh cookie set by the worker carries the session across origins
+     because it's scoped to Domain=.advocatemcp.com (worker/src/auth.ts:243).
+     On 4xx, surface the customer_message in the inline error span and stay
+     on this state so the customer can retry. */
+  function renderHostedPasswordForm(data) {
+    var emailEl = document.getElementById('hosted-email');
+    var pwInput = document.getElementById('hosted-password');
+    var btn     = document.getElementById('hosted-submit-btn');
+    var form    = document.getElementById('hosted-form');
+    var errEl   = document.getElementById('hosted-error');
+
+    if (emailEl && data && data.email) emailEl.value = data.email;
+
+    function showErr(msg) {
+      if (!errEl) return;
+      errEl.textContent = msg;
+      errEl.style.display = 'block';
+    }
+    function clearErr() {
+      if (!errEl) return;
+      errEl.textContent = '';
+      errEl.style.display = 'none';
+    }
+
+    if (form && !form.__hostedWired) {
+      form.__hostedWired = true;
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        clearErr();
+
+        var pw = (pwInput && pwInput.value) || '';
+        if (pw.length < 8) {
+          showErr('Password must be at least 8 characters.');
+          return;
+        }
+
+        if (btn) btn.disabled = true;
+        setState('loading');
+
+        fetch('https://customers.advocatemcp.com/api/activate/hosted', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Activation-Token': token
+          },
+          body: JSON.stringify({ password: pw })
+        })
+          .then(function (res) {
+            return res.json().then(function (body) { return { status: res.status, body: body }; });
+          })
+          .then(function (r) {
+            if (btn) btn.disabled = false;
+            if (r.body && r.body.ok) {
+              // Success — cookie is set on .advocatemcp.com. Bounce to dashboard;
+              // dashboard-auth.js will exchange the cookie for an access token.
+              window.location.replace('https://advocatemcp.com/dashboard.html');
+              return;
+            }
+            var msg = (r.body && r.body.customer_message)
+                      || (r.body && r.body.error_code)
+                      || 'Something went wrong. Please try again.';
+            showErr(msg);
+            setState('hosted');
+          })
+          .catch(function () {
+            if (btn) btn.disabled = false;
+            showErr("We couldn't reach our servers. Please check your internet connection and try again.");
+            setState('hosted');
+          });
+      });
+    }
+
+    setState('hosted');
+    if (pwInput) {
+      // Nudge focus to the password field for a smoother UX. setTimeout
+      // because some mobile browsers ignore focus calls fired during a
+      // synchronous render pass.
+      setTimeout(function () { try { pwInput.focus(); } catch (_) {} }, 50);
     }
   }
 

@@ -157,6 +157,14 @@ function escapeHtml(s: string): string {
 }
 
 // ── Hosted page HTML ─────────────────────────────────────────────────────────
+//
+// @deprecated (May 3 2026). The hosted-tenant activation page now renders on
+// the Pages site at advocatemcp.com/activate.html using the brand CSS
+// (site/activate.html state-hosted + site/js/dashboard-activate.js
+// renderHostedPasswordForm). worker/src/routes/portal.ts now redirects
+// /activate to Pages for both hosted AND DNS tenants. This function is
+// kept dormant for one release as a quick rollback path; remove in a
+// follow-up after the Pages flow proves stable.
 
 function renderHostedPage(escapedToken: string, hostedUrl: string, email: string, userHasPassword: boolean): string {
   return `<!DOCTYPE html>

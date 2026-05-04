@@ -194,6 +194,41 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
     </p>
   </div>
 
+  <!-- ── State: hosted (set password for hosted-tenant signup) ──
+       Customer signed up via the self-serve wizard with skipDns:true →
+       their tenant lives at <slug>.hosted.advocatemcp.com (no DNS to
+       configure). Activation here is purely "set a password to log in".
+       The form POSTs to customers.advocatemcp.com/api/activate/hosted
+       which creates the user, mints a session cookie, and we redirect
+       to the dashboard. -->
+  <div id="state-hosted" class="state-panel">
+    <h1 class="act-h">Set your password</h1>
+    <p class="act-sub">
+      Choose a password for your AdvocateMCP dashboard. You'll use this
+      email and password to log in.
+    </p>
+
+    <form id="hosted-form" novalidate>
+      <div class="fg">
+        <label class="fl" for="hosted-email">Email</label>
+        <input class="fi" id="hosted-email" type="email" readonly />
+        <div class="fi-hint">This is the email you signed up with.</div>
+      </div>
+
+      <div class="fg">
+        <label class="fl" for="hosted-password">Password</label>
+        <input class="fi" id="hosted-password" type="password" minlength="8"
+               autocomplete="new-password"
+               placeholder="At least 8 characters" required />
+        <div id="hosted-error" style="display:none;color:var(--red,#a13a3a);margin-top:6px;font-size:.8125rem"></div>
+      </div>
+
+      <button type="submit" class="btn-submit" id="hosted-submit-btn">
+        Set password and continue &rarr;
+      </button>
+    </form>
+  </div>
+
   <!-- ── State: enter domain ── -->
   <div id="state-enter" class="state-panel">
     <h1 class="act-h">Activate your domain</h1>
