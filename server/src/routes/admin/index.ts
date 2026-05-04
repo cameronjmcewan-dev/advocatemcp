@@ -10,6 +10,7 @@ import { adminRevenueEventsRouter } from "./revenueEvents.js";
 import { adminFaqsRouter } from "./faqs.js";
 import { adminCompetitorsRouter } from "./competitors.js";
 import { probeDomainRouter } from "./probeDomain.js";
+import { purgeTenantRouter } from "./purgeTenant.js";
 
 /**
  * Bearer-token auth gate for /admin/* — keyed on ADMIN_API_KEY env var.
@@ -71,6 +72,7 @@ adminRouter.use("/admin", requireAdmin, adminAuditsRouter);
 adminRouter.use("/admin", requireAdmin, adminAuditBatchRouter);
 adminRouter.use("/admin", requireAdmin, adminExperimentsRouter);
 adminRouter.use("/admin", requireAdmin, probeDomainRouter);
+adminRouter.use("/admin", requireAdmin, purgeTenantRouter);
 // Worker → Railway revenue_events mirror (Apr 27 2026). Uses
 // requireApiKey (X-API-Key / Bearer SERVER_API_KEY) instead of
 // requireAdmin so the worker's existing env.API_KEY authenticates it.
