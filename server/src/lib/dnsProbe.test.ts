@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { probeDns } from "./dnsProbe";
+import { probeDns } from "./dnsProbe.js";
 
 describe("probeDns", () => {
   const fetchMock = vi.fn();
