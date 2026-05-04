@@ -30,7 +30,13 @@ export async function probeDns(
     return { ok: false, error: `DoH returned HTTP ${res.status}` };
   }
 
-  const body = (await res.json()) as { Answer?: Array<{ data: string; type: number }> };
+  let body: { Answer?: Array<{ data: string; type: number }> };
+  try {
+    body = (await res.json()) as { Answer?: Array<{ data: string; type: number }> };
+  } catch {
+    return { ok: false, error: "failed to parse DoH response (not JSON)" };
+  }
+
   const cname = body.Answer?.find((a) => a.type === 5);
   if (!cname) {
     return { ok: false, error: "no CNAME record found" };

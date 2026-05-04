@@ -73,6 +73,17 @@ describe("probeDns", () => {
     expect(result.error).toMatch(/network down/);
   });
 
+  it("returns err when response body is not JSON", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response("<html>upstream error</html>", { status: 200, headers: { "content-type": "text/html" } }),
+    );
+
+    const result = await probeDns("www.example.com", "customers.advocatemcp.com");
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/failed to parse DoH response/i);
+  });
+
   it("is case-insensitive and tolerates trailing dots", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
