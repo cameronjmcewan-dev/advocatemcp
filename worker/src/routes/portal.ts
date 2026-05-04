@@ -242,7 +242,6 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/radar/basket"  && method === "POST")   return apiRadarBasketAdd(request, env);
   if (radarBasketDel && method === "DELETE")                            return apiRadarBasketDelete(request, env, radarBasketDel[1]);
   if (pathname === "/api/client/domain-info"   && method === "GET")    return apiDomainInfo(request, env);
-  if (pathname === "/api/client/domain-test"   && method === "GET")    return apiDomainTest(request, env);
   if (pathname === "/api/client/onboarding"      && method === "GET")  return apiGetOnboarding(request, env);
   if (pathname === "/api/client/onboarding/step" && method === "POST") return apiMarkOnboardingStep(request, env);
   if (pathname === "/api/client/preview-voice"   && method === "POST") return apiPreviewVoice(request, env);
@@ -342,7 +341,6 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/radar/basket"  && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (radarBasketDel && method === "OPTIONS")                            return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/domain-info"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
-  if (pathname === "/api/client/domain-test"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/onboarding"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/onboarding/step" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/preview-voice"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
@@ -1740,172 +1738,171 @@ async function apiRadarBasketDelete(request: Request, env: Env, basketId: string
 // ── GET /api/client/domain-info ───────────────────────────────────────────
 // Session-authed status surface for the Domains dashboard section.
 //
-// Combines three sources:
-//   1. cf_hostname   — pulled live from the Cloudflare API when
-//                      CF_API_TOKEN/CF_ZONE_ID are set on the Worker;
-//                      otherwise surfaced as "permission check required".
-//   2. worker_route  — full introspection requires Workers Routes:Read scope
-//                      which this token lacks. Return present: null with a
-//                      computed pattern so the UI can signal "unknown".
-//   3. last_bot_hit  — derived from the tenant's /analytics/:slug payload
-//                      (max timestamp across recent_queries).
+// Proxies to Railway's POST /admin/probe-domain for DNS + live-request
+// signals (only Railway can reach arbitrary origins without CF loop
+// protection). Overlays three CF-API-derived signals that only the Worker
+// can fetch because the scoped CF_API_TOKEN lives here, not on Railway.
 
-async function apiDomainInfo(request: Request, env: Env): Promise<Response> {
-  const ctx = await getSessionFromRequest(request, env);
-  if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
+// ── Domain status cache ────────────────────────────────────────────────────
+// 30s TTL absorbs the wizard's 10s polling cadence without hammering Railway.
 
-  const businesses = ctx.role === "admin"
-    ? await getActiveBusinesses(env.DB)
-    : await getUserBusinesses(env.DB, ctx.user_id);
-  const slug = new URL(request.url).searchParams.get("slug");
-  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
-  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+type SignalState = "ok" | "err" | "waiting";
+type Signal<D = unknown> = { state: SignalState; message: string; detail?: D };
 
-  // Pull cf_hostname_id from D1 — the raw admin endpoint does this too but
-  // we keep the query here so the session-authed helper does not leak the
-  // admin secret to anyone.
-  const row = await env.DB
-    .prepare("SELECT cf_hostname_id FROM businesses WHERE slug = ? LIMIT 1")
-    .bind(biz.slug)
-    .first<{ cf_hostname_id: string | null }>();
-
-  let cfHostname: {
-    status: string;
-    ssl_status: string;
-    ownership_verified: boolean | null;
-    note?: string;
-  } = {
-    status:             "unknown",
-    ssl_status:         "unknown",
-    ownership_verified: null,
-    note:               "no cf_hostname_id on record",
+type DomainStatus = {
+  domain: string;
+  slug: string;
+  checked_at: string;
+  signals: {
+    dns:           Signal<{ resolved_target?: string; expected_target?: string }>;
+    cf_hostname:   Signal<{ cf_status?: string; ownership_verified?: boolean | null; ssl_status?: string }>;
+    cf_ssl:        Signal<{ cf_ssl_status?: string }>;
+    worker_route:  Signal<{ pattern_expected?: string }>;
+    live_request:  Signal<{ status_code?: number; latency_ms?: number; marker_present?: boolean; error?: string }>;
   };
+  all_green: boolean;
+};
 
-  if (row?.cf_hostname_id) {
-    if (env.CF_API_TOKEN && env.CF_ZONE_ID) {
-      const { ok, data } = await cfRequest(env, "GET", `/${row.cf_hostname_id}`);
-      if (ok) {
-        const result = data.result as Record<string, unknown> | undefined;
-        const ssl    = result?.ssl as Record<string, unknown> | undefined;
-        const ownershipStatus = result?.ownership_verification_status as string | undefined;
-        cfHostname = {
-          status:             (result?.status as string) ?? "unknown",
-          ssl_status:         (ssl?.status as string) ?? "unknown",
-          ownership_verified: ownershipStatus === "success",
-        };
-      } else {
-        cfHostname.note = "cloudflare API error";
-      }
-    } else {
-      cfHostname.note = "permission check required — CF_API_TOKEN / CF_ZONE_ID not configured on Worker";
-    }
+const DOMAIN_STATUS_CACHE = new Map<string, { value: DomainStatus; expires_at: number }>();
+const DOMAIN_STATUS_CACHE_TTL_MS = 30_000;
+
+function readDomainStatusCache(slug: string): DomainStatus | null {
+  const hit = DOMAIN_STATUS_CACHE.get(slug);
+  if (!hit) return null;
+  if (Date.now() > hit.expires_at) {
+    DOMAIN_STATUS_CACHE.delete(slug);
+    return null;
   }
-
-  // Worker Route introspection via CF Workers Routes API.
-  //
-  // We previously did an empirical self-probe (fetch https://{domain}/ with a
-  // bot UA and check for `ai_generated:true + powered_by:"AdvocateMCP"`). That
-  // approach fails on Cloudflare Workers because a Worker's fetch() to a URL
-  // served by the same Worker script hits CF's subrequest-loop protection
-  // and returns 522/empty/timeout — producing a false "missing" even when
-  // the route is live and serving real bot traffic (verified via direct
-  // curl + queries.last_bot_hit showing recent activity).
-  //
-  // Now: query CF's authoritative Workers Routes list and check for a
-  // pattern matching `{domain}/*`. Requires `Workers Routes: Read` scope
-  // on CF_API_TOKEN (we added this Apr 16 2026 for auto-provisioning).
-  const workerRoutePattern = biz.domain ? `${biz.domain}/*` : null;
-  let workerRoutePresent: boolean | null = null;
-  let workerRouteNote: string | undefined;
-
-  if (biz.domain && workerRoutePattern) {
-    if (!env.CF_API_TOKEN || !env.CF_ZONE_ID) {
-      workerRouteNote = "CF_API_TOKEN / CF_ZONE_ID not configured; cannot verify";
-    } else {
-      try {
-        const listRes = await fetch(
-          `https://api.cloudflare.com/client/v4/zones/${env.CF_ZONE_ID}/workers/routes`,
-          {
-            headers: { Authorization: `Bearer ${env.CF_API_TOKEN}` },
-            signal: AbortSignal.timeout(5000),
-          },
-        );
-        if (!listRes.ok) {
-          workerRouteNote = `CF routes API returned HTTP ${listRes.status}`;
-        } else {
-          const data = await listRes.json() as {
-            success?: boolean;
-            result?: Array<{ pattern: string; script: string; id: string }>;
-          };
-          if (data.success === true && Array.isArray(data.result)) {
-            const matching = data.result.find((r) => r.pattern === workerRoutePattern);
-            workerRoutePresent = Boolean(matching);
-            if (!matching) {
-              // Also accept wildcard parent matches (e.g. *.hosted.advocatemcp.com/*
-              // covers any subdomain under our hosted namespace without a
-              // per-tenant entry).
-              const wildcardMatch = data.result.find((r) => {
-                if (!r.pattern.startsWith("*.")) return false;
-                const parent = r.pattern.replace(/^\*\./, "").replace(/\/\*$/, "");
-                return biz.domain!.endsWith("." + parent);
-              });
-              if (wildcardMatch) {
-                workerRoutePresent = true;
-                workerRouteNote = `covered by wildcard route ${wildcardMatch.pattern}`;
-              }
-            }
-          } else {
-            workerRouteNote = "CF routes API returned unexpected shape";
-          }
-        }
-      } catch (err) {
-        workerRouteNote = `CF routes API fetch failed: ${err instanceof Error ? err.message : "unknown"}`;
-      }
-    }
-  }
-
-  // last_bot_hit — piggyback on the analytics fetch we already do. Only read
-  // max(timestamp) from recent_queries.
-  let lastBotHit: string | null = null;
-  try {
-    const analytics = await fetchAnalytics(biz, env);
-    const recents = analytics?.recent_queries ?? [];
-    if (recents.length > 0) {
-      const maxTs = recents
-        .map((q) => q.timestamp)
-        .filter((t): t is string => typeof t === "string")
-        .sort()
-        .pop();
-      lastBotHit = maxTs ?? null;
-    }
-  } catch {
-    /* non-fatal */
-  }
-
-  return withCors(
-    jsonOk({
-      slug:          biz.slug,
-      business_name: biz.business_name,
-      domain:        biz.domain ?? null,
-      cf_hostname:   cfHostname,
-      worker_route:  { present: workerRoutePresent, pattern: workerRoutePattern, note: workerRouteNote },
-      last_bot_hit:  lastBotHit,
-    }),
-    request,
-    { credentials: true },
-  );
+  return hit.value;
 }
 
-// ── GET /api/client/domain-test ───────────────────────────────────────────
-// Server-side fetch of the tenant's domain with a crawler User-Agent so the
-// dashboard can visually verify that bot traffic is flowing through the
-// Worker. Browsers cannot override User-Agent on fetch() for security
-// reasons, so the Worker does it on their behalf.
-//
-// Capped at ~10s total and returns the HTTP status + first 200 chars of
-// the body. Only called from the authenticated portal; session-bound slug.
+function writeDomainStatusCache(slug: string, value: DomainStatus): void {
+  DOMAIN_STATUS_CACHE.set(slug, { value, expires_at: Date.now() + DOMAIN_STATUS_CACHE_TTL_MS });
+}
 
-async function apiDomainTest(request: Request, env: Env): Promise<Response> {
+// ── Cloudflare-derived signals (Worker-only — needs CF API token scopes) ──
+
+async function fetchCfHostnameSignal(env: Env, slug: string): Promise<Signal<{
+  cf_status?: string; ownership_verified?: boolean | null; ssl_status?: string;
+}>> {
+  const row = await env.DB
+    .prepare("SELECT cf_hostname_id FROM businesses WHERE slug = ? LIMIT 1")
+    .bind(slug)
+    .first<{ cf_hostname_id: string | null }>();
+
+  if (!row?.cf_hostname_id) {
+    return { state: "waiting", message: "Cloudflare hostname not yet created.", detail: {} };
+  }
+  if (!env.CF_API_TOKEN || !env.CF_ZONE_ID) {
+    return { state: "err", message: "Server not configured for Cloudflare API access.", detail: {} };
+  }
+
+  const { ok, data } = await cfRequest(env, "GET", `/${row.cf_hostname_id}`);
+  if (!ok) {
+    return { state: "err", message: "Cloudflare API call failed.", detail: {} };
+  }
+  // CF API returns a loose shape; narrow at access sites.
+  const result = (data as { result?: Record<string, unknown> }).result;
+  const ssl = result?.ssl as Record<string, unknown> | undefined;
+  const cfStatus = (result?.status as string) ?? "unknown";
+  const sslStatus = (ssl?.status as string) ?? "unknown";
+  const ownershipStatus = result?.ownership_verification_status as string | undefined;
+
+  const detail = {
+    cf_status: cfStatus,
+    ownership_verified: ownershipStatus === "success",
+    ssl_status: sslStatus,
+  };
+
+  if (cfStatus === "active") {
+    return { state: "ok", message: "Cloudflare has activated your domain.", detail };
+  }
+  if (cfStatus === "pending_validation" || cfStatus === "pending") {
+    return {
+      state: "waiting",
+      message: "Cloudflare is validating your domain — usually 2–10 minutes.",
+      detail,
+    };
+  }
+  return {
+    state: "err",
+    message: `Cloudflare hostname status: ${cfStatus}. Check that your TXT record matches what we sent you.`,
+    detail,
+  };
+}
+
+function deriveSslSignal(cfSignal: Signal<{ ssl_status?: string }>): Signal<{ cf_ssl_status?: string }> {
+  const sslStatus = cfSignal.detail?.ssl_status ?? "unknown";
+  if (sslStatus === "active") {
+    return { state: "ok", message: "SSL certificate is issued.", detail: { cf_ssl_status: sslStatus } };
+  }
+  if (sslStatus === "pending_validation" || sslStatus === "pending_deployment" || sslStatus === "initializing") {
+    return {
+      state: "waiting",
+      message: "SSL certificate is being issued — usually 2–10 minutes.",
+      detail: { cf_ssl_status: sslStatus },
+    };
+  }
+  return {
+    state: "err",
+    message: `SSL status: ${sslStatus}. May need a TXT record correction.`,
+    detail: { cf_ssl_status: sslStatus },
+  };
+}
+
+async function fetchWorkerRouteSignal(env: Env, domain: string): Promise<Signal<{ pattern_expected: string }>> {
+  const pattern = `${domain}/*`;
+  if (!env.CF_API_TOKEN || !env.CF_ZONE_ID) {
+    return {
+      state: "err",
+      message: "Server not configured for Cloudflare API access.",
+      detail: { pattern_expected: pattern },
+    };
+  }
+  try {
+    const r = await fetch(
+      `https://api.cloudflare.com/client/v4/zones/${env.CF_ZONE_ID}/workers/routes`,
+      { headers: { Authorization: `Bearer ${env.CF_API_TOKEN}` }, signal: AbortSignal.timeout(5_000) },
+    );
+    if (!r.ok) {
+      return {
+        state: "err",
+        message: `Cloudflare routes API returned HTTP ${r.status}.`,
+        detail: { pattern_expected: pattern },
+      };
+    }
+    const data = (await r.json()) as { result?: Array<{ pattern: string }> };
+    const exact = data.result?.find((rt) => rt.pattern === pattern);
+    if (exact) {
+      return { state: "ok", message: "Crawler route is active.", detail: { pattern_expected: pattern } };
+    }
+    const wildcard = data.result?.find((rt) => {
+      if (!rt.pattern.startsWith("*.")) return false;
+      const parent = rt.pattern.replace(/^\*\./, "").replace(/\/\*$/, "");
+      return domain.endsWith(`.${parent}`);
+    });
+    if (wildcard) {
+      return {
+        state: "ok",
+        message: `Crawler route is active (covered by wildcard ${wildcard.pattern}).`,
+        detail: { pattern_expected: pattern },
+      };
+    }
+    return {
+      state: "waiting",
+      message: "Crawler route hasn't been wired up on our side yet — we'll provision it automatically.",
+      detail: { pattern_expected: pattern },
+    };
+  } catch (err) {
+    return {
+      state: "err",
+      message: `Cloudflare routes API call failed: ${err instanceof Error ? err.message : String(err)}.`,
+      detail: { pattern_expected: pattern },
+    };
+  }
+}
+
+async function apiDomainInfo(request: Request, env: Env): Promise<Response> {
   const ctx = await getSessionFromRequest(request, env);
   if (!ctx) return withCors(jsonErr(401, "Unauthorized"), request, { credentials: true });
 
@@ -1919,32 +1916,48 @@ async function apiDomainTest(request: Request, env: Env): Promise<Response> {
     return withCors(jsonErr(400, "No domain registered for this business"), request, { credentials: true });
   }
 
-  const target = `https://${biz.domain}/`;
+  const cached = readDomainStatusCache(biz.slug);
+  if (cached) {
+    return withCors(jsonOk(cached), request, { credentials: true });
+  }
+
+  const railwayBase = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  let railwayStatus: DomainStatus;
   try {
-    const res = await fetch(target, {
-      headers: { "User-Agent": "PerplexityBot/1.0 (advocate dashboard test)" },
-      signal: AbortSignal.timeout(10_000),
+    const r = await fetch(`${railwayBase}/admin/probe-domain`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(env.ADMIN_API_KEY ? { "X-Admin-Key": env.ADMIN_API_KEY, "Authorization": `Bearer ${env.ADMIN_API_KEY}` } : {}),
+      },
+      body: JSON.stringify({ domain: biz.domain, slug: biz.slug }),
+      signal: AbortSignal.timeout(12_000),
     });
-    const body = await res.text();
-    const snippet = body.length > 200 ? body.slice(0, 200) + "…" : body;
-    return withCors(
-      jsonOk({
-        url:         target,
-        status:      res.status,
-        status_text: res.statusText,
-        content_type: res.headers.get("Content-Type") ?? null,
-        snippet,
-      }),
-      request,
-      { credentials: true },
-    );
+    if (!r.ok) {
+      return withCors(jsonErr(502, `Probe service returned HTTP ${r.status}`), request, { credentials: true });
+    }
+    railwayStatus = (await r.json()) as DomainStatus;
   } catch (err) {
     return withCors(
-      jsonErr(502, `Fetch failed: ${String(err)}`),
+      jsonErr(502, `Probe service unreachable: ${err instanceof Error ? err.message : String(err)}`),
       request,
       { credentials: true },
     );
   }
+
+  const cfHostnameSignal = await fetchCfHostnameSignal(env, biz.slug);
+  const cfSslSignal      = deriveSslSignal(cfHostnameSignal);
+  const workerRouteSignal = await fetchWorkerRouteSignal(env, biz.domain);
+
+  railwayStatus.signals.cf_hostname  = cfHostnameSignal;
+  railwayStatus.signals.cf_ssl       = cfSslSignal;
+  railwayStatus.signals.worker_route = workerRouteSignal;
+
+  railwayStatus.all_green = (["dns", "cf_hostname", "cf_ssl", "worker_route", "live_request"] as const)
+    .every((k) => railwayStatus.signals[k]?.state === "ok");
+
+  writeDomainStatusCache(biz.slug, railwayStatus);
+  return withCors(jsonOk(railwayStatus), request, { credentials: true });
 }
 
 // ── POST /api/client/rotate-key ───────────────────────────────────────────
