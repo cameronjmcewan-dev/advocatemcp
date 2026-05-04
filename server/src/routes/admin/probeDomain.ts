@@ -12,6 +12,10 @@ const ProbeSchema = z.object({
   slug:   z.string().min(1).max(64),
 });
 
+// NOTE: Signal / DomainStatus must stay structurally in sync with
+// worker/src/routes/portal.ts — the Worker casts the response from this
+// endpoint directly to its DomainStatus type. Renaming a field here without
+// updating the Worker breaks the wizard at runtime, not at build time.
 type SignalState = "ok" | "err" | "waiting";
 type Signal<D = unknown> = { state: SignalState; message: string; detail?: D };
 

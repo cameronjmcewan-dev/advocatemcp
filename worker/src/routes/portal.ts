@@ -1746,6 +1746,10 @@ async function apiRadarBasketDelete(request: Request, env: Env, basketId: string
 // ── Domain status cache ────────────────────────────────────────────────────
 // 30s TTL absorbs the wizard's 10s polling cadence without hammering Railway.
 
+// NOTE: Signal / DomainStatus must stay structurally in sync with
+// server/src/routes/admin/probeDomain.ts — the Worker casts the Railway
+// response directly to DomainStatus, so a server-side rename will silently
+// break this contract until something at runtime explodes.
 type SignalState = "ok" | "err" | "waiting";
 type Signal<D = unknown> = { state: SignalState; message: string; detail?: D };
 
@@ -1785,10 +1789,15 @@ function writeDomainStatusCache(slug: string, value: DomainStatus): void {
 async function fetchCfHostnameSignal(env: Env, slug: string): Promise<Signal<{
   cf_status?: string; ownership_verified?: boolean | null; ssl_status?: string;
 }>> {
-  const row = await env.DB
-    .prepare("SELECT cf_hostname_id FROM businesses WHERE slug = ? LIMIT 1")
-    .bind(slug)
-    .first<{ cf_hostname_id: string | null }>();
+  let row: { cf_hostname_id: string | null } | null;
+  try {
+    row = await env.DB
+      .prepare("SELECT cf_hostname_id FROM businesses WHERE slug = ? LIMIT 1")
+      .bind(slug)
+      .first<{ cf_hostname_id: string | null }>();
+  } catch {
+    return { state: "err", message: "Database read failed.", detail: {} };
+  }
 
   if (!row?.cf_hostname_id) {
     return { state: "waiting", message: "Cloudflare hostname not yet created.", detail: {} };
