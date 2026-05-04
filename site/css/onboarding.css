@@ -374,7 +374,7 @@
 }
 .amcp-dns-light {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   padding: 12px 14px;
   background: var(--surface);
@@ -385,10 +385,26 @@
 .amcp-dns-light-dot {
   width: 10px;
   height: 10px;
+  margin-top: 6px;
   border-radius: 999px;
   background: var(--border);
   flex-shrink: 0;
   transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+.amcp-dns-light-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+.amcp-dns-light-label {
+  color: var(--text);
+  font-weight: 600;
+}
+.amcp-dns-light-message {
+  color: var(--muted);
+  font-size: var(--tx-xs);
+  line-height: 1.5;
 }
 .amcp-dns-light.waiting .amcp-dns-light-dot {
   background: #c08a30;
@@ -401,14 +417,39 @@
 .amcp-dns-light.err .amcp-dns-light-dot {
   background: #b84242;
 }
+.amcp-dns-light.err .amcp-dns-light-message {
+  color: var(--red);
+}
 @keyframes amcpDnsPulse {
   0%, 100% { opacity: 0.45; }
   50%      { opacity: 1; }
 }
-.amcp-dns-light-label { color: var(--text); flex: 1; }
-.amcp-dns-light-hint {
+
+.amcp-dns-status-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+.amcp-dns-status-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.amcp-dns-status-title {
+  font-weight: 600;
+  color: var(--text);
+}
+.amcp-dns-status-meta {
+  margin-top: 10px;
   font-size: var(--tx-xs);
   color: var(--muted);
+}
+.amcp-dns-empty {
+  color: var(--muted);
+  font-size: var(--tx-sm);
+  padding: 12px 0;
 }
 
 .amcp-dns-success {
