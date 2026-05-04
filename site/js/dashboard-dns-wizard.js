@@ -7,11 +7,9 @@
  *      Selection cached in localStorage so return visits skip this stage.
  *   2. Instructions   , schematic SVG diagram + copyable CNAME/TXT
  *                         record values specific to the chosen provider.
- *   3. Verification   , four live status lights (DoH probe, CF hostname
- *                         active, SSL active, Worker Route present),
- *                         polling /api/client/domain-info every 10s until
- *                         all four go green, then marks
- *                         checklist.dns_configured complete.
+ *   3. Verification   , delegates to window.AMCP_DNS_STATUS.startPolling
+ *                         which renders all signals; wizard handles the
+ *                         on-all-green hook (toast + checklist mark).
  *
  * Public API (window.AMCP_DNS_WIZARD):
  *   open(initialProvider?), open the drawer at the appropriate stage.
@@ -22,6 +20,7 @@
  *   window.AMCP.authedFetch (dashboard-auth.js)
  *   window.AMCP_UI.openDrawer / closeDrawer / toast (dashboard-ui.js)
  *   window.AMCP_DATA (slug, domain), metrics fetch in dashboard shell
+ *   window.AMCP_DNS_STATUS.startPolling (dashboard-dns-status.js)
  *   window.AMCP_ONBOARDING.markStep (dashboard-onboarding.js), to tick
  *                            checklist.dns_configured on first all-green.
  */
@@ -35,8 +34,6 @@
 
   var _stage    = STAGE_PICKER;
   var _provider = null;   // one of 'godaddy' | 'namecheap' | 'cloudflare'
-  var _pollTimer = null;  // interval id for /domain-info polling
-  var _lastStatus = null; // last parsed status object
 
   var LOCAL_STORAGE_KEY = 'amcp-dns-provider';
   var POLL_INTERVAL_MS  = 10000;
@@ -223,11 +220,11 @@
       '<div class="amcp-dns-step">' +
         '<div class="amcp-dns-step-title">Where is ' + escHtml(domain) + ' registered?</div>' +
         '<div class="amcp-dns-step-copy">' +
-          'Pick your DNS provider and we\u2019ll show step-by-step instructions with copyable record values.' +
+          'Pick your DNS provider and we’ll show step-by-step instructions with copyable record values.' +
         '</div>' +
         '<div class="amcp-dns-providers" id="amcp-dns-picker-grid">' + cards + '</div>' +
         '<div style="margin-top:16px;font-size:var(--tx-xs);color:var(--muted)">' +
-          'Your choice is remembered locally \u2014 next time you open this wizard, we\u2019ll jump straight to instructions.' +
+          'Your choice is remembered locally — next time you open this wizard, we’ll jump straight to instructions.' +
         '</div>' +
       '</div>'
     );
@@ -379,7 +376,7 @@
         '<div id="amcp-dns-records">' +
           _recordHTML('CNAME', cnameName, CNAME_TARGET, CNAME_TARGET) +
           '<div id="amcp-dns-txt-slot" style="color:var(--muted);font-size:var(--tx-xs);padding:4px 2px">' +
-            'Loading TXT record\u2026' +
+            'Loading TXT record…' +
           '</div>' +
         '</div>' +
         '<div style="margin-top:18px;display:flex;gap:10px;justify-content:flex-end">' +
@@ -433,7 +430,7 @@
       })
       .catch(function () {
         var slot = document.getElementById('amcp-dns-txt-slot');
-        if (slot) slot.textContent = 'Could not load TXT record. The CNAME alone will still work \u2014 you can re-check later.';
+        if (slot) slot.textContent = 'Could not load TXT record. The CNAME alone will still work — you can re-check later.';
       });
   }
 
@@ -475,48 +472,23 @@
 
   /* ── Stage 3: verification ──────────────────────────────────────────────── */
   /*
-   * Four live status lights:
-   *   1. DNS lookup       , DoH probe to cloudflare-dns.com/dns-query.
-   *                           Fastest signal; confirms the CNAME resolves.
-   *   2. Cloudflare hostname, cf_hostname.status === 'active'
-   *   3. SSL certificate  , cf_hostname.ssl_status === 'active'
-   *   4. Crawler route    , worker_route.present === true
-   *
-   * Poll /api/client/domain-info every 10s. First check fires immediately
-   * on stage entry so the user sees progress without waiting.
-   *
-   * When all four go green, show the success block, mark
-   * checklist.dns_configured, and stop polling.
+   * Stage 3 is now a thin host. The actual rendering + polling lives in
+   * dashboard-dns-status.js (window.AMCP_DNS_STATUS). The wizard provides
+   * the container and the on-all-green hook (toast + checklist mark).
    */
-  var LIGHTS = [
-    { id: 'dns_lookup', label: 'DNS record detected',        hint: 'We look up your CNAME via Cloudflare DNS.' },
-    { id: 'cf_active',  label: 'Cloudflare hostname active', hint: 'Your domain has been registered with Cloudflare SaaS.' },
-    { id: 'ssl_active', label: 'SSL certificate issued',     hint: 'Encryption is provisioned and ready.' },
-    { id: 'route_ready', label: 'AI crawler route live',     hint: 'AdvocateMCP is intercepting crawler traffic.' },
-  ];
-
-  var _allGreen       = false;
-  var _pollingStarted = false;
+  var _statusHandle = null;
+  var _allGreen = false;
 
   function _renderVerify() {
-    var lightsHTML = LIGHTS.map(function (l) {
-      return (
-        '<div class="amcp-dns-light waiting" data-check="' + escHtml(l.id) + '">' +
-          '<span class="amcp-dns-light-dot"></span>' +
-          '<span class="amcp-dns-light-label">' + escHtml(l.label) + '</span>' +
-          '<span class="amcp-dns-light-hint">' + escHtml(l.hint) + '</span>' +
-        '</div>'
-      );
-    }).join('');
-
     return (
       '<div class="amcp-dns-step">' +
         '<div class="amcp-dns-step-title">Verifying DNS</div>' +
         '<div class="amcp-dns-step-copy">' +
-          'DNS changes usually propagate within a few minutes but can take up to an hour. This page polls every 10 seconds \u2014 feel free to leave it open.' +
+          'DNS changes usually propagate within a few minutes but can take up to an hour. ' +
+          'This page polls every 10 seconds — feel free to leave it open.' +
         '</div>' +
         '<div id="amcp-dns-success-slot"></div>' +
-        '<div class="amcp-dns-lights" id="amcp-dns-lights">' + lightsHTML + '</div>' +
+        '<div id="amcp-dns-status-container"></div>' +
         '<div style="margin-top:18px;display:flex;gap:10px;justify-content:flex-end">' +
           '<button id="amcp-dns-verify-back" class="amcp-welcome-btn amcp-welcome-btn-ghost">Back to instructions</button>' +
         '</div>' +
@@ -533,103 +505,32 @@
     _startPolling();
   }
 
-  /* ── Polling lifecycle ──────────────────────────────────────────────────── */
   function _startPolling() {
     _stopPolling();
     _allGreen = false;
-    _pollingStarted = true;
-    _doPoll();
-    _pollTimer = setInterval(_doPoll, POLL_INTERVAL_MS);
+    var container = document.getElementById('amcp-dns-status-container');
+    var slug = currentSlug();
+    if (!container || !slug || !window.AMCP_DNS_STATUS) return;
+    _statusHandle = window.AMCP_DNS_STATUS.startPolling(container, slug, POLL_INTERVAL_MS, function (status) {
+      _onAllGreen(status);
+    });
   }
 
   function _stopPolling() {
-    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
-    _pollingStarted = false;
+    if (_statusHandle && typeof _statusHandle.stop === 'function') {
+      _statusHandle.stop();
+    }
+    _statusHandle = null;
   }
 
-  function _doPoll() {
-    var slug   = currentSlug();
-    var domain = currentDomain();
-    if (!slug) return;
-
-    // Fire DoH + domain-info in parallel.
-    var probe = _probeDoh(domain);
-    var info  = window.AMCP && typeof window.AMCP.authedFetch === 'function'
-      ? window.AMCP.authedFetch('/api/client/domain-info?slug=' + encodeURIComponent(slug))
-          .then(function (r) { return r.ok ? r.json() : null; })
-          .catch(function () { return null; })
-      : Promise.resolve(null);
-
-    Promise.all([probe, info]).then(function (results) {
-      var dohOk = !!results[0];
-      var data  = results[1] || {};
-      _lastStatus = data;
-      var statuses = _computeStatuses(dohOk, data);
-      _updateLights(statuses);
-      if (_allFour(statuses) && !_allGreen) {
-        _allGreen = true;
-        _onAllGreen();
-      }
-    });
-  }
-
-  /* Query cloudflare-dns.com/dns-query for a CNAME record on the host. Short
-   * timeout; returns false on any error. Resolving to any Answer counts as
-   * success, we don't check the target value because DoH sees the chain
-   * before it follows it. */
-  function _probeDoh(host) {
-    if (!host) return Promise.resolve(false);
-    var url = 'https://cloudflare-dns.com/dns-query?name=' + encodeURIComponent(host) + '&type=CNAME';
-    var ctrl = ('AbortController' in window) ? new AbortController() : null;
-    var t = ctrl ? setTimeout(function () { ctrl.abort(); }, 6000) : null;
-    return fetch(url, {
-      headers: { Accept: 'application/dns-json' },
-      signal:  ctrl ? ctrl.signal : undefined,
-    })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (body) {
-        if (t) clearTimeout(t);
-        if (!body) return false;
-        return Array.isArray(body.Answer) && body.Answer.length > 0;
-      })
-      .catch(function () {
-        if (t) clearTimeout(t);
-        return false;
-      });
-  }
-
-  function _computeStatuses(dohOk, data) {
-    var cf = (data && data.cf_hostname) || {};
-    var wr = (data && data.worker_route) || {};
-    return {
-      dns_lookup:  dohOk                            ? 'ok' : 'waiting',
-      cf_active:   cf.status === 'active'           ? 'ok' : (cf.status === 'bad' ? 'err' : 'waiting'),
-      ssl_active:  cf.ssl_status === 'active'       ? 'ok' : 'waiting',
-      route_ready: wr.present === true              ? 'ok' : 'waiting',
-    };
-  }
-
-  function _allFour(statuses) {
-    return statuses.dns_lookup === 'ok' && statuses.cf_active === 'ok'
-        && statuses.ssl_active === 'ok' && statuses.route_ready === 'ok';
-  }
-
-  function _updateLights(statuses) {
-    Object.keys(statuses).forEach(function (key) {
-      var el = document.querySelector('[data-check="' + key + '"]');
-      if (!el) return;
-      el.classList.remove('waiting', 'ok', 'err');
-      el.classList.add(statuses[key]);
-    });
-  }
-
-  function _onAllGreen() {
+  function _onAllGreen(status) {
+    _allGreen = true;
     _stopPolling();
     var slot = document.getElementById('amcp-dns-success-slot');
     if (slot) {
       slot.innerHTML =
         '<div class="amcp-dns-success" style="margin-bottom:18px">' +
-          '<div class="amcp-dns-success-title">You\u2019re live</div>' +
+          '<div class="amcp-dns-success-title">You’re live</div>' +
           '<div class="amcp-dns-success-copy">' +
             'AI crawlers hitting <strong style="color:var(--text)">' + escHtml(currentDomain() || 'your domain') + '</strong> now reach your Advocate agent. ' +
             'Real bot traffic usually starts within 24 hours.' +
@@ -637,7 +538,7 @@
         '</div>';
     }
     if (window.AMCP_UI && window.AMCP_UI.toast) {
-      window.AMCP_UI.toast('DNS verified \u2014 you\u2019re live!', 'success');
+      window.AMCP_UI.toast('DNS verified — you’re live!', 'success');
     }
     if (window.AMCP_ONBOARDING && typeof window.AMCP_ONBOARDING.markStep === 'function') {
       window.AMCP_ONBOARDING.markStep('checklist.dns_configured').then(function () {
