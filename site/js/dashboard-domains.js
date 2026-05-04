@@ -2,10 +2,8 @@
  *
  * Fetches GET /api/client/domain-info (session-authed) and surfaces:
  *   - Business header (name + domain)
- *   - Three status pills (CF hostname, SSL, Worker Route)
+ *   - Unified 5-light DNS status card (shared renderer via window.AMCP_DNS_STATUS)
  *   - DNS records hint
- *   - "Test bot traffic" button → GET /api/client/domain-test (server-side
- *     fetch with PerplexityBot UA since browsers can't override User-Agent)
  *   - Admin-only rotate-key button that prompts for ADMIN_SECRET and calls
  *     POST /admin/businesses/:slug/resync-api-key
  *
@@ -42,16 +40,6 @@
     errEl.classList.remove('show');
   }
 
-  // CF hostname status → badge color.
-  function pill(label, state) {
-    var cls = 'badge-yellow';
-    if (state === 'ok')      cls = 'badge-green';
-    else if (state === 'bad') cls = 'badge-red';
-    else if (state === 'unknown') cls = 'badge-yellow';
-    else if (state === 'accent')  cls = 'badge-accent';
-    return '<span class="badge ' + cls + '"><span class="badge-dot"></span>' + esc(label) + '</span>';
-  }
-
   function renderHeader(info) {
     var hdr = document.getElementById('domain-header');
     if (!hdr) return;
@@ -68,49 +56,51 @@
       '</div>';
   }
 
-  function renderStatus(info) {
-    var wrap = document.getElementById('status-pills');
-    if (!wrap) return;
-    var cf = info.cf_hostname || {};
-    var wr = info.worker_route || {};
+  // New: shared 5-light status renderer + manual re-run button.
+  function renderDomainStatus(rootEl, slug) {
+    rootEl.innerHTML =
+      '<div class="amcp-dns-status-card">' +
+        '<div class="amcp-dns-status-header">' +
+          '<div class="amcp-dns-status-title">Domain status</div>' +
+          '<button type="button" id="dns-recheck-btn" class="amcp-welcome-btn amcp-welcome-btn-ghost">Re-run check</button>' +
+        '</div>' +
+        '<div id="dns-status-container"></div>' +
+        '<div id="dns-status-meta" class="amcp-dns-status-meta"></div>' +
+      '</div>';
 
-    var cfState = 'unknown';
-    if (cf.status === 'active') cfState = 'ok';
-    else if (cf.status === 'pending' || cf.status === 'pending_validation') cfState = 'unknown';
-    else if (cf.status && cf.status !== 'active') cfState = 'bad';
+    var container = document.getElementById('dns-status-container');
+    var meta      = document.getElementById('dns-status-meta');
+    var btn       = document.getElementById('dns-recheck-btn');
 
-    var sslState = cf.ssl_status === 'active' ? 'ok'
-                 : cf.ssl_status === 'pending_validation' ? 'unknown'
-                 : cf.ssl_status === 'unknown' ? 'unknown'
-                 : 'bad';
-
-    var routeLabel, routeState;
-    if (wr.present === true) {
-      routeLabel = 'Worker Route ✓ present';
-      routeState = 'ok';
-    } else if (wr.present === false) {
-      routeLabel = 'Worker Route ✗ missing';
-      routeState = 'bad';
-    } else {
-      routeLabel = 'Worker Route ? unknown';
-      routeState = 'unknown';
+    function paint(status) {
+      if (window.AMCP_DNS_STATUS && typeof window.AMCP_DNS_STATUS.render === 'function') {
+        window.AMCP_DNS_STATUS.render(container, status);
+      }
+      if (status && status.checked_at) {
+        meta.textContent = 'Last checked ' + new Date(status.checked_at).toLocaleString();
+      } else {
+        meta.textContent = '';
+      }
     }
 
-    wrap.innerHTML =
-      pill('CF SaaS hostname ' + (cfState === 'ok' ? '✓' : cfState === 'bad' ? '✗' : '?') +
-           ' ' + (cf.status || 'unknown'), cfState) +
-      pill('SSL ' + (sslState === 'ok' ? '✓' : sslState === 'bad' ? '✗' : '?') +
-           ' ' + (cf.ssl_status || 'unknown'), sslState) +
-      pill(routeLabel, routeState);
-
-    var meta = document.getElementById('status-meta');
-    if (meta) {
-      var parts = [];
-      if (cf.note) parts.push(esc(cf.note));
-      if (wr.pattern) parts.push('Expected route pattern: <code>' + esc(wr.pattern) + '</code>');
-      if (wr.present === null) parts.push('Full Worker Route introspection requires Workers Routes:Read scope on the admin token.');
-      meta.innerHTML = parts.length ? parts.join(' · ') : '';
+    function refresh() {
+      if (!window.AMCP_DNS_STATUS || typeof window.AMCP_DNS_STATUS.runOnce !== 'function') {
+        paint(null);
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = 'Checking…';
+      window.AMCP_DNS_STATUS.runOnce(slug)
+        .then(paint)
+        .catch(function () { paint(null); })
+        .then(function () {
+          btn.disabled = false;
+          btn.textContent = 'Re-run check';
+        });
     }
+
+    btn.addEventListener('click', refresh);
+    refresh();
   }
 
   function renderDns(info) {
@@ -128,46 +118,6 @@
       '<div style="font-size:var(--tx-xs);color:var(--muted);margin-top:10px">' +
         'These are the records you configured at your registrar to route AI crawler traffic through Advocate.' +
       '</div>';
-  }
-
-  function runBotTest() {
-    var btn = document.getElementById('btn-test-bot');
-    var result = document.getElementById('test-bot-result');
-    if (!btn || !result) return;
-    var slug = currentSlug();
-    btn.disabled = true;
-    btn.textContent = 'Testing…';
-    result.innerHTML = '<div class="skeleton" style="height:60px;border-radius:6px"></div>';
-
-    var path = '/api/client/domain-test' + (slug ? '?slug=' + encodeURIComponent(slug) : '');
-    window.AMCP.authedFetch(path)
-      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, status: r.status, json: j }; }); })
-      .then(function (wrapResp) {
-        if (!wrapResp.ok) {
-          var msg = (wrapResp.json && wrapResp.json.error) || ('HTTP ' + wrapResp.status);
-          result.innerHTML = '<div style="padding:10px 12px;background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.2);border-radius:6px;color:var(--red);font-size:var(--tx-sm)">' + esc(msg) + '</div>';
-          return;
-        }
-        var data = wrapResp.json || {};
-        var statusCls = data.status >= 200 && data.status < 300 ? 'badge-green'
-                      : data.status >= 300 && data.status < 400 ? 'badge-yellow'
-                      : 'badge-red';
-        result.innerHTML =
-          '<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">' +
-            '<span class="badge ' + statusCls + '"><span class="badge-dot"></span>' + esc(String(data.status || ',')) + ' ' + esc(data.status_text || '') + '</span>' +
-            '<span style="font-family:var(--font-mono);font-size:var(--tx-xs);color:var(--muted)">' + esc(data.url || '') + '</span>' +
-          '</div>' +
-          '<pre style="background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-family:var(--font-mono);font-size:var(--tx-xs);white-space:pre-wrap;word-break:break-word;max-height:180px;overflow:auto;margin:0">' +
-            esc(data.snippet || '(no body)') +
-          '</pre>';
-      })
-      .catch(function (err) {
-        result.innerHTML = '<div style="padding:10px 12px;background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.2);border-radius:6px;color:var(--red);font-size:var(--tx-sm)">Test failed: ' + esc(err && err.message ? err.message : String(err)) + '</div>';
-      })
-      .then(function () {
-        btn.disabled = false;
-        btn.textContent = 'Run test';
-      });
   }
 
   // Admin rotate-key flow, pops the drawer with a form for the ADMIN_SECRET
@@ -238,11 +188,6 @@
   }
 
   function wireActions() {
-    var testBtn = document.getElementById('btn-test-bot');
-    if (testBtn && !testBtn.dataset.bound) {
-      testBtn.dataset.bound = '1';
-      testBtn.addEventListener('click', runBotTest);
-    }
     var rotateBtn = document.getElementById('btn-rotate-key-admin');
     if (rotateBtn && !rotateBtn.dataset.bound) {
       rotateBtn.dataset.bound = '1';
@@ -300,7 +245,12 @@
       })
       .then(function (info) {
         renderHeader(info);
-        renderStatus(info);
+        // Replace the 3-pill card with the unified 5-light status renderer.
+        var statusWrap = document.getElementById('status-pills-wrap');
+        if (statusWrap) renderDomainStatus(statusWrap, slug);
+        // Test-bot card no longer exists; hide the shell placeholder.
+        var testWrap = document.getElementById('test-bot-wrap');
+        if (testWrap) testWrap.style.display = 'none';
         renderDns(info);
         wireActions();
       })
