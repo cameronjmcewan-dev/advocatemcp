@@ -144,7 +144,14 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
       "/team-accept.html":     "https://advocatemcp.com/team-accept.html",
       "/onboarding":           "https://advocatemcp.com/onboarding.html",
       "/onboarding.html":      "https://advocatemcp.com/onboarding.html",
-      "/activate":             "https://advocatemcp.com/activate.html",
+      // /activate is handled by handleActivatePage below — it renders the
+      // hosted-tenant "Confirm and continue" page in-worker, and only
+      // 302-redirects to advocatemcp.com/activate.html for DNS tenants.
+      // Keeping /activate in this static-redirect table broke the hosted
+      // flow (May 3 2026 — bamboo-brace's activation link 301'd straight
+      // to the DNS form before handleActivatePage could check skipDns).
+      // The /activate.html alias still redirects since no in-worker
+      // dispatch covers that pathname.
       "/activate.html":        "https://advocatemcp.com/activate.html",
       "/login":                "https://advocatemcp.com/login.html",
       "/login.html":           "https://advocatemcp.com/login.html",
