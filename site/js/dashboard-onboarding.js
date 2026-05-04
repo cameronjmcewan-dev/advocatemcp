@@ -870,19 +870,20 @@
     var slug = currentSlug();
     if (!slug) return;
     if (window.AMCP_UI) window.AMCP_UI.toast('Simulating a bot hit\u2026', 'info');
-    window.AMCP.authedFetch('/api/client/domain-test?slug=' + encodeURIComponent(slug))
-      .then(function (r) { return r.json(); })
-      .then(function (res) {
-        if (res && (res.ok || res.status === 200)) {
-          if (window.AMCP_UI) window.AMCP_UI.toast('Simulated hit successful', 'success');
-          markStep('checklist.simulated_bot_hit').then(function () { _refreshChecklist(); });
-        } else {
-          if (window.AMCP_UI) window.AMCP_UI.toast('Simulation failed. Check domain setup.', 'error');
-        }
-      })
-      .catch(function () {
-        if (window.AMCP_UI) window.AMCP_UI.toast('Simulation failed.', 'error');
-      });
+    // Use the unified probe — live_request.state === 'ok' means a real bot
+    // request reached the worker (same signal the DNS wizard's 5-light check uses).
+    window.AMCP_DNS_STATUS.runOnce(slug).then(function (status) {
+      var live = status && status.signals && status.signals.live_request;
+      if (live && live.state === 'ok') {
+        if (window.AMCP_UI) window.AMCP_UI.toast('Simulated hit successful', 'success');
+        markStep('checklist.simulated_bot_hit').then(function () { _refreshChecklist(); });
+      } else {
+        var msg = (live && live.message) || 'Domain isn\'t live yet — check the DNS wizard.';
+        if (window.AMCP_UI) window.AMCP_UI.toast(msg, 'error');
+      }
+    }).catch(function () {
+      if (window.AMCP_UI) window.AMCP_UI.toast('Simulation failed.', 'error');
+    });
   }
 
   function _checkRealBotHit() {

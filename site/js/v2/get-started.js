@@ -511,27 +511,29 @@
     }
   }
 
-  // Simulated bot hit — POST /api/client/domain-test pretends to be
-  // PerplexityBot pinging the agent. On success the server responds
-  // with a 200 + a synthesized query, and we mark the step. Identical
-  // logic to legacy _triggerSimulatedHit, just inlined for the v2 panel.
+  // Simulated bot hit — uses the shared DNS probe to check whether a live
+  // request has reached the worker. Marks the step when live_request.state === 'ok'.
   async function runSimulatedBotHit() {
     const af = window.AMCP && window.AMCP.authedFetch;
     if (!af) return setStatus('Network unavailable.', 'error');
     setStatus('Pinging your agent…');
     try {
       const slug = (window.AMCP_DATA && window.AMCP_DATA.slug) || '';
-      const r = await af('/api/client/domain-test' + (slug ? '?slug=' + encodeURIComponent(slug) : ''));
-      if (!r.ok) {
-        setStatus('Simulation failed (HTTP ' + r.status + '). Check your domain setup.', 'error');
-        return;
+      // Use the unified probe — live_request.state === 'ok' means a real bot
+      // request reached the worker (same signal the DNS wizard's 5-light check uses).
+      const status = await window.AMCP_DNS_STATUS.runOnce(slug);
+      const live = status && status.signals && status.signals.live_request;
+      if (live && live.state === 'ok') {
+        setStatus('PerplexityBot pinged — your agent answered.', 'ok');
+        const ob = window.AMCP_ONBOARDING;
+        if (ob && typeof ob.markStep === 'function') {
+          await ob.markStep('checklist.simulated_bot_hit');
+        }
+        update();
+      } else {
+        const msg = (live && live.message) || 'Domain isn\'t live yet — check the DNS wizard.';
+        setStatus(msg, 'error');
       }
-      setStatus('PerplexityBot pinged — your agent answered.', 'ok');
-      const ob = window.AMCP_ONBOARDING;
-      if (ob && typeof ob.markStep === 'function') {
-        await ob.markStep('checklist.simulated_bot_hit');
-      }
-      update();
     } catch (e) {
       setStatus('Network error: ' + String((e && e.message) || e), 'error');
     }
