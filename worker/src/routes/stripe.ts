@@ -37,7 +37,11 @@ import {
   getBusinessBySlug,
   getActiveBusinesses,
   getUserBusinesses,
+  getUserByEmail,
+  createUser,
+  grantAccess,
 } from "../portalDb";
+import { generateSalt, hashPassword, generateSessionToken, hashToken, refreshCookieHeader } from "../auth";
 import { getSessionFromRequest } from "./authApi";
 
 // ── CORS helper for the public wizard endpoint ───────────────────────────────
@@ -562,6 +566,7 @@ export async function handlePublicOnboard(
   const email = (body.email as string ?? "").trim().toLowerCase();
   const plan = ((body.plan as string ?? "base").toLowerCase()) as "base" | "pro";
   const referralUrl = (body.referral_url as string ?? "").trim();
+  const password = typeof body.password === "string" ? body.password : "";
   // Optional full business profile — validated at ingress, then persisted on
   // the tenant and pushed to Railway server-side (best-effort, non-blocking).
   // Keeps the browser on a single origin so Railway's CORS preflight cannot
@@ -585,6 +590,9 @@ export async function handlePublicOnboard(
   if (!name) errors.push("name");
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push("email (invalid format)");
   if (!["base", "pro"].includes(plan)) errors.push("plan (must be 'base' or 'pro' — free tier removed)");
+  if (!password || password.length < 8) {
+    errors.push("password (must be at least 8 characters)");
+  }
   if (errors.length > 0) {
     return withCors(
       jsonErr(400, "validation_error", `Missing or invalid fields: ${errors.join(", ")}`),
@@ -696,6 +704,37 @@ export async function handlePublicOnboard(
     );
   }
 
+  // ── Create user + mint session BEFORE Stripe redirect ─────────────
+  // The customer is logged in immediately so the post-checkout return
+  // page (and the eventual activation email click) can rely on a
+  // pre-existing session. email_verified stays at 0 until they click
+  // the activation email; dashboard middleware gates on that bit.
+  const existingUser = await getUserByEmail(env.DB, email);
+  if (existingUser) {
+    return withCors(
+      jsonErr(409, "email_taken", "An account with this email already exists. Log in instead."),
+      request,
+    );
+  }
+  const salt = generateSalt();
+  const passwordHash = await hashPassword(password, salt);
+  const user = await createUser(env.DB, email, passwordHash, salt, name, "client");
+
+  // Mint a session — same shape as handleActivateHosted (see
+  // worker/src/routes/activate.ts:996-1007 for the canonical pattern).
+  const refreshRawToken = generateSessionToken();
+  const refreshTokenHash = await hashToken(refreshRawToken);
+  const dbSessionId = crypto.randomUUID().replace(/-/g, "");
+  const nowIso = new Date().toISOString();
+  const expiresIso = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  await env.DB
+    .prepare(
+      `INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at, last_seen_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(dbSessionId, user.id, refreshTokenHash, expiresIso, nowIso, nowIso)
+    .run();
+
   // Fixed success/cancel URLs — always land back on the marketing brand.
   // success_url ⇒ site/onboarding/complete.html (static page that polls
   // GET /api/onboard/session/:session_id and renders confirmation/CTA).
@@ -753,15 +792,22 @@ export async function handlePublicOnboard(
     sessionId,
   }));
 
+  const successHeaders: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Set-Cookie": refreshCookieHeader(refreshRawToken),
+  };
   return withCors(
-    jsonOk({
+    new Response(JSON.stringify({
       ok: true,
       slug,
       status: "pending_payment",
       plan,
       checkoutUrl,
       sessionId,
-    }, 201),
+    }), {
+      status: 201,
+      headers: successHeaders,
+    }),
     request,
   );
 }

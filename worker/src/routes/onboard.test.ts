@@ -65,6 +65,17 @@ vi.mock("../portalDb", () => ({
   setActivationTokenIfMissing: vi.fn(async () => ({ meta: { changes: 0 } })),
   updateActivationStatus:      vi.fn(async () => undefined),
   updateBusinessApiKey:        vi.fn(async () => undefined),
+  // May 2 2026: handlePublicOnboard now creates a user + session before
+  // the Stripe redirect. These three need to resolve in the integration
+  // smoke tests.
+  getUserByEmail:              vi.fn(async () => null),
+  createUser:                  vi.fn(async (_db, email, password_hash, salt, full_name, role) => ({
+    id: "mock-user-id",
+    email, password_hash, salt, full_name, role,
+    created_at: new Date().toISOString(),
+    email_verified: 0,
+  })),
+  grantAccess:                 vi.fn(async () => undefined),
 }));
 
 vi.mock("../lib/activation-token", () => ({
@@ -169,6 +180,7 @@ describe("handlePublicOnboard — integration smoke tests", () => {
         slug:  "smoke-plumbing-co",
         name:  "Smoke Plumbing Co",
         email: "owner@smokeplumbing.example.com",
+        password: "test-password-123",
         plan:  "base",
         profile: {
           // 7 required flat fields

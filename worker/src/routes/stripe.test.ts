@@ -879,6 +879,7 @@ describe("handlePublicOnboard — Task 6: profile validation (9-step wizard)", (
       slug: "austinplumbing",
       name: "Austin Plumbing Co",
       email: "owner@austinplumbing.com",
+      password: "test-password-123",
       plan: "base",
       profile: {
         name: "Austin Plumbing Co",
@@ -918,6 +919,7 @@ describe("handlePublicOnboard — Task 6: profile validation (9-step wizard)", (
       slug: "legacybiz",
       name: "Legacy Biz",
       email: "owner@legacy.com",
+      password: "test-password-123",
       plan: "base",
       // no profile field — old wizard, must still work
     });

@@ -52,6 +52,7 @@ import {
 } from "./sharedLayout";
 import { base64urlToBytes } from "../lib/activation-token";
 import { getTenant } from "./onboard";
+import { getUserByEmail } from "../portalDb";
 
 /**
  * Attempt to extract the slug from a signed activation token WITHOUT
@@ -105,6 +106,12 @@ export async function handleActivatePage(request: Request, env: Env): Promise<Re
     }
   }
 
+  let userHasPassword = false;
+  if (hasToken && isHosted && tenantEmail) {
+    const existingUser = await getUserByEmail(env.DB, tenantEmail.toLowerCase().trim());
+    userHasPassword = !!(existingUser && existingUser.password_hash);
+  }
+
   // Hosted tenants stay on the Worker page — they need the password-
   // setup step (POST /api/activate/hosted), which requires inline UI
   // we only render here. Custom-domain tenants get redirected to the
@@ -129,7 +136,7 @@ export async function handleActivatePage(request: Request, env: Env): Promise<Re
   }
 
   return new Response(
-    renderHostedPage(escapedToken, escapeHtml(hostedUrl), escapeHtml(tenantEmail)),
+    renderHostedPage(escapedToken, escapeHtml(hostedUrl), escapeHtml(tenantEmail), userHasPassword),
     {
       status: 200,
       headers: {
@@ -150,8 +157,16 @@ function escapeHtml(s: string): string {
 }
 
 // ── Hosted page HTML ─────────────────────────────────────────────────────────
+//
+// @deprecated (May 3 2026). The hosted-tenant activation page now renders on
+// the Pages site at advocatemcp.com/activate.html using the brand CSS
+// (site/activate.html state-hosted + site/js/dashboard-activate.js
+// renderHostedPasswordForm). worker/src/routes/portal.ts now redirects
+// /activate to Pages for both hosted AND DNS tenants. This function is
+// kept dormant for one release as a quick rollback path; remove in a
+// follow-up after the Pages flow proves stable.
 
-function renderHostedPage(escapedToken: string, hostedUrl: string, email: string): string {
+function renderHostedPage(escapedToken: string, hostedUrl: string, email: string, userHasPassword: boolean): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -195,7 +210,18 @@ ${renderHeader({ subtitle: "Set your password" })}
 
 <div class="err" id="err-banner" role="alert" aria-live="polite"></div>
 
-<!-- State H1 — Password form -->
+<!-- State H1 — Account confirm (post-May-2-2026 signups) OR password setup (legacy) -->
+${userHasPassword ? `
+<div class="state active" id="state-h1">
+  <div class="tag">Almost there</div>
+  <h1 class="h1">Confirm your email and continue</h1>
+  <p class="lede">We sent this link to <strong>${email}</strong> to confirm it's you. Click below to verify your email and head to your dashboard.</p>
+
+  <div class="card">
+    <button type="button" class="btn" id="hosted-submit-btn">Confirm and go to dashboard</button>
+  </div>
+</div>
+` : `
 <div class="state active" id="state-h1">
   <div class="tag">Account setup</div>
   <h1 class="h1">Set your password</h1>
@@ -212,6 +238,7 @@ ${renderHeader({ subtitle: "Set your password" })}
     <button type="button" class="btn" id="hosted-submit-btn">Set password and continue</button>
   </div>
 </div>
+`}
 
 <!-- State H2 — Submitting -->
 <div class="state" id="state-h2">
@@ -269,8 +296,11 @@ ${themeToggleScript()}
 
   submitBtn.addEventListener("click", function(){
     clearError();
-    var password = passwordInput.value || "";
-    if (password.length < 8) {
+    var password = passwordInput ? (passwordInput.value || "") : "";
+    // If the password input isn't on the page (post-May-2 confirm-only
+    // flow), submit with an empty body — the worker's existing-user
+    // branch ignores password and just flips email_verified.
+    if (passwordInput && password.length < 8) {
       showError("Password must be at least 8 characters.");
       return;
     }
@@ -285,7 +315,7 @@ ${themeToggleScript()}
         "Content-Type": "application/json",
         "X-Activation-Token": token
       },
-      body: JSON.stringify({ password: password })
+      body: JSON.stringify(passwordInput ? { password: password } : {})
     })
     .then(function(resp){ return resp.json().then(function(data){ return { status: resp.status, data: data }; }); })
     .then(function(r){

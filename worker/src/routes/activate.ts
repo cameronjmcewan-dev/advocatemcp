@@ -545,6 +545,7 @@ async function handleActivatePreviewInner(request: Request, env: Env): Promise<R
   // Look up the canonical signup domain via D1 → tenant via KV.
   let skipDns = false;
   let hostedDomain: string | null = null;
+  let tenantEmail: string | null = null;
   try {
     const row = await env.DB
       .prepare("SELECT domain FROM businesses WHERE slug = ? LIMIT 1")
@@ -556,6 +557,11 @@ async function handleActivatePreviewInner(request: Request, env: Env): Promise<R
         skipDns = true;
         hostedDomain = tenant.domain;
       }
+      // Surface tenant.email so the Pages-side hosted activation form
+      // (advocatemcp.com/activate.html, see site/js/dashboard-activate.js
+      // renderHostedPasswordForm) can pre-fill the read-only email field.
+      // Only emitted when present — DNS-tenant flow ignores this.
+      if (tenant?.email) tenantEmail = tenant.email;
     }
   } catch {
     // Fail-open: best path is the customer seeing the manual domain
@@ -566,6 +572,7 @@ async function handleActivatePreviewInner(request: Request, env: Env): Promise<R
     slug,
     skip_dns: skipDns,
     ...(hostedDomain ? { hosted_domain: hostedDomain } : {}),
+    ...(tenantEmail  ? { email: tenantEmail } : {}),
   });
 }
 
@@ -928,32 +935,53 @@ export async function handleActivateHosted(
     return withCors(jsonErr(400, "account_not_ready"), request);
   }
 
-  // ── Validate password ──────────────────────────────────────────────────
-  const password = typeof body.password === "string" ? body.password : "";
-  if (password.length < 8) {
-    return withCors(
-      new Response(
-        JSON.stringify({
-          ok: false,
-          error_code: "password_too_short",
-          customer_message: "Password must be at least 8 characters.",
-        }, null, 2),
-        { status: 400, headers: { "Content-Type": "application/json" } },
-      ),
-      request,
-    );
-  }
-
-  // ── Create or update user ──────────────────────────────────────────────
+  // ── Branch on existing user ────────────────────────────────────────────
+  // Post-May-2-2026 signups: handlePublicOnboard already created the
+  // users row + hashed the password. Activation's only job here is to
+  // flip email_verified=1 and mint a fresh session (cross-device).
+  // Legacy pre-fix signups: no users row yet — fall through to the
+  // password-set path.
   const email = tenant.email.toLowerCase().trim();
-  const salt = generateSalt();
-  const passwordHash = await hashPassword(password, salt);
+  const existingUser = await getUserByEmail(env.DB, email);
 
-  let user = await getUserByEmail(env.DB, email);
-  if (user) {
-    await updateUserPassword(env.DB, user.id, passwordHash, salt);
+  let user: NonNullable<Awaited<ReturnType<typeof getUserByEmail>>>;
+  if (existingUser && existingUser.password_hash) {
+    // Fast path: just verify-the-email + mint session.
+    await env.DB
+      .prepare("UPDATE users SET email_verified = 1 WHERE id = ?")
+      .bind(existingUser.id)
+      .run();
+    user = { ...existingUser, email_verified: 1 } as typeof user;
   } else {
-    user = await createUser(env.DB, email, passwordHash, salt, tenant.name, "client");
+    // Legacy path: original password-set behavior.
+    const password = typeof body.password === "string" ? body.password : "";
+    if (password.length < 8) {
+      return withCors(
+        new Response(
+          JSON.stringify({
+            ok: false,
+            error_code: "password_too_short",
+            customer_message: "Password must be at least 8 characters.",
+          }, null, 2),
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        ),
+        request,
+      );
+    }
+    const salt = generateSalt();
+    const passwordHash = await hashPassword(password, salt);
+    if (existingUser) {
+      await updateUserPassword(env.DB, existingUser.id, passwordHash, salt);
+      user = { ...existingUser, password_hash: passwordHash, salt } as typeof user;
+    } else {
+      user = await createUser(env.DB, email, passwordHash, salt, tenant.name, "client");
+    }
+    // Legacy users still need email_verified = 1 — clicking the email
+    // is proof of email ownership.
+    await env.DB
+      .prepare("UPDATE users SET email_verified = 1 WHERE id = ?")
+      .bind(user.id)
+      .run();
   }
 
   // ── Link user to business (idempotent via INSERT OR IGNORE) ────────────

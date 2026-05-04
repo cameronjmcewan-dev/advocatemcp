@@ -10,6 +10,7 @@ export interface User {
   salt: string;
   full_name: string | null;
   role: string;
+  email_verified: number;  // 0 or 1 — set during activation, gates dashboard
   created_at: string;
   updated_at: string;
 }
@@ -136,6 +137,7 @@ export async function getSessionByToken(
          s.id, s.user_id, s.token_hash, s.expires_at, s.created_at, s.last_seen_at,
          u.email, u.full_name, u.role,
          u.password_hash, u.salt,
+         u.email_verified,
          u.created_at  AS u_created_at,
          u.updated_at  AS u_updated_at
        FROM sessions s
@@ -161,14 +163,15 @@ export async function getSessionByToken(
     created_at:   row.created_at as string,
     last_seen_at: row.last_seen_at as string,
     user: {
-      id:            row.user_id as string,
-      email:         row.email as string,
-      password_hash: row.password_hash as string,
-      salt:          row.salt as string,
-      full_name:     row.full_name as string | null,
-      role:          row.role as string,
-      created_at:    row.u_created_at as string,
-      updated_at:    row.u_updated_at as string,
+      id:             row.user_id as string,
+      email:          row.email as string,
+      password_hash:  row.password_hash as string,
+      salt:           row.salt as string,
+      full_name:      row.full_name as string | null,
+      role:           row.role as string,
+      email_verified: row.email_verified as number,
+      created_at:     row.u_created_at as string,
+      updated_at:     row.u_updated_at as string,
     },
   };
 }

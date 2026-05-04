@@ -121,6 +121,8 @@ export interface AuthContext {
   full_name: string | null;
   role: string;
   tenant_id: string | null;
+  /** 0 or 1 — gates the dashboard and any feature requiring a verified email. */
+  email_verified: number;
   /** Which auth mechanism produced this context. Useful for logging. */
   auth_method: "bearer" | "cookie";
 }
@@ -157,12 +159,16 @@ export async function getSessionFromRequest(
       try {
         const payload = await verifyAccessToken(accessToken, env.ACCESS_TOKEN_SIGNING_KEY);
         return {
-          user_id:     payload.sub,
-          email:       payload.email,
-          full_name:   payload.full_name,
-          role:        payload.role,
-          tenant_id:   payload.tenant_id,
-          auth_method: "bearer",
+          user_id:        payload.sub,
+          email:          payload.email,
+          full_name:      payload.full_name,
+          role:           payload.role,
+          tenant_id:      payload.tenant_id,
+          // Access tokens are only issued post-login; treat bearer holders
+          // as verified. When the token payload gains this claim (future),
+          // swap to `payload.email_verified ?? 1`.
+          email_verified: 1,
+          auth_method:    "bearer",
         };
       } catch (err) {
         // verifyAccessToken throws AccessTokenError strings
@@ -182,14 +188,15 @@ export async function getSessionFromRequest(
   if (!session) return null;
 
   return {
-    user_id:     session.user_id,
-    email:       session.user.email,
-    full_name:   session.user.full_name,
-    role:        session.user.role,
+    user_id:        session.user_id,
+    email:          session.user.email,
+    full_name:      session.user.full_name,
+    role:           session.user.role,
+    email_verified: session.user.email_verified,
     // Cookie path is admin-only in practice today. See file header for
     // the full rationale and the deferred followup if this ever changes.
-    tenant_id:   null,
-    auth_method: "cookie",
+    tenant_id:      null,
+    auth_method:    "cookie",
   };
 }
 

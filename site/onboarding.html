@@ -1333,6 +1333,21 @@ function goToStep(n) {
   // Populate review on last step
   if (n === TOTAL_STEPS) populateReview();
 
+  // Step 7 (leads): if the customer chose "My website" or "A booking page"
+  // and they already entered a website in Step 1, pre-fill biz-lead-dest
+  // so they don't retype the same URL. Manual edits are preserved — we
+  // only auto-fill when biz-lead-dest is empty.
+  if (n === 7) {
+    const lt = state.leadType;
+    if (lt === 'website' || lt === 'booking') {
+      const dest = document.getElementById('biz-lead-dest');
+      const web  = document.getElementById('biz-website');
+      if (dest && web && !dest.value && web.value) {
+        dest.value = web.value;
+      }
+    }
+  }
+
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -1903,6 +1918,7 @@ function buildOnboardPayload() {
   const review_platform = v('biz-review-platform');
   const leadDest = v('biz-lead-dest').trim();
   const acct_email = v('acct-email').trim().toLowerCase();
+  const acct_password = v('acct-password');
   const radiusRaw = v('biz-radius');
 
   // services: split the free-text Step 2 textarea on newlines/commas, drop empties
@@ -2044,6 +2060,7 @@ function buildOnboardPayload() {
     slug: slugify(name),
     name,
     email: acct_email,
+    password: acct_password,
     plan: state.plan,
     profile,
   };
