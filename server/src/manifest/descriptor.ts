@@ -31,12 +31,14 @@ import { TIER_LIMITS } from "../lib/agentTier.js";
  * numbers for v1 — they guide clients' scheduling/budgeting decisions but
  * are not SLOs. A runtime-measured version is Session 11+ work.
  *
- * `annotations` carry the MCP spec's behavioral hints (readOnlyHint,
+ * `annotations` carry the MCP spec's behavioral hints (title, readOnlyHint,
  * destructiveHint, openWorldHint) so both the A2A manifest and the
- * `tools/list` RPC response expose the same signal. Per OpenAI's Apps
- * SDK submission guidance these are a hard requirement.
+ * `tools/list` RPC response expose the same signal. `title` is required by
+ * Anthropic's Connectors Directory submission alongside the readOnly/
+ * destructive hints — missing it accounts for ~30% of directory rejections.
  */
 export interface ToolAnnotations {
+  title: string;
   readOnlyHint: boolean;
   destructiveHint: boolean;
   openWorldHint: boolean;
@@ -87,6 +89,7 @@ export const DESCRIPTORS: ToolDescriptor[] = [
     estimated_latency_ms: 1500,
     estimated_cost_cents: 2,
     annotations: {
+      title: "Query business agent",
       readOnlyHint: false,
       destructiveHint: false,
       openWorldHint: true,
@@ -114,6 +117,7 @@ export const DESCRIPTORS: ToolDescriptor[] = [
     estimated_latency_ms: 50,
     estimated_cost_cents: 0,
     annotations: {
+      title: "Search businesses",
       readOnlyHint: true,
       destructiveHint: false,
       openWorldHint: false,
@@ -145,6 +149,7 @@ export const DESCRIPTORS: ToolDescriptor[] = [
     estimated_latency_ms: 150,
     estimated_cost_cents: 0,
     annotations: {
+      title: "Get availability",
       readOnlyHint: true,
       destructiveHint: false,
       openWorldHint: false,
@@ -174,6 +179,7 @@ export const DESCRIPTORS: ToolDescriptor[] = [
     estimated_latency_ms: 200,
     estimated_cost_cents: 0, // deterministic=0; LLM fallback ~1–2¢ per call; averaged assumes ≥70% deterministic hit
     annotations: {
+      title: "Get quote",
       readOnlyHint: true,
       destructiveHint: false,
       // openWorld: true because the LLM fallback path calls Anthropic's API
@@ -210,6 +216,7 @@ export const DESCRIPTORS: ToolDescriptor[] = [
     estimated_latency_ms: 300,
     estimated_cost_cents: 1,
     annotations: {
+      title: "Initiate handoff",
       readOnlyHint: false,
       // destructive: true — triggers outbound SMS/email to the tenant or mints
       // a signed continuation URL; either way there's a real-world side effect
@@ -235,6 +242,7 @@ export const DESCRIPTORS: ToolDescriptor[] = [
     estimated_latency_ms: 100,
     estimated_cost_cents: 0,
     annotations: {
+      title: "Reserve slot",
       readOnlyHint: false,
       // destructive: true — writes a row to `reservations` that blocks a slot
       // for 15 minutes. Even though it's idempotent on replay, the first call
@@ -269,6 +277,7 @@ export const DESCRIPTORS: ToolDescriptor[] = [
     estimated_latency_ms: 50,
     estimated_cost_cents: 0,
     annotations: {
+      title: "Get business credentials",
       readOnlyHint: true,
       destructiveHint: false,
       openWorldHint: false,
@@ -295,6 +304,7 @@ export const DESCRIPTORS: ToolDescriptor[] = [
     estimated_latency_ms: 50,
     estimated_cost_cents: 0,
     annotations: {
+      title: "Get cancellation policy",
       readOnlyHint: true,
       destructiveHint: false,
       openWorldHint: false,
@@ -324,6 +334,7 @@ export const DESCRIPTORS: ToolDescriptor[] = [
     estimated_latency_ms: 250,
     estimated_cost_cents: 1,
     annotations: {
+      title: "Request callback",
       readOnlyHint: false,
       // destructive: true — fires real-world SMS/email to the tenant + writes
       // a callback_requests row that surfaces in their dashboard. Idempotency
@@ -357,6 +368,7 @@ export const DESCRIPTORS: ToolDescriptor[] = [
     estimated_latency_ms: 100,
     estimated_cost_cents: 0,
     annotations: {
+      title: "Subscribe to updates",
       readOnlyHint: false,
       // destructive: true — writes a subscriptions row and (in v2) sends a
       // confirmation email. Even at v1 the row creation is a real side effect.
