@@ -719,10 +719,14 @@ async function apiMe(request: Request, env: Env): Promise<Response> {
   // Compute dns_configured on every request (not in the token) — the value
   // can change without re-login (e.g. user wires DNS after logging in).
   let dns_configured = false;
+  let apiMeDomain: string | null = null;
+  let apiMeIsHosted = false;
   try {
     const businesses = await getUserBusinesses(env.DB, ctx.user_id);
     if (businesses.length > 0) {
       const biz = businesses[0];
+      apiMeDomain = biz.domain ?? null;
+      apiMeIsHosted = !!(biz.domain && biz.domain.endsWith('.hosted.advocatemcp.com'));
       // Hosted tenants (domains under our wildcard *.hosted.advocatemcp.com)
       // don't have per-tenant DNS setup — the wildcard route handles them.
       // Treat as automatically configured.
@@ -754,7 +758,7 @@ async function apiMe(request: Request, env: Env): Promise<Response> {
   }
 
   return withCors(
-    jsonOk({ id: ctx.user_id, email: ctx.email, full_name: ctx.full_name, role: ctx.role, dns_configured }),
+    jsonOk({ id: ctx.user_id, email: ctx.email, full_name: ctx.full_name, role: ctx.role, dns_configured, domain: apiMeDomain, is_hosted: apiMeIsHosted }),
     request,
     { credentials: true },
   );

@@ -215,6 +215,8 @@
         user_role:     (me && me.role) || null,
         full_name:     (me && me.full_name) || null,
         impersonating: impersonating,
+        domain:        (me && me.domain) || null,
+        is_hosted:     !!(me && me.is_hosted),
       };
 
       // DNS-first gate: customers who haven't verified their DNS yet

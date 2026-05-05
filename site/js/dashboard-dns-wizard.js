@@ -484,8 +484,8 @@
       '<div class="amcp-dns-step">' +
         '<div class="amcp-dns-step-title">Verifying DNS</div>' +
         '<div class="amcp-dns-step-copy">' +
-          'DNS changes usually propagate within a few minutes but can take up to an hour. ' +
-          'This page polls every 10 seconds — feel free to leave it open.' +
+          'DNS changes usually propagate in 10-30 minutes, but can take up to 48 hours globally. ' +
+          'This page polls every 10 seconds — feel free to leave it open and check back later.' +
         '</div>' +
         '<div id="amcp-dns-success-slot"></div>' +
         '<div id="amcp-dns-status-container"></div>' +
