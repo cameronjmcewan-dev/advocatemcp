@@ -271,6 +271,16 @@
 
 /* ─── DNS wizard ────────────────────────────────────────────────── */
 .amcp-dns-step { padding: 4px 0 12px; }
+.amcp-dns-ttl-callout {
+  background: var(--surface-2, var(--surface));
+  border-left: 3px solid var(--accent-bright, var(--text));
+  border-radius: 4px;
+  padding: 10px 12px;
+  margin: 0 0 14px 0;
+  color: var(--text);
+  font-size: var(--tx-sm);
+  line-height: 1.5;
+}
 .amcp-dns-step-title {
   font-size: var(--tx-md);
   font-weight: 600;

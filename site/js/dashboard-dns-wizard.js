@@ -255,23 +255,27 @@
       'Find your domain, then click <strong>DNS</strong>.',
       'Scroll to <strong>Records</strong> and click <strong>Add New Record</strong>.',
       'Set Type to <strong>CNAME</strong> and paste the values below.',
+      'Set <strong>TTL</strong> to <strong>1/2 Hour</strong> from the dropdown (don\'t pick Custom or 1 Hour).',
     ],
     namecheap: [
       'Sign in and open the <strong>Domain List</strong>.',
       'Click <strong>Manage</strong> next to your domain.',
       'Select the <strong>Advanced DNS</strong> tab.',
       'Click <strong>Add New Record</strong>, choose CNAME, then paste the values below.',
+      'Set <strong>TTL</strong> to <strong>30 min</strong> from the dropdown.',
     ],
     cloudflare: [
       'Open your domain in the Cloudflare dashboard.',
       'In the sidebar: <strong>DNS</strong> → <strong>Records</strong>.',
       'Click <strong>Add record</strong> and choose <strong>CNAME</strong>.',
       'Paste the values below. Set proxy status to <strong>DNS only</strong> (grey cloud).',
+      'Leave <strong>TTL</strong> on <strong>Auto</strong>.',
     ],
     other: [
       'Log in to your DNS provider.',
       'Find the <strong>DNS</strong> or <strong>Records</strong> settings for your domain.',
       'Add a <strong>CNAME</strong> record using the values below.',
+      'Set <strong>TTL</strong> to <strong>30 minutes</strong> (1800 seconds).',
     ],
   };
 
@@ -358,6 +362,15 @@
     );
   }
 
+  function _ttlCallout(provider) {
+    var msg = '';
+    if (provider === 'godaddy')  msg = '⏱️ Set <strong>TTL</strong> to <strong>1/2 Hour</strong> for every record. (GoDaddy default is 1 Hour — change it.)';
+    else if (provider === 'namecheap') msg = '⏱️ Set <strong>TTL</strong> to <strong>30 min</strong> for every record.';
+    else if (provider === 'cloudflare') msg = '⏱️ Leave <strong>TTL</strong> on <strong>Auto</strong> (Cloudflare default).';
+    else msg = '⏱️ Use <strong>30 minutes</strong> (1800 seconds) as the TTL for every record.';
+    return '<div class="amcp-dns-ttl-callout">' + msg + '</div>';
+  }
+
   function _renderInstructions() {
     var steps  = (PROVIDER_STEPS[_provider] || PROVIDER_STEPS.other).map(function (s) {
       return '<li>' + s + '</li>';
@@ -372,6 +385,7 @@
           'This CNAME routes AI crawler traffic for <strong>' + escHtml(domain || 'your domain') + '</strong> through Advocate.' +
         '</div>' +
         _schematicSVG() +
+        _ttlCallout(_provider) +
         '<ol style="font-size:var(--tx-sm);color:var(--text);line-height:1.6;padding-left:20px;margin:0 0 18px">' + steps + '</ol>' +
         '<div id="amcp-dns-records">' +
           _recordHTML('CNAME', cnameName, CNAME_TARGET, CNAME_TARGET) +

@@ -879,6 +879,14 @@ body.pro-tier .db-nav-item[data-pro-only]{display:flex}
             <span style="color:var(--muted)">Plan</span>
             <span id="settings-plan"><span class="skeleton" style="display:inline-block;height:14px;width:60px"></span></span>
           </div>
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;font-size:var(--tx-sm)">
+            <label for="settings-full-name" style="color:var(--muted)">Your name</label>
+            <div style="display:flex;gap:6px;align-items:center">
+              <input type="text" id="settings-full-name" maxlength="100" placeholder="Your name" style="width:140px;padding:4px 8px;border:1px solid var(--border);border-radius:3px;font-size:var(--tx-sm)" />
+              <button id="btn-save-name" class="btn btn-primary btn-sm" type="button">Save</button>
+              <span id="name-save-status" class="settings-status"></span>
+            </div>
+          </div>
         </div>
       </div>
 
