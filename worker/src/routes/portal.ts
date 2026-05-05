@@ -729,8 +729,8 @@ async function apiMe(request: Request, env: Env): Promise<Response> {
       if (biz.domain && biz.domain.endsWith('.hosted.advocatemcp.com')) {
         dns_configured = true;
       } else {
-        // Existing logic: query cf_hostname_id + onboarding_state to check
-        // whether the customer's custom-domain CNAME is verified.
+        // Custom-domain tenants: query cf_hostname_id + onboarding_state to
+        // check whether the customer's CNAME is verified.
         // cf_hostname_id is not on the Business interface (added by migration
         // 0002 after the type was frozen), so we query it separately.
         const row = await env.DB
