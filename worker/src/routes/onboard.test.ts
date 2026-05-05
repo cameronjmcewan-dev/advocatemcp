@@ -88,10 +88,12 @@ vi.mock("../lib/resend", () => ({
 
 import { handlePublicOnboard } from "./stripe.js";
 import { getTenant, putTenant } from "./onboard.js";
+import { grantAccess } from "../portalDb.js";
 import type { Env } from "../types.js";
 
 const mockedGetTenant = vi.mocked(getTenant);
 const mockedPutTenant = vi.mocked(putTenant);
+const mockedGrantAccess = vi.mocked(grantAccess);
 
 // ── Fake D1 ───────────────────────────────────────────────────────────────────
 // registerBusinessInD1 runs SELECT then INSERT. We just need both to succeed.
@@ -284,6 +286,41 @@ describe("handlePublicOnboard — integration smoke tests", () => {
 
       // putTenant must NOT have been called — we never reached the KV write
       expect(mockedPutTenant).not.toHaveBeenCalled();
+    },
+  );
+
+  it(
+    "Test C — grantAccess is called to populate user_business_access",
+    async () => {
+      stubFetchOk();
+      const env = makeEnv();
+
+      const payload = {
+        slug:  "grant-access-test-co",
+        name:  "Grant Access Test Co",
+        email: "owner@grant-access.example.com",
+        password: "test-password-123",
+        plan:  "pro",
+      };
+
+      const req = new Request("https://customers.advocatemcp.com/api/onboard/public", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify(payload),
+      });
+
+      const resp = await handlePublicOnboard(req, env);
+      expect(resp.status).toBe(201);
+
+      // grantAccess must have been called exactly once with the user ID
+      // from createUser and the business ID from registerBusinessInD1.
+      // The mock is called with (db, userId, bizId).
+      expect(mockedGrantAccess).toHaveBeenCalledTimes(1);
+      const callArgs = mockedGrantAccess.mock.calls[0];
+      expect(callArgs[1]).toBe("mock-user-id"); // userId from createUser mock
+      // bizId is a UUID without hyphens, generated inside registerBusinessInD1
+      expect(typeof callArgs[2]).toBe("string");
+      expect(callArgs[2]).toMatch(/^[a-f0-9]{32}$/);
     },
   );
 });

@@ -974,7 +974,10 @@ export async function handleActivateHosted(
       await updateUserPassword(env.DB, existingUser.id, passwordHash, salt);
       user = { ...existingUser, password_hash: passwordHash, salt } as typeof user;
     } else {
-      user = await createUser(env.DB, email, passwordHash, salt, tenant.name, "client");
+      const fullName = (typeof body.first_name === "string" && body.first_name.trim())
+        ? body.first_name.trim()
+        : email.split("@")[0];
+      user = await createUser(env.DB, email, passwordHash, salt, fullName, "client");
     }
     // Legacy users still need email_verified = 1 — clicking the email
     // is proof of email ownership.

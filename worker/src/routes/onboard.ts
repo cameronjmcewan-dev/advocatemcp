@@ -787,6 +787,9 @@ export async function handleOnboard(request: Request, env: Env): Promise<Respons
         )
         .bind(bizId, slug, tenant.name, "pending", now)
         .run();
+      // NOTE: no user is created here — this is an admin-only shell record.
+      // grantAccess() fires in handleActivateHosted (activate.ts) when the
+      // tenant clicks their activation email link and sets their password.
       addStatusLog(tenant, "d1_business_created", `Business record created in D1: ${slug}`);
     }
 

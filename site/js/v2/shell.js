@@ -217,6 +217,16 @@
         impersonating: impersonating,
       };
 
+      // DNS-first gate: customers who haven't verified their DNS yet
+      // cannot enter the dashboard — they need to wire up their domain
+      // first. Skip the redirect if we're already on /onboard-dns so
+      // the boot sequence there doesn't loop. Admins bypass the gate.
+      if (me && me.dns_configured === false && !isAdmin &&
+          !window.location.pathname.startsWith('/onboard-dns')) {
+        window.location.replace('/onboard-dns');
+        return;
+      }
+
       // Mount chrome with a loading card BEFORE data arrives. The
       // sidebar + topbar are visible instantly; only the main content
       // area shows the spinner.
@@ -296,6 +306,19 @@
       }
 
       if (typeof opts.afterMount === 'function') opts.afterMount(data);
+
+      // First post-DNS visit: auto-open the Get Started checklist so the
+      // customer sees their next steps immediately. localStorage flag
+      // prevents repeated auto-opens on every subsequent page load.
+      if (!localStorage.getItem('amcp-seen-checklist-once')) {
+        localStorage.setItem('amcp-seen-checklist-once', '1');
+        setTimeout(function () {
+          var navItem = document.querySelector('[data-section="getting-started"]') ||
+                        document.querySelector('a[href="#getting-started"]');
+          if (navItem && typeof navItem.click === 'function') navItem.click();
+        }, 300);
+      }
+
       return;
     }
 

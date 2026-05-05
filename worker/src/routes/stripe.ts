@@ -782,7 +782,14 @@ export async function handlePublicOnboard(
   tenant.stripe!.checkoutSessionId = sessionId;
   transitionStatus(tenant, "pending_payment", `Stripe Checkout created via wizard: ${sessionId}`);
   await putTenant(env, tenant);
-  await registerBusinessInD1(env, tenant, plan, now);
+  const bizId = await registerBusinessInD1(env, tenant, plan, now);
+
+  // Grant the newly created user access to the business. This populates
+  // user_business_access so the user can see the business in their dashboard
+  // after email verification + login. FK constraints require both rows to exist first.
+  if (bizId) {
+    await grantAccess(env.DB, user.id, bizId);
+  }
 
   console.log(JSON.stringify({
     onboarding: true,
@@ -819,12 +826,12 @@ export async function registerBusinessInD1(
   tenant: TenantRecord,
   plan: string,
   now: string,
-): Promise<void> {
+): Promise<string | null> {
   try {
     const existingBiz = await env.DB
-      .prepare("SELECT slug FROM businesses WHERE slug = ? LIMIT 1")
+      .prepare("SELECT id, slug FROM businesses WHERE slug = ? LIMIT 1")
       .bind(tenant.slug)
-      .first<{ slug: string }>();
+      .first<{ id: string; slug: string }>();
 
     // Helper: JSON-stringify objects/arrays, pass null for missing values.
     // TEXT columns (differentiators_text, guarantee_text) must NOT be stringified.
@@ -849,6 +856,7 @@ export async function registerBusinessInD1(
           p.guarantee_text ?? null, j(p.case_stories_json), j(p.lead_routing_json),
         )
         .run();
+      return bizId;
     } else {
       // COALESCE(?, col) means re-onboard can only ADD or OVERWRITE values, never CLEAR them.
       // An explicit clear must go through a separate admin path — prevents a partial re-onboard payload from wiping fields set on a richer previous onboard.
@@ -876,6 +884,7 @@ export async function registerBusinessInD1(
           tenant.slug,
         )
         .run();
+      return existingBiz.id;
     }
   } catch (err) {
     console.log(JSON.stringify({
@@ -885,6 +894,7 @@ export async function registerBusinessInD1(
       error: String(err),
     }));
     addStatusLog(tenant, "d1_write_warning", String(err));
+    return null;
   }
 }
 
@@ -1331,7 +1341,10 @@ export async function handleStripeWebhook(
   }
   await putTenant(env, tenant);
 
-  // Update D1 with Stripe IDs
+  // Update D1 with Stripe IDs.
+  // NOTE: no user is created here — the webhook only updates billing state on
+  // an existing businesses row. grantAccess() fires in handleActivateHosted
+  // (activate.ts) when the tenant clicks their activation email link.
   try {
     await env.DB
       .prepare(

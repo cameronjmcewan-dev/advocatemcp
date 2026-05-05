@@ -23,6 +23,7 @@ import {
   getTenant,
 } from "./onboard";
 import { handleOnboardPage } from "./onboardPage";
+import { serveOnboardDnsPage } from "./onboardDnsPage";
 import { handleActivatePage } from "./activatePage";
 import { handleActivate, handleActivateHosted, handleActivatePreview, handleActivateStatus, handleActivateDnsProvider, handleActivationToken, handleGetActivation, handleResendActivation } from "./activate";
 import { handleCloudflareValidate, handleCloudflareApply, handleGoDaddyValidate, handleGoDaddyApply, handleNamecheapValidate, handleNamecheapApply, handleRoute53Validate, handleRoute53Apply, handleIonosValidate, handleIonosApply } from "./dnsAuto";
@@ -279,6 +280,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/admin/onboard/rotate-railway-key"     && method === "POST") return handleRotateRailwayKey(request, env);
   if (pathname === "/status"                   && method === "GET")  return statusPage(request, env);
   if (pathname === "/onboard"                  && method === "GET")  return handleOnboardPage(request, env);
+  if (pathname === "/onboard-dns"              && method === "GET")  return serveOnboardDnsPage(request, env);
 
   // ── Phase 3 self-serve activation (post-payment, token-gated) ──────────
   // Separate flow from the existing /onboard wizard. See feat(worker):
@@ -713,8 +715,37 @@ async function apiMe(request: Request, env: Env): Promise<Response> {
   const guard = await requireVerifiedSession(request, env);
   if (!guard.ok) return guard.resp;
   const ctx = guard.ctx;
+
+  // Compute dns_configured on every request (not in the token) — the value
+  // can change without re-login (e.g. user wires DNS after logging in).
+  let dns_configured = false;
+  try {
+    const businesses = await getUserBusinesses(env.DB, ctx.user_id);
+    if (businesses.length > 0) {
+      const biz = businesses[0];
+      // cf_hostname_id is not on the Business interface (added by migration
+      // 0002 after the type was frozen), so we query it separately.
+      const row = await env.DB
+        .prepare("SELECT cf_hostname_id, onboarding_state FROM businesses WHERE id = ? LIMIT 1")
+        .bind(biz.id)
+        .first<{ cf_hostname_id: string | null; onboarding_state: string | null }>();
+      if (row?.cf_hostname_id) {
+        // CF SaaS hostname exists — check the checklist completion flag.
+        try {
+          const state = row.onboarding_state ? JSON.parse(row.onboarding_state) : null;
+          dns_configured = !!(state?.checklist?.dns_configured?.completed_at);
+        } catch {
+          // Malformed JSON — fail closed (dns_configured stays false).
+        }
+      }
+    }
+  } catch {
+    // DB hiccup — fail closed so the DNS gate shows rather than being skipped.
+    dns_configured = false;
+  }
+
   return withCors(
-    jsonOk({ id: ctx.user_id, email: ctx.email, full_name: ctx.full_name, role: ctx.role }),
+    jsonOk({ id: ctx.user_id, email: ctx.email, full_name: ctx.full_name, role: ctx.role, dns_configured }),
     request,
     { credentials: true },
   );
