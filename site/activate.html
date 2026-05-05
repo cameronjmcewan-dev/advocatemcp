@@ -216,6 +216,14 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
       </div>
 
       <div class="fg">
+        <label class="fl" for="first_name">Your first name</label>
+        <input class="fi" type="text" id="first_name" name="first_name"
+               required minlength="1" maxlength="50"
+               autocomplete="given-name"
+               placeholder="What should we call you?" />
+      </div>
+
+      <div class="fg">
         <label class="fl" for="hosted-password">Password</label>
         <input class="fi" id="hosted-password" type="password" minlength="8"
                autocomplete="new-password"

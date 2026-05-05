@@ -802,6 +802,14 @@
         e.preventDefault();
         clearErr();
 
+        var firstNameEl = document.getElementById('first_name');
+        var firstName = firstNameEl ? firstNameEl.value.trim() : '';
+        if (!firstName) {
+          showErr('Please enter your first name.');
+          if (firstNameEl) firstNameEl.focus();
+          return;
+        }
+
         var pw = (pwInput && pwInput.value) || '';
         if (pw.length < 8) {
           showErr('Password must be at least 8 characters.');
@@ -818,7 +826,7 @@
             'Content-Type': 'application/json',
             'X-Activation-Token': token
           },
-          body: JSON.stringify({ password: pw })
+          body: JSON.stringify({ password: pw, first_name: firstName })
         })
           .then(function (res) {
             return res.json().then(function (body) { return { status: res.status, body: body }; });
