@@ -889,6 +889,12 @@ async function apiMetrics(request: Request, env: Env): Promise<Response> {
 
   const data = {
     ...(analytics ?? { message: "No data available yet", slug: biz.slug }),
+    // Surface the plan column (written by the Stripe webhook on
+    // checkout.session.completed) so the dashboard sidebar + AI Insights
+    // upgrade gate read from the canonical source. Without this, the
+    // frontend's `m.plan || 'free'` fallback would show every tenant as
+    // free regardless of the D1 row's actual plan. Mirrors apiAllMetrics.
+    plan: biz.plan ?? "base",
     domain,
     is_hosted: isHosted,
     onboarding: onboardingSnapshot,
@@ -1919,6 +1925,10 @@ type DomainStatus = {
     live_request:  Signal<{ status_code?: number; latency_ms?: number; marker_present?: boolean; error?: string }>;
   };
   all_green: boolean;
+  // Optional: set true when the worker short-circuits the probe for hosted
+  // tenants (subdomains under *.hosted.advocatemcp.com). Lets the frontend
+  // render the hosted-friendly card instead of regex-matching the hostname.
+  is_hosted?: boolean;
 };
 
 const DOMAIN_STATUS_CACHE = new Map<string, { value: DomainStatus; expires_at: number }>();
@@ -2078,6 +2088,31 @@ async function apiDomainInfo(request: Request, env: Env): Promise<Response> {
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
   if (!biz.domain) {
     return withCors(jsonErr(400, "No domain registered for this business"), request, { credentials: true });
+  }
+
+  // Hosted tenants live at <slug>.hosted.advocatemcp.com — fully provisioned at
+  // signup, no DNS for the customer to configure. Short-circuit the probe and
+  // return a synthetic "all green" status. The probe service can't meaningfully
+  // verify our own subdomain (we own the zone), and forwarding the call would
+  // return 502s that the frontend surfaces as "Couldn't check. Try again in a
+  // moment." Detection mirrors the rest of portal.ts (hostname-suffix match).
+  if (biz.domain.endsWith(".hosted.advocatemcp.com")) {
+    const hostedStatus: DomainStatus = {
+      domain: biz.domain,
+      slug: biz.slug,
+      checked_at: new Date().toISOString(),
+      signals: {
+        dns:          { state: "ok", message: "Hosted subdomain active." },
+        cf_hostname:  { state: "ok", message: "Cloudflare hostname active." },
+        cf_ssl:       { state: "ok", message: "SSL certificate active." },
+        worker_route: { state: "ok", message: "Worker route configured." },
+        live_request: { state: "ok", message: "Live and serving." },
+      },
+      all_green: true,
+      is_hosted: true,
+    };
+    writeDomainStatusCache(biz.slug, hostedStatus);
+    return withCors(jsonOk(hostedStatus), request, { credentials: true });
   }
 
   const cached = readDomainStatusCache(biz.slug);
