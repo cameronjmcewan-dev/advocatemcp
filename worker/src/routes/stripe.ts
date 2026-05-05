@@ -1331,7 +1331,10 @@ export async function handleStripeWebhook(
   }
   await putTenant(env, tenant);
 
-  // Update D1 with Stripe IDs
+  // Update D1 with Stripe IDs.
+  // NOTE: no user is created here — the webhook only updates billing state on
+  // an existing businesses row. grantAccess() fires in handleActivateHosted
+  // (activate.ts) when the tenant clicks their activation email link.
   try {
     await env.DB
       .prepare(
