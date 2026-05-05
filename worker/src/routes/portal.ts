@@ -723,19 +723,28 @@ async function apiMe(request: Request, env: Env): Promise<Response> {
     const businesses = await getUserBusinesses(env.DB, ctx.user_id);
     if (businesses.length > 0) {
       const biz = businesses[0];
-      // cf_hostname_id is not on the Business interface (added by migration
-      // 0002 after the type was frozen), so we query it separately.
-      const row = await env.DB
-        .prepare("SELECT cf_hostname_id, onboarding_state FROM businesses WHERE id = ? LIMIT 1")
-        .bind(biz.id)
-        .first<{ cf_hostname_id: string | null; onboarding_state: string | null }>();
-      if (row?.cf_hostname_id) {
-        // CF SaaS hostname exists — check the checklist completion flag.
-        try {
-          const state = row.onboarding_state ? JSON.parse(row.onboarding_state) : null;
-          dns_configured = !!(state?.checklist?.dns_configured?.completed_at);
-        } catch {
-          // Malformed JSON — fail closed (dns_configured stays false).
+      // Hosted tenants (domains under our wildcard *.hosted.advocatemcp.com)
+      // don't have per-tenant DNS setup — the wildcard route handles them.
+      // Treat as automatically configured.
+      if (biz.domain && biz.domain.endsWith('.hosted.advocatemcp.com')) {
+        dns_configured = true;
+      } else {
+        // Existing logic: query cf_hostname_id + onboarding_state to check
+        // whether the customer's custom-domain CNAME is verified.
+        // cf_hostname_id is not on the Business interface (added by migration
+        // 0002 after the type was frozen), so we query it separately.
+        const row = await env.DB
+          .prepare("SELECT cf_hostname_id, onboarding_state FROM businesses WHERE id = ? LIMIT 1")
+          .bind(biz.id)
+          .first<{ cf_hostname_id: string | null; onboarding_state: string | null }>();
+        if (row?.cf_hostname_id) {
+          // CF SaaS hostname exists — check the checklist completion flag.
+          try {
+            const state = row.onboarding_state ? JSON.parse(row.onboarding_state) : null;
+            dns_configured = !!(state?.checklist?.dns_configured?.completed_at);
+          } catch {
+            // Malformed JSON — fail closed (dns_configured stays false).
+          }
         }
       }
     }
