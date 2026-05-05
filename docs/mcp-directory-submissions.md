@@ -3,11 +3,12 @@
 Copy-paste targets for submitting AdvocateMCP to each of the major MCP
 directories. One section per directory with the exact fields they ask for.
 
-Submit in this order: **Smithery → PulseMCP → Anthropic's registry**.
+Submit in this order: **MCP Registry (fast, self-serve) → Smithery → PulseMCP → Anthropic Connectors Directory**.
 Each later submission benefits from showing the earlier listings as proof of
-ecosystem presence.
+ecosystem presence; Anthropic's review is the slowest and most selective so it
+goes last with maximum supporting evidence.
 
-Last validated: 2026-04-19.
+Last validated: 2026-05-04 (Phase 1 expanded the tool surface from 6 → 10 on Apr 30 2026; Anthropic + MCP Registry sections corrected at the same time).
 
 ---
 
@@ -46,15 +47,30 @@ canonical long-form description.
 2. "What does Workman Copy Co charge for a 4-email welcome sequence?"
 3. "Book a 30-minute consultation with Apex Legal on Thursday afternoon."
 4. "What's the best-rated DTC email agency in Austin?"
+5. "Is the locksmith on 5th Ave actually licensed and insured?"
+6. "What's their cancellation policy if I need to reschedule the day before?"
+7. "Have them call me back about a custom quote — I'm at 555-0123."
+8. "Sign me up for new-service emails from this medspa."
 
-### Tools list (for forms that ask enumerate tools)
+### Tools list (10 tools — for forms that enumerate the surface)
+
+Discovery (open, no auth):
 
 - `search_businesses` — search by category, name, or location
-- `query_business_agent` — query a specific business's agent
-- `get_availability` — 30-min slot windows from `hours_json`
-- `get_quote` — price quote from `pricing_json_v2`
-- `reserve_slot` — 15-min HELD reservation with signed confirmation token
-- `initiate_handoff` — SMS/email to a human or signed URL to another agent
+- `query_business_agent` — query a specific business's AI agent
+- `get_availability` — 30-min slot windows derived from `hours_json`
+- `get_quote` — price quote from `pricing_json_v2` (deterministic ranges first, LLM fallback labeled "estimate")
+- `get_credentials` — self-reported licenses, insurance, bonding, certifications (trust-sensitive verticals)
+- `get_cancellation_policy` — verbatim cancellation/refund/no-show policy + agent guidance when missing
+
+Transactional (per-tenant Bearer required — agent-to-agent surface):
+
+- `reserve_slot` — 15-min HELD reservation, returns signed `confirmation_token`
+- `initiate_handoff` — SMS/email to human (Twilio) OR signed continuation URL for agent-to-agent
+- `request_callback` — push user contact to business; idempotency-keyed within 24h to prevent spam
+- `subscribe_to_updates` — double-opt-in email subscription (CAN-SPAM/GDPR compliant)
+
+All 10 tools carry MCP-spec annotations (`title`, `readOnlyHint`, `destructiveHint`, `openWorldHint`); Anthropic explicitly requires `title`.
 
 ---
 
@@ -69,7 +85,7 @@ canonical long-form description.
 | Description (short) | See "Short description" above |
 | Endpoint | `https://api.advocatemcp.com/mcp` |
 | Transport | Streamable HTTP |
-| Tags | `local-business`, `directory`, `smb`, `lead-gen`, `attribution` |
+| Tags | `local-business`, `directory`, `smb`, `lead-gen`, `attribution`, `booking`, `quotes`, `credentials`, `callbacks` |
 | Auth required | Discovery: none. Transactions: per-tenant Bearer. |
 | Homepage | `https://advocatemcp.com/mcp.html` |
 | GitHub | `https://github.com/cameronjmcewan-dev/advocatemcp` |
@@ -104,39 +120,154 @@ listing will still be accepted, just without a demo banner.
 
 ---
 
-## 3. Anthropic MCP Registry
+## 3. Anthropic Connectors Directory
 
-**Submission path:** likely via `github.com/anthropics/mcp-registry` PR (registry
-format is still evolving — check their README for the current process at
-submission time).
+**Submission path:** Google Form at `https://clau.de/mcp-directory-submission`
+(remote/hosted MCPs). Desktop extensions submit separately at
+`https://clau.de/desktop-extention-submission` — not us; we're a remote MCP.
 
-The registry entry is a YAML/JSON manifest with fields close to what
-`/.well-known/mcp.json` already emits. Expected shape (pseudocode):
+**Review timeline:** ~2 weeks manual review by the Anthropic team. Status updates via dashboard (rolling out) or `mcp-review@anthropic.com` for escalations.
 
-```yaml
-name: advocate-mcp
-display_name: AdvocateMCP
-description: |
-  The MCP layer for local businesses...
-url: https://api.advocatemcp.com/mcp
-homepage: https://advocatemcp.com/mcp.html
-maintainer: Cameron McEwan <max@advocate-mcp.com>
-transport: streamable-http
-category: local-business
-tools:
-  - search_businesses
-  - query_business_agent
-  - get_availability
-  - get_quote
-  - reserve_slot
-  - initiate_handoff
+**Form field map:**
+
+| Field | Answer |
+|---|---|
+| Server name | `AdvocateMCP` |
+| Server URL | `https://api.advocatemcp.com/mcp` |
+| Tagline | "Search and query a directory of local businesses' AI-ready advocate agents." |
+| Description | See "Medium description" above |
+| Use cases | See example queries above |
+| Authentication type | None (discovery surface). Write tools require per-tenant Bearer — see test instructions below. |
+| Transport | Streamable HTTP (JSON-RPC 2.0) |
+| Read/write capabilities | 6 read-only tools, 4 write tools (transactional, agent-to-agent only) |
+| Connection requirements | None for discovery; per-business Bearer for `reserve_slot`/`initiate_handoff`/`request_callback`/`subscribe_to_updates` |
+| Data handling | No PII written to long-term analytics; signed attribution tokens only |
+| Third-party connections | Anthropic API (LLM responses), Twilio (handoff SMS/email), Resend (email) |
+| Health data | None |
+| Category | Local business / SMB directory / Customer discovery |
+| Tools list | All 10 (see Tools list above), all with `title`/`readOnlyHint`/`destructiveHint`/`openWorldHint` annotations confirmed |
+| Documentation URL | `https://advocatemcp.com/mcp.html` |
+| Privacy policy | `https://advocatemcp.com/privacy` |
+| Terms | `https://advocatemcp.com/terms` |
+| Support channel | `max@advocate-mcp.com` |
+| Test account | See "Reviewer test instructions" below |
+| GA date | Submission day |
+| Tested surfaces | Claude Desktop (verified); Claude.ai (screenshots) |
+| Logo | `https://advocatemcp.com/icon-512.png` (512×512 PNG) |
+| Favicon | `https://advocatemcp.com/favicon.ico` (verify before submission) |
+| Promotional screenshots | 3–5 PNG ≥1000px, cropped to Claude.ai response (drop in `docs/brand/screenshots/`) |
+| Compliance checklists | Confirm directory policy, technical requirements, docs, testing all met |
+
+### Reviewer test instructions (copy into the form's test-account field)
+
+```
+1. Add to Claude Desktop's claude_desktop_config.json:
+   { "mcpServers": { "advocate": { "url": "https://api.advocatemcp.com/mcp", "transport": "http" } } }
+2. Restart Claude Desktop. Try these prompts:
+   - "Search for marketing agencies in Boise" → search_businesses
+   - "What does Workman Copy Co charge for a welcome email sequence?" → query_business_agent
+   - "When is Apex Legal available Thursday afternoon?" → get_availability
+   - "Is Workman Copy Co licensed and insured?" → get_credentials
+   - "What's their cancellation policy?" → get_cancellation_policy
+3. Write tools (reserve_slot, initiate_handoff, request_callback,
+   subscribe_to_updates) require per-business Bearer auth — they're an
+   agent-to-agent surface for AI booking on behalf of a user, not exposed
+   to direct end-user Claude.ai sessions. Reviewer can verify registration
+   via tools/list RPC. Functional tests require business onboarding (out of scope).
+4. Manifest: https://api.advocatemcp.com/.well-known/mcp.json
+5. Public spec page: https://advocatemcp.com/mcp.html
+6. Rate limit posture: 60 req/min/IP (Cloudflare DO-backed) declared in manifest
 ```
 
-**Expect back-and-forth.** Anthropic reviewers will likely ask about:
-(a) rate limits and abuse protection — answer: Cloudflare Durable Object
-per-IP limits; (b) handling of PII in tool outputs — answer: we never
-surface customer contact info through MCP responses, only the business
-side of a conversation; (c) attribution — worth volunteering proactively.
+**Common rejection triggers and pre-empted responses:**
+
+- **"Auth model is OAuth?"** — No. Discovery tools are open (auth=none). Write tools are agent-to-agent and use per-tenant Bearer issued at business registration. End-users in Claude.ai never need credentials. OAuth 2.0 doesn't fit because the "user" of write tools is a business owner, not a Claude.ai end-user.
+- **"Rate limits not documented"** — Manifest declares `per_ip_per_minute: 60` and per-tier ceilings. `mcp.html` Rate Limits section explains the DO-backed enforcement.
+- **"Privacy policy thin"** — verify `https://advocatemcp.com/privacy` covers data collection, retention, third-party sharing, contact email before submission. **Most common immediate-rejection trigger** per Anthropic's own guidance.
+- **"Tool annotations missing"** — All 10 tools carry `title` + `readOnlyHint`/`destructiveHint`/`openWorldHint`. Verified by drift test in `server/src/manifest/descriptor.test.ts`.
+
+---
+
+## 4. MCP Registry (registry.modelcontextprotocol.io)
+
+**Submission path:** Self-serve CLI publish via the `mcp-publisher` binary. Domain-authenticated via DNS TXT or HTTP `/.well-known/` proof. Goes live in hours, no manual review queue.
+
+**Why submit here too:** The MCP Registry is the official, vendor-neutral registry — Anthropic is a contributor but it's community-governed. Listing here first creates ecosystem proof the Anthropic reviewer can cite.
+
+**Server.json file:** Already drafted at [docs/mcp-registry-server.json](mcp-registry-server.json) — name `com.advocatemcp/advocate`, declares one streamable-http remote at `https://api.advocatemcp.com/mcp`, references the GitHub repo. Update the `version` field on each republish.
+
+### Setup steps
+
+**1. Install `mcp-publisher`** (one-time, macOS/Linux):
+
+```bash
+curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" \
+  | tar xz mcp-publisher \
+  && sudo mv mcp-publisher /usr/local/bin/
+mcp-publisher --help
+```
+
+Or via Homebrew: `brew install mcp-publisher`.
+
+**2. Authenticate with the `com.advocatemcp` namespace via HTTP method** (recommended — uses our existing `/.well-known/` infrastructure on advocatemcp.com):
+
+```bash
+# Generate Ed25519 key pair (run from a secure local directory; key.pem is sensitive)
+openssl genpkey -algorithm Ed25519 -out key.pem
+
+# Generate the auth file
+PUBLIC_KEY="$(openssl pkey -in key.pem -pubout -outform DER | tail -c 32 | base64)"
+echo "v=MCPv1; k=ed25519; p=${PUBLIC_KEY}" > mcp-registry-auth
+```
+
+Then host `mcp-registry-auth` at `https://advocatemcp.com/.well-known/mcp-registry-auth`. Drop it into `site/.well-known/mcp-registry-auth` and redeploy the site (Cloudflare Pages picks up the file automatically since `/.well-known/` paths route through the site bucket).
+
+```bash
+# Verify it's live before login
+curl -sI https://advocatemcp.com/.well-known/mcp-registry-auth | head -3
+# Expected: HTTP/2 200, content-type: text/plain (or application/octet-stream)
+```
+
+Then log in:
+
+```bash
+PRIVATE_KEY="$(openssl pkey -in key.pem -noout -text | grep -A3 "priv:" | tail -n +2 | tr -d ' :\n')"
+mcp-publisher login http --domain "advocatemcp.com" --private-key "${PRIVATE_KEY}"
+# Expected: ✓ Successfully logged in
+```
+
+(Alternative: DNS method using a TXT record on advocatemcp.com. Slower because DNS propagation can take several minutes, but doesn't require a redeploy. See `https://modelcontextprotocol.io/registry/authentication` for the full DNS recipe.)
+
+**3. Publish:**
+
+`mcp-publisher` defaults to `./server.json` and accepts a positional path. There is no `--file=` flag (despite what some third-party docs say). Publish via:
+
+```bash
+cd /Users/cameronmcewan/Desktop/advocate/advocatemcp
+mcp-publisher publish docs/mcp-registry-server.json
+# Expected:
+# Publishing to https://registry.modelcontextprotocol.io...
+# ✓ Successfully published
+# ✓ Server com.advocatemcp/advocate version 1.0.0
+```
+
+To pre-validate without publishing (verified 2026-05-04 against the live registry schema): `cp docs/mcp-registry-server.json server.json && mcp-publisher validate && rm server.json`. The `validate` command requires `./server.json` — copy in/out is a one-line workaround.
+
+**4. Verify listing:**
+
+```bash
+curl "https://registry.modelcontextprotocol.io/v0.1/servers?search=com.advocatemcp/advocate" | jq
+# Confirm name + remotes[0].url match
+```
+
+**5. Capture the registry URL** — paste it into the Anthropic submission's "tested surfaces" / "previous listings" field as ecosystem evidence.
+
+### Republish workflow (after future tool surface changes)
+
+1. Bump `"version"` in `docs/mcp-registry-server.json` (e.g. `1.0.0` → `1.1.0` if a tool was added)
+2. Re-run `mcp-publisher publish --file=docs/mcp-registry-server.json` (auth state cached locally; no re-login needed)
+
+The MCP Registry stores metadata only — it does NOT pull our `/.well-known/mcp.json` automatically. So tool annotation changes (like the `title` annotation added 2026-05-04) require a republish to be reflected on the registry side. The full tool catalog lives in our manifest, which clients fetch directly from `https://api.advocatemcp.com/.well-known/mcp.json`.
 
 ---
 

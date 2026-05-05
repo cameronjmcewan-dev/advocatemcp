@@ -39,13 +39,19 @@ describe("POST /mcp — initialize carries _meta.advocatemcp", () => {
     expect(meta.agent_id).toBe("advocatemcp-central");
     expect(meta.manifest_url).toMatch(/\/\.well-known\/mcp\.json$/);
     expect(Array.isArray(meta.tools)).toBe(true);
+    // Apr 30 2026 — Phase 1 added get_credentials, get_cancellation_policy,
+    // request_callback, subscribe_to_updates (10 total).
     expect((meta.tools as { name: string }[]).map((t) => t.name).sort()).toEqual([
       "get_availability",
+      "get_cancellation_policy",
+      "get_credentials",
       "get_quote",
       "initiate_handoff",
       "query_business_agent",
+      "request_callback",
       "reserve_slot",
       "search_businesses",
+      "subscribe_to_updates",
     ]);
   });
 });

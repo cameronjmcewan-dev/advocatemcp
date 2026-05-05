@@ -51,7 +51,20 @@ describe("GET /.well-known/mcp.json", () => {
   it("tools[].name includes all current MCP tools", async () => {
     const res = await request(app).get("/.well-known/mcp.json");
     const names = (res.body.tools as { name: string }[]).map((t) => t.name).sort();
-    expect(names).toEqual(["get_availability", "get_quote", "initiate_handoff", "query_business_agent", "reserve_slot", "search_businesses"]);
+    // Apr 30 2026 — Phase 1 added get_credentials, get_cancellation_policy,
+    // request_callback, subscribe_to_updates (10 total).
+    expect(names).toEqual([
+      "get_availability",
+      "get_cancellation_policy",
+      "get_credentials",
+      "get_quote",
+      "initiate_handoff",
+      "query_business_agent",
+      "request_callback",
+      "reserve_slot",
+      "search_businesses",
+      "subscribe_to_updates",
+    ]);
   });
 
   it("transports lists only http pointing at /mcp (SSE dropped — see descriptor.ts)", async () => {

@@ -169,8 +169,11 @@ export const ManifestSchema = z.object({
       estimated_latency_ms: z.number().int().positive(),
       estimated_cost_cents: z.number().nonnegative(),
       // MCP spec behavioral hints — surfaced so A2A manifest consumers see
-      // the same readOnly/destructive/openWorld signal as `tools/list`.
+      // the same title/readOnly/destructive/openWorld signal as `tools/list`.
+      // Anthropic's Connectors Directory submission requires `title` on every
+      // tool alongside the readOnly/destructive hints (30% rejection cause).
       annotations: z.object({
+        title: z.string().min(1),
         readOnlyHint: z.boolean(),
         destructiveHint: z.boolean(),
         openWorldHint: z.boolean(),

@@ -48,8 +48,12 @@ describe("descriptor registry", () => {
     }
   });
 
-  it("each descriptor carries MCP tool annotations (readOnly/destructive/openWorld)", () => {
+  it("each descriptor carries MCP tool annotations (title/readOnly/destructive/openWorld)", () => {
     for (const d of DESCRIPTORS) {
+      // title is required by Anthropic's Connectors Directory submission —
+      // missing it accounts for ~30% of directory rejections.
+      expect(typeof d.annotations.title).toBe("string");
+      expect(d.annotations.title.length).toBeGreaterThan(0);
       expect(typeof d.annotations.readOnlyHint).toBe("boolean");
       expect(typeof d.annotations.destructiveHint).toBe("boolean");
       expect(typeof d.annotations.openWorldHint).toBe("boolean");
@@ -59,34 +63,64 @@ describe("descriptor registry", () => {
   it("annotations match the Apps-SDK submission table", () => {
     const byName = Object.fromEntries(DESCRIPTORS.map((d) => [d.name, d.annotations]));
     expect(byName.query_business_agent).toEqual({
+      title: "Query business agent",
       readOnlyHint: false,
       destructiveHint: false,
       openWorldHint: true,
     });
     expect(byName.search_businesses).toEqual({
+      title: "Search businesses",
       readOnlyHint: true,
       destructiveHint: false,
       openWorldHint: false,
     });
     expect(byName.get_availability).toEqual({
+      title: "Get availability",
       readOnlyHint: true,
       destructiveHint: false,
       openWorldHint: false,
     });
     expect(byName.get_quote).toEqual({
+      title: "Get quote",
       readOnlyHint: true,
       destructiveHint: false,
       openWorldHint: true,
     });
     expect(byName.reserve_slot).toEqual({
+      title: "Reserve slot",
       readOnlyHint: false,
       destructiveHint: true,
       openWorldHint: true,
     });
     expect(byName.initiate_handoff).toEqual({
+      title: "Initiate handoff",
       readOnlyHint: false,
       destructiveHint: true,
       openWorldHint: true,
+    });
+    expect(byName.get_credentials).toEqual({
+      title: "Get business credentials",
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false,
+    });
+    expect(byName.get_cancellation_policy).toEqual({
+      title: "Get cancellation policy",
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: false,
+    });
+    expect(byName.request_callback).toEqual({
+      title: "Request callback",
+      readOnlyHint: false,
+      destructiveHint: true,
+      openWorldHint: true,
+    });
+    expect(byName.subscribe_to_updates).toEqual({
+      title: "Subscribe to updates",
+      readOnlyHint: false,
+      destructiveHint: true,
+      openWorldHint: false,
     });
   });
 });
@@ -151,6 +185,8 @@ describe("buildManifest", () => {
     for (const t of m.tools) {
       const anno = (t as { annotations?: Record<string, unknown> }).annotations;
       expect(anno).toBeDefined();
+      expect(typeof anno!.title).toBe("string");
+      expect((anno!.title as string).length).toBeGreaterThan(0);
       expect(typeof anno!.readOnlyHint).toBe("boolean");
       expect(typeof anno!.destructiveHint).toBe("boolean");
       expect(typeof anno!.openWorldHint).toBe("boolean");
@@ -312,6 +348,10 @@ describe("drift: MCP registry ↔ DESCRIPTORS", () => {
         reg.annotations,
         `tool ${d.name} carries annotations on the MCP server`,
       ).toBeDefined();
+      // title is the Anthropic Connectors Directory requirement that closes
+      // the 30%-rejection gap; verify it propagates through annotationsFor()
+      // into the actual tools/list response.
+      expect(reg.annotations!.title).toBe(d.annotations.title);
       expect(reg.annotations!.readOnlyHint).toBe(d.annotations.readOnlyHint);
       expect(reg.annotations!.destructiveHint).toBe(d.annotations.destructiveHint);
       expect(reg.annotations!.openWorldHint).toBe(d.annotations.openWorldHint);

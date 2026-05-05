@@ -4,11 +4,33 @@
 
 The central MCP server lives at `POST /mcp` and `GET /mcp` on the Railway Express backend (`server/src/routes/mcp.ts`). It uses `@modelcontextprotocol/sdk` with the `StreamableHTTPServerTransport` (stateless mode — a new `McpServer` instance is created per request to avoid shared-transport concurrency issues). The Worker proxies all `/mcp` and `/mcp/*` paths straight through to Railway without modification, so the MCP endpoint is accessible at both the Railway URL and the Worker's public hostname.
 
-## Tools exposed
+## Tools exposed (10, as of Apr 30 2026 Phase 1 expansion)
 
-**`query_business_agent`** — accepts `{ slug: string, query: string }`. Looks up the business in SQLite, calls `queryAgent()` (same code path as the crawler flow), and returns the Claude response as a JSON text block. Returns an `isError: true` result if the slug is not found.
+All tools are registered via [server/src/routes/mcp.ts](../server/src/routes/mcp.ts) and described in [server/src/manifest/descriptor.ts](../server/src/manifest/descriptor.ts). Every tool carries MCP-spec annotations (`title`, `readOnlyHint`, `destructiveHint`, `openWorldHint`) — `title` is required by Anthropic's Connectors Directory submission and absence accounts for ~30% of directory rejections.
 
-**`search_businesses`** — accepts `{ search: string, location?: string }`. Runs a LIKE search across `name`, `description`, `services`, and `category` in the SQLite `businesses` table (with optional `location` filter). Returns up to 20 matches with slug, name, description, category, location, website, star_rating, review_count, pricing_tier, and an `agent_endpoint` URL. Returns a descriptive "no results" string if nothing matches.
+### Discovery (open, no auth)
+
+**`query_business_agent`** — `{ slug, query, agent_id?, stage? }`. Looks up the business in SQLite, calls `queryAgent()` (same code path as the crawler flow), returns the Claude response as JSON text. `isError: true` on slug miss.
+
+**`search_businesses`** — `{ search, location? }`. LIKE search across `name`, `description`, `services`, `category` in the `businesses` table. Returns up to 20 matches with slug, agent endpoint, and metadata.
+
+**`get_availability`** — `{ slug, window_start?, window_end? }`. 30-min slot windows derived from `hours_json` (v1 synthetic). `availability_webhook_url` column reserved for v2.
+
+**`get_quote`** — `{ slug, service, params? }`. Deterministic from `pricing_json_v2.ranges[]` first, Claude fallback labeled `"estimate"`.
+
+**`get_credentials`** — `{ slug }`. Self-reported licenses, insurance, bonding, certifications. Trust-sensitive verticals (contractors, healthcare, legal). Framed as "self-reported" so agents don't upgrade tenant claims to verified facts.
+
+**`get_cancellation_policy`** — `{ slug }`. Verbatim cancellation/refund/no-show policy. When missing, returns guidance for the agent to acknowledge the gap.
+
+### Transactional (per-tenant Bearer required — agent-to-agent surface)
+
+**`reserve_slot`** — `{ slug, window_start, window_end, customer_contact, idempotency_key }`. Creates a 15-min HELD reservation, returns signed `confirmation_token`. Idempotency_key UNIQUE catch for race-safety.
+
+**`initiate_handoff`** — `{ slug, mode: "human" | "agent", payload }`. Discriminated union: `human` notifies via `lead_routing_json` recipient through Twilio (or short-circuits with `no_recipient_configured`); `agent` mints signed continuation URL.
+
+**`request_callback`** — `{ slug, contact, preferred_channel?, reason?, urgency?, agent_id?, idempotency_key }`. Pushes user contact to business. Idempotent on idempotency_key within 24h.
+
+**`subscribe_to_updates`** — `{ slug, contact_email, topics[], agent_id? }`. Double-opt-in email subscription (CAN-SPAM/GDPR). Returns confirmation_url; user must click within 7 days.
 
 ## Transports
 
@@ -48,13 +70,14 @@ The DO is registered via the `[[migrations]]` stanza in `wrangler.toml` (`tag = 
 
 ### Submitting to directories
 
-With the hardening above, the `/mcp` endpoint at `https://api.advocatemcp.com/mcp` is ready for submission to:
+With the hardening above plus the `title` annotation added 2026-05-04, the `/mcp` endpoint at `https://api.advocatemcp.com/mcp` is ready for submission to:
 
-- **Smithery** — `https://smithery.ai/` — submit via their web form
-- **PulseMCP** — `https://pulsemcp.com/` — submit via their web form
-- **Anthropic MCP registry** — `https://github.com/modelcontextprotocol/servers` — PR to the community-maintained list
+- **MCP Registry** (official, vendor-neutral) — `https://registry.modelcontextprotocol.io/` — self-serve CLI publish via `make publisher` from `modelcontextprotocol/registry`. Reverse-DNS namespace (`com.advocatemcp/advocate-mcp`). No manual review queue.
+- **Anthropic Connectors Directory** (Claude.ai-curated) — `https://clau.de/mcp-directory-submission` — Google Form, ~2 week manual review. Requires `title` annotation, privacy policy URL, 3–5 promotional screenshots ≥1000px.
+- **Smithery** — `https://smithery.ai/` — submit via their web form, 3–7 day turnaround.
+- **PulseMCP** — `https://pulsemcp.com/` — submit via their web form.
 
-Each submission should reference the manifest at `/.well-known/mcp.json`, the tools listed above, and the rate-limit posture (60 req/min per IP).
+Each submission should reference the manifest at `/.well-known/mcp.json`, the 10 tools listed above, and the rate-limit posture (60 req/min per IP). See [docs/mcp-directory-submissions.md](mcp-directory-submissions.md) for pre-filled per-directory form answers.
 
 ## Updating this doc
 
