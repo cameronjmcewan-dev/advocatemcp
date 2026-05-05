@@ -58,7 +58,7 @@ ${renderHeader({ subtitle: "Domain Setup", showCta: false, activeNav: null })}
   <h1 class="dns-gate-title">Connect your domain to Advocate</h1>
   <p class="dns-gate-sub">
     Before you can start receiving AI bot traffic, point your domain at Advocate.
-    Add the DNS records below — verification usually completes in 5&ndash;15 minutes.
+    Add the DNS records below — verification usually takes 10&ndash;30 minutes, but can take up to 48 hours globally.
   </p>
 
   <div class="dns-gate-container" id="onboard-dns-container"></div>

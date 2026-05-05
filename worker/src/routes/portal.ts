@@ -187,6 +187,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
     }
   }
   if (pathname === "/api/client/me"       && method === "GET")  return apiMe(request, env);
+  if (pathname === "/api/client/me"       && method === "PATCH") return apiPatchMe(request, env);
   if (pathname === "/api/client/metrics"  && method === "GET")  return apiMetrics(request, env);
   if (pathname === "/api/client/activity"   && method === "GET")  return apiActivity(request, env);
   if (pathname === "/api/client/clicks"          && method === "GET")  return apiClicks(request, env);
@@ -719,10 +720,14 @@ async function apiMe(request: Request, env: Env): Promise<Response> {
   // Compute dns_configured on every request (not in the token) — the value
   // can change without re-login (e.g. user wires DNS after logging in).
   let dns_configured = false;
+  let apiMeDomain: string | null = null;
+  let apiMeIsHosted = false;
   try {
     const businesses = await getUserBusinesses(env.DB, ctx.user_id);
     if (businesses.length > 0) {
       const biz = businesses[0];
+      apiMeDomain = biz.domain ?? null;
+      apiMeIsHosted = !!(biz.domain && biz.domain.endsWith('.hosted.advocatemcp.com'));
       // Hosted tenants (domains under our wildcard *.hosted.advocatemcp.com)
       // don't have per-tenant DNS setup — the wildcard route handles them.
       // Treat as automatically configured.
@@ -754,7 +759,42 @@ async function apiMe(request: Request, env: Env): Promise<Response> {
   }
 
   return withCors(
-    jsonOk({ id: ctx.user_id, email: ctx.email, full_name: ctx.full_name, role: ctx.role, dns_configured }),
+    jsonOk({ id: ctx.user_id, email: ctx.email, full_name: ctx.full_name, role: ctx.role, dns_configured, domain: apiMeDomain, is_hosted: apiMeIsHosted }),
+    request,
+    { credentials: true },
+  );
+}
+
+// ── PATCH /api/client/me ───────────────────────────────────────────────────
+
+async function apiPatchMe(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  let body: { full_name?: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    return withCors(jsonErr(400, "Invalid JSON"), request, { credentials: true });
+  }
+
+  const fullName = typeof body.full_name === "string" ? body.full_name.trim() : "";
+  if (!fullName || fullName.length > 100) {
+    return withCors(jsonErr(400, "full_name must be 1-100 characters"), request, { credentials: true });
+  }
+
+  try {
+    await env.DB
+      .prepare("UPDATE users SET full_name = ?, updated_at = ? WHERE id = ?")
+      .bind(fullName, new Date().toISOString(), ctx.user_id)
+      .run();
+  } catch (err) {
+    return withCors(jsonErr(500, "Database error"), request, { credentials: true });
+  }
+
+  return withCors(
+    jsonOk({ id: ctx.user_id, email: ctx.email, full_name: fullName, role: ctx.role }),
     request,
     { credentials: true },
   );

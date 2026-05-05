@@ -52,6 +52,9 @@
       if (slugEl) slugEl.textContent = window.AMCP_DATA.slug;
     }
 
+    var input = document.getElementById('settings-full-name');
+    if (input) input.value = (user && user.full_name) || '';
+
     // Account activity, we don't yet have a last_login_at field from
     // /api/client/me, so show an em-dash instead of a cosmetic "This session"
     // placeholder. Flip to a real value once the endpoint exposes it.
@@ -576,6 +579,33 @@
       if (navItem) navItem.style.display = '';
       var gs = document.querySelector('[data-section="getting-started"]');
       if (gs) gs.click();
+    });
+  }
+
+  // Save full name button handler
+  var saveNameBtn = document.getElementById('btn-save-name');
+  if (saveNameBtn) {
+    saveNameBtn.addEventListener('click', function () {
+      var input = document.getElementById('settings-full-name');
+      var status = document.getElementById('name-save-status');
+      var newName = (input.value || '').trim();
+      if (!newName) { if (status) { status.textContent = 'Name cannot be empty'; status.style.color = 'var(--red)'; } return; }
+      saveNameBtn.disabled = true;
+      var prevText = saveNameBtn.textContent;
+      saveNameBtn.textContent = 'Saving...';
+      window.AMCP.authedFetch('/api/client/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ full_name: newName }),
+      }).then(function (r) { return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)); })
+        .then(function (data) {
+          if (window.AMCP_DATA) window.AMCP_DATA.full_name = data.full_name || newName;
+          if (status) { status.textContent = 'Saved'; status.style.color = 'var(--green)'; }
+        })
+        .catch(function (err) {
+          if (status) { status.textContent = 'Save failed: ' + (err.message || err); status.style.color = 'var(--red)'; }
+        })
+        .finally(function () { saveNameBtn.disabled = false; saveNameBtn.textContent = prevText; });
     });
   }
 
