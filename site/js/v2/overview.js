@@ -126,6 +126,15 @@
         window.location.reload();
       }
     });
+    // Same pattern for the topbar's date-range selector — refetch every
+    // metrics-driven section when the user changes the time window.
+    window.addEventListener('amcp:date-range-changed', () => {
+      if (window.AMCP_SHELL && typeof window.AMCP_SHELL.refresh === 'function') {
+        window.AMCP_SHELL.refresh();
+      } else {
+        window.location.reload();
+      }
+    });
   }
 
   /* ────────────────────────────────────────────────────────────────────
@@ -277,6 +286,10 @@
     const clicks       = fmtCount(metrics && metrics.referral_clicks_last_30_days);
     const reservations = fmtCount(reservationCount(activity));
     const citation     = fmtPct(citationRate(radar));
+    // Use the API's echoed window so the label always tracks the data
+    // (the same `range` param drives the topbar dropdown via dashboard-chrome.js).
+    const rangeDays    = (metrics && metrics.date_range && metrics.date_range.days) || 30;
+    const rangeLabel   = `Last ${rangeDays} days`;
 
     // Revenue card has three render states (Apr 27 2026):
     //
@@ -329,13 +342,13 @@
         <div class="kpi">
           <div class="head"><div class="k">Mentions <span class="info" title="Total AI queries that referenced your business.">i</span></div></div>
           <div class="v tabular">${mentions}</div>
-          <div class="d">Last 30 days</div>
+          <div class="d">${rangeLabel}</div>
           <div class="plain">Times AI answered a question by mentioning you.</div>
         </div>
         <div class="kpi">
           <div class="head"><div class="k">Click-throughs <span class="info" title="People who tapped from an AI answer to your site.">i</span></div></div>
           <div class="v tabular">${clicks}</div>
-          <div class="d">Last 30 days</div>
+          <div class="d">${rangeLabel}</div>
           <div class="plain">Visitors who came from an AI citation.</div>
         </div>
         <div class="kpi">

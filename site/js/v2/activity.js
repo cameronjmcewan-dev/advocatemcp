@@ -45,9 +45,13 @@
 
   async function fetchReal() {
     const af = window.AMCP && window.AMCP.authedFetch;
+    // Honor the topbar's date-range selector. wireDateRange in
+    // dashboard-chrome.js sets window.AMCP_DATE_RANGE; fall back to 30d.
+    const range = (window.AMCP_DATE_RANGE && window.AMCP_DATE_RANGE.get && window.AMCP_DATE_RANGE.get()) || '30d';
+    const rangeQ = `?range=${encodeURIComponent(range)}`;
     const [m, a] = await Promise.all([
-      af('/api/client/metrics').then(r => r.ok ? r.json() : null).catch(() => null),
-      af('/api/client/activity-detail').then(r => r.ok ? r.json() : null).catch(() => null),
+      af(`/api/client/metrics${rangeQ}`).then(r => r.ok ? r.json() : null).catch(() => null),
+      af(`/api/client/activity-detail${rangeQ}`).then(r => r.ok ? r.json() : null).catch(() => null),
     ]);
     return { metrics: m || {}, activity: a || { reservations: [], handoffs: [], agent_requests: [] } };
   }
@@ -221,4 +225,15 @@
   }
 
   window.AMCP_ACTIVITY = { demo: () => DEMO, fetch: fetchReal, render };
+
+  // Re-fetch + re-render when the topbar's date-range selector changes.
+  if (typeof window !== 'undefined') {
+    window.addEventListener('amcp:date-range-changed', () => {
+      if (window.AMCP_SHELL && typeof window.AMCP_SHELL.refresh === 'function') {
+        window.AMCP_SHELL.refresh();
+      } else {
+        window.location.reload();
+      }
+    });
+  }
 })();
