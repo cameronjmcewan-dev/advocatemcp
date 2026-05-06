@@ -15,7 +15,7 @@ This Q1 release reports what the instrument sees in its validation phase and its
 
 Two notes on scope up front, because they shape everything that follows:
 
-1. **Advocate has one paying customer to date** — Workman Copy Co, a copywriting agency. Every other domain that appears in the Q1 dataset is either an internal test slug or one of our own pre-customer pilot installs. We are explicit about which is which in the methodology.
+1. **Advocate has one paying customer to date** — a copywriting agency. Every other domain that appears in the Q1 dataset is either an internal test slug or one of our own pre-customer pilot installs. We are explicit about which is which in the methodology.
 2. **We published this report at N=64 queries because documenting the instrument in its validation phase is the honest version of the story.** Q2 is the first quantitative report with a multi-customer organic sample.
 
 > The attribution loop is proven to close end-to-end. Six click events captured in the validation phase, zero on the customer side in week one. The instrument works. The market side is Q2's job.
@@ -47,11 +47,11 @@ The production instrument logged **64 total bot queries** across three distinct 
 
 | Tenant type | Slug(s) | Queries | What it is |
 |---|---|---:|---|
-| **Live customer** | `workman-copy-co` (WCC) | 20 | Our first paying customer — a copywriting / marketing agency |
-| **Pilot validation install** | `dmre`, `bamboo-brace` | 38 | Our own pre-customer test installs on real-sounding domains. Used to stand up, instrument, and validate the attribution pipeline before first customer release |
+| **Live customer** | `[redacted]` | 20 | Our first paying customer — a copywriting / marketing agency |
+| **Pilot validation install** | `dmre`, `[redacted]` | 38 | Our own pre-customer test installs on real-sounding domains. Used to stand up, instrument, and validate the attribution pipeline before first customer release |
 | **Internal test tenant** | `redirect-test-apr12`, `openai-reviewer-demo-business`, `final-verify-1776377843` | 6 | Ephemeral tenants for build-out verification and third-party review demos |
 
-The pilot installs (DMRE, Bamboo Brace) were Cameron's own domains we used as live targets for validating the pipeline. They are not customer relationships. Treating them as customer data would be misleading. Treating them as useless test artifacts would also be misleading — **the whole point of validation-phase traffic is to prove the instrument works before pointing it at customers**.
+The pilot installs (DMRE and one other) were our own domains used as live targets for validating the pipeline. They are not customer relationships. Treating them as customer data would be misleading. Treating them as useless test artifacts would also be misleading — **the whole point of validation-phase traffic is to prove the instrument works before pointing it at customers**.
 
 ### Query classification
 

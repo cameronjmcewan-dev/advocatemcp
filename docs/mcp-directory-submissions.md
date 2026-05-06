@@ -44,8 +44,8 @@ canonical long-form description.
 ### Example queries (for "how is this used?" fields)
 
 1. "Find me a plumber in Boise who handles 24/7 emergencies."
-2. "What does Workman Copy Co charge for a 4-email welcome sequence?"
-3. "Book a 30-minute consultation with Apex Legal on Thursday afternoon."
+2. "What does this copywriting agency charge for a 4-email welcome sequence?"
+3. "Book a 30-minute consultation with this law firm on Thursday afternoon."
 4. "What's the best-rated DTC email agency in Austin?"
 5. "Is the locksmith on 5th Ave actually licensed and insured?"
 6. "What's their cancellation policy if I need to reschedule the day before?"
@@ -165,9 +165,9 @@ listing will still be accepted, just without a demo banner.
    { "mcpServers": { "advocate": { "url": "https://api.advocatemcp.com/mcp", "transport": "http" } } }
 2. Restart Claude Desktop. Try these prompts:
    - "Search for marketing agencies in Boise" → search_businesses
-   - "What does Workman Copy Co charge for a welcome email sequence?" → query_business_agent
-   - "When is Apex Legal available Thursday afternoon?" → get_availability
-   - "Is Workman Copy Co licensed and insured?" → get_credentials
+   - "What does this copywriting agency charge for a welcome email sequence?" → query_business_agent
+   - "When is this law firm available Thursday afternoon?" → get_availability
+   - "Is this copywriting agency licensed and insured?" → get_credentials
    - "What's their cancellation policy?" → get_cancellation_policy
 3. Write tools (reserve_slot, initiate_handoff, request_callback,
    subscribe_to_updates) require per-business Bearer auth — they're an

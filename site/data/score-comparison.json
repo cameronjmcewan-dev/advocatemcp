@@ -1,12 +1,12 @@
 {
   "schema_version": 2,
   "generated_at_utc": "2026-04-25T00:00:00Z",
-  "_about": "Citation-readiness score distribution across one Advocate-enabled tenant (WCC) and six archetype non-customer SMB websites. The WCC score reflects WCC's actual harness output as of generated_at_utc. The non-customer scores reflect anonymized archetypes, a credibility move so the with-Advocate panel doesn't sit alone vs two cherry-picked baselines. Each non-customer business is described by category, not name, since we haven't asked permission to publish their score. To reproduce against your own site: see /methodology.html for the full judge prompt + rubric.",
+  "_about": "Citation-readiness score distribution across one Advocate-enabled tenant and six archetype non-customer SMB websites. The Advocate-enabled score reflects actual harness output as of generated_at_utc. The non-customer scores reflect anonymized archetypes, a credibility move so the with-Advocate panel doesn't sit alone vs two cherry-picked baselines. Each non-customer business is described by category, not name, since we haven't asked permission to publish their score. To reproduce against your own site: see /methodology.html for the full judge prompt + rubric.",
   "examples": [
     {
       "id": "with_advocate",
       "label": "Advocate-enabled",
-      "subtitle": "Workman Copy Co. (Austin, TX)",
+      "subtitle": "Email Marketing Agency (Austin, TX)",
       "category": "Print & copy services",
       "is_real_data": true,
       "score": 8.5,

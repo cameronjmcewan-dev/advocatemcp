@@ -2,7 +2,7 @@
 
 ## The problem
 
-AI crawler traffic to tenant custom hostnames (e.g. `www.workmancopyco.com`) returned 522 at Cloudflare's edge in ~67ms — too fast to be an upstream timeout. CF was refusing to route the request to our Worker, even though:
+AI crawler traffic to tenant custom hostnames (e.g. `www.example-tenant.com`) returned 522 at Cloudflare's edge in ~67ms — too fast to be an upstream timeout. CF was refusing to route the request to our Worker, even though:
 
 - `status: active`, `ssl_status: active` on the custom hostname record
 - `fallback_origin` was set and active to `customers.advocatemcp.com` since April 9
@@ -18,7 +18,7 @@ Two pieces are needed for a tenant hostname to route through CF SaaS to our Work
 
 2. **A Worker Route `{tenant-hostname}/*` bound to our zone `advocatemcp.com`, script `advocatemcp-worker`.** Without this, CF SaaS has no Worker target to forward to: the request's URL hostname is the tenant domain (not `customers.advocatemcp.com`), so our existing `customers.advocatemcp.com/*` route pattern never matches. CF's edge returns a fast 522 without attempting any upstream.
 
-The Worker Route does NOT need to be `*/*` (which breaks Pages). A per-tenant pattern is fine because CF SaaS custom hostnames are delegated to our zone for routing purposes — CF accepts `www.workmancopyco.com/*` as a valid route pattern on zone `advocatemcp.com` even though the domain itself is external.
+The Worker Route does NOT need to be `*/*` (which breaks Pages). A per-tenant pattern is fine because CF SaaS custom hostnames are delegated to our zone for routing purposes — CF accepts `www.example-tenant.com/*` as a valid route pattern on zone `advocatemcp.com` even though the domain itself is external.
 
 ## How it works now
 

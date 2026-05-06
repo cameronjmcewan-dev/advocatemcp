@@ -73,7 +73,7 @@ automatically. Existing tenants need a one-shot backfill:
 curl -X POST https://customers.advocatemcp.com/admin/domains/backfill-variants \
   -H "X-Admin-Secret: <ADMIN_SECRET>" \
   -H "Content-Type: application/json" \
-  -d '{"slug":"workman-copy-co"}'
+  -d '{"slug":"<tenant-slug>"}'
 
 # All existing tenants in one shot:
 curl -X POST https://customers.advocatemcp.com/admin/domains/backfill-variants \
@@ -163,16 +163,16 @@ The self-healing reconcile on `POST /admin/domains/activate` handles piece 1. Pi
 
 **Remaining operator step:** upgrade `CF_API_TOKEN` at dash.cloudflare.com/profile/api-tokens to include `Account > Workers Routes > Edit` on the `advocatemcp.com` zone. Once that scope lands, every new paying signup (custom-domain or wizard) auto-gets both pieces (CF hostname + Workers Route).
 
-**One-shot backfill for WCC:** after the token upgrade, run:
+**One-shot backfill for existing tenants:** after the token upgrade, run per-tenant:
 ```
 curl -X POST https://customers.advocatemcp.com/admin/domains/ensure-worker-route \
   -H "X-Admin-Secret: <ADMIN_SECRET>" \
   -H "Content-Type: application/json" \
-  -d '{"hostname":"www.workmancopyco.com"}'
+  -d '{"hostname":"www.example-tenant.com"}'
 ```
-This creates the missing `www.workmancopyco.com/*` route and fixes the 522s.
+This creates the missing `www.example-tenant.com/*` route and fixes the 522s.
 
-Workman Copy Co's domain (www.workmancopyco.com) currently returns 522 for AI crawler traffic.
+The first paying customer's domain currently returns 522 for AI crawler traffic.
 The worker code is fully prepared to handle custom hostname requests (BUSINESS_MAP KV lookup,
 cf-custom-hostname header fallback, getTenant proxy logic), but Cloudflare's Workers Routes
 layer never sends the traffic to the worker because there's no route pattern that matches
@@ -289,7 +289,7 @@ the same way the Stripe webhook would.
 Before first real paying customer:
 - docs/secrets-runbook.md — what secrets exist, how to rotate each one
 - docs/manual-onboarding-runbook.md — step-by-step for admin-provisioned customers (this is
-  the path used for Workman Copy Co tonight)
+  the path used for the first paying customer)
 
 ### Phase E worker HTML deprecation cleanup
 Old worker-rendered HTML routes that are superseded by Phase D dashboard. Identify and delete.

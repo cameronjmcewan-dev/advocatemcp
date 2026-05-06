@@ -40,17 +40,17 @@ describe("deriveHostnameVariants — gTLD apex cases", () => {
     expect(deriveHostnameVariants("www.acme.com")).toEqual(["acme.com", "www.acme.com"]);
   });
 
-  it("WCC's actual case: workmancopyco.com → both", () => {
-    expect(deriveHostnameVariants("workmancopyco.com")).toEqual([
-      "workmancopyco.com",
-      "www.workmancopyco.com",
+  it("apex domain: example-tenant.com → both", () => {
+    expect(deriveHostnameVariants("example-tenant.com")).toEqual([
+      "example-tenant.com",
+      "www.example-tenant.com",
     ]);
   });
 
-  it("WCC's www variant: www.workmancopyco.com → both", () => {
-    expect(deriveHostnameVariants("www.workmancopyco.com")).toEqual([
-      "workmancopyco.com",
-      "www.workmancopyco.com",
+  it("www variant: www.example-tenant.com → both", () => {
+    expect(deriveHostnameVariants("www.example-tenant.com")).toEqual([
+      "example-tenant.com",
+      "www.example-tenant.com",
     ]);
   });
 });
@@ -100,8 +100,8 @@ describe("deriveHostnameVariants — hosted-tenant subdomains skip variant deriv
   });
 
   it("hyphenated hosted slug stays as-is", () => {
-    expect(deriveHostnameVariants("workman-copy-co.hosted.advocatemcp.com")).toEqual([
-      "workman-copy-co.hosted.advocatemcp.com",
+    expect(deriveHostnameVariants("example-tenant.hosted.advocatemcp.com")).toEqual([
+      "example-tenant.hosted.advocatemcp.com",
     ]);
   });
 });
@@ -121,7 +121,7 @@ describe("deriveHostnameVariants — invalid inputs return []", () => {
 describe("classifyVariant", () => {
   it("apex domains (2-label gTLD)", () => {
     expect(classifyVariant("acme.com")).toBe("apex");
-    expect(classifyVariant("workmancopyco.com")).toBe("apex");
+    expect(classifyVariant("example-tenant.com")).toBe("apex");
   });
 
   it("apex domains (multi-label TLD)", () => {

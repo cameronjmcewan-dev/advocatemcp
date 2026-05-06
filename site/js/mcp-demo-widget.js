@@ -66,7 +66,7 @@
       <div class="hv-answer" style="position:relative;overflow:hidden;">
         <div class="who">
           <span class="hv-pulse"></span>
-          Calling AI agent against workman-copy-co's live endpoint…
+          Calling AI agent against the live demo endpoint…
         </div>
         <p style="color:var(--ink-2);font-size:14px;margin-top:8px;">
           Real production call. Typically 2–4s.
@@ -91,7 +91,7 @@
     const slot = el("mcp-demo-result");
     if (!slot) return;
     const answer = (payload.answer || "").trim();
-    const businessName = payload.business_name || "Workman Copy Co.";
+    const businessName = payload.business_name || "Demo Business";
     const slots = (slotsPayload && slotsPayload.slots) || [];
     const tz = (slotsPayload && slotsPayload.timezone) || null;
 
@@ -133,7 +133,7 @@
     // We use that exact text on the API call so the visitor's expectation
     // matches what the agent answered. Strip the wrapping quotes.
     const rawQuery = (queryEl.textContent || "").replace(/^["']|["']$/g, "").trim();
-    const query = rawQuery || "Tell me about Workman Copy Co.";
+    const query = rawQuery || "Tell me about this business.";
 
     btn.disabled = true;
     btn.textContent = "Running…";

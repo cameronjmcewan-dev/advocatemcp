@@ -19,7 +19,7 @@ The instrument: a Cloudflare Worker that intercepts AI crawler requests at the e
 
 Two scope notes up front, because they shape everything else:
 
-→ Advocate has one paying customer to date (Workman Copy Co, a copywriting agency). The other tenants in this dataset are our own pre-customer pilot installs we used to validate the pipeline before shipping to customers.
+→ Advocate has one paying customer to date (a copywriting agency). The other tenants in this dataset are our own pre-customer pilot installs we used to validate the pipeline before shipping to customers.
 → Six click events were captured in Q1. All six came from pilot validation, not from the customer side. The instrument works. Customer-facing conversion is Q2's job.
 
 What the live-customer sample looked like (N=20 WCC queries, 9 organic after filtering our own probes):
@@ -61,7 +61,7 @@ Thread 🧵
 ```
 Scope up front:
 
-→ One paying customer in Q1 (Workman Copy Co). 
+→ One paying customer in Q1 (a copywriting agency). 
 → Two other tenants are our own pre-customer pilot installs used to validate the pipeline.
 → Six click events captured in Q1 — all six from pilot validation, not from the customer side.
 
@@ -168,7 +168,7 @@ A Cloudflare Worker that sits at the edge for small businesses, intercepts AI cr
 
 **Scope — stated up front:**
 
-Advocate has one paying customer in Q1 (Workman Copy Co, a copywriting agency). The other tenants in the dataset are our own pre-customer pilot installs we used to validate the pipeline. Commingling them as "three tenants" would be dishonest. I'm calling them out separately.
+Advocate has one paying customer in Q1 (a copywriting agency). The other tenants in the dataset are our own pre-customer pilot installs we used to validate the pipeline. Commingling them as "three tenants" would be dishonest. I'm calling them out separately.
 
 **What the instrument saw:**
 
@@ -230,11 +230,11 @@ I built a Cloudflare Worker that intercepts AI crawler traffic at the edge, gene
 
 This is a methodology preview, not a quantitative report. The honest scope:
 
-- One paying customer in Q1 (Workman Copy Co). Two other tenants are our own pre-customer pilot installs we used to validate the pipeline.
+- One paying customer in Q1 (a copywriting agency). Two other tenants are our own pre-customer pilot installs we used to validate the pipeline.
 - 64 total bot queries across all tenants. After classifying out our own probe traffic and internal test slugs, the defensible organic subset is N=20 (9 live-customer, 11 pilot-validation).
 - 6 click events captured end-to-end. All six came from the pilot-validation tier, zero from the paying customer. That is within the noise floor at N=9 over nine days.
 
-The one finding from the live-customer sample that's worth stating, with heavy caveat: on WCC (B2B copywriting agency, N=20 total queries), PerplexityBot was 60% of traffic, ClaudeBot 25%, GPTBot 15%. Opposite of the "GPTBot dominates" conventional wisdom. Tiny N, one vertical, not a finding — a hypothesis worth quantifying at Q2 scale.
+The one finding from the live-customer sample that's worth stating, with heavy caveat: on the live customer (B2B copywriting agency, N=20 total queries), PerplexityBot was 60% of traffic, ClaudeBot 25%, GPTBot 15%. Opposite of the "GPTBot dominates" conventional wisdom. Tiny N, one vertical, not a finding — a hypothesis worth quantifying at Q2 scale.
 
 Why publish at this N? Because the instrument is the contribution. Nobody at SMB tier has closed the loop from crawler query → bot-specific response → signed citation → user click → attribution. I wanted the method on the record before Q2, which is when the quantitative report lands.
 
@@ -267,9 +267,9 @@ Today I'm publishing the Q1 methodology preview. Three things worth the read:
 
 1. **The instrument is built and validated.** Edge interception → per-bot response → signed citation tracking → closed attribution loop. Six click events captured end-to-end in Q1, all six from our own pre-customer pilot installs during validation. The pipeline works — the market-side numbers are Q2's job.
 
-2. **The scope is one paying customer.** Workman Copy Co onboarded mid-window. The other tenants in the dataset are our own pilot installs we stood up to validate the pipeline before customer release. I treat them separately in the report instead of padding the customer count.
+2. **The scope is one paying customer.** First customer onboarded mid-window. The other tenants in the dataset are our own pilot installs we stood up to validate the pipeline before customer release. I treat them separately in the report instead of padding the customer count.
 
-3. **The one live-customer signal worth flagging.** On WCC (N=20 queries), PerplexityBot was 60% of traffic, GPTBot only 15%. Opposite of the GPTBot-dominance consensus. N is too small to generalize — but it's on the record as a hypothesis Q2 can quantify.
+3. **The one live-customer signal worth flagging.** On the live customer (N=20 queries), PerplexityBot was 60% of traffic, GPTBot only 15%. Opposite of the GPTBot-dominance consensus. N is too small to generalize — but it's on the record as a hypothesis Q2 can quantify.
 
 Why I'm posting here: I'm bootstrapped, pre-meaningful-revenue, and publishing real data instead of paying for distribution. This is a test of whether methodology-first content marketing works in a category where the enterprise players have a 2-year head start.
 

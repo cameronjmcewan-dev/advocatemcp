@@ -59,7 +59,7 @@ export function redactSafeProfile(p: BusinessRow): SafeBusinessRow {
 const DEFAULT_QUERIES = [
   "best email marketing agency for DTC ecommerce",
   "Klaviyo specialist agencies near me",
-  "tell me about Workman Copy Co",
+  "tell me about this email marketing agency",
   "email agency for shopify stores",
   "compare email marketing services for small DTC brands",
 ];
@@ -131,21 +131,21 @@ function loadProfileFromDb(slug: string): BusinessRow | null {
   }
 }
 
-/** Hardcoded WCC fixture — used when DB is unavailable. Reflects the
+/** Fallback fixture — used when DB is unavailable. Reflects the
  *  actual production profile shape so the harness exercises real data.
  *  Field set matches BusinessRow in server/src/db.ts. */
 const WCC_FIXTURE: BusinessRow = {
   id: 1,
-  slug: "workman-copy-co",
-  name: "Workman Copy Co",
+  slug: "example-tenant",
+  name: "Example Email Agency",
   description:
     "Email marketing agency for DTC ecommerce brands. Combines direct-response copywriting with deep Klaviyo expertise to build consistent email revenue systems.",
   services: "email marketing, Klaviyo, DTC ecommerce, copywriting",
   pricing: null,
   location: "Austin, TX",
   phone: null,
-  website: "https://workmancopyco.com",
-  referral_url: "https://workmancopyco.com",
+  website: "https://example-tenant.com",
+  referral_url: "https://example-tenant.com",
   tone: "knowledgeable",
   api_key: "fixture",
   created_at: new Date().toISOString(),
@@ -176,21 +176,21 @@ const WCC_FIXTURE: BusinessRow = {
     google: {
       rating: 4.9,
       count: 47,
-      url: "https://www.google.com/maps/place/Workman+Copy+Co",
+      url: "https://www.google.com/maps/place/Example+Email+Agency",
     },
     yelp: {
       rating: 5.0,
       count: 12,
-      url: "https://www.yelp.com/biz/workman-copy-co-austin",
+      url: "https://www.yelp.com/biz/example-email-agency-austin",
     },
   }),
   differentiators_text: null,
   // Sample customer quotes so Review JSON-LD has data to render. In
   // production this comes from the tenant's Business Profile editor.
   customer_quotes_json: JSON.stringify([
-    { author: "Anya R.", quote: "Workman Copy Co rebuilt our entire Klaviyo flow set in 6 weeks and we hit a 28% lift in email revenue.", rating: 5 },
+    { author: "Anya R.", quote: "They rebuilt our entire Klaviyo flow set in 6 weeks and we hit a 28% lift in email revenue.", rating: 5 },
     { author: "Devon P.", quote: "Their copy reads like our customers wrote it. We finally stopped sending generic blasts.", rating: 5 },
-    { author: "Jin S.",   quote: "Worked with three other agencies before. None understood DTC like Workman does.", rating: 5 },
+    { author: "Jin S.",   quote: "Worked with three other agencies before. None understood DTC like this team does.", rating: 5 },
   ]),
   guarantee_text: null,
   case_stories_json: null,
@@ -200,7 +200,7 @@ const WCC_FIXTURE: BusinessRow = {
 // ── Build experiment config ────────────────────────────────────────────────
 
 async function buildConfig(): Promise<ExperimentConfig> {
-  const real = loadProfileFromDb("workman-copy-co");
+  const real = loadProfileFromDb(process.env.DEMO_SLUG ?? "example-tenant");
   const profile = real ?? WCC_FIXTURE;
   if (real) {
     console.log(`[formatJudge] Using real DB profile: ${profile.slug} (${profile.name})`);
@@ -462,7 +462,7 @@ export async function runExperiment(opts: {
   const cfg = { ...baseCfg };
   if (opts.profileSlugs?.length) {
     cfg.profiles = opts.profileSlugs
-      .map((s) => loadProfileFromDb(s) ?? (s === "workman-copy-co" ? WCC_FIXTURE : null))
+      .map((s) => loadProfileFromDb(s) ?? (s === (process.env.DEMO_SLUG ?? "example-tenant") ? WCC_FIXTURE : null))
       .filter((p): p is BusinessRow => !!p);
   }
   if (opts.queries?.length) cfg.queries = opts.queries;

@@ -52,8 +52,8 @@ export function createTestApp(): express.Express {
   app.use(requestIdMiddleware);
 
   // Session 5 — `GET /r/:token/decode` is intentionally public + cross-origin.
-  // It's called from customer-owned third-party domains (e.g.
-  // workmancopyco.com) so it MUST bypass the worker-only origin whitelist in
+  // It's called from customer-owned third-party domains so it MUST bypass
+  // the worker-only origin whitelist in
   // the global `cors()` middleware below. The router sets permissive ACAO
   // headers itself and exposes only non-sensitive fields.
   app.use(decodeRouter);
