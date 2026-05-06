@@ -282,7 +282,13 @@
    * Per-card renderers — each returns an HTML string fragment.
    * ──────────────────────────────────────────────────────────────────── */
   function renderKPIs({ metrics, radar, activity, revenue }) {
-    const mentions     = fmtCount(metrics && metrics.total_queries);
+    // Sum queries_by_crawler so the KPI tracks the date-range window the
+    // API echoes back. Using metrics.total_queries here would silently
+    // mix all-time vs windowed and disagree with the Mentions page,
+    // which the user reported on May 5 2026.
+    const byCrawler    = (metrics && metrics.queries_by_crawler) || {};
+    const mentionsTotal = Object.values(byCrawler).reduce((s, n) => s + (n || 0), 0);
+    const mentions     = fmtCount(mentionsTotal);
     const clicks       = fmtCount(metrics && metrics.referral_clicks_last_30_days);
     const reservations = fmtCount(reservationCount(activity));
     const citation     = fmtPct(citationRate(radar));
