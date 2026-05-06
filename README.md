@@ -60,8 +60,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 Restart Claude Desktop. Try:
 
 - *"Find me a marketing agency in Austin"*
-- *"What does Workman Copy Co charge for a 4-email welcome sequence?"*
-- *"When is Apex Legal available Thursday afternoon?"*
+- *"What does the top-rated email-marketing agency in my area charge for a 4-email welcome sequence?"*
+- *"When is a law firm with 5-star reviews available Thursday afternoon?"*
 - *"Is the locksmith on 5th Avenue licensed and insured?"*
 
 ## How it works (also a bot interceptor)
