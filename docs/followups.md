@@ -552,3 +552,123 @@ Six dependabot PRs deferred from the audit cleanup wave — each needs a dedicat
 ### Also pending: PR #110 (vitest 4.1.4 → 4.1.5)
 
 Auto-merge attempted in the audit wave but had merge conflicts after main moved. Dependabot will rebase on next run; safe to merge then.
+
+## Branch review punch list (audit 2026-05-05)
+
+Branches with unique commits not on main and no active PR. Each needs human triage — choose: (a) cherry-pick the unique commits to a fresh branch + PR, (b) confirm abandoned + delete, or (c) leave alone if still WIP.
+
+### `claude/consolidate-dashboard-m14cz` (0
+0 unique commits, last 2026-04-12)
+
+
+### `claude/fix-logo-homepage-link-bGv1k` (0
+0 unique commits, last 2026-04-12)
+
+
+### `claude/review-plan-files-ETcdf` (1 unique commits, last 2026-04-22)
+  - refactor(worker): Phase E — redirect legacy HTML to advocatemcp.com
+
+### `copilot/featvisual-redesign` (2 unique commits, last 2026-04-17)
+  - Merge pull request #47 from cameronjmcewan-dev/copilot/redesign-advocatemcp-landing-page
+  - sitewide: swap sibling pink variants (#5c1a3c, #a03569) to oxblood dark/highlight
+  - sitewide: swap pink accent (#7d2550) to oxblood (#4A0E0E)
+
+### `copilot/redesign-advocatemcp-landing-page` (2 unique commits, last 2026-04-17)
+  - sitewide: swap sibling pink variants (#5c1a3c, #a03569) to oxblood dark/highlight
+  - sitewide: swap pink accent (#7d2550) to oxblood (#4A0E0E)
+
+### `docs/design-brief-max` (5 unique commits, last 2026-04-16)
+  - Merge pull request #22 from cameronjmcewan-dev/copilot/familiarize-website-layout
+  - Phase 4: Expand onboarding wizard from 4 to 9 steps with draft save/resume, array editors, plan picker
+  - Phase 3: Add Agent Config, Competitor Radar, Billing, and Embed Snippet dashboard pages
+
+### `feat/activation-flow` (0
+0 unique commits, last 2026-05-03)
+
+
+### `feat/data-layer-phase-1` (0
+0 unique commits, last 2026-04-23)
+
+
+### `feat/grey-hat-phase-2-platform-variants` (2 unique commits, last 2026-04-28)
+  - fix(grey-hat-phase-2): edge cache 600s + word-boundary truncation per reviewer
+  - feat(grey-hat): Phase 2 — per-platform variant URLs + bot-instructional aside
+  - fix(admin): mount FAQ router BEFORE requireAdmin chain
+
+### `feat/hosted-tenant-onboarding-flow` (0
+0 unique commits, last 2026-04-12)
+
+
+### `feat/onboarding-v2` (6 unique commits, last 2026-04-17)
+  - Merge remote-tracking branch 'origin/main' into feat/onboarding-v2
+  - feat(prompts): tier response attribution — assert facts, attribute self-reported
+  - feat(onboarding): truth warranty + ToS acceptance gating + self-reported disclosure
+
+### `feat/phase-f-part-2-email` (0
+0 unique commits, last 2026-04-12)
+
+
+### `feat/site-polish-oxblood` (7 unique commits, last 2026-04-17)
+  - chore(assets): regenerate landing OG image with oxblood + Advocate brand
+  - feat(dashboard): topbar + KPI card polish
+  - feat(pricing): restore Base $100 / Pro $250 + add Enterprise consultation tier
+
+### `feature/competitor-radar-polling` (45 unique commits, last 2026-04-14)
+  - docs(p3): env template + v1.1 followups
+  - feat(p3): mount competitor-radar router and schedule cron
+  - feat(p3): basket CRUD endpoints (GET, POST, DELETE)
+
+### `feature/dashboard-onboarding-fixes` (6 unique commits, last 2026-05-04)
+  - Merge remote-tracking branch 'origin/main' into feature/dashboard-onboarding-fixes
+  - fix(onboarding): hosted tenants skip DNS gate (wildcard route handles them)
+  - feat(onboarding): hard DNS-first gate + /onboard-dns page + auto-show checklist on first dashboard visit
+
+### `feature/design-brief` (45 unique commits, last 2026-04-14)
+  - docs: design brief for Max covering brand, pages, data contracts, tokens
+  - docs(p3): env template + v1.1 followups
+  - feat(p3): mount competitor-radar router and schedule cron
+
+### `feature/dns-verification` (12 unique commits, last 2026-05-04)
+  - Merge remote-tracking branch 'origin/main' into feature/dns-verification
+  - revert(worker): drop unrelated package.json changes accidentally included in dd1c7b0
+  - fix(frontend): rewire simulated_bot_hit + v2 get-started to shared probe
+
+### `feature/hosted-tenant-polish` (2 unique commits, last 2026-05-04)
+  - feat(dashboard): editable name on Settings + prominent TTL callout in DNS wizard
+  - fix(dashboard): expose is_hosted to wizard + clarify DNS propagation timing
+
+### `feature/state-of-ai-q1-launch` (6 unique commits, last 2026-04-16)
+  - feat(research): publish-day send sequence for State of AI Q1 report
+  - feat(research): press kit for State of AI Q1 report
+  - feat(research): launch kit for State of AI Q1 report
+
+### `fix/cors-credentials-header` (0
+0 unique commits, last 2026-04-12)
+
+
+### `fix/custom-hostname-routing` (0
+0 unique commits, last 2026-04-12)
+
+
+### `fix/dashboard-empty-state` (0
+0 unique commits, last 2026-04-12)
+
+
+### `fix/dashboard-section-dispatch` (0
+0 unique commits, last 2026-04-12)
+
+
+### `fix/research-q1-methodology-preview` (7 unique commits, last 2026-04-17)
+  - chore(research): update send-sequence to match new framing
+  - feat(research): rewrite press kit for methodology-preview framing
+  - feat(research): rewrite launch kit for methodology-preview framing
+
+### `fix/revert-max-hero-changes` (3 unique commits, last 2026-04-17)
+  - Revert "Merge pull request #48 from cameronjmcewan-dev/copilot/add-poppins-font-sitewide"
+  - Revert "Merge pull request #49 from cameronjmcewan-dev/copilot/apply-glowing-oxblood-gradient"
+  - Revert "Merge pull request #50 from cameronjmcewan-dev/copilot/redesign-hero-section"
+
+### `origin` (0
+0 unique commits, last )
+
+
