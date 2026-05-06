@@ -168,6 +168,9 @@
         email:     'you@advocatemcp.com',
         full_name: 'Preview User',
         user_role: isPreviewAdmin ? 'admin' : 'owner',
+        // Synthesize a one-tenant access list so the preview sidebar
+        // can render the business-switcher dropdown without a network call.
+        accessible_businesses: [{ slug: 'preview-demo', name: 'Preview Business', domain: null, plan: opts.previewPlan || 'base' }],
       }, m);
       // If the page asked for a specific preview plan, let it win over
       // whatever the demo payload carries so the right view renders.
@@ -211,12 +214,16 @@
       const impersonating = isAdmin && asSlug ? asSlug : null;
 
       window.AMCP_DATA = {
-        email:         (me && me.email) || null,
-        user_role:     (me && me.role) || null,
-        full_name:     (me && me.full_name) || null,
-        impersonating: impersonating,
-        domain:        (me && me.domain) || null,
-        is_hosted:     !!(me && me.is_hosted),
+        email:                  (me && me.email) || null,
+        user_role:              (me && me.role) || null,
+        full_name:              (me && me.full_name) || null,
+        impersonating:          impersonating,
+        domain:                 (me && me.domain) || null,
+        is_hosted:              !!(me && me.is_hosted),
+        // Powers the sidebar business-switcher dropdown. Empty array if
+        // the user is admin-without-tenants — dropdown gracefully shows
+        // just "Add another business".
+        accessible_businesses:  (me && Array.isArray(me.accessible_businesses)) ? me.accessible_businesses : [],
       };
 
       // DNS-first gate: customers who haven't verified their DNS yet

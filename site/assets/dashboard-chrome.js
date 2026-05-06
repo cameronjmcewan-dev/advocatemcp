@@ -147,19 +147,29 @@
   function renderSidebar(activeId) {
     const biz = currentBiz();
     const bizSub = biz.location ? `${escHtml(biz.location)} · ${escHtml(biz.plan)}` : escHtml(biz.plan);
+    // The biz block became a <button> on May 6 2026 (Max's V2 sidebar): clicking
+    // it opens #biz-menu, which holds the Account section + multi-tenant
+    // switcher + Sign out — items that used to live as their own NAV_ACCOUNT
+    // section in the sidebar. NAV_ACCOUNT is no longer rendered here; its
+    // items are routed through the dropdown instead.
     return `
     <aside class="sidebar" id="amcp-sidebar">
       <a class="sb-brand" href="/" aria-label="Advocate — back to homepage">
         <span class="brand-mark" aria-hidden="true">A</span>
         <span class="name">Advocate</span>
       </a>
-      <div class="sb-biz" title="Switch business">
-        <div class="sq">${escHtml(biz.letter)}</div>
-        <div class="info">
-          <strong>${escHtml(biz.name)}</strong>
-          <span>${bizSub}</span>
-        </div>
-        <span class="caret">⌄</span>
+      <div class="sb-biz-wrap">
+        <button type="button" class="sb-biz" id="biz-trigger"
+                aria-expanded="false" aria-haspopup="menu" aria-controls="biz-menu"
+                title="Switch business">
+          <div class="sq">${escHtml(biz.letter)}</div>
+          <div class="info">
+            <strong>${escHtml(biz.name)}</strong>
+            <span>${bizSub}</span>
+          </div>
+          <span class="caret">⌄</span>
+        </button>
+        ${renderBizMenu(activeId)}
       </div>
       ${renderAdminSection(activeId)}
       ${renderDashboardsSection(activeId)}
@@ -167,14 +177,90 @@
         <div class="sb-section">Main</div>
         <ul class="sb-nav">${NAV_MAIN.map(i => navItem(i, activeId)).join('')}</ul>
       </div>
-      <div>
-        <div class="sb-section">Account</div>
-        <ul class="sb-nav">${NAV_ACCOUNT.map(i => navItem(i, activeId)).join('')}</ul>
-      </div>
       <div class="sb-foot">
         <ul class="sb-nav">${NAV_FOOT.map(i => navItem(i, activeId)).join('')}</ul>
       </div>
     </aside>`;
+  }
+
+  /* Business-switcher dropdown menu (Max V2 sidebar, May 6 2026).
+   *
+   * Anchored beneath the .sb-biz button, contains:
+   *   1. Account header — full name, email, plan badge w/ Upgrade
+   *   2. Account section — Profile / Settings / Billing
+   *      (formerly NAV_ACCOUNT in the sidebar)
+   *   3. Switch business — list of accessible_businesses (from /api/client/me)
+   *      plus an "Add another business" item linking to /onboarding.html
+   *   4. Sign out — POSTs /api/auth/logout, redirects to /login.html
+   *
+   * Per the integration spec we do NOT render the keyboard-shortcuts item
+   * Max's mockup included.
+   */
+  function renderBizMenu(activeId) {
+    const d = window.AMCP_DATA || {};
+    const fullName = d.full_name || 'You';
+    const email    = d.email     || '';
+    const planRaw  = (d.plan || '').toLowerCase();
+    const planLabel = planRaw === 'pro'  ? 'Pro plan'
+                    : planRaw === 'base' ? 'Base plan'
+                    : planRaw === 'admin' ? 'Admin'
+                    : 'Free plan';
+    const initials = fullName.split(/\s+/).map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '·';
+
+    // Identify the "current" tenant for the checkmark — admins use
+    // ?as=<slug> impersonation; owners use their first business.
+    const list = Array.isArray(d.accessible_businesses) ? d.accessible_businesses : [];
+    const currentSlug = d.impersonating || (list[0] && list[0].slug) || null;
+
+    const accountItems = NAV_ACCOUNT.map((it) => {
+      const cls = it.id === activeId ? ' bm-item-active' : '';
+      return `<a href="${it.href}" class="bm-item${cls}" data-nav-id="${it.id}">
+        <span class="bm-item-icon"><span class="g">${it.g}</span></span>
+        <span class="bm-item-label">${escHtml(it.label)}</span>
+      </a>`;
+    }).join('');
+
+    const bizRows = list.map((b) => {
+      const isCurrent = b.slug === currentSlug;
+      const sub = (b.domain || (b.plan ? b.plan + ' plan' : '')).toString();
+      // Owners click their own row → no-op (already there). Admin can flip
+      // between tenants via ?as= — drop the current slug and add the target.
+      const href = `/app.html?as=${encodeURIComponent(b.slug)}`;
+      return `<a href="${href}" class="bm-biz-row" data-biz-slug="${escHtml(b.slug)}">
+        <div class="bm-biz-row-text">
+          <div class="bm-biz-row-name">${escHtml(b.name || b.slug)}</div>
+          ${sub ? `<div class="bm-biz-row-meta">${escHtml(sub)}</div>` : ''}
+        </div>
+        ${isCurrent ? '<span class="bm-biz-row-check" aria-label="Current">✓</span>' : ''}
+      </a>`;
+    }).join('');
+
+    return `
+      <div class="biz-menu" id="biz-menu" role="menu" aria-labelledby="biz-trigger">
+        <div class="bm-account">
+          <div class="bm-avatar">${escHtml(initials)}</div>
+          <div class="bm-account-info">
+            <div class="bm-account-name">${escHtml(fullName)}</div>
+            ${email ? `<div class="bm-account-email">${escHtml(email)}</div>` : ''}
+            <a href="/Billing.html" class="bm-plan-badge">${escHtml(planLabel)} · Upgrade</a>
+          </div>
+        </div>
+        <div class="bm-section-label">Account</div>
+        ${accountItems}
+        <div class="bm-divider"></div>
+        <div class="bm-section-label">Switch business</div>
+        <div class="bm-biz-list">${bizRows}</div>
+        <a href="/onboarding.html" class="bm-add-biz">
+          <div class="bm-add-biz-icon">+</div>
+          <span>Add another business</span>
+        </a>
+        <div class="bm-divider"></div>
+        <button type="button" class="bm-item" id="biz-menu-signout">
+          <span class="bm-item-icon"><span class="g">↪</span></span>
+          <span class="bm-item-label">Sign out</span>
+        </button>
+      </div>
+    `;
   }
 
   function renderTopbar({ crumb, title, showDateRange = true, showShare = true, showInvite = true }) {
@@ -260,6 +346,75 @@
       e.stopPropagation();
       window.location.assign('/');
     });
+  }
+
+  /* Business-switcher dropdown wiring (Max V2 sidebar, May 6 2026).
+   *
+   * Pattern lifted from the mockup's <script> block: click trigger →
+   * fixed-position the menu under the button, toggle aria-expanded +
+   * .open class. Outside-click + Escape close. Resize/scroll re-pin.
+   * Sign-out POSTs /api/auth/logout then redirects to /login.html.
+   */
+  function wireBizMenu() {
+    const trigger = document.getElementById('biz-trigger');
+    const menu    = document.getElementById('biz-menu');
+    if (!trigger || !menu) return;
+
+    function positionMenu() {
+      const r = trigger.getBoundingClientRect();
+      const top = r.bottom + 8;
+      menu.style.left = r.left + 'px';
+      menu.style.top  = top + 'px';
+      menu.style.maxHeight = (window.innerHeight - top - 12) + 'px';
+    }
+    function setOpen(open) {
+      trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open) positionMenu();
+      menu.classList.toggle('open', open);
+    }
+
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = trigger.getAttribute('aria-expanded') === 'true';
+      setOpen(!isOpen);
+    });
+    document.addEventListener('click', (e) => {
+      if (!menu.contains(e.target) && !trigger.contains(e.target)) setOpen(false);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && trigger.getAttribute('aria-expanded') === 'true') {
+        setOpen(false);
+        trigger.focus();
+      }
+    });
+    window.addEventListener('resize', () => {
+      if (trigger.getAttribute('aria-expanded') === 'true') positionMenu();
+    });
+    window.addEventListener('scroll', () => {
+      if (trigger.getAttribute('aria-expanded') === 'true') positionMenu();
+    }, true);
+
+    // Auto-close after any anchor click inside the menu — the SPA router
+    // handles routing for /BusinessProfile.html / /Settings.html / etc.
+    menu.addEventListener('click', (e) => {
+      const a = e.target.closest('a');
+      if (a) setOpen(false);
+    });
+
+    // Sign out: POST to logout, then hard-redirect to /login.html. Use a
+    // hard redirect (not the SPA router) so any in-memory session state
+    // is dropped and the next visit boots clean.
+    const signOutBtn = document.getElementById('biz-menu-signout');
+    if (signOutBtn) {
+      signOutBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        signOutBtn.disabled = true;
+        try {
+          await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+        } catch { /* ignore — we redirect either way */ }
+        window.location.replace('/login.html');
+      });
+    }
   }
 
   function wireMobileSidebar() {
@@ -362,6 +517,7 @@
     wireLocationSelector();
     wireDateRange();
     wireBrandLogo();
+    wireBizMenu();
     injectSpeculationRules();
     loadCommandPaletteIfAdmin();
     loadRouter();

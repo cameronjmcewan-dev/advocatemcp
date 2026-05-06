@@ -722,8 +722,19 @@ async function apiMe(request: Request, env: Env): Promise<Response> {
   let dns_configured = false;
   let apiMeDomain: string | null = null;
   let apiMeIsHosted = false;
+  // Surfaced for the sidebar's business-switcher dropdown so the user can
+  // jump between tenants they have access to without leaving the dashboard.
+  // Admin can impersonate any tenant via /admin/tenants — the dropdown
+  // only shows the user's own access list to keep the menu short.
+  let accessible_businesses: Array<{ slug: string; name: string; domain: string | null; plan: string | null }> = [];
   try {
     const businesses = await getUserBusinesses(env.DB, ctx.user_id);
+    accessible_businesses = businesses.map((b) => ({
+      slug:   b.slug,
+      name:   b.business_name,
+      domain: b.domain ?? null,
+      plan:   (b as { plan?: string }).plan ?? null,
+    }));
     if (businesses.length > 0) {
       const biz = businesses[0];
       apiMeDomain = biz.domain ?? null;
@@ -759,7 +770,7 @@ async function apiMe(request: Request, env: Env): Promise<Response> {
   }
 
   return withCors(
-    jsonOk({ id: ctx.user_id, email: ctx.email, full_name: ctx.full_name, role: ctx.role, dns_configured, domain: apiMeDomain, is_hosted: apiMeIsHosted }),
+    jsonOk({ id: ctx.user_id, email: ctx.email, full_name: ctx.full_name, role: ctx.role, dns_configured, domain: apiMeDomain, is_hosted: apiMeIsHosted, accessible_businesses }),
     request,
     { credentials: true },
   );
