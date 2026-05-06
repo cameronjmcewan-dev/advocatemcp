@@ -73,7 +73,10 @@
 
   async function fetchReal() {
     const af = window.AMCP && window.AMCP.authedFetch;
-    const r = await af('/api/client/metrics');
+    // Honor the topbar's date-range selector (set by wireDateRange in
+    // dashboard-chrome.js). Falls back to the backend's default (30d).
+    const range = (window.AMCP_DATE_RANGE && window.AMCP_DATE_RANGE.get && window.AMCP_DATE_RANGE.get()) || '30d';
+    const r = await af(`/api/client/metrics?range=${encodeURIComponent(range)}`);
     return (r.ok ? await r.json() : {}) || {};
   }
 
@@ -238,4 +241,15 @@
   }
 
   window.AMCP_MENTIONS = { demo: () => DEMO, fetch: fetchReal, render, afterMount };
+
+  // Re-fetch + re-render when the topbar's date-range selector changes.
+  if (typeof window !== 'undefined') {
+    window.addEventListener('amcp:date-range-changed', () => {
+      if (window.AMCP_SHELL && typeof window.AMCP_SHELL.refresh === 'function') {
+        window.AMCP_SHELL.refresh();
+      } else {
+        window.location.reload();
+      }
+    });
+  }
 })();

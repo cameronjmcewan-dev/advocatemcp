@@ -54,9 +54,13 @@
 
   async function fetchReal() {
     const af = window.AMCP && window.AMCP.authedFetch;
+    // Honor the topbar's date-range selector. wireDateRange in
+    // dashboard-chrome.js sets window.AMCP_DATE_RANGE; fall back to 30d.
+    const range = (window.AMCP_DATE_RANGE && window.AMCP_DATE_RANGE.get && window.AMCP_DATE_RANGE.get()) || '30d';
+    const rangeQ = `?range=${encodeURIComponent(range)}`;
     const [m, c] = await Promise.all([
-      af('/api/client/metrics').then(r => r.ok ? r.json() : null).catch(() => null),
-      af('/api/client/clicks').then(r => r.ok ? r.json() : null).catch(() => null),
+      af(`/api/client/metrics${rangeQ}`).then(r => r.ok ? r.json() : null).catch(() => null),
+      af(`/api/client/clicks${rangeQ}`).then(r => r.ok ? r.json() : null).catch(() => null),
     ]);
     return {
       metrics: m || {},
@@ -134,7 +138,7 @@
 
       <div class="kpis">
         <div class="kpi"><div class="head"><div class="k">Total click-throughs</div></div><div class="v tabular">${fmtCount(total)}</div><div class="d">All time</div></div>
-        <div class="kpi"><div class="head"><div class="k">This month</div></div><div class="v tabular">${fmtCount(month)}</div><div class="d">Last 30 days</div></div>
+        <div class="kpi"><div class="head"><div class="k">This period</div></div><div class="v tabular">${fmtCount(month)}</div><div class="d">${(m.date_range && m.date_range.days) ? `Last ${m.date_range.days} days` : 'Last 30 days'}</div></div>
         <div class="kpi"><div class="head"><div class="k">Click-through rate</div></div><div class="v tabular">${fmtPct(ctr)}</div><div class="d">Clicks ÷ mentions</div></div>
         <div class="kpi"><div class="head"><div class="k">Top source</div></div><div class="v tabular" style="font-size:28px">${esc(srcEntries[0] ? srcEntries[0][0] : '—')}</div><div class="d">Most clicks</div></div>
       </div>
@@ -226,4 +230,15 @@ function afterMount(data) {
 }
 
 window.AMCP_CLICKS = { demo: () => DEMO, fetch: fetchReal, render, afterMount };
+
+  // Re-fetch + re-render when the topbar's date-range selector changes.
+  if (typeof window !== 'undefined') {
+    window.addEventListener('amcp:date-range-changed', () => {
+      if (window.AMCP_SHELL && typeof window.AMCP_SHELL.refresh === 'function') {
+        window.AMCP_SHELL.refresh();
+      } else {
+        window.location.reload();
+      }
+    });
+  }
 })();

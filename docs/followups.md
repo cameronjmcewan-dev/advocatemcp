@@ -691,3 +691,16 @@ Branches with unique commits not on main and no active PR. Each needs human tria
 - **Phase D (history scrub via git filter-repo) NOT RUN.** Evidence shows the exposure window was too short for Google to crawl and index. The deleted commits remain visible to anyone clicking through commit history on GitHub, but no search-index-driven discovery is in play.
 - If a customer reaction demands a full scrub, Phase D in `docs/superpowers/plans/2026-05-05-public-repo-exposure-remediation.md` has the exact `git filter-repo` recipe.
 
+
+## Dashboard date-range unification (2026-05-05)
+
+Shipped: topbar `Last 30 days ⌄` button is now functional. Selection (7d / 30d / 90d / 365d) drives every metrics-driven dashboard page (Bot Traffic, Mentions, Click-throughs, Activity, Overview). Persisted in localStorage + URL `?range=` for deep-links and reloads.
+
+Bot Traffic chart used to be hardcoded to 14 days while the KPI total was 30 days — the 16-day gap silently dropped ~254 visits from the chart. Both windows now match and respect the user's selection.
+
+Backend was already correct (`/api/client/metrics` accepts `range=7d|30d|90d|365d`, returns `date_range.days`); the fix is entirely site-side.
+
+### Followup (Option C from the audit)
+
+Extract a shared `site/assets/dashboard-range.js` module that owns the picker UI + global state + event broadcast, mirroring the location-selector pattern. Each page would then `import { onRangeChange }` instead of duplicating the 12-line `addEventListener('amcp:date-range-changed', ...)` block. Cosmetic refactor, not blocking.
+
