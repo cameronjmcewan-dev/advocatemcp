@@ -21,7 +21,7 @@ Verify `user_business_access` join counts before DELETE. Use explicit id list,
 not bare `WHERE api_key='pending'`.
 
 ## Critical Distinction
-- `8961b467481648518431f2072bdc1ded` (slug `workman`) = test row, DELETE ok
+- `8961b467481648518431f2072bdc1ded` (test row, deletion-safe slug) = DELETE ok
 - `biz_<first-tenant-slug>` = real customer, NEVER DELETE
 
 ## Next Up
