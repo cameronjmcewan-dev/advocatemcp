@@ -522,3 +522,33 @@ becomes a hard gate again.
 
 Owner: triage one test file at a time. Most are mock-shape drift after route
 middleware changes.
+
+## Deferred dependency bumps (audit 2026-05-05)
+
+Six dependabot PRs deferred from the audit cleanup wave — each needs a dedicated branch + full test run before merge. Listed in priority order:
+
+1. **PR #157 — wrangler 3.114.17 → 4.87.0** (10–20 min)
+   - Wrangler v4 renamed `kv:key put` → `kv key put` (space, not colon)
+   - Our `worker/package.json` has `"kv:add": "wrangler kv:key put --binding=BUSINESS_MAP"` — needs update
+   - Otherwise simple deploy/dev usage, low risk after the rename
+
+2. **PR #156 — zod 3.25.76 → 4.4.3** (1–2 hr)
+   - v4 overhauled `preprocess` and optional-field semantics
+   - Touches 17 schema files in `server/src/manifest/`, `server/src/mcp/tools/`, `server/src/routes/` plus 167 z.string/z.object/z.parse/z.refine call sites
+   - Schedule: dedicated branch + full vitest run before merge
+
+3. **PR #109 + PR #104 — typescript 5.9.3 → 6.0.3** (30–45 min each workspace)
+   - Strictness tightens; expect 10–30 new type errors across server/ and worker/
+   - Do AFTER zod (stricter types may cascade)
+
+4. **PR #111 — dotenv 16.6.1 → 17.4.2** (5 min)
+   - Config-only, 3 import sites
+   - Low risk, but check .env parsing behavior changelog first
+
+5. **PR #108 — express + @types/express bumps** (10–15 min)
+   - Middleware signatures stable
+   - @types tightening may surface errors on 67 router/middleware sites
+
+### Also pending: PR #110 (vitest 4.1.4 → 4.1.5)
+
+Auto-merge attempted in the audit wave but had merge conflicts after main moved. Dependabot will rebase on next run; safe to merge then.
