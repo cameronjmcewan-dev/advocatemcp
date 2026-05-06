@@ -57,8 +57,21 @@
 
   async function fetchReal() {
     const af = window.AMCP && window.AMCP.authedFetch;
-    const r = await af('/api/client/metrics');
+    // Honor the topbar's date-range selector. window.AMCP_DATE_RANGE is
+    // set by dashboard-chrome.js's wireDateRange(); fall back to the
+    // backend's default (30d) if chrome hasn't booted yet.
+    const range = (window.AMCP_DATE_RANGE && window.AMCP_DATE_RANGE.get && window.AMCP_DATE_RANGE.get()) || '30d';
+    const r = await af(`/api/client/metrics?range=${encodeURIComponent(range)}`);
     return (r.ok ? await r.json() : {}) || {};
+  }
+
+  // Derive a human label from the API's echoed `date_range.days`. The
+  // backend returns the actual window it used (7, 30, 90, 365), so the
+  // label always tracks the data even if the user just switched ranges
+  // and the response is mid-flight.
+  function rangeLabel(m) {
+    const days = (m && m.date_range && m.date_range.days) || 30;
+    return `Last ${days} days`;
   }
 
   function esc(s) {
@@ -82,7 +95,10 @@
   }
 
   function dailySeries(metrics, days) {
-    days = days || 14;
+    // Default to the API's echoed window when the caller doesn't pass one.
+    // 30 is the backend default; 14 was the previous hardcoded value that
+    // silently dropped 16 days of data from the chart.
+    days = days || (metrics && metrics.date_range && metrics.date_range.days) || 30;
     const now = new Date();
     const buckets = [];
     for (let i = days - 1; i >= 0; i--) {
@@ -121,7 +137,8 @@
     const topCrawler      = familyEntries[0] ? familyEntries[0][0] : '—';
     const uniqueCrawlers  = familyEntries.length;
 
-    const series = dailySeries(m);
+    const days = (m.date_range && m.date_range.days) || 30;
+    const series = dailySeries(m, days);
     // The daily bar chart stays as the primary visualization on this
     // page — chartMax + bars feed both the legacy CSS bars and the
     // ECharts upgrade applied in afterMount.
@@ -148,7 +165,7 @@
         }).join('');
 
     const recentRows = recent.length === 0
-      ? `<tr><td colspan="3" style="padding:20px;color:var(--muted);font-size:13.5px;text-align:center">No bot visits in the last 30 days.</td></tr>`
+      ? `<tr><td colspan="3" style="padding:20px;color:var(--muted);font-size:13.5px;text-align:center">No bot visits in the ${rangeLabel(m).toLowerCase()}.</td></tr>`
       : recent.map(q => `<tr>
           <td class="t">${esc(timeAgo(q.timestamp))}</td>
           <td><span class="bot-tag">${esc(q.crawler_agent || 'unknown')}</span></td>
@@ -157,7 +174,7 @@
 
     return `
       <div class="kpis">
-        <div class="kpi"><div class="head"><div class="k">Total visits</div></div><div class="v tabular">${fmtCount(totalMentions)}</div><div class="d">Last 30 days</div></div>
+        <div class="kpi"><div class="head"><div class="k">Total visits</div></div><div class="v tabular">${fmtCount(totalMentions)}</div><div class="d">${rangeLabel(m)}</div></div>
         <div class="kpi"><div class="head"><div class="k">AI vendors</div></div><div class="v tabular">${fmtCount(uniqueCrawlers)}</div><div class="d">Companies seen</div></div>
         <div class="kpi"><div class="head"><div class="k">Most active</div></div><div class="v tabular" style="font-size:28px">${esc(topCrawler)}</div><div class="d">Top vendor</div></div>
         <div class="kpi"><div class="head"><div class="k">Last visit</div></div><div class="v tabular" style="font-size:28px">${esc(lastSeen)}</div><div class="d">Most recent hit</div></div>
@@ -165,12 +182,12 @@
 
       <div class="row">
         <div class="card-dash" data-bots-traffic-card>
-          <div class="card-head"><div><h3>Daily bot traffic</h3><div class="sub">14-day rolling view</div></div></div>
+          <div class="card-head"><div><h3>Daily bot traffic</h3><div class="sub">${days}-day rolling view</div></div></div>
           <div class="chart">${bars}</div>
           <div class="chart-labels">${labels}</div>
         </div>
         <div class="card-dash">
-          <div class="card-head"><div><h3>By AI vendor</h3><div class="sub">Share of visits, last 30 days</div></div></div>
+          <div class="card-head"><div><h3>By AI vendor</h3><div class="sub">Share of visits, ${rangeLabel(m).toLowerCase()}</div></div></div>
           ${crawlerBars}
         </div>
       </div>
@@ -241,7 +258,8 @@
     host.style.cssText = 'width:100%;height:280px;margin-top:8px';
     oldChart.replaceWith(host);
 
-    const series = dailySeries(metrics || {});
+    const days = (metrics && metrics.date_range && metrics.date_range.days) || 30;
+    const series = dailySeries(metrics || {}, days);
     const inst = window.echarts.init(host, 'advocate-maroon');
     inst.setOption({
       grid: { left: 36, right: 16, top: 16, bottom: 32 },
@@ -265,4 +283,17 @@
   }
 
   window.AMCP_BOTS = { demo: () => DEMO, fetch: fetchReal, render, afterMount };
+
+  // Re-fetch + re-render when the topbar's date-range selector changes.
+  // Mirrors the amcp:location-changed pattern in overview.js — the shell
+  // owns the fetch+render pipeline; we just nudge it to refresh.
+  if (typeof window !== 'undefined') {
+    window.addEventListener('amcp:date-range-changed', () => {
+      if (window.AMCP_SHELL && typeof window.AMCP_SHELL.refresh === 'function') {
+        window.AMCP_SHELL.refresh();
+      } else {
+        window.location.reload();
+      }
+    });
+  }
 })();
