@@ -40,3 +40,9 @@ worker/node_modules/
 # Claude Code operator notes (Obsidian vault, not code)
 claude-sessions/
 .gstack/
+
+# ── Internal-only docs (don't ship to public repo, post-mortem 2026-05-05) ──
+docs/handoff-*.md
+docs/customer-disclosure-*.md
+docs/cf-launchpad-*.md
+experiments/
