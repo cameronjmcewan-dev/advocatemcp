@@ -143,7 +143,9 @@
   }
 
   function renderTopbar({ crumb, title, showDateRange = true, showShare = true, showInvite = true }) {
-    const dateBtn = showDateRange ? `<button class="date-range">Last 7 days ⌄</button>` : '';
+    const dateBtn = showDateRange ? `<button class="date-range" id="date-range-btn" type="button">
+      <span class="date-range-label">Last 30 days</span><span style="opacity:.6;margin-left:4px">⌄</span>
+    </button>` : '';
     const shareBtn = showShare ? `<button class="btn btn-ghost btn-sm">Share</button>` : '';
     const inviteBtn = showInvite ? `<button class="btn btn-primary btn-sm">Invite teammate</button>` : '';
     // Location selector — visible only for tenants with > 1 location.
@@ -323,6 +325,7 @@
     wireMobileSidebar();
     wireFab();
     wireLocationSelector();
+    wireDateRange();
     wireBrandLogo();
     injectSpeculationRules();
     loadCommandPaletteIfAdmin();
@@ -451,6 +454,136 @@
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
       })
       .catch(() => { /* network blip — leave selector hidden */ });
+  }
+
+  // ── Date-range selector (May 5 2026) ────────────────────────────────
+  //
+  // Topbar dropdown that controls the time window every dashboard
+  // metrics-driven page reads from. Selection persists in localStorage
+  // and the URL (?range=) so deep-links + reloads keep the choice.
+  // When changed, dispatches `amcp:date-range-changed` on window so
+  // module-specific renderers (bots.js, mentions.js, etc.) can refetch
+  // their data with the new window.
+  //
+  // Backend already accepts `range=7d|30d|90d|365d` on /api/client/metrics
+  // and echoes back `date_range.days` in the response so callers can
+  // derive labels + chart bucket counts dynamically.
+  //
+  // Replaces the previous non-functional `Last 7 days ⌄` button that
+  // looked clickable but did nothing.
+  function wireDateRange() {
+    const btn = document.getElementById('date-range-btn');
+    if (!btn) return;
+
+    const KEY = 'amcp_selected_date_range';
+    const PRESETS = [
+      { value: '7d',   label: 'Last 7 days' },
+      { value: '30d',  label: 'Last 30 days' },
+      { value: '90d',  label: 'Last 90 days' },
+      { value: '365d', label: 'Last 365 days' },
+    ];
+    function labelFor(value) {
+      const m = PRESETS.find((p) => p.value === value);
+      return m ? m.label : 'Last 30 days';
+    }
+
+    // Initial selection: URL ?range= wins, then localStorage, then 30d.
+    function readInitial() {
+      const url = new URL(window.location.href);
+      const fromUrl = url.searchParams.get('range');
+      if (fromUrl && PRESETS.find((p) => p.value === fromUrl)) return fromUrl;
+      const stored = localStorage.getItem(KEY);
+      if (stored && PRESETS.find((p) => p.value === stored)) return stored;
+      return '30d';
+    }
+
+    // Expose the selected range as a window-global so any module can
+    // read the current filter without subscribing to the event.
+    window.AMCP_DATE_RANGE = window.AMCP_DATE_RANGE || {
+      get: () => localStorage.getItem(KEY) || '30d',
+      set: (value) => {
+        if (!PRESETS.find((p) => p.value === value)) return;
+        localStorage.setItem(KEY, value);
+        // Sync URL so deep-links and reloads preserve the choice.
+        const u = new URL(window.location.href);
+        u.searchParams.set('range', value);
+        window.history.replaceState({}, '', u.toString());
+        window.dispatchEvent(new CustomEvent('amcp:date-range-changed', {
+          detail: { range: value, label: labelFor(value) },
+        }));
+      },
+    };
+
+    // Inject styles for the menu (one-time, mirrors the location-selector pattern).
+    if (!document.getElementById('amcp-date-style')) {
+      const style = document.createElement('style');
+      style.id = 'amcp-date-style';
+      style.textContent = [
+        '.date-range{display:inline-flex;align-items:center;background:var(--paper-2);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:13px;color:var(--ink);cursor:pointer;font:inherit}',
+        '.date-range:hover{background:var(--paper)}',
+        '.date-menu{position:fixed;background:var(--paper);border:1px solid var(--line);border-radius:8px;box-shadow:0 12px 36px rgba(0,0,0,.12);padding:6px;z-index:9999;min-width:180px}',
+        '.date-menu-item{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;font-size:13.5px;color:var(--ink);cursor:pointer;border-radius:6px}',
+        '.date-menu-item:hover{background:var(--paper-2)}',
+        '.date-menu-item.active{font-weight:500;color:var(--maroon)}',
+      ].join('');
+      document.head.appendChild(style);
+    }
+
+    // Apply the initial label without broadcasting (the page's first
+    // render reads window.AMCP_DATE_RANGE.get() directly, so a wakeup
+    // event would just trigger a duplicate fetch).
+    const initial = readInitial();
+    localStorage.setItem(KEY, initial);
+    {
+      const u = new URL(window.location.href);
+      if (u.searchParams.get('range') !== initial) {
+        u.searchParams.set('range', initial);
+        window.history.replaceState({}, '', u.toString());
+      }
+    }
+    function refreshLabel() {
+      const lbl = btn.querySelector('.date-range-label');
+      if (lbl) lbl.textContent = labelFor(window.AMCP_DATE_RANGE.get());
+    }
+    refreshLabel();
+
+    let menu = null;
+    function closeMenu() { if (menu) { menu.remove(); menu = null; } }
+    function openMenu() {
+      closeMenu();
+      const rect = btn.getBoundingClientRect();
+      menu = document.createElement('div');
+      menu.className = 'date-menu';
+      menu.style.top = (rect.bottom + 6) + 'px';
+      const MENU_WIDTH = 180;
+      const GUTTER = 8;
+      const desiredLeft = rect.right - MENU_WIDTH;
+      const maxLeft = Math.max(GUTTER, window.innerWidth - MENU_WIDTH - GUTTER);
+      menu.style.left = Math.min(maxLeft, Math.max(GUTTER, desiredLeft)) + 'px';
+      const current = window.AMCP_DATE_RANGE.get();
+      menu.innerHTML = PRESETS.map((p) => {
+        const active = current === p.value;
+        return `<div class="date-menu-item ${active ? 'active' : ''}" data-range-value="${p.value}">
+          <span>${p.label}</span>
+          ${active ? '<span style="color:var(--maroon)">✓</span>' : ''}
+        </div>`;
+      }).join('');
+      document.body.appendChild(menu);
+      menu.addEventListener('click', (e) => {
+        const item = e.target.closest('.date-menu-item');
+        if (!item) return;
+        const value = item.getAttribute('data-range-value');
+        window.AMCP_DATE_RANGE.set(value);
+        refreshLabel();
+        closeMenu();
+      });
+    }
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (menu) closeMenu(); else openMenu();
+    });
+    document.addEventListener('click', () => closeMenu());
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
   }
 
   /* Auto-load the client-side SPA router on every v2 page so sidebar
