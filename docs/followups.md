@@ -672,3 +672,22 @@ Branches with unique commits not on main and no active PR. Each needs human tria
 0 unique commits, last )
 
 
+
+## Public-repo exposure remediation (2026-05-05)
+
+### Exposure window
+- Public from 2026-05-05 ~23:55 UTC to 2026-05-06 ~00:55 UTC after Phase A redactions landed in HEAD
+- Window length: ~1 hour
+- Force-pushed clean A7 sweep at 2026-05-06 ~01:30 UTC
+
+### Indexing scope (Phase B)
+- Google `site:github.com/cameronjmcewan-dev/advocatemcp` for customer names: **no results**
+- Broader Google search `"advocatemcp" "Workman Copy Co" OR "Bamboo Brace"`: only returned the customers' own legitimate web presences (bamboobrace.com etc.), no reference to our repo
+- Broader Google search for `"cameronjmcewan-dev/advocatemcp" cf-launchpad`: **no results**
+- Wayback Machine: not checkable from automated environment — manual spot-check recommended
+- Bing/DDG: not run
+
+### Decision
+- **Phase D (history scrub via git filter-repo) NOT RUN.** Evidence shows the exposure window was too short for Google to crawl and index. The deleted commits remain visible to anyone clicking through commit history on GitHub, but no search-index-driven discovery is in play.
+- If a customer reaction demands a full scrub, Phase D in `docs/superpowers/plans/2026-05-05-public-repo-exposure-remediation.md` has the exact `git filter-repo` recipe.
+
