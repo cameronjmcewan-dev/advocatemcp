@@ -10,7 +10,7 @@ Solo founder sprint. Read this first, then `docs/followups.md`.
 ## Current State (as of Apr 12, 2026)
 - Phase F Part 2 shipped
 - Hosted-tenant onboarding flow live
-- WCC (Workman Copy Co) set up end-to-end as first real customer
+- First real customer set up end-to-end
 - Wildcard route production incident resolved
 - `STRIPE_WEBHOOK_SECRET` rotated — watch for 401s on in-flight retries
 - 5 test custom hostnames deleted from Cloudflare zone
@@ -21,8 +21,8 @@ Verify `user_business_access` join counts before DELETE. Use explicit id list,
 not bare `WHERE api_key='pending'`.
 
 ## Critical Distinction
-- `8961b467481648518431f2072bdc1ded` (slug `workman`) = test row, DELETE ok
-- `biz_workman_copy_co` = real customer, NEVER DELETE
+- `8961b467481648518431f2072bdc1ded` (test row, deletion-safe slug) = DELETE ok
+- `biz_<first-tenant-slug>` = real customer, NEVER DELETE
 
 ## Next Up
 1. Post-checkout redirect bug in wizard flow

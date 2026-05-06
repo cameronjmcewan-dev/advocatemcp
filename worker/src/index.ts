@@ -49,7 +49,7 @@ export type { Env };
 //      the user sees in the answer panel. Missing a *-User agent from
 //      this list means our worker serves scraped HTML to Perplexity/
 //      ChatGPT when they're answering a live query — the exact failure
-//      mode observed on WCC's domain before adding Perplexity-User.
+//      mode observed on the first paying tenant's domain before adding Perplexity-User.
 const AI_CRAWLERS = [
   "PerplexityBot",
   "Perplexity-User",

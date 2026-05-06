@@ -1286,7 +1286,7 @@ export async function handleStripeWebhook(
 
   // Workers Route creation is the final routing primitive — without this,
   // CF SaaS has a hostname configured but no Worker to dispatch to (the
-  // 522 we saw in the WCC smoke test). Create one route AND one KV
+  // 522 we saw in early smoke testing). Create one route AND one KV
   // entry per hostname variant so a bot crawling any variant gets the
   // Advocate intercept. Pre-Apr-26-2026 we registered just the primary
   // hostname here, which left the other variant (apex if signup was on

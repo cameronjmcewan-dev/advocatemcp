@@ -6,7 +6,7 @@
 
 ## Problem
 
-Custom tenant hostnames (e.g. `www.workmancopyco.com`) registered through Cloudflare for SaaS return 522 for AI crawler traffic. The Worker script is ready to handle them (KV lookup, `cf-custom-hostname` header, `getTenant` proxy), but Cloudflare's edge never routes traffic *to* the Worker because the custom hostname records were created without a `custom_origin_server` field. Cloudflare has no target to forward the traffic to.
+Custom tenant hostnames (e.g. `www.example-tenant.com`) registered through Cloudflare for SaaS return 522 for AI crawler traffic. The Worker script is ready to handle them (KV lookup, `cf-custom-hostname` header, `getTenant` proxy), but Cloudflare's edge never routes traffic *to* the Worker because the custom hostname records were created without a `custom_origin_server` field. Cloudflare has no target to forward the traffic to.
 
 A prior fix attempt (commit `bbbf572`, 2026-04-12) added a zone-wide `*/*` Workers Route to catch custom hostname traffic. It also captured traffic for the `advocatemcp.com` marketing Pages site — breaking the marketing site for ~15 minutes until revert. `wrangler rollback` does not revert Workers Routes, only the Worker script. That attempt is not retryable.
 
@@ -156,8 +156,8 @@ Mock CF via the existing `fetch` mock pattern used in the current `domains.test.
 ## Production rollout
 
 1. Deploy Worker (`cd worker && npx wrangler deploy`).
-2. Call `POST /admin/domains/activate` for Workman Copy Co's hostname with no body changes. The "already exists" branch fires, reconcile PATCHes `custom_origin_server`, response includes `reconcile_summary`.
-3. Verify `www.workmancopyco.com` with a PerplexityBot UA returns 200 with an advocate response (not 522).
+2. Call `POST /admin/domains/activate` for the first tenant's hostname with no body changes. The "already exists" branch fires, reconcile PATCHes `custom_origin_server`, response includes `reconcile_summary`.
+3. Verify the tenant's hostname with a PerplexityBot UA returns 200 with an advocate response (not 522).
 4. `wrangler tail` confirms the Worker is receiving the request.
 5. Optional: backfill-curl any other tenant hostnames through the same activate endpoint (they'll self-heal if any drift exists, no-op otherwise).
 
@@ -193,6 +193,6 @@ Mock CF via the existing `fetch` mock pattern used in the current `domains.test.
 
 1. `cd worker && npx vitest run && npx tsc --noEmit` — green
 2. `cd worker && ./scripts/smoke-test.sh` — 18/18 pass (no regression in portal/auth)
-3. Manually activated WCC hostname returns 200 with advocate response for a PerplexityBot UA hitting `www.workmancopyco.com`
+3. Manually activated first tenant's hostname returns 200 with advocate response for a PerplexityBot UA
 4. `wrangler tail` shows the Worker receiving the request (not a 522 at CF edge)
 5. `docs/followups.md` "DNS custom hostname routing" entry marked RESOLVED with commit SHA

@@ -154,7 +154,7 @@ Bootstrapped. Running on $0 outside revenue. Solo founder + engineer. Full trans
 
 ### Q9: Do you have customers who will talk on the record?
 
-One paying customer in Q1 (Workman Copy Co), and we can coordinate a conversation with them with permission. The other tenants referenced in the dataset are our own pre-customer pilot installs, which we describe as such in the report — we are not presenting them as customer references.
+One paying customer in Q1 (a copywriting agency), and we can coordinate a conversation with them with permission. The other tenants referenced in the dataset are our own pre-customer pilot installs, which we describe as such in the report — we are not presenting them as customer references.
 
 ### Q10: What's the business model?
 

@@ -40,7 +40,7 @@ describe("extractPlaceIdFromInput", () => {
 
   it("extracts Place ID from long-form Maps URL via !1s", () => {
     const url =
-      "https://www.google.com/maps/place/Workman+Copy+Co/@40.7,-74,17z/data=!3m1!4b1!4m6!3m5!1s0x89c259a9b71ed63d:0xabc123def456!8m2!3d40.7!4d-74!16s%2Fg%2F11abcd1234?entry=ttu";
+      "https://www.google.com/maps/place/Example+Business/@40.7,-74,17z/data=!3m1!4b1!4m6!3m5!1s0x89c259a9b71ed63d:0xabc123def456!8m2!3d40.7!4d-74!16s%2Fg%2F11abcd1234?entry=ttu";
     expect(extractPlaceIdFromInput(url)).toBe("0x89c259a9b71ed63d:0xabc123def456");
   });
 
@@ -125,7 +125,7 @@ describe("fetchPlaceDetails", () => {
       rating: 4.8,
       userRatingCount: 42,
       googleMapsUri: "https://maps.google.com/?cid=12345",
-      displayName: { text: "Workman Copy Co" },
+      displayName: { text: "Example Business" },
       formattedAddress: "123 Main St",
       reviews: [
         {
@@ -149,7 +149,7 @@ describe("fetchPlaceDetails", () => {
       expect(out.placeId).toBe("ChIJabc");
       expect(out.details.rating).toBe(4.8);
       expect(out.details.userRatingCount).toBe(42);
-      expect(out.details.displayName).toBe("Workman Copy Co");
+      expect(out.details.displayName).toBe("Example Business");
       expect(out.details.reviews).toHaveLength(1);
       expect(out.details.reviews[0].text).toBe("Best service in town.");
       expect(out.details.reviews[0].author).toBe("Jane D");

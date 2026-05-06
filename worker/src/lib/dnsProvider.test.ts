@@ -34,7 +34,7 @@ function mockDohAnswer(nsRecords: string[]) {
 describe("detectDnsProvider — known providers", () => {
   it("identifies GoDaddy via domaincontrol.com", async () => {
     mockDohAnswer(["ns35.domaincontrol.com", "ns36.domaincontrol.com"]);
-    const r = await detectDnsProvider("workmancopyco.com");
+    const r = await detectDnsProvider("example-tenant.com");
     expect(r.provider).toBe("godaddy");
     expect(r.nameservers).toContain("ns35.domaincontrol.com");
   });

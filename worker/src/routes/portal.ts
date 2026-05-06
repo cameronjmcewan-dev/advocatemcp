@@ -1153,9 +1153,21 @@ async function apiActivityDetail(request: Request, env: Env): Promise<Response> 
   const biz = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
 
+  // Forward the date-range filter to /analytics/:slug/activity. Same shape
+  // as apiMetrics — start_date+end_date wins over range; both fall through
+  // to the server's 30d default when absent.
+  const rangeQS = (() => {
+    const r = url.searchParams.get("range");
+    const s = url.searchParams.get("start_date");
+    const e = url.searchParams.get("end_date");
+    if (s && e) return `?start_date=${encodeURIComponent(s)}&end_date=${encodeURIComponent(e)}`;
+    if (r)      return `?range=${encodeURIComponent(r)}`;
+    return "";
+  })();
+
   const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
   try {
-    const res = await fetch(`${base}/analytics/${biz.slug}/activity`, {
+    const res = await fetch(`${base}/analytics/${biz.slug}/activity${rangeQS}`, {
       headers: { Authorization: `Bearer ${biz.api_key}` },
     });
     if (!res.ok) {
@@ -1205,13 +1217,26 @@ async function apiClicks(request: Request, env: Env): Promise<Response> {
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
     : await getUserBusinesses(env.DB, ctx.user_id);
-  const slug = new URL(request.url).searchParams.get("slug");
+  const url  = new URL(request.url);
+  const slug = url.searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
 
+  // Forward the global date-range filter to /analytics/:slug/clicks. Same
+  // shape as apiMetrics + apiActivityDetail — start_date+end_date wins
+  // over range; both fall through to the server's 30d default when absent.
+  const rangeQS = (() => {
+    const r = url.searchParams.get("range");
+    const s = url.searchParams.get("start_date");
+    const e = url.searchParams.get("end_date");
+    if (s && e) return `?start_date=${encodeURIComponent(s)}&end_date=${encodeURIComponent(e)}`;
+    if (r)      return `?range=${encodeURIComponent(r)}`;
+    return "";
+  })();
+
   const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
   try {
-    const res = await fetch(`${base}/analytics/${biz.slug}/clicks`, {
+    const res = await fetch(`${base}/analytics/${biz.slug}/clicks${rangeQS}`, {
       headers: { Authorization: `Bearer ${biz.api_key}` },
     });
     if (!res.ok) {
@@ -2871,7 +2896,7 @@ async function adminCreateClient(request: Request, env: Env): Promise<Response> 
 // Why not just use ?as=<slug> impersonation? Because impersonation
 // keeps the session role as 'admin', so admin UI elements still
 // render. Magic-login swaps to the tenant's actual user_id, with
-// role: 'client' — same auth context as if WCC logged in normally.
+// role: 'client' — same auth context as if a real tenant logged in normally.
 //
 // Auth: Bearer ADMIN_SECRET (same pattern as /admin/create-client).
 // Token TTL: 5 minutes. Token is NOT single-use; the short window is

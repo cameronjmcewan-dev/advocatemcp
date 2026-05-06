@@ -91,8 +91,8 @@ function createFakeKv(
 function makeTenant(overrides: Partial<TenantRecord> = {}): TenantRecord {
   return {
     domain:  "wcc.example.com",
-    name:    "Workman Copy Co",
-    slug:    "workman-copy-co",
+    name:    "Example Tenant",
+    slug:    "example-tenant",
     phone:   "555-0100",
     email:   "owner@wcc.example.com",
     address: "", city: "Boise", state: "ID", postalCode: "", country: "US",
@@ -144,12 +144,12 @@ describe("POST /admin/onboard/retry-railway", () => {
   afterEach(() => { vi.restoreAllMocks(); });
 
   it("401s without admin secret", async () => {
-    const { db } = createFakeDb({ "workman-copy-co": { domain: "wcc.example.com" } });
+    const { db } = createFakeDb({ "example-tenant": { domain: "wcc.example.com" } });
     const kv = createFakeKv({ "wcc.example.com": makeTenant() });
     const env = makeEnv(db, kv);
 
     const res = await handleRetryRailwayRegistration(
-      makeRequest({ slug: "workman-copy-co" }),
+      makeRequest({ slug: "example-tenant" }),
       env,
     );
     expect(res.status).toBe(401);
@@ -178,35 +178,35 @@ describe("POST /admin/onboard/retry-railway", () => {
   });
 
   it("404s when D1 row exists but KV tenant record is missing", async () => {
-    const { db } = createFakeDb({ "workman-copy-co": { domain: "wcc.example.com" } });
+    const { db } = createFakeDb({ "example-tenant": { domain: "wcc.example.com" } });
     const kv = createFakeKv({});
     const env = makeEnv(db, kv);
     const res = await handleRetryRailwayRegistration(
-      makeRequest({ slug: "workman-copy-co" }, { "X-Admin-Secret": "test-admin-secret" }),
+      makeRequest({ slug: "example-tenant" }, { "X-Admin-Secret": "test-admin-secret" }),
       env,
     );
     expect(res.status).toBe(404);
   });
 
   it("422s when KV tenant has no wizard profile", async () => {
-    const { db } = createFakeDb({ "workman-copy-co": { domain: "wcc.example.com" } });
+    const { db } = createFakeDb({ "example-tenant": { domain: "wcc.example.com" } });
     const tenantNoProfile = makeTenant();
     delete (tenantNoProfile as { profile?: unknown }).profile;
     const kv = createFakeKv({ "wcc.example.com": tenantNoProfile });
     const env = makeEnv(db, kv);
     const res = await handleRetryRailwayRegistration(
-      makeRequest({ slug: "workman-copy-co" }, { "X-Admin-Secret": "test-admin-secret" }),
+      makeRequest({ slug: "example-tenant" }, { "X-Admin-Secret": "test-admin-secret" }),
       env,
     );
     expect(res.status).toBe(422);
   });
 
   it("500s when API_BASE_URL / API_KEY are not configured", async () => {
-    const { db } = createFakeDb({ "workman-copy-co": { domain: "wcc.example.com" } });
+    const { db } = createFakeDb({ "example-tenant": { domain: "wcc.example.com" } });
     const kv = createFakeKv({ "wcc.example.com": makeTenant() });
     const env = makeEnv(db, kv, { API_BASE_URL: undefined, API_KEY: undefined });
     const res = await handleRetryRailwayRegistration(
-      makeRequest({ slug: "workman-copy-co" }, { "X-Admin-Secret": "test-admin-secret" }),
+      makeRequest({ slug: "example-tenant" }, { "X-Admin-Secret": "test-admin-secret" }),
       env,
     );
     expect(res.status).toBe(500);
@@ -217,34 +217,34 @@ describe("POST /admin/onboard/retry-railway", () => {
       new Response(JSON.stringify({ error: "schema mismatch" }), { status: 400 }),
     );
     const { db, rows } = createFakeDb({
-      "workman-copy-co": { domain: "wcc.example.com", api_key: "pending" },
+      "example-tenant": { domain: "wcc.example.com", api_key: "pending" },
     });
     const kv = createFakeKv({ "wcc.example.com": makeTenant() });
     const env = makeEnv(db, kv);
 
     const res = await handleRetryRailwayRegistration(
-      makeRequest({ slug: "workman-copy-co" }, { "X-Admin-Secret": "test-admin-secret" }),
+      makeRequest({ slug: "example-tenant" }, { "X-Admin-Secret": "test-admin-secret" }),
       env,
     );
     expect(res.status).toBe(502);
-    expect(rows.get("workman-copy-co")?.api_key).toBe("pending");
+    expect(rows.get("example-tenant")?.api_key).toBe("pending");
   });
 
   it("200 on success — updates D1 api_key with the new Railway key", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(
-        JSON.stringify({ slug: "workman-copy-co", api_key: "railway-new-key-123" }),
+        JSON.stringify({ slug: "example-tenant", api_key: "railway-new-key-123" }),
         { status: 201, headers: { "Content-Type": "application/json" } },
       ),
     );
     const { db, rows } = createFakeDb({
-      "workman-copy-co": { domain: "wcc.example.com", api_key: "pending" },
+      "example-tenant": { domain: "wcc.example.com", api_key: "pending" },
     });
     const kv = createFakeKv({ "wcc.example.com": makeTenant() });
     const env = makeEnv(db, kv);
 
     const res = await handleRetryRailwayRegistration(
-      makeRequest({ slug: "workman-copy-co" }, { "X-Admin-Secret": "test-admin-secret" }),
+      makeRequest({ slug: "example-tenant" }, { "X-Admin-Secret": "test-admin-secret" }),
       env,
     );
     expect(res.status).toBe(200);
@@ -252,22 +252,22 @@ describe("POST /admin/onboard/retry-railway", () => {
       ok?: boolean; slug?: string; domain?: string; action?: string;
     };
     expect(body.ok).toBe(true);
-    expect(body.slug).toBe("workman-copy-co");
+    expect(body.slug).toBe("example-tenant");
     expect(body.domain).toBe("wcc.example.com");
-    expect(rows.get("workman-copy-co")?.api_key).toBe("railway-new-key-123");
+    expect(rows.get("example-tenant")?.api_key).toBe("railway-new-key-123");
   });
 
   it("accepts Bearer auth form in addition to X-Admin-Secret", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(JSON.stringify({ slug: "workman-copy-co", api_key: "k" }), { status: 201 }),
+      new Response(JSON.stringify({ slug: "example-tenant", api_key: "k" }), { status: 201 }),
     );
     const { db } = createFakeDb({
-      "workman-copy-co": { domain: "wcc.example.com", api_key: "pending" },
+      "example-tenant": { domain: "wcc.example.com", api_key: "pending" },
     });
     const kv = createFakeKv({ "wcc.example.com": makeTenant() });
     const env = makeEnv(db, kv);
     const res = await handleRetryRailwayRegistration(
-      makeRequest({ slug: "workman-copy-co" }, { Authorization: "Bearer test-admin-secret" }),
+      makeRequest({ slug: "example-tenant" }, { Authorization: "Bearer test-admin-secret" }),
       env,
     );
     expect(res.status).toBe(200);

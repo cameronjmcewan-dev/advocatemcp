@@ -499,7 +499,7 @@
         a.classList.add('error');
         a.innerHTML =
           'No answer came back. You\'re signed in as <strong>admin</strong> without an impersonation target, so the preview hit the alphabetically-first business — usually a test row with no profile data.<br><br>' +
-          'To see a real answer, append <code>&amp;as=workman-copy-co</code> (or any real tenant slug) to the URL, or pick one from <a href="/admin/tenants" style="color:var(--maroon, #7d2550);font-weight:500">Tenants</a> and click Replay tutorial after impersonating.';
+          'To see a real answer, append <code>&amp;as=example-tenant</code> (or any real tenant slug) to the URL, or pick one from <a href="/admin/tenants" style="color:var(--maroon, #7d2550);font-weight:500">Tenants</a> and click Replay tutorial after impersonating.';
       } else {
         a.classList.add('error');
         a.innerHTML =

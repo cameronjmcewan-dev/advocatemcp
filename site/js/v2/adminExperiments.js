@@ -54,7 +54,7 @@
           <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:18px;align-items:flex-end">
             <div style="flex:1;min-width:200px">
               <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:4px">Tenant slug (optional)</label>
-              <input id="exp-slug" type="text" placeholder="workman-copy-co" autocomplete="off"
+              <input id="exp-slug" type="text" placeholder="example-tenant" autocomplete="off"
                      style="width:100%;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font-size:14px;background:var(--paper);color:var(--ink)">
             </div>
             <div style="flex:2;min-width:300px">
@@ -248,7 +248,7 @@
   const DEFAULT_QUERIES = [
     'best email marketing agency for DTC ecommerce',
     'Klaviyo specialist agencies near me',
-    'tell me about Workman Copy Co',
+    'tell me about this email marketing agency',
     'email agency for shopify stores',
     'compare email marketing services for small DTC brands',
   ];
@@ -327,13 +327,13 @@
   // verified ratings WITHOUT mutating their live profile.
   const WHAT_IF_PATCH = {
     ratings_json: {
-      google: { rating: 4.9, count: 47, url: "https://www.google.com/maps/place/Workman+Copy+Co" },
-      yelp:   { rating: 5.0, count: 12, url: "https://www.yelp.com/biz/workman-copy-co-austin" },
+      google: { rating: 4.9, count: 47, url: "https://www.google.com/maps/place/Example+Email+Agency" },
+      yelp:   { rating: 5.0, count: 12, url: "https://www.yelp.com/biz/example-email-agency-austin" },
     },
     customer_quotes_json: [
-      { author: "Anya R.",  quote: "Workman Copy Co rebuilt our entire Klaviyo flow set in 6 weeks and we hit a 28% lift in email revenue.", source: "google" },
-      { author: "Devon P.", quote: "Their copy reads like our customers wrote it. We finally stopped sending generic blasts.",                source: "yelp" },
-      { author: "Jin S.",   quote: "Worked with three other agencies before. None understood DTC like Workman does.",                            source: "google" },
+      { author: "Anya R.",  quote: "They rebuilt our entire Klaviyo flow set in 6 weeks and we hit a 28% lift in email revenue.", source: "google" },
+      { author: "Devon P.", quote: "Their copy reads like our customers wrote it. We finally stopped sending generic blasts.",     source: "yelp" },
+      { author: "Jin S.",   quote: "Worked with three other agencies before. None understood DTC like this team does.",           source: "google" },
     ],
   };
 

@@ -220,25 +220,25 @@ describe("provisionActivationToken (Phase F Part 1)", () => {
   });
 
   it("first call mints a token and returns 'minted'", async () => {
-    const { db, rows } = createFakeDb({ "workman-copy-co": {} });
+    const { db, rows } = createFakeDb({ "example-tenant": {} });
     const env = makeEnv(db);
 
     const result = await provisionActivationToken(
       env,
-      "workman-copy-co",
+      "example-tenant",
       "2026-04-11T12:00:00.000Z",
     );
 
     expect(result).toBe("minted");
     expect(mockedSign).toHaveBeenCalledTimes(1);
     expect(mockedSign).toHaveBeenCalledWith(
-      { slug: "workman-copy-co" },
+      { slug: "example-tenant" },
       "test-phase-f-key",
       7 * 24 * 3600, // 7-day TTL — Phase F Part 2
     );
 
-    const row = rows.get("workman-copy-co");
-    expect(row?.activation_token).toBe("mock-token-for-workman-copy-co");
+    const row = rows.get("example-tenant");
+    expect(row?.activation_token).toBe("mock-token-for-example-tenant");
     expect(row?.activation_status).toBe("pending_send");
     expect(row?.activation_issued_at).toBe("2026-04-11T12:00:00.000Z");
   });
@@ -246,13 +246,13 @@ describe("provisionActivationToken (Phase F Part 1)", () => {
   it(
     "second call short-circuits without invoking signActivationToken",
     async () => {
-      const { db, rows } = createFakeDb({ "workman-copy-co": {} });
+      const { db, rows } = createFakeDb({ "example-tenant": {} });
       const env = makeEnv(db);
 
       // First call — mints.
       const first = await provisionActivationToken(
         env,
-        "workman-copy-co",
+        "example-tenant",
         "2026-04-11T12:00:00.000Z",
       );
       expect(first).toBe("minted");
@@ -263,7 +263,7 @@ describe("provisionActivationToken (Phase F Part 1)", () => {
       // guard requested in the Phase F Part 1 design session.
       const second = await provisionActivationToken(
         env,
-        "workman-copy-co",
+        "example-tenant",
         "2026-04-11T13:00:00.000Z",
       );
       expect(second).toBe("existing");
@@ -271,8 +271,8 @@ describe("provisionActivationToken (Phase F Part 1)", () => {
 
       // And the stored token is the one from the FIRST call — the
       // second call did not overwrite it.
-      const row = rows.get("workman-copy-co");
-      expect(row?.activation_token).toBe("mock-token-for-workman-copy-co");
+      const row = rows.get("example-tenant");
+      expect(row?.activation_token).toBe("mock-token-for-example-tenant");
       expect(row?.activation_issued_at).toBe("2026-04-11T12:00:00.000Z");
     },
   );
@@ -280,13 +280,13 @@ describe("provisionActivationToken (Phase F Part 1)", () => {
   it(
     "returns 'no_key' and skips signing when ACTIVATION_SIGNING_KEY is missing",
     async () => {
-      const { db } = createFakeDb({ "workman-copy-co": {} });
+      const { db } = createFakeDb({ "example-tenant": {} });
       const env = makeEnv(db, {});
       delete (env as { ACTIVATION_SIGNING_KEY?: string }).ACTIVATION_SIGNING_KEY;
 
       const result = await provisionActivationToken(
         env,
-        "workman-copy-co",
+        "example-tenant",
         "2026-04-11T12:00:00.000Z",
       );
 
@@ -317,15 +317,15 @@ describe("handleGetActivation (GET /admin/businesses/:slug/activation)", () => {
     const headers: Record<string, string> = {};
     if (secret !== undefined) headers["X-Admin-Secret"] = secret;
     return new Request(
-      "https://customers.advocatemcp.com/admin/businesses/workman-copy-co/activation",
+      "https://customers.advocatemcp.com/admin/businesses/example-tenant/activation",
       { method: "GET", headers },
     );
   }
 
   it("happy path — returns 200 with the activation record JSON", async () => {
     const { db } = createFakeDb({
-      "workman-copy-co": {
-        activation_token:     "mock-token-for-workman-copy-co",
+      "example-tenant": {
+        activation_token:     "mock-token-for-example-tenant",
         activation_status:    "pending_send",
         activation_issued_at: "2026-04-11T12:00:00.000Z",
       },
@@ -335,58 +335,58 @@ describe("handleGetActivation (GET /admin/businesses/:slug/activation)", () => {
     const response = await handleGetActivation(
       makeRequest("test-admin-secret"),
       env,
-      "workman-copy-co",
+      "example-tenant",
     );
 
     expect(response.status).toBe(200);
     const body = (await response.json()) as Record<string, unknown>;
     expect(body).toEqual({
-      slug:                 "workman-copy-co",
-      activation_token:     "mock-token-for-workman-copy-co",
+      slug:                 "example-tenant",
+      activation_token:     "mock-token-for-example-tenant",
       activation_status:    "pending_send",
       activation_issued_at: "2026-04-11T12:00:00.000Z",
     });
   });
 
   it("returns 200 with null token when the webhook has not yet fired", async () => {
-    const { db } = createFakeDb({ "workman-copy-co": {} });
+    const { db } = createFakeDb({ "example-tenant": {} });
     const env = makeEnv(db);
 
     const response = await handleGetActivation(
       makeRequest("test-admin-secret"),
       env,
-      "workman-copy-co",
+      "example-tenant",
     );
 
     expect(response.status).toBe(200);
     const body = (await response.json()) as Record<string, unknown>;
-    expect(body.slug).toBe("workman-copy-co");
+    expect(body.slug).toBe("example-tenant");
     expect(body.activation_token).toBeNull();
     expect(body.activation_status).toBe("none");
     expect(body.activation_issued_at).toBeNull();
   });
 
   it("returns 401 when X-Admin-Secret header is missing", async () => {
-    const { db } = createFakeDb({ "workman-copy-co": {} });
+    const { db } = createFakeDb({ "example-tenant": {} });
     const env = makeEnv(db);
 
     const response = await handleGetActivation(
       makeRequest(undefined),
       env,
-      "workman-copy-co",
+      "example-tenant",
     );
 
     expect(response.status).toBe(401);
   });
 
   it("returns 401 when X-Admin-Secret header is wrong", async () => {
-    const { db } = createFakeDb({ "workman-copy-co": {} });
+    const { db } = createFakeDb({ "example-tenant": {} });
     const env = makeEnv(db);
 
     const response = await handleGetActivation(
       makeRequest("not-the-right-secret"),
       env,
-      "workman-copy-co",
+      "example-tenant",
     );
 
     expect(response.status).toBe(401);

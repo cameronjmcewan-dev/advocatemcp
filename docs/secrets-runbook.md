@@ -159,7 +159,7 @@ Mode-specific (test price IDs ≠ live price IDs). Mixing modes causes 400s.
 3. `cd worker && npx wrangler secret put CF_API_TOKEN`, paste new value.
 4. Smoke test: `curl -X POST https://customers.advocatemcp.com/admin/domains/ensure-worker-route
     -H "X-Admin-Secret: $ADMIN_SECRET" -H "Content-Type: application/json"
-    -d '{"hostname":"www.workmancopyco.com"}'` should return 200.
+    -d '{"hostname":"www.example-tenant.com"}'` should return 200.
 
 ### Admin secret
 

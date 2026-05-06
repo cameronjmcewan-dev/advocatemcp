@@ -632,7 +632,7 @@ export async function handleSetFallbackOrigin(
 // hostname. Without it, SaaS forwarding loops internally and the edge
 // returns a fast 522 without reaching the Worker.
 //
-// Body: { "hostname": "www.workmancopyco.com" }. Idempotent: checks for an
+// Body: { "hostname": "www.example-tenant.com" }. Idempotent: checks for an
 // existing matching route before creating.
 
 /**

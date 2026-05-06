@@ -27,7 +27,7 @@ const KEY = "test-vector-key-access-phase-c";
 const CUSTOMER_CLAIMS = {
   sub:       "user_abcdef123",
   role:      "client",
-  tenant_id: "biz_workman_copy_co",
+  tenant_id: "biz_example_tenant",
   email:     "customer@example.com",
   full_name: "Test Customer",
 } as const;
@@ -148,9 +148,9 @@ describe("access-token", () => {
     const claims = {
       sub:       "user_abcdef123",
       role:      "admin",
-      tenant_id: "biz_workman_copy_co",
-      email:     "cameron@advocatemcp.com",
-      full_name: "Cameron McEwan",
+      tenant_id: "biz_example_tenant",
+      email:     "admin@advocatemcp.com",
+      full_name: "Admin User",
     };
     const token = await signAccessToken(claims, KEY);
     const payload = await verifyAccessToken(token, KEY);

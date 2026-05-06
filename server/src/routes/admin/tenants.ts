@@ -12,7 +12,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * Admin-only tenant contact-email backfill. Accepts `{ email }` in the
  * body, validates shape, and updates `businesses.email` for the slug.
  * Primary use case is legacy tenants registered before migration 016
- * added the column (e.g. WCC) — the P5 digest job skips tenants with no
+ * added the column (e.g. legacy tenants) — the P5 digest job skips tenants with no
  * email on file, so this endpoint is the quickest way to unblock them.
  *
  * Idempotent: setting the same email twice returns `{ changes: 0 }` but

@@ -276,7 +276,7 @@ export async function pollAll(): Promise<void> {
           // If t.name is empty (data-integrity edge case: tenant name
           // accidentally cleared during onboarding or admin action),
           // fall back to t.slug so extraction still runs. Slugs are
-          // typically derived from the name (e.g. "workman-copy-co"),
+          // typically derived from the name (e.g. "my-business-name"),
           // so the regex match will still hit reasonable sentence
           // boundaries. Log a structured warning so ops can detect
           // and repair the underlying data issue — silent skipping

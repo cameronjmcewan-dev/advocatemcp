@@ -7,7 +7,7 @@
  *
  * What it does:
  *   1. Runs runExperiment against the current Advocate tenant slug
- *      (DEMO_SLUG env or "workman-copy-co" default). Produces the
+ *      (DEMO_SLUG env or "example-tenant" default). Produces the
  *      "with_advocate" panel.
  *   2. Loads the existing baselines from the current
  *      site/data/score-comparison.json (these are hand-curated
@@ -20,7 +20,7 @@
  * directly and rerun this — it preserves any baselines whose `id`
  * doesn't start with `with_advocate`.
  *
- * Cost: ~$0.04 for the WCC harness run (default 4 trials × ~$0.01).
+ * Cost: ~$0.04 for the harness run (default 4 trials × ~$0.01).
  * Once per quarter is rounding error.
  */
 
@@ -30,7 +30,7 @@ import { join, resolve } from "path";
 import { runExperiment } from "../src/experiments/formatJudge/runner.js";
 import { getDb } from "../src/db.js";
 
-const SLUG = process.env.DEMO_SLUG ?? "workman-copy-co";
+const SLUG = process.env.DEMO_SLUG ?? "example-tenant";
 
 // site/data/score-comparison.json — relative to repo root. The script
 // lives in server/scripts so we walk up one level.
@@ -156,7 +156,7 @@ async function main(): Promise<void> {
 
   writeFileSync(OUTPUT_PATH, JSON.stringify(output, null, 2) + "\n", "utf8");
   console.log(`[refresh] wrote ${OUTPUT_PATH}`);
-  console.log(`[refresh] WCC score: ${advocatePanel.score}/10 (cite rate ${(advocatePanel.cite_rate * 100).toFixed(0)}%)`);
+  console.log(`[refresh] tenant score: ${advocatePanel.score}/10 (cite rate ${(advocatePanel.cite_rate * 100).toFixed(0)}%)`);
 }
 
 main().catch((err) => {

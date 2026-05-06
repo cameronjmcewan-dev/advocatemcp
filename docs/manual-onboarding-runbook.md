@@ -4,8 +4,7 @@ Step-by-step for admin-provisioned customers — the "white-glove" path where
 you set up a tenant directly instead of sending them through the self-serve
 wizard at `advocatemcp.com/audit` / `advocatemcp.com/onboarding`.
 
-This is the path that was used for **Workman Copy Co** (WCC) as the first
-real paying customer.
+This is the path that was used for the first real paying customer.
 
 Last validated: 2026-04-19.
 
@@ -59,18 +58,18 @@ curl -X POST https://api.advocatemcp.com/register \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $API_KEY" \
   -d '{
-    "name": "Workman Copy Co",
-    "description": "Boise copywriting studio specializing in DTC email sequences.",
+    "name": "Example Tenant",
+    "description": "Example business description.",
     "category": "copywriter",
-    "location": "Boise, ID",
+    "location": "City, ST",
     "services": ["email copy", "landing page copy", "brand voice"],
-    "phone": "208-555-0100",
-    "website": "https://www.workmancopyco.com",
+    "phone": "555-555-0100",
+    "website": "https://www.example-tenant.com",
     "star_rating": 4.9,
     "review_count": 18,
     "tone": "warm",
     "plan": "pro",
-    "email": "owner@workmancopyco.com"
+    "email": "owner@example-tenant.com"
   }'
 ```
 
@@ -78,9 +77,9 @@ curl -X POST https://api.advocatemcp.com/register \
 
 ```json
 {
-  "slug": "workman-copy-co",
+  "slug": "example-tenant",
   "api_key": "2a3b4c...",
-  "agent_endpoint": "https://api.advocatemcp.com/agents/workman-copy-co/query",
+  "agent_endpoint": "https://api.advocatemcp.com/agents/example-tenant/query",
   ...
 }
 ```
@@ -101,7 +100,7 @@ If another tenant already has the generated base slug, Railway auto-suffixes
 ## Step 2: Create the D1 business row
 
 Railway has the profile + `api_key`; now the worker needs a pointer so it
-knows to route `www.workmancopyco.com` traffic to that slug.
+knows to route the tenant's domain traffic to that slug.
 
 `/admin/create-client` creates the user AND the D1 business row AND grants
 the user access, in one call:
@@ -111,11 +110,11 @@ curl -X POST https://customers.advocatemcp.com/admin/create-client \
   -H "Authorization: Bearer $ADMIN_SECRET" \
   -H "Content-Type: application/json" \
   -d '{
-    "email":         "owner@workmancopyco.com",
+    "email":         "owner@example-tenant.com",
     "password":      "<temporary-strong-password>",
-    "full_name":     "Jane Workman",
-    "slug":          "workman-copy-co",
-    "business_name": "Workman Copy Co",
+    "full_name":     "<Customer Name>",
+    "slug":          "example-tenant",
+    "business_name": "Example Tenant",
     "api_key":       "<the api_key Railway returned>",
     "role":          "client"
   }'
@@ -143,10 +142,10 @@ curl -X POST https://customers.advocatemcp.com/api/onboard \
   -H "X-Admin-Secret: $ADMIN_SECRET" \
   -H "Content-Type: application/json" \
   -d '{
-    "domain": "www.workmancopyco.com",
-    "slug":   "workman-copy-co",
-    "name":   "Workman Copy Co",
-    "email":  "owner@workmancopyco.com"
+    "domain": "www.example-tenant.com",
+    "slug":   "example-tenant",
+    "name":   "Example Tenant",
+    "email":  "owner@example-tenant.com"
   }'
 ```
 
@@ -157,16 +156,18 @@ instructions for the customer.
 
 - **TXT record for ownership verification** — `txtName` / `txtValue` from the
   response.
-- **CNAME record** from `www.workmancopyco.com` → `customers.advocatemcp.com`.
+- **CNAME record** from `www.example-tenant.com` → `customers.advocatemcp.com`.
+- **TTL: `1/2 Hour`** for both records. On GoDaddy this is a dropdown preset —
+  the customer should never pick Custom or leave it on the 1-Hour default.
 
-Send those two lines via email.
+Send those three lines via email.
 
 ### 3c. Wait for verification
 
 CF checks the TXT + CNAME every few minutes. Monitor status:
 
 ```bash
-curl https://customers.advocatemcp.com/api/onboard/www.workmancopyco.com/status \
+curl https://customers.advocatemcp.com/api/onboard/www.example-tenant.com/status \
   -H "X-Admin-Secret: $ADMIN_SECRET"
 ```
 
@@ -194,10 +195,10 @@ isn't there. Save.
 curl -X POST https://customers.advocatemcp.com/admin/domains/ensure-worker-route \
   -H "X-Admin-Secret: $ADMIN_SECRET" \
   -H "Content-Type: application/json" \
-  -d '{"hostname":"www.workmancopyco.com"}'
+  -d '{"hostname":"www.example-tenant.com"}'
 ```
 
-Expected `200 OK` with `{ "created": true, "pattern": "www.workmancopyco.com/*", ... }`.
+Expected `200 OK` with `{ "created": true, "pattern": "www.example-tenant.com/*", ... }`.
 
 If this returns 502 or "not configured", the `CF_API_TOKEN` is still
 under-scoped. Re-check step 4a.
@@ -209,7 +210,7 @@ under-scoped. Re-check step 4a.
 ### 5a. Crawler interception (custom-domain only)
 
 ```bash
-curl -I -A "PerplexityBot/1.0" https://www.workmancopyco.com/
+curl -I -A "PerplexityBot/1.0" https://www.example-tenant.com/
 ```
 
 Expected: `200` from our Worker (not a 522 CF error, not the customer's
@@ -219,7 +220,7 @@ specific to AI crawler UAs.
 ### 5b. Public profile endpoint
 
 ```bash
-curl https://api.advocatemcp.com/agents/workman-copy-co/profile | jq .
+curl https://api.advocatemcp.com/agents/<slug>/profile | jq .
 ```
 
 Expected: structured JSON with `name`, `description`, `services`, `category`.
@@ -227,10 +228,10 @@ Expected: structured JSON with `name`, `description`, `services`, `category`.
 ### 5c. Agent query
 
 ```bash
-curl -X POST https://api.advocatemcp.com/agents/workman-copy-co/query \
+curl -X POST https://api.advocatemcp.com/agents/<slug>/query \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $THE_TENANT_API_KEY" \
-  -d '{"query": "Who are the best copywriters for DTC email in Boise?",
+  -d '{"query": "Who are the best businesses in this category in this city?",
        "crawler_agent": "PerplexityBot"}'
 ```
 

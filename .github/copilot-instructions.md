@@ -117,7 +117,7 @@ Server source files:
 - Hosted tenant flow at `*.hosted.advocatemcp.com`
 - Attribution system: signed tokens, click tracking, query-to-click linkage
 - Railway agent runtime, MCP server, registry
-- **Workman Copy Co (WCC)** — first real customer, fully onboarded
+- First real customer, fully onboarded
 
 ### ❌ Broken / Not Yet Wired
 - `site/onboarding.html` — posts to `https://advocate-production-2887.up.railway.app/api/businesses` which does NOT exist on Railway. Should be wired to the worker's `/api/onboard/public`
@@ -132,8 +132,8 @@ Server source files:
 
 ## Critical Rules
 
-1. **NEVER delete `biz_workman_copy_co`** — this is the real Workman Copy Co customer tenant in D1.
-2. `8961b467481648518431f2072bdc1ded` (slug `workman`) = old test row — DELETE is OK. `biz_workman_copy_co` = real customer — NEVER DELETE.
+1. **NEVER delete `biz_[first-customer-slug]`** — this is the real paying customer tenant in D1.
+2. `8961b467481648518431f2072bdc1ded` (old test row slug) = DELETE is OK. The real customer tenant row = NEVER DELETE.
 3. Pages deploys are NOT git-connected — a `wrangler pages deploy site/` from a working directory missing files WILL wipe those files from production.
 4. Any shared secret rotation must update BOTH sides (worker wrangler secret AND Railway env var) in the same operation.
 
@@ -141,10 +141,7 @@ Server source files:
 
 ## First Customer
 
-**Workman Copy Co (WCC)**
-- Slug: `workman-copy-co`
-- Domain: `www.workmancopyco.com`
-- Fully onboarded in both D1 and Railway
+First paying customer is a copywriting agency, fully onboarded in both D1 and Railway.
 - Custom domain currently returns 522 for crawler traffic (DNS routing blocker — see `docs/followups.md`)
 
 ---

@@ -40,9 +40,8 @@ import crypto from "crypto";
 
 /* The single demo tenant. Hardcoded so visitors can't pivot to other
  * tenants by changing a URL. Override via DEMO_SLUG env if you want a
- * different demo profile. Defaults to WCC since that's the only real
- * customer right now (Apr 2026). */
-const DEMO_SLUG = process.env.DEMO_SLUG ?? "workman-copy-co";
+ * different demo profile. */
+const DEMO_SLUG = process.env.DEMO_SLUG ?? "example-tenant";
 
 const DEMO_RUN_LIMITS = [
   { label: "demo:burst", cfg: { max: 3,  windowMs: 60_000 } },

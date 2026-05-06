@@ -3,9 +3,9 @@ import { desiredHostnameSpec } from "./hostnameSpec.js";
 
 describe("desiredHostnameSpec", () => {
   it("returns the canonical CF custom hostname config for a given hostname", () => {
-    const spec = desiredHostnameSpec("www.workmancopyco.com");
+    const spec = desiredHostnameSpec("www.example-tenant.com");
     expect(spec).toEqual({
-      hostname: "www.workmancopyco.com",
+      hostname: "www.example-tenant.com",
       custom_origin_server: "customers.advocatemcp.com",
       ssl: {
         method: "txt",

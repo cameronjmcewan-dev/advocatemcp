@@ -44,8 +44,8 @@ canonical long-form description.
 ### Example queries (for "how is this used?" fields)
 
 1. "Find me a plumber in Boise who handles 24/7 emergencies."
-2. "What does Workman Copy Co charge for a 4-email welcome sequence?"
-3. "Book a 30-minute consultation with Apex Legal on Thursday afternoon."
+2. "What does this copywriting agency charge for a 4-email welcome sequence?"
+3. "Book a 30-minute consultation with this law firm on Thursday afternoon."
 4. "What's the best-rated DTC email agency in Austin?"
 5. "Is the locksmith on 5th Ave actually licensed and insured?"
 6. "What's their cancellation policy if I need to reschedule the day before?"
@@ -114,7 +114,7 @@ PulseMCP's form asks for many of the same fields as Smithery, plus:
 | Changelog URL | `https://github.com/cameronjmcewan-dev/advocatemcp/releases` (once we start tagging) |
 
 **Notable extras:** PulseMCP encourages a YouTube or demo link. Record a
-90-second screen-cap of Claude Desktop using the server to find WCC and
+90-second screen-cap of Claude Desktop using the server to find the first paying tenant and
 run a query; link it in the submission. Skip if no recording yet — the
 listing will still be accepted, just without a demo banner.
 
@@ -165,9 +165,9 @@ listing will still be accepted, just without a demo banner.
    { "mcpServers": { "advocate": { "url": "https://api.advocatemcp.com/mcp", "transport": "http" } } }
 2. Restart Claude Desktop. Try these prompts:
    - "Search for marketing agencies in Boise" → search_businesses
-   - "What does Workman Copy Co charge for a welcome email sequence?" → query_business_agent
-   - "When is Apex Legal available Thursday afternoon?" → get_availability
-   - "Is Workman Copy Co licensed and insured?" → get_credentials
+   - "What does this copywriting agency charge for a welcome email sequence?" → query_business_agent
+   - "When is this law firm available Thursday afternoon?" → get_availability
+   - "Is this copywriting agency licensed and insured?" → get_credentials
    - "What's their cancellation policy?" → get_cancellation_policy
 3. Write tools (reserve_slot, initiate_handoff, request_callback,
    subscribe_to_updates) require per-business Bearer auth — they're an
@@ -295,7 +295,7 @@ Most common reasons + responses:
   Limits section + `/.well-known/mcp.json` which declares the limits
   machine-readably.
 - **"No clear use case"** → send them the demo video OR run a live
-  one-on-one via Zoom demonstrating Claude Desktop querying WCC.
+  one-on-one via Zoom demonstrating Claude Desktop querying the first paying tenant.
 
 ## Outreach ordering rationale
 
