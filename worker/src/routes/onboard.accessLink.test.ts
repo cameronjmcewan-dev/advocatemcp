@@ -3,7 +3,7 @@
  *
  * Every onboarding path that creates a user AND a business must call
  * grantAccess() so that getUserBusinesses() returns a row for that user.
- * The bug that prompted these tests: bamboo-brace had a businesses row but
+ * The bug that prompted these tests: example-tenant had a businesses row but
  * no user_business_access row, causing "404: No business found for this
  * account" on the dashboard.
  *
