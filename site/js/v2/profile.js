@@ -244,7 +244,7 @@
           <div class="score-real-cell">
             <div class="score-real-num">${fmt(botVisits)}</div>
             <div class="score-real-lbl">AI bot visits</div>
-            <a class="score-real-link" href="/BotTraffic.html">Open Bot Traffic →</a>
+            <a class="score-real-link" href="/Mentions.html">Open Mentions →</a>
           </div>
           <div class="score-real-cell">
             <div class="score-real-num">${fmt(clicks)}</div>

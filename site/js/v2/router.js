@@ -37,7 +37,6 @@
   // NAV items; crumb + title drive the topbar.
   const ROUTES = [
     { path: /^\/app(\.html)?\/?$/,                script: '/js/v2/overview.js',     module: 'AMCP_OVERVIEW',       activeId: 'overview',       crumb: 'Dashboard · Overview',         title: null /* dynamic via function */, titleFn: (d) => `Welcome back${window.AMCP_DATA && window.AMCP_DATA.full_name ? ', ' + window.AMCP_DATA.full_name.split(' ')[0] : ''}.` },
-    { path: /^\/BotTraffic(\.html)?\/?$/,          script: '/js/v2/bots.js',         module: 'AMCP_BOTS',           activeId: 'bot-traffic',    crumb: 'Dashboard · Bot traffic',      title: 'Bot traffic' },
     { path: /^\/Mentions(\.html)?\/?$/,            script: '/js/v2/mentions.js',     module: 'AMCP_MENTIONS',       activeId: 'mentions',       crumb: 'Dashboard · Mentions',         title: 'Mentions' },
     { path: /^\/ClickThroughs(\.html)?\/?$/,       script: '/js/v2/clicks.js',       module: 'AMCP_CLICKS',         activeId: 'clicks',         crumb: 'Dashboard · Click-throughs',   title: 'Click-throughs' },
     { path: /^\/CompetitorRadar(\.html)?\/?$/,     script: '/js/v2/radar.js',        module: 'AMCP_RADAR',          activeId: 'radar',          crumb: 'Dashboard · Competitor Radar', title: 'Competitor Radar' },
@@ -139,6 +138,16 @@
 
   async function navigate(href, opts = {}) {
     const u = (typeof href === 'string') ? new URL(href, location.origin) : href;
+
+    // Legacy redirect: /BotTraffic.html was merged into /Mentions.html.
+    // Preserve query string + hash so ?as=<slug>&range=<w> survive.
+    if (/^\/BotTraffic(\.html)?\/?$/.test(u.pathname)) {
+      u.pathname = '/Mentions.html';
+      if (opts.push !== false) {
+        history.replaceState(null, '', u.pathname + u.search + u.hash);
+      }
+    }
+
     const route = matchRoute(u.pathname);
     if (!route) {
       // Not in our SPA — let the browser handle it (fallback nav).

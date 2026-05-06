@@ -7,7 +7,7 @@
       body: '<strong>Mentions</strong> is how many times AI brought you up. <strong>Click-throughs</strong> is how many people then visited your website. <strong>Earned</strong> is the money those visits brought in.' },
     { sels: ['.date-range'], title: 'Change the date range',
       body: 'By default you\'re looking at the last 7 days. Tap here to see this month, last month, or a custom range.' },
-    { sels: ['[data-tour="bot-traffic"]'], title: 'Which AI tools are talking about you',
+    { sels: ['[data-tour="mentions"]'], title: 'Which AI tools are talking about you',
       body: 'The chart shows daily mentions across all AI tools. The list on the right breaks it down by tool.' },
     { sels: ['[data-tour="mentions-table"]'], title: 'Every mention, explained',
       body: 'Each row is one time AI brought up your business. The last column shows what happened next.' },
@@ -119,7 +119,7 @@
     const vhNow = window.innerHeight;
     const primaryH = primary.getBoundingClientRect().height;
     const isTall = primaryH > vhNow * 0.45;
-    const isLargeRow = primary.matches('[data-tour="kpis"], [data-tour="bot-traffic"], [data-tour="mentions-table"], [data-tour="revenue"]');
+    const isLargeRow = primary.matches('[data-tour="kpis"], [data-tour="mentions"], [data-tour="mentions-table"], [data-tour="revenue"]');
     if (isTall || isLargeRow) {
       const absTop = primary.getBoundingClientRect().top + window.scrollY;
       window.scrollTo({ top: Math.max(0, absTop - 80), behavior: 'smooth' });

@@ -39,7 +39,7 @@
     {
       sels:  ['.sidebar', '.sb-nav'],
       title: 'Your dashboard',
-      body:  'Every section lives in the sidebar — Overview, Bot traffic, Mentions, Click-throughs, Competitor Radar, AI bookings, Activity feed.',
+      body:  'Every section lives in the sidebar — Overview, Mentions, Click-throughs, Competitor Radar, AI bookings, Activity feed.',
     },
     {
       sels:  ['[data-tour="kpis"], .row.kpi-row, .row.kpis, .row:nth-of-type(1)'],
@@ -47,7 +47,7 @@
       body:  '<strong>Mentions</strong> is how many times AI brought you up. <strong>Click-throughs</strong> is how many people then visited your site. <strong>Reservations</strong> is bookings agents made on your behalf.',
     },
     {
-      sels:  ['[data-tour="bot-traffic"]'],
+      sels:  ['[data-tour="mentions"]'],
       title: 'Which AI tools are talking about you',
       body:  'The chart shows daily mentions across every AI tool. The list on the right breaks it down by crawler.',
     },

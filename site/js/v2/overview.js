@@ -370,7 +370,7 @@
     }).join('');
     const labels = series.map(s => `<span>${s.label || ''}</span>`).join('');
     return `
-      <div class="card-dash" data-tour="bot-traffic">
+      <div class="card-dash" data-tour="mentions">
         <div class="card-head">
           <div>
             <h3>AI bot traffic</h3>
@@ -690,7 +690,7 @@
           : ''
       }
 
-      <div class="row" data-tour="bot-traffic">
+      <div class="row" data-tour="mentions">
         ${renderBotChart(d)}
         ${renderBotBreakdown(d)}
       </div>
@@ -880,10 +880,10 @@
    *  with an ECharts area-line chart. Same data source as the legacy
    *  rendering: derivedDailySeries(metrics). */
   function upgradeBotTrafficChart(data) {
-    // The legacy renderBotChart writes a `.card-dash[data-tour="bot-traffic"]`
+    // The legacy renderBotChart writes a `.card-dash[data-tour="mentions"]`
     // wrapper. Inside it find the `.chart` (CSS bars) + `.chart-labels`
     // and replace with a single ECharts mount.
-    const wrap = document.querySelector('.card-dash[data-tour="bot-traffic"]');
+    const wrap = document.querySelector('.card-dash[data-tour="mentions"]');
     if (!wrap) return;
     const oldChart  = wrap.querySelector('.chart');
     const oldLabels = wrap.querySelector('.chart-labels');
