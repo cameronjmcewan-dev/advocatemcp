@@ -73,9 +73,10 @@
 
   async function fetchReal() {
     const af = window.AMCP && window.AMCP.authedFetch;
-    // Honor the topbar's date-range selector (set by wireDateRange in
-    // dashboard-chrome.js). Falls back to the backend's default (30d).
-    const range = (window.AMCP_DATE_RANGE && window.AMCP_DATE_RANGE.get && window.AMCP_DATE_RANGE.get()) || '30d';
+    // AdvocateChrome.getRange() resolves URL → localStorage → '30d' and
+    // is available before this function runs (window.AMCP_DATE_RANGE is
+    // not — it's created inside chrome.mount() which runs after fetch).
+    const range = (window.AdvocateChrome && window.AdvocateChrome.getRange) ? window.AdvocateChrome.getRange() : '30d';
     const r = await af(`/api/client/metrics?range=${encodeURIComponent(range)}`);
     return (r.ok ? await r.json() : {}) || {};
   }

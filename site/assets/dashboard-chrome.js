@@ -42,6 +42,42 @@
     { id: 'admin-experiments',  href: '/admin/experiments.html',    g: '⚗', label: 'Experiments' },
   ];
 
+  // ── Date-range helper (single source of truth) ──────────────────────
+  //
+  // Every page module's fetchReal calls AdvocateChrome.getRange() to
+  // pick the time window for /api/client/metrics. Resolution order:
+  //   1. URL ?range= (set by deep-links + by wireDateRange()'s history.replaceState)
+  //   2. localStorage 'amcp_selected_date_range' (cross-page persistence)
+  //   3. '30d' default (matches backend's parseDateRange default)
+  //
+  // The URL takes precedence over localStorage so a deep-link or a
+  // history navigation always wins over a stale stored value. Validates
+  // against the 4-preset allowlist so a corrupt URL param can't poison
+  // the fetch.
+  //
+  // CRITICAL: this helper exists because shell.js calls opts.fetchReal()
+  // BEFORE AdvocateChrome.mount(), which is BEFORE wireDateRange() runs.
+  // That means window.AMCP_DATE_RANGE doesn't exist yet at fetch time.
+  // Reading the URL directly works because the browser populates it
+  // before any script runs.
+  const VALID_RANGES = ['7d', '30d', '90d', '365d'];
+  function getRange() {
+    try {
+      const fromUrl = new URL(window.location.href).searchParams.get('range');
+      if (fromUrl && VALID_RANGES.indexOf(fromUrl) !== -1) return fromUrl;
+    } catch (_) { /* URL parse error — fall through */ }
+    try {
+      const fromStorage = localStorage.getItem('amcp_selected_date_range');
+      if (fromStorage && VALID_RANGES.indexOf(fromStorage) !== -1) return fromStorage;
+    } catch (_) { /* localStorage blocked (private mode, etc.) */ }
+    return '30d';
+  }
+  // Expose on window.AdvocateChrome so page modules can call it from
+  // their fetchReal() at module-evaluation or boot time, without waiting
+  // for chrome.mount() to run.
+  window.AdvocateChrome = window.AdvocateChrome || {};
+  window.AdvocateChrome.getRange = getRange;
+
   /* Reads the current tenant from window.AMCP_DATA (populated after /api/
      client/me + /api/client/metrics resolve) and falls back to generic
      placeholders if the boot code hasn't finished yet. Never returns the
@@ -499,8 +535,11 @@
 
     // Expose the selected range as a window-global so any module can
     // read the current filter without subscribing to the event.
+    // get() delegates to getRange() (top of IIFE) so URL → localStorage
+    // → default precedence is identical for every caller. Older code
+    // that read just localStorage now follows the URL too.
     window.AMCP_DATE_RANGE = window.AMCP_DATE_RANGE || {
-      get: () => localStorage.getItem(KEY) || '30d',
+      get: () => getRange(),
       set: (value) => {
         if (!PRESETS.find((p) => p.value === value)) return;
         localStorage.setItem(KEY, value);
