@@ -3,7 +3,7 @@
  * archetype non-customer SMBs.
  *
  * v2 (Apr 25 2026): expanded from 3-card layout to a 7-row
- * distribution view. The previous version had WCC + 2 baselines,
+ * distribution view. The previous version had a single tenant + 2 baselines,
  * which read as cherry-picked. The new version shows a real spread
  * (8.5, 3.8) across realistic SMB archetypes, credibility move
  * straight out of the strategic critique. Sophisticated buyers
@@ -96,7 +96,7 @@
           <span class="eyebrow">See the math</span>
           <h2 style="font-family:var(--serif);font-weight:400;font-size:32px;line-height:1.15;margin:8px 0 12px;color:var(--ink);">Citation-readiness, measured.</h2>
           <p style="margin:0;font-size:14.5px;line-height:1.55;color:var(--ink-2);">
-            One Advocate-enabled tenant alongside six anonymized SMB archetypes. Same Claude-judge harness, same rubric, same prompt. ${gap ? `Advocate's WCC scores ${gap} points above the strongest non-customer archetype.` : ""} The full prompt + rubric is published on <a href="/methodology.html" style="color:var(--maroon);">/methodology.html</a> so you can reproduce against your own site.
+            One Advocate-enabled tenant alongside six anonymized SMB archetypes. Same Claude-judge harness, same rubric, same prompt. ${gap ? `The Advocate-enabled tenant scores ${gap} points above the strongest non-customer archetype.` : ""} The full prompt + rubric is published on <a href="/methodology.html" style="color:var(--maroon);">/methodology.html</a> so you can reproduce against your own site.
           </p>
         </div>
         <div class="sc-stack" style="display:flex;flex-direction:column;gap:10px;">

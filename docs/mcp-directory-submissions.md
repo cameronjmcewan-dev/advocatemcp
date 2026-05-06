@@ -114,7 +114,7 @@ PulseMCP's form asks for many of the same fields as Smithery, plus:
 | Changelog URL | `https://github.com/cameronjmcewan-dev/advocatemcp/releases` (once we start tagging) |
 
 **Notable extras:** PulseMCP encourages a YouTube or demo link. Record a
-90-second screen-cap of Claude Desktop using the server to find WCC and
+90-second screen-cap of Claude Desktop using the server to find the first paying tenant and
 run a query; link it in the submission. Skip if no recording yet — the
 listing will still be accepted, just without a demo banner.
 
@@ -295,7 +295,7 @@ Most common reasons + responses:
   Limits section + `/.well-known/mcp.json` which declares the limits
   machine-readably.
 - **"No clear use case"** → send them the demo video OR run a live
-  one-on-one via Zoom demonstrating Claude Desktop querying WCC.
+  one-on-one via Zoom demonstrating Claude Desktop querying the first paying tenant.
 
 ## Outreach ordering rationale
 

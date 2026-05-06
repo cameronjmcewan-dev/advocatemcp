@@ -133,6 +133,6 @@
     ],
     "iteration_count": 12,
     "methodology_url": "/methodology.html",
-    "notes": "WCC is real harness output. Non-customer archetypes are anonymized (category, not business name) since we haven't asked permission to publish specific firms' scores. The methodology page publishes the full judge prompt + rubric so any reader can reproduce against their own site."
+    "notes": "The Advocate-enabled tenant row is real harness output. Non-customer archetypes are anonymized (category, not business name) since we haven't asked permission to publish specific firms' scores. The methodology page publishes the full judge prompt + rubric so any reader can reproduce against their own site."
   }
 }

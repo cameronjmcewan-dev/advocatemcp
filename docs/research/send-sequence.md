@@ -17,7 +17,7 @@ Tuesday 8am PT because:
 Heads-up emails to a tight circle. One-line, no ask, no link.
 
 **Recipients (5 total):**
-- The one paying customer who agreed to be on-record (WCC's owner)
+- The one paying customer who agreed to be on-record (the customer's owner)
 - 1–2 "friends of the company" who will boost organically — other solo SaaS founders with relevant audiences
 - 1 journalist you have a warm relationship with (if any) — give them the link as a private embargo
 
@@ -173,7 +173,7 @@ Post with reframed angle — "what this means for Google Business Profile-era th
 
 ### 2:00 PM — First customer outreach off the report
 
-Email your paying customer (WCC). Subject: `You're part of Q1's research`. Thank them, show them the report, offer a private data cut showing their tenant's stats in context. This is retention gold — and worth treating with extra care given they are the only live-customer data point in Q1.
+Email your paying customer. Subject: `You're part of Q1's research`. Thank them, show them the report, offer a private data cut showing their tenant's stats in context. This is retention gold — and worth treating with extra care given they are the only live-customer data point in Q1.
 
 ---
 

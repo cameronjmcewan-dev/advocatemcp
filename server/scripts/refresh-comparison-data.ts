@@ -156,7 +156,7 @@ async function main(): Promise<void> {
 
   writeFileSync(OUTPUT_PATH, JSON.stringify(output, null, 2) + "\n", "utf8");
   console.log(`[refresh] wrote ${OUTPUT_PATH}`);
-  console.log(`[refresh] WCC score: ${advocatePanel.score}/10 (cite rate ${(advocatePanel.cite_rate * 100).toFixed(0)}%)`);
+  console.log(`[refresh] tenant score: ${advocatePanel.score}/10 (cite rate ${(advocatePanel.cite_rate * 100).toFixed(0)}%)`);
 }
 
 main().catch((err) => {

@@ -59,7 +59,7 @@ Within each tenant type we further classify each query as either **ORGANIC** (pl
 
 | Tenant type | Total | BURST | ORGANIC |
 |---|---:|---:|---:|
-| Live customer (WCC) | 20 | 11 | **9** |
+| Live customer | 20 | 11 | **9** |
 | Pilot validation | 38 | 27 | **11** |
 | Internal test | 6 | — | — |
 | **Total** | **64** | **38** | **20** |
@@ -90,11 +90,11 @@ Q2 will materially improve all four.
 
 ---
 
-## Finding 1 — Live customer bot distribution (WCC, N=20)
+## Finding 1 — Live customer bot distribution (N=20)
 
 On our first paying customer's domain, across 20 total queries (11 BURST + 9 ORGANIC), the bot distribution was:
 
-| Bot | WCC queries | Share |
+| Bot | Customer queries | Share |
 |-----|--------------:|------:|
 | PerplexityBot | 12 | 60.0% |
 | ClaudeBot | 5 | 25.0% |
@@ -107,7 +107,7 @@ This contradicts the conventional wisdom that GPTBot dominates AI crawler volume
 
 ### Contrast: pilot validation distribution
 
-Our own pre-customer pilot installs (DMRE + Bamboo Brace, N=38) saw a completely different mix: GPTBot 79%, PerplexityBot 16%, mcp-client 5%. That distribution is heavily shaped by how we ran build-out probes (GPTBot-simulated curl tests dominated the early validation sessions) and is *not* a read on real crawler behavior. Reporting it alongside the customer data would misrepresent both.
+Our own pre-customer pilot installs (DMRE + a hosted tenant, N=38) saw a completely different mix: GPTBot 79%, PerplexityBot 16%, mcp-client 5%. That distribution is heavily shaped by how we ran build-out probes (GPTBot-simulated curl tests dominated the early validation sessions) and is *not* a read on real crawler behavior. Reporting it alongside the customer data would misrepresent both.
 
 The gap between the two distributions is exactly the reason we insist on separating validation traffic from customer traffic.
 
@@ -127,9 +127,9 @@ Six click events were captured in `click_events` during the Q1 window. Three dis
 
 **What this does not prove:** that customer-facing bots will click, at what rate, which bots convert better, or anything about commercial value per crawler hit. That is Q2's work.
 
-### Why no WCC clicks yet?
+### Why no customer clicks yet?
 
-Our first paying customer was onboarded mid-window, has 9 ORGANIC queries in the dataset, and logged 0 attributed clicks. At N=9 over nine days, that is within the noise floor — a 10% click rate would produce 0–1 clicks. It is statistically uninformative. Q2 will have the volume to start separating signal from noise.
+The first paying customer was onboarded mid-window, has 9 ORGANIC queries in the dataset, and logged 0 attributed clicks. At N=9 over nine days, that is within the noise floor — a 10% click rate would produce 0–1 clicks. It is statistically uninformative. Q2 will have the volume to start separating signal from noise.
 
 ---
 
@@ -156,7 +156,7 @@ The `general` + `affordable` dominance (85% combined) indicates AI crawlers at t
 
 The Q2 report lands in July 2026. Between now and then we will onboard more customers and materially expand the defensible sample.
 
-1. **Cross-bot conversion deltas** at customer scale — first quantitative test of whether PerplexityBot's apparent dominance on the WCC sample holds across verticals.
+1. **Cross-bot conversion deltas** at customer scale — first quantitative test of whether PerplexityBot's apparent dominance on the first paying customer's sample holds across verticals.
 2. **Per-agent attribution.** Our per-agent reputation rollup shipped in April 2026. Q2 is the first report where we can attribute outcomes to specific caller agents (Claude Desktop vs. Cursor vs. ChatGPT Apps vs. generic MCP client) over 7-day and 30-day windows.
 3. **Competitor Radar cohort data.** Our weekly Perplexity-poll loop auto-seeds a query basket per Pro tenant and records whether the tenant's domain showed up. Q2 will include the first cohort-level read on which citation battles SMBs systematically win vs. lose.
 4. **Vertical and regional variation.** Once tenants span more verticals and states, we can report on whether crawler pressure correlates with regional AI-adoption or tracks legacy SEO patterns.

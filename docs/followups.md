@@ -69,7 +69,7 @@ Today's commit makes new signups register both apex and www
 automatically. Existing tenants need a one-shot backfill:
 
 ```bash
-# WCC specifically:
+# First paying tenant specifically:
 curl -X POST https://customers.advocatemcp.com/admin/domains/backfill-variants \
   -H "X-Admin-Secret: <ADMIN_SECRET>" \
   -H "Content-Type: application/json" \

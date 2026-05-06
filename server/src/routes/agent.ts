@@ -736,7 +736,7 @@ agentRouter.post("/agents/:slug/query", requireSlugOrAdminKey, async (req: Reque
 
     // Close the budget reservation. queryAgent doesn't currently
     // surface per-call Claude cost, so we estimate $0.01 — the rough
-    // average across the WCC profile size + prompt-caching uplift on
+    // average across a typical profile size + prompt-caching uplift on
     // repeat calls. Refining this to use actual Anthropic-reported
     // cost (which queryAgent could expose via response.usage) is a
     // follow-up. Per-tenant tracking is visibility-only here — recorded

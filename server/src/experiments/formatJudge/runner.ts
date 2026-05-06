@@ -6,7 +6,7 @@
  *
  * Reads:
  *   - server/dev.db for live business profiles (or falls back to a
- *     hardcoded fixture for WCC if the DB is empty)
+ *     hardcoded fixture if the DB is empty)
  *   - server/src/agent/query.ts to generate a fresh agent answer per
  *     (profile × query). The agent answer is the "answerText" each
  *     variant wraps differently — so we measure WRAPPER quality, not
@@ -134,7 +134,7 @@ function loadProfileFromDb(slug: string): BusinessRow | null {
 /** Fallback fixture — used when DB is unavailable. Reflects the
  *  actual production profile shape so the harness exercises real data.
  *  Field set matches BusinessRow in server/src/db.ts. */
-const WCC_FIXTURE: BusinessRow = {
+const EXAMPLE_FIXTURE: BusinessRow = {
   id: 1,
   slug: "example-tenant",
   name: "Example Email Agency",
@@ -201,7 +201,7 @@ const WCC_FIXTURE: BusinessRow = {
 
 async function buildConfig(): Promise<ExperimentConfig> {
   const real = loadProfileFromDb(process.env.DEMO_SLUG ?? "example-tenant");
-  const profile = real ?? WCC_FIXTURE;
+  const profile = real ?? EXAMPLE_FIXTURE;
   if (real) {
     console.log(`[formatJudge] Using real DB profile: ${profile.slug} (${profile.name})`);
   } else {
@@ -420,7 +420,7 @@ export async function runExperiment(opts: {
   judges?: string[];         // override default judges
   /**
    * Profile patches: per-slug overrides applied on top of the loaded
-   * profile (or the WCC fixture). Lets callers test "what would the
+   * profile (or the example fixture). Lets callers test "what would the
    * score be IF this tenant added X" without mutating their live
    * profile. Each value gets shallow-merged onto the profile row
    * before rendering. Field names match BusinessRow columns:
@@ -462,7 +462,7 @@ export async function runExperiment(opts: {
   const cfg = { ...baseCfg };
   if (opts.profileSlugs?.length) {
     cfg.profiles = opts.profileSlugs
-      .map((s) => loadProfileFromDb(s) ?? (s === (process.env.DEMO_SLUG ?? "example-tenant") ? WCC_FIXTURE : null))
+      .map((s) => loadProfileFromDb(s) ?? (s === (process.env.DEMO_SLUG ?? "example-tenant") ? EXAMPLE_FIXTURE : null))
       .filter((p): p is BusinessRow => !!p);
   }
   if (opts.queries?.length) cfg.queries = opts.queries;

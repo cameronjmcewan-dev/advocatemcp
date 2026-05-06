@@ -22,7 +22,7 @@ Two scope notes up front, because they shape everything else:
 → Advocate has one paying customer to date (a copywriting agency). The other tenants in this dataset are our own pre-customer pilot installs we used to validate the pipeline before shipping to customers.
 → Six click events were captured in Q1. All six came from pilot validation, not from the customer side. The instrument works. Customer-facing conversion is Q2's job.
 
-What the live-customer sample looked like (N=20 WCC queries, 9 organic after filtering our own probes):
+What the live-customer sample looked like (N=20 queries from the first paying tenant, 9 organic after filtering our own probes):
 
 → PerplexityBot: 60%
 → ClaudeBot: 25%
@@ -82,7 +82,7 @@ Human clicks through from an AI answer → attribution back to the exact bot + e
 The dataset:
 
 64 total bot queries, Apr 8–17 2026.
-Classified by tenant type: 20 live-customer (WCC), 38 pilot validation, 6 internal test.
+Classified by tenant type: 20 live-customer (first paying tenant), 38 pilot validation, 6 internal test.
 Classified by traffic type: 20 organic, 38 burst (our own probes), 6 test.
 
 Defensible organic subset: N=20 across all tenant types.
@@ -90,7 +90,7 @@ Defensible organic subset: N=20 across all tenant types.
 
 **Tweet 5:**
 ```
-Live-customer bot distribution (WCC, N=20, all queries):
+Live-customer bot distribution (first paying tenant, N=20, all queries):
 
 PerplexityBot: 60%
 ClaudeBot: 25%
@@ -174,7 +174,7 @@ Advocate has one paying customer in Q1 (a copywriting agency). The other tenants
 
 64 total bot queries, Apr 8–17 2026. Classified: 20 organic, 38 burst (our own probe traffic during build-out), 6 internal test. Further split by tenant type — 9 organic from the paying customer, 11 organic from pilot validation.
 
-On the live customer (WCC, N=20 total across 20 queries):
+On the live customer (first paying tenant, N=20 total across 20 queries):
 - PerplexityBot: 60%
 - ClaudeBot: 25%
 - GPTBot: 15%

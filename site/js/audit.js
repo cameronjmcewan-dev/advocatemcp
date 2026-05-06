@@ -503,7 +503,7 @@
    *
    * Two render modes:
    *   - readiness present (judge succeeded): full breakdown — score
-   *     wheel + horizontal bar (positioned vs WCC's 8.5 and the lowest
+   *     wheel + horizontal bar (positioned vs the tenant baseline 8.5 and the lowest
    *     archetype's 3.8), Claude judge reasoning quote, two-column
    *     signals checklist (present/missing), ranked improvements with
    *     predicted lift, methodology link footer.
@@ -562,7 +562,7 @@
             '<div style="height:8px;background:var(--surface-2);border-radius:999px;overflow:hidden;border:1px solid var(--border);">' +
               '<div style="height:100%;width:' + pct + '%;background:var(--accent-bright);"></div>' +
             '</div>' +
-            '<div style="margin-top:8px;font-size:var(--tx-xs);color:var(--muted);">For comparison: WCC (Advocate-enabled) scores 8.5; the lowest archetype on our homepage scores 3.8.</div>' +
+            '<div style="margin-top:8px;font-size:var(--tx-xs);color:var(--muted);">For comparison: an Advocate-enabled tenant scores 8.5; the lowest archetype on our homepage scores 3.8.</div>' +
           '</div>' +
         '</div>' +
 

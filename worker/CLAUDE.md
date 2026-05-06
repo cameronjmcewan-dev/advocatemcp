@@ -92,4 +92,4 @@ npx wrangler deploy        # deploy to customers.advocatemcp.com
 
 **All four secrets must be in the same mode** (all test OR all live). Mixing modes produces 400 "No such price" errors from Stripe.
 
-To verify which mode is loaded at runtime, run `npx wrangler secret list` and check the values against your Stripe dashboard, or run a synthetic checkout via the Stripe CLI and observe the resulting `cs_test_` vs `cs_live_` session ID in `wrangler tail`. (The previous `stripe_key_probe` log line was removed after WCC + beta E2E verification — never reintroduce it; key prefixes in production logs are a needless attack surface.)
+To verify which mode is loaded at runtime, run `npx wrangler secret list` and check the values against your Stripe dashboard, or run a synthetic checkout via the Stripe CLI and observe the resulting `cs_test_` vs `cs_live_` session ID in `wrangler tail`. (The previous `stripe_key_probe` log line was removed after early tenant + beta E2E verification — never reintroduce it; key prefixes in production logs are a needless attack surface.)
