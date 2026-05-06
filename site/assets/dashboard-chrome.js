@@ -13,7 +13,6 @@
   // legacy dashboard.html, and we need the new UI on a distinct path.
   const NAV_MAIN = [
     { id: 'overview',    href: '/app.html',              g: '◈', label: 'Overview' },
-    { id: 'bot-traffic', href: '/BotTraffic.html',       g: '♨', label: 'Bot traffic' },
     { id: 'mentions',    href: '/Mentions.html',         g: '✦', label: 'Mentions' },
     { id: 'clicks',      href: '/ClickThroughs.html',    g: '→', label: 'Click-throughs' },
     { id: 'radar',       href: '/CompetitorRadar.html',  g: '△', label: 'Competitor Radar' },

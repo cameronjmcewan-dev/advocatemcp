@@ -2,7 +2,7 @@
  * events and /api/client/metrics for the rollup counts. */
 (function () {
 
-  // Same bot-family + brand-color logic as the Overview / Bot traffic
+  // Same bot-family + brand-color logic as the Overview / Mentions
   // pages — group GPTBot / GPTBot-1.0 / ChatGPT / ChatGPT-User / OAI-
   // SearchBot onto one OpenAI slice instead of fragmenting the donut.
   function botFamily(name) {
@@ -109,7 +109,7 @@
     const ctr      = (queries && total) ? (total / queries) : null;
 
     // Break clicks down by AI vendor (family-grouped). Mirrors the
-    // Overview / Bot traffic donut treatment so the dashboard speaks
+    // Overview / Mentions donut treatment so the dashboard speaks
     // one visual language across pages.
     const byFamily = Object.create(null);
     clicks.forEach(c => {
