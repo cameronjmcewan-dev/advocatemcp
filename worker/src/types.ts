@@ -170,4 +170,34 @@ export interface Env {
    * "production" when unset since the worker only deploys to one env.
    */
   SENTRY_ENVIRONMENT?: string;
+
+  // ── GA4 OAuth (Traffic Impact PR 1) ──────────────────────────────────
+  /**
+   * Google OAuth2 client ID for the GA4 connection flow.
+   * Issued in Google Cloud Console under OAuth 2.0 Client IDs.
+   * Set via: `cd worker && npx wrangler secret put GA4_OAUTH_CLIENT_ID`
+   */
+  GA4_OAUTH_CLIENT_ID?: string;
+
+  /**
+   * Google OAuth2 client secret matching GA4_OAUTH_CLIENT_ID.
+   * Set via: `cd worker && npx wrangler secret put GA4_OAUTH_CLIENT_SECRET`
+   */
+  GA4_OAUTH_CLIENT_SECRET?: string;
+
+  /**
+   * The redirect URI registered in the Google Cloud Console for this OAuth
+   * client — must match exactly. Typically:
+   *   https://customers.advocatemcp.com/oauth/ga4/callback
+   * Set via: `cd worker && npx wrangler secret put GA4_OAUTH_REDIRECT_URI`
+   */
+  GA4_OAUTH_REDIRECT_URI?: string;
+
+  /**
+   * 64-character hex string (32 bytes) used as the AES-256-GCM key for
+   * encrypting GA4 refresh tokens at rest in D1. Generate once and never
+   * rotate unless you also re-encrypt all existing rows.
+   * Set via: `cd worker && npx wrangler secret put GA4_TOKEN_ENCRYPTION_KEY`
+   */
+  GA4_TOKEN_ENCRYPTION_KEY?: string;
 }

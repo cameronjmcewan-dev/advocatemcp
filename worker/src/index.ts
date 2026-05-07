@@ -18,6 +18,7 @@ import type { Env } from "./types";
 import { handlePortal } from "./routes/portal";
 import { handleDemo } from "./routes/demo";
 import { reconcileRailwaySync } from "./lib/railwayReconciler";
+import { runGA4SyncBatch } from "./cron/ga4Sync";
 import { verifyToken, base64urlToBytes } from "./lib/tracked-url";
 import { buildSignedClickBody } from "./lib/clickBody";
 import { getTenant } from "./routes/onboard";
@@ -1232,6 +1233,26 @@ export default Sentry.withSentry(
             // Flush Sentry queue before the isolate is recycled. 5s is
             // generous; the reconciler's Sentry events are small.
             await Sentry.flush(5000);
+          }
+        })(),
+      );
+      // GA4 traffic sync — independent of railway reconciler. Per-tenant
+      // errors are already persisted into last_sync_error; we still log a
+      // top-level catch in case of an unexpected throw outside the per-tenant
+      // try/catch inside runGA4SyncBatch.
+      ctx.waitUntil(
+        (async () => {
+          try {
+            await runGA4SyncBatch(env);
+          } catch (err) {
+            Sentry.captureException(err, {
+              tags: { cron: "ga4_sync", phase: "top_level_throw" },
+            });
+            console.error(JSON.stringify({
+              cron:  "ga4_sync",
+              event: "top_level_throw",
+              error: String(err),
+            }));
           }
         })(),
       );

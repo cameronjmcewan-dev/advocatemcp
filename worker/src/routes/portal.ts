@@ -67,6 +67,11 @@ import {
   handleAdminExperimentFormatJudgePreflight,
   handleAdminProfileScores,
 } from "./adminInsightsProxy";
+import { handleGA4Start, handleGA4Callback } from "./ga4Oauth";
+import { decryptToken } from "../lib/ga4TokenCrypto";
+import { refreshAccessToken, listProperties, fetchDailyTraffic } from "../lib/ga4";
+import { classifyTrafficSource } from "../lib/aiTrafficClassifier";
+import { trafficImpactPayload } from "../lib/trafficImpactPayload";
 
 // ── Public route dispatcher ────────────────────────────────────────────────
 // Returns a Response if this is a portal path, or null to fall through to
@@ -186,6 +191,13 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
       return Response.redirect(target + search, 301);
     }
   }
+  if (pathname === "/oauth/ga4/start"     && method === "GET")  return handleGA4StartProtected(request, env);
+  if (pathname === "/oauth/ga4/callback"  && method === "GET")  return handleGA4Callback(request, env);
+  if (pathname === "/api/client/ga4/status"          && method === "GET")  return apiGA4Status(request, env);
+  if (pathname === "/api/client/ga4/properties"      && method === "GET")  return apiGA4Properties(request, env);
+  if (pathname === "/api/client/ga4/select-property" && method === "POST") return apiGA4SelectProperty(request, env);
+  if (pathname === "/api/client/ga4/disconnect"      && method === "POST") return apiGA4Disconnect(request, env);
+  if (pathname === "/api/client/traffic-impact"      && method === "GET")  return apiTrafficImpact(request, env);
   if (pathname === "/api/client/me"       && method === "GET")  return apiMe(request, env);
   if (pathname === "/api/client/me"       && method === "PATCH") return apiPatchMe(request, env);
   if (pathname === "/api/client/metrics"  && method === "GET")  return apiMetrics(request, env);
@@ -341,6 +353,11 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   // which must be 'true'".
   if (pathname === "/api/client/me"         && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/metrics"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/ga4/status"          && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/ga4/properties"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/ga4/select-property" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/ga4/disconnect"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/traffic-impact"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/all-metrics" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/all-metrics" && method === "GET")     return apiAllMetrics(request, env);
   if (pathname === "/api/client/activity-detail" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
@@ -3306,6 +3323,292 @@ async function fetchAnalytics(
   } catch {
     return null;
   }
+}
+
+// ── GA4 OAuth protected start ─────────────────────────────────────────────
+
+async function handleGA4StartProtected(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const reqUrl = new URL(request.url);
+  const querySlug = reqUrl.searchParams.get("slug");
+  if (!querySlug) {
+    return withCors(jsonErr(400, "slug query param required"), request, { credentials: true });
+  }
+
+  // Confirm the session user actually has access to this slug.
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const owns = businesses.some(b => b.slug === querySlug);
+  if (!owns) {
+    return withCors(jsonErr(403, "no access to this business"), request, { credentials: true });
+  }
+
+  // Authorized — delegate to the actual OAuth start handler.
+  return handleGA4Start(request, env);
+}
+
+// ── GET /api/client/ga4/status ─────────────────────────────────────────────
+
+async function apiGA4Status(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const reqUrl = new URL(request.url);
+  const slugParam = reqUrl.searchParams.get("slug");
+  const biz = (slugParam ? businesses.find(b => b.slug === slugParam) : null) ?? businesses[0] ?? null;
+  if (!biz) {
+    return withCors(jsonOk({ connected: false }), request, { credentials: true });
+  }
+
+  const row = await env.DB
+    .prepare("SELECT property_id, property_label, status, last_sync_at, last_sync_error, connected_at FROM ga4_connections WHERE slug = ? LIMIT 1")
+    .bind(biz.slug)
+    .first<{
+      property_id: string | null;
+      property_label: string | null;
+      status: string;
+      last_sync_at: string | null;
+      last_sync_error: string | null;
+      connected_at: string;
+    }>();
+
+  if (!row) {
+    return withCors(jsonOk({ connected: false, slug: biz.slug }), request, { credentials: true });
+  }
+
+  return withCors(
+    jsonOk({
+      connected: true,
+      slug: biz.slug,
+      property_id: row.property_id,
+      property_label: row.property_label,
+      status: row.status,
+      last_sync_at: row.last_sync_at,
+      last_sync_error: row.last_sync_error,
+      connected_at: row.connected_at,
+    }),
+    request,
+    { credentials: true },
+  );
+}
+
+// ── GET /api/client/ga4/properties ────────────────────────────────────────
+
+async function apiGA4Properties(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const reqUrl = new URL(request.url);
+  const slugParam = reqUrl.searchParams.get("slug");
+  const biz = (slugParam ? businesses.find(b => b.slug === slugParam) : null) ?? businesses[0] ?? null;
+  if (!biz) {
+    return withCors(jsonErr(404, "No business"), request, { credentials: true });
+  }
+
+  const row = await env.DB
+    .prepare("SELECT refresh_token_enc FROM ga4_connections WHERE slug = ? LIMIT 1")
+    .bind(biz.slug)
+    .first<{ refresh_token_enc: string }>();
+  if (!row) {
+    return withCors(jsonErr(404, "GA4 not connected"), request, { credentials: true });
+  }
+
+  if (!env.GA4_TOKEN_ENCRYPTION_KEY || !env.GA4_OAUTH_CLIENT_ID || !env.GA4_OAUTH_CLIENT_SECRET) {
+    return withCors(jsonErr(503, "GA4 integration not configured"), request, { credentials: true });
+  }
+
+  try {
+    const refreshToken = await decryptToken(row.refresh_token_enc, env.GA4_TOKEN_ENCRYPTION_KEY);
+    const { accessToken } = await refreshAccessToken(
+      refreshToken,
+      env.GA4_OAUTH_CLIENT_ID,
+      env.GA4_OAUTH_CLIENT_SECRET,
+    );
+    const properties = await listProperties(accessToken);
+    return withCors(jsonOk({ properties }), request, { credentials: true });
+  } catch {
+    return withCors(
+      jsonErr(502, "Failed to list GA4 properties"),
+      request,
+      { credentials: true },
+    );
+  }
+}
+
+// ── POST /api/client/ga4/select-property ──────────────────────────────────
+
+async function apiGA4SelectProperty(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  let body: { property_id?: string; property_label?: string; slug?: string } = {};
+  try { body = await request.json() as typeof body; } catch {
+    return withCors(jsonErr(400, "Invalid JSON"), request, { credentials: true });
+  }
+  if (!body.property_id || typeof body.property_id !== "string") {
+    return withCors(jsonErr(400, "property_id required"), request, { credentials: true });
+  }
+  if (!body.property_label || typeof body.property_label !== "string") {
+    return withCors(jsonErr(400, "property_label required"), request, { credentials: true });
+  }
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const biz = (body.slug ? businesses.find(b => b.slug === body.slug) : null) ?? businesses[0] ?? null;
+  if (!biz) {
+    return withCors(jsonErr(404, "No business"), request, { credentials: true });
+  }
+
+  // Save the property choice immediately so even if backfill fails the
+  // selection persists and a manual resync can be tried later.
+  await env.DB
+    .prepare("UPDATE ga4_connections SET property_id = ?, property_label = ? WHERE slug = ?")
+    .bind(body.property_id, body.property_label, biz.slug)
+    .run();
+
+  // Inline backfill — 18 months in one report. Errors don't fail the request:
+  // we surface them via last_sync_error so the Settings page can show them.
+  if (env.GA4_TOKEN_ENCRYPTION_KEY && env.GA4_OAUTH_CLIENT_ID && env.GA4_OAUTH_CLIENT_SECRET) {
+    try {
+      const conn = await env.DB
+        .prepare("SELECT refresh_token_enc FROM ga4_connections WHERE slug = ? LIMIT 1")
+        .bind(biz.slug)
+        .first<{ refresh_token_enc: string }>();
+      if (conn) {
+        const refreshToken = await decryptToken(conn.refresh_token_enc, env.GA4_TOKEN_ENCRYPTION_KEY);
+        const { accessToken } = await refreshAccessToken(
+          refreshToken,
+          env.GA4_OAUTH_CLIENT_ID,
+          env.GA4_OAUTH_CLIENT_SECRET,
+        );
+        const today = new Date();
+        const start = new Date(today);
+        start.setUTCDate(start.getUTCDate() - 540);  // ~18 months
+        const startDate = start.toISOString().slice(0, 10);
+        const endDate = new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);  // yesterday
+
+        const rows = await fetchDailyTraffic({
+          propertyId: body.property_id,
+          startDate,
+          endDate,
+          accessToken,
+        });
+
+        // Aggregate per (slug, date): sum AI rows + sum Human rows. Track top
+        // sources for the dashboard tooltip.
+        type Agg = { ai: number; human: number; sources: Record<string, number> };
+        const byDate = new Map<string, Agg>();
+        for (const r of rows) {
+          const key = r.date;
+          let agg = byDate.get(key);
+          if (!agg) { agg = { ai: 0, human: 0, sources: {} }; byDate.set(key, agg); }
+          const cls = classifyTrafficSource(r.source, r.medium);
+          if (cls === "ai")    agg.ai    += r.sessions;
+          else                 agg.human += r.sessions;
+          const srcKey = `${r.source}|${r.medium}`;
+          agg.sources[srcKey] = (agg.sources[srcKey] || 0) + r.sessions;
+        }
+
+        // Upsert each daily row.
+        const now = new Date().toISOString();
+        for (const [date, agg] of byDate.entries()) {
+          // Top-5 source/medium tuples for tooltips
+          const top = Object.entries(agg.sources)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([sm, n]) => { const [s, m] = sm.split("|"); return { source: s, medium: m, sessions: n }; });
+          await env.DB.prepare(
+            `INSERT INTO traffic_daily (slug, date, ai_sessions, human_sessions, total_sessions, top_sources_json)
+             VALUES (?, ?, ?, ?, ?, ?)
+             ON CONFLICT(slug, date) DO UPDATE SET
+               ai_sessions     = excluded.ai_sessions,
+               human_sessions  = excluded.human_sessions,
+               total_sessions  = excluded.total_sessions,
+               top_sources_json = excluded.top_sources_json`
+          )
+          .bind(
+            biz.slug,
+            date,
+            agg.ai,
+            agg.human,
+            agg.ai + agg.human,
+            JSON.stringify(top),
+          )
+          .run();
+        }
+
+        await env.DB
+          .prepare("UPDATE ga4_connections SET last_sync_at = ?, last_sync_error = NULL, status = 'connected' WHERE slug = ?")
+          .bind(now, biz.slug)
+          .run();
+      }
+    } catch (err) {
+      const msg = String(err instanceof Error ? err.message : err).slice(0, 500);
+      await env.DB
+        .prepare("UPDATE ga4_connections SET last_sync_error = ?, status = 'error' WHERE slug = ?")
+        .bind(msg, biz.slug)
+        .run();
+      // Don't fail the request — selection succeeded; sync error is recoverable.
+    }
+  }
+
+  return withCors(jsonOk({ ok: true }), request, { credentials: true });
+}
+
+// ── POST /api/client/ga4/disconnect ───────────────────────────────────────
+
+async function apiGA4Disconnect(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const reqUrl = new URL(request.url);
+  const slugParam = reqUrl.searchParams.get("slug");
+  const biz = (slugParam ? businesses.find(b => b.slug === slugParam) : null) ?? businesses[0] ?? null;
+  if (!biz) {
+    return withCors(jsonErr(404, "No business"), request, { credentials: true });
+  }
+
+  await env.DB.prepare("DELETE FROM ga4_connections WHERE slug = ?").bind(biz.slug).run();
+  return withCors(jsonOk({ ok: true }), request, { credentials: true });
+}
+
+// ── GET /api/client/traffic-impact ────────────────────────────────────────
+
+async function apiTrafficImpact(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const reqUrl = new URL(request.url);
+  const slugParam = reqUrl.searchParams.get("slug");
+  const biz = (slugParam ? businesses.find(b => b.slug === slugParam) : null) ?? businesses[0] ?? null;
+  if (!biz) {
+    return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  }
+
+  const payload = await trafficImpactPayload(env, biz, reqUrl);
+  return withCors(jsonOk(payload), request, { credentials: true });
 }
 
 // ── Response helpers ───────────────────────────────────────────────────────
