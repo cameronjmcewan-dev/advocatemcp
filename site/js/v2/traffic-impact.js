@@ -293,15 +293,104 @@
   // ── Conversion revenue banner ─────────────────────────────────────
 
   /**
-   * Returns one of three banner variants based on Pro-gate + data state.
-   * conv is data.conversions — null means skip entirely.
+   * Returns the revenue banner HTML (one of five variants) plus an
+   * optional side-by-side calibration strip below it.
+   *
+   *   conv     = data.conversions  (GA4 estimated, from /traffic-impact/conversions)
+   *   verified = data.verifiedRevenue (webhook-verified, from /traffic-impact/verified-revenue)
+   *   rangeLabel = human-readable window string e.g. "last 30 days"
+   *
+   * Render priority:
+   *   V      — verified + webhook_configured + events > 0 → show verified banner
+   *   V-empty — webhook configured but no events yet → show GA4 banner + note
+   *   A/B/C  — fall through to existing GA4-only variants
    */
-  function renderRevenueBanner(conv, rangeLabel) {
-    if (conv == null) return '';
+  function renderRevenueBanner(conv, verified, rangeLabel) {
+    var banner = '';
+    var compareCard = '';
 
-    // Variant C — base tenant hit a 402
-    if (conv.__planRequired) {
-      return [
+    // ── Variant V — webhook verified with events ──────────────────────
+    var verifiedHasEvents = verified && !verified.__planRequired
+      && verified.webhook_configured === true
+      && (verified.ai_cents > 0 || verified.total_events > 0);
+
+    if (verifiedHasEvents) {
+      var vCurrency  = verified.currency || 'USD';
+      var evWord     = verified.ai_events === 1 ? 'verified event' : 'verified events';
+      banner = [
+        '<section class="card-dash" style="background:linear-gradient(135deg,var(--maroon-tint),transparent);border:1px solid var(--maroon-tint);padding:24px 28px;margin-bottom:16px;">',
+        '  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap;">',
+        '    <div>',
+        '      <div style="font-size:13px;color:var(--maroon);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;display:flex;align-items:center;gap:8px;">',
+        '        Verified revenue from AI search',
+        '        <span style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;padding:2px 8px;background:var(--sage-tint,#d8e8d2);color:var(--sage,#4a7a3e);border-radius:999px;font-weight:600">&#10003; Verified</span>',
+        '      </div>',
+        '      <div style="font-family:var(--serif);font-size:42px;line-height:1;">' + esc(formatMoney(verified.ai_cents / 100, vCurrency)) + '</div>',
+        '      <div style="font-size:13px;color:var(--ink-2);margin-top:6px">',
+        '        From ' + fmtCount(verified.ai_events) + ' ' + evWord + ' attributed to AI · ' + esc(rangeLabel || ''),
+        '      </div>',
+        '    </div>',
+        '    <div style="text-align:right;font-size:13px;color:var(--muted)">',
+        '      <div>' + esc(formatMoney(verified.unknown_cents / 100, vCurrency)) + ' unattributed</div>',
+        '      <div style="margin-top:4px">' + fmtCount(verified.total_events) + ' total verified events</div>',
+        '    </div>',
+        '  </div>',
+        '</section>',
+      ].join('');
+
+      // Side-by-side calibration card — only when GA4 estimated data also exists
+      var convHasData = conv && !conv.__planRequired && conv.has_conversion_data;
+      if (convHasData) {
+        var estVal = (conv.ai || {}).revenue || 0;
+        var verVal = (verified.ai_cents / 100) || 0;
+        var deltaHtml = '';
+        if (estVal > 0 && verVal > 0) {
+          var delta = ((verVal - estVal) / estVal) * 100;
+          var sign  = delta >= 0 ? '+' : '';
+          var deltaColor = Math.abs(delta) > 25 ? 'var(--orange,#c87a3b)' : 'var(--ink-2)';
+          var calibNote  = Math.abs(delta) > 25
+            ? 'Worth a sanity check on event values in your booking system.'
+            : 'Within expected calibration drift.';
+          deltaHtml = '<div style="margin-top:10px;font-size:12.5px;color:' + deltaColor + '">'
+            + 'Verified is ' + sign + Math.round(delta) + '% ' + (delta >= 0 ? 'above' : 'below') + ' the GA4 estimate. ' + calibNote
+            + '</div>';
+        }
+        compareCard = [
+          '<section class="card-dash" style="margin-bottom:16px;padding:16px 20px;">',
+          '  <div style="font-size:13px;color:var(--ink-2);margin-bottom:10px">Estimated vs verified — calibration check</div>',
+          '  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">',
+          '    <div>',
+          '      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:4px">GA4 estimated</div>',
+          '      <div class="tabular" style="font-size:22px;">' + esc(formatMoney(estVal, conv.currency || 'USD')) + '</div>',
+          '    </div>',
+          '    <div>',
+          '      <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--maroon);margin-bottom:4px">Webhook verified</div>',
+          '      <div class="tabular" style="font-size:22px;">' + esc(formatMoney(verVal, vCurrency)) + '</div>',
+          '    </div>',
+          '  </div>',
+          deltaHtml,
+          '</section>',
+        ].join('');
+      }
+      return banner + compareCard;
+    }
+
+    // ── Variant V-empty — webhook configured but no events yet ────────
+    var verifiedConfiguredEmpty = verified && !verified.__planRequired
+      && verified.webhook_configured === true
+      && (verified.total_events === 0);
+
+    // For V-empty we still want to render the GA4 banner first, so we fall
+    // through to the GA4 variants below and append the note after.
+
+    // ── Variants A / B / C (GA4-based) ───────────────────────────────
+    var ga4Banner = '';
+
+    if (conv == null) {
+      // nothing to render
+    } else if (conv.__planRequired) {
+      // Variant C — base tenant
+      ga4Banner = [
         '<section class="card-dash" style="background:var(--paper);border:1px solid var(--line);padding:20px 24px;margin-bottom:16px;">',
         '  <div style="display:flex;justify-content:space-between;align-items:center;gap:24px;flex-wrap:wrap;">',
         '    <div>',
@@ -315,11 +404,9 @@
         '  </div>',
         '</section>',
       ].join('');
-    }
-
-    // Variant B — Pro but no conversion data
-    if (!conv.has_conversion_data) {
-      return [
+    } else if (!conv.has_conversion_data) {
+      // Variant B — Pro but no conversion data
+      ga4Banner = [
         '<section class="card-dash" style="border:1px dashed var(--line);padding:20px 24px;margin-bottom:16px;">',
         '  <div style="display:flex;justify-content:space-between;align-items:center;gap:24px;flex-wrap:wrap;">',
         '    <div>',
@@ -332,29 +419,84 @@
         '  </div>',
         '</section>',
       ].join('');
+    } else {
+      // Variant A — Pro tenant with conversion data
+      var aiRevenue    = (conv.ai    || {}).revenue     || 0;
+      var humanRevenue = (conv.human || {}).revenue     || 0;
+      var aiEventCount = (conv.ai    || {}).event_count || 0;
+      var currency     = conv.currency || 'USD';
+      var totalRevenue = aiRevenue + humanRevenue;
+      var aiSharePct   = totalRevenue > 0 ? Math.round((aiRevenue / totalRevenue) * 100) : 0;
+      var convWord     = aiEventCount === 1 ? 'conversion' : 'conversions';
+      ga4Banner = [
+        '<section class="card-dash" style="background:linear-gradient(135deg,var(--maroon-tint),transparent);border:1px solid var(--maroon-tint);padding:24px 28px;margin-bottom:16px;">',
+        '  <div style="display:flex;justify-content:space-between;align-items:center;gap:24px;flex-wrap:wrap;">',
+        '    <div>',
+        '      <div style="font-size:13px;color:var(--maroon);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Revenue from AI search</div>',
+        '      <div style="font-family:var(--serif);font-size:42px;line-height:1;">' + esc(formatMoney(aiRevenue, currency)) + '</div>',
+        '      <div style="font-size:13px;color:var(--ink-2);margin-top:6px">From ' + fmtCount(aiEventCount) + ' ' + convWord + ' attributed to AI sources · ' + esc(rangeLabel || '') + '</div>',
+        '    </div>',
+        '    <div style="text-align:right;font-size:13px;color:var(--muted)">',
+        '      <div>vs ' + esc(formatMoney(humanRevenue, currency)) + ' from Human</div>',
+        '      <div style="margin-top:4px">' + aiSharePct + '% of total revenue</div>',
+        '    </div>',
+        '  </div>',
+        '</section>',
+      ].join('');
     }
 
-    // Variant A — Pro tenant with conversion data
-    var aiRevenue   = (conv.ai    || {}).revenue     || 0;
-    var humanRevenue= (conv.human || {}).revenue     || 0;
-    var aiEventCount= (conv.ai    || {}).event_count || 0;
-    var currency    = conv.currency || 'USD';
-    var totalRevenue= aiRevenue + humanRevenue;
-    var aiSharePct  = totalRevenue > 0 ? Math.round((aiRevenue / totalRevenue) * 100) : 0;
-    var convWord    = aiEventCount === 1 ? 'conversion' : 'conversions';
+    // Append the V-empty note below the GA4 banner when webhook is configured
+    // but no events have arrived yet. Keeps the GA4 estimate visible while
+    // signalling that verified actuals are incoming.
+    if (verifiedConfiguredEmpty && ga4Banner) {
+      ga4Banner += [
+        '<div style="margin-top:-8px;margin-bottom:16px;padding:12px 16px;border-left:2px solid var(--sage,#4a7a3e);background:var(--paper);font-size:13px;color:var(--ink-2);">',
+        '  &#10003; Verified-revenue webhook is configured. Once your booking system POSTs an event, you\'ll see verified dollar amounts here in addition to the estimate above.',
+        '</div>',
+      ].join('');
+    }
+
+    return ga4Banner;
+  }
+
+  /**
+   * Renders the recent verified revenue events table.
+   * Only called when Variant V is active and recent_events is non-empty.
+   */
+  function renderVerifiedRevenueEvents(verified) {
+    if (!verified || !Array.isArray(verified.recent_events) || verified.recent_events.length === 0) return '';
+    var rows = verified.recent_events.map(function (ev) {
+      var whenStr = esc((ev.occurred_at || '').replace('T', ' ').replace('Z', ' UTC').slice(0, 19));
+      var sourceCell;
+      if (ev.referrer_classification === 'ai') {
+        sourceCell = '<span style="display:inline-block;font-size:10.5px;font-weight:600;color:var(--maroon);background:var(--maroon-tint);padding:2px 8px;border-radius:999px;margin-right:6px">AI</span>'
+          + esc(ev.first_touch_source || '—');
+      } else {
+        sourceCell = '<span style="display:inline-block;font-size:10.5px;font-weight:500;color:var(--muted);background:var(--paper-2);padding:2px 8px;border-radius:999px">Source unknown</span>';
+      }
+      var amt = formatMoney((ev.amount_cents || 0) / 100, ev.currency || 'USD');
+      return '<tr>'
+        + '<td>' + whenStr + '</td>'
+        + '<td>' + sourceCell + '</td>'
+        + '<td style="text-align:right" class="tabular">' + esc(amt) + '</td>'
+        + '</tr>';
+    }).join('');
     return [
-      '<section class="card-dash" style="background:linear-gradient(135deg,var(--maroon-tint),transparent);border:1px solid var(--maroon-tint);padding:24px 28px;margin-bottom:16px;">',
-      '  <div style="display:flex;justify-content:space-between;align-items:center;gap:24px;flex-wrap:wrap;">',
+      '<section class="card-dash">',
+      '  <div class="card-head">',
       '    <div>',
-      '      <div style="font-size:13px;color:var(--maroon);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Revenue from AI search</div>',
-      '      <div style="font-family:var(--serif);font-size:42px;line-height:1;">' + esc(formatMoney(aiRevenue, currency)) + '</div>',
-      '      <div style="font-size:13px;color:var(--ink-2);margin-top:6px">From ' + fmtCount(aiEventCount) + ' ' + convWord + ' attributed to AI sources · ' + esc(rangeLabel || '') + '</div>',
-      '    </div>',
-      '    <div style="text-align:right;font-size:13px;color:var(--muted)">',
-      '      <div>vs ' + esc(formatMoney(humanRevenue, currency)) + ' from Human</div>',
-      '      <div style="margin-top:4px">' + aiSharePct + '% of total revenue</div>',
+      '      <h3>Recent verified revenue events</h3>',
+      '      <div class="sub">Latest webhook deliveries from your booking system, with attribution.</div>',
       '    </div>',
       '  </div>',
+      '  <table class="tbl" style="width:100%;font-size:13.5px">',
+      '    <thead><tr>',
+      '      <th style="text-align:left">When</th>',
+      '      <th style="text-align:left">Source</th>',
+      '      <th style="text-align:right">Amount</th>',
+      '    </tr></thead>',
+      '    <tbody>' + rows + '</tbody>',
+      '  </table>',
       '</section>',
     ].join('');
   }
@@ -519,6 +661,7 @@
     const propLabel = ga4St.property_label || impact.property_label || '';
     const conv      = d.conversions !== undefined ? d.conversions : null;
     const gsc       = d.gsc !== undefined ? d.gsc : null;
+    const verified  = d.verifiedRevenue !== undefined ? d.verifiedRevenue : null;
 
     const clickCount = Array.isArray(clicksPay.clicks)
       ? clicksPay.clicks.length
@@ -594,7 +737,7 @@
         </div>` : '';
 
     return `
-      ${renderRevenueBanner(conv, rangeLabel)}
+      ${renderRevenueBanner(conv, verified, rangeLabel)}
 
       <div class="plain-banner">
         <strong>In plain English:</strong> Here's how AI search has changed who's reaching your site, before vs after you turned Advocate on.
@@ -648,6 +791,7 @@
       ${renderAcquisitionCard(daily)}
       ${convHasData ? renderTopConversions(conv) : ''}
       ${renderAiOverviewSection(gsc)}
+      ${(verified && !verified.__planRequired && verified.webhook_configured === true && (verified.ai_cents > 0 || verified.total_events > 0)) ? renderVerifiedRevenueEvents(verified) : ''}
       ${renderGeographyCard()}
 
       <details class="card-dash" style="padding:16px 20px;">
@@ -1006,7 +1150,7 @@
     const range = (window.AdvocateChrome && window.AdvocateChrome.getRange)
       ? window.AdvocateChrome.getRange() : '30d';
     const rq = '?range=' + encodeURIComponent(range);
-    const [status, impact, clicks, metrics, conversions, gscResult] = await Promise.allSettled([
+    const [status, impact, clicks, metrics, conversions, gscResult, verifiedRevResult] = await Promise.allSettled([
       window.AMCP.authedFetch('/api/client/ga4/status').then(function (r) { return r.json(); }),
       window.AMCP.authedFetch('/api/client/traffic-impact' + rq).then(function (r) { return r.json(); }),
       window.AMCP.authedFetch('/api/client/clicks' + rq).then(function (r) { return r.json(); }),
@@ -1021,14 +1165,20 @@
         if (!r.ok) return null;
         return r.json();
       }),
+      window.AMCP.authedFetch('/api/client/traffic-impact/verified-revenue').then(function (r) {
+        if (r.status === 402) return { __planRequired: true };
+        if (!r.ok) return null;
+        return r.json();
+      }),
     ]);
     return {
-      ga4Status:   status.status      === 'fulfilled' ? status.value      : { connected: false },
-      impact:      impact.status      === 'fulfilled' ? impact.value      : { ga4_connected: false, daily: [], bleed_at: null },
-      clicks:      clicks.status      === 'fulfilled' ? clicks.value      : { clicks: [] },
-      metrics:     metrics.status     === 'fulfilled' ? (metrics.value.metrics || metrics.value) : {},
-      conversions: conversions.status === 'fulfilled' ? conversions.value : null,
-      gsc:         gscResult.status   === 'fulfilled' ? gscResult.value   : null,
+      ga4Status:       status.status          === 'fulfilled' ? status.value          : { connected: false },
+      impact:          impact.status          === 'fulfilled' ? impact.value          : { ga4_connected: false, daily: [], bleed_at: null },
+      clicks:          clicks.status          === 'fulfilled' ? clicks.value          : { clicks: [] },
+      metrics:         metrics.status         === 'fulfilled' ? (metrics.value.metrics || metrics.value) : {},
+      conversions:     conversions.status     === 'fulfilled' ? conversions.value     : null,
+      gsc:             gscResult.status       === 'fulfilled' ? gscResult.value       : null,
+      verifiedRevenue: verifiedRevResult.status === 'fulfilled' ? verifiedRevResult.value : null,
     };
   }
 
@@ -1097,6 +1247,20 @@
           { query: 'best ai search analytics tool',  impressions: 4200, clicks: 180 },
           { query: 'advocate vs scrunch',            impressions: 1800, clicks: 95 },
           { query: 'perplexity citation tracking',   impressions: 1500, clicks: 30 },
+        ],
+      },
+      verifiedRevenue: {
+        slug:               'preview-demo',
+        currency:           'USD',
+        webhook_configured: true,
+        ai_cents:           512000,
+        unknown_cents:      1840000,
+        total_events:       47,
+        ai_events:          14,
+        recent_events: [
+          { amount_cents: 38000, currency: 'USD', occurred_at: '2026-05-06T14:23:11Z', referrer_classification: 'ai',      first_touch_source: 'PerplexityBot' },
+          { amount_cents: 89000, currency: 'USD', occurred_at: '2026-05-06T11:12:04Z', referrer_classification: 'unknown', first_touch_source: null            },
+          { amount_cents: 24000, currency: 'USD', occurred_at: '2026-05-05T18:45:33Z', referrer_classification: 'ai',      first_touch_source: 'ChatGPT'        },
         ],
       },
     };
