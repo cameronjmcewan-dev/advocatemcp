@@ -14,7 +14,7 @@
   const NAV_MAIN = [
     { id: 'overview',    href: '/app.html',              g: '◈', label: 'Overview' },
     { id: 'mentions',    href: '/Mentions.html',         g: '✦', label: 'Mentions' },
-    { id: 'clicks',      href: '/ClickThroughs.html',    g: '→', label: 'Click-throughs' },
+    { id: 'traffic-impact', href: '/TrafficImpact.html',  g: '→', label: 'Traffic impact' },
     { id: 'radar',       href: '/CompetitorRadar.html',  g: '△', label: 'Competitor Radar' },
     { id: 'a2a',         href: '/A2APipeline.html',      g: '⇄', label: 'AI bookings' },
     { id: 'activity',    href: '/ActivityFeed.html',     g: '☰', label: 'Activity feed' },

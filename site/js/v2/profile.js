@@ -249,7 +249,7 @@
           <div class="score-real-cell">
             <div class="score-real-num">${fmt(clicks)}</div>
             <div class="score-real-lbl">Click-throughs from AI answers</div>
-            <a class="score-real-link" href="/ClickThroughs.html">Open Click-throughs →</a>
+            <a class="score-real-link" href="/TrafficImpact.html">Open Traffic impact →</a>
           </div>
           <div class="score-real-cell">
             <div class="score-real-num">${fmt(recent)}</div>
