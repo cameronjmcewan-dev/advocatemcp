@@ -12,3 +12,22 @@
 # their browser.
 
 /r/*  /r.html?id=:splat  200
+
+# /mcp.html → /mcp-server  (marketing page rename, May 7 2026)
+#
+# The marketing page was originally at site/mcp.html. Cloudflare Pages
+# auto-strips .html and serves it at /mcp — but the Worker registers a
+# route on /mcp for the MCP JSON-RPC server (used by Claude Desktop /
+# Cursor / other MCP clients), so the marketing page was unreachable on
+# the apex domain: every request to /mcp got the JSON server response.
+#
+# Fix: rename the file to mcp-server.html (Pages serves at /mcp-server)
+# and 301 the legacy /mcp.html URL here so any inbound link or bookmark
+# still resolves. We canNOT redirect /mcp itself from this file — Pages
+# never sees /mcp because the Worker intercepts at the edge before Pages
+# routing runs.
+#
+# Out of scope of this rule:
+#   - /mcp                  → still served by the Worker (MCP JSON-RPC)
+#   - api.advocatemcp.com/mcp  → unchanged, canonical for MCP clients
+/mcp.html  /mcp-server  301

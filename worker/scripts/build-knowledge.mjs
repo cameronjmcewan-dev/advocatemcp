@@ -43,7 +43,7 @@ const SITE_PAGES = [
   "site/FAQs.html",
   "site/Industries.html",
   "site/methodology.html",
-  "site/mcp.html",
+  "site/mcp-server.html",
   "site/audit.html",
   "site/research/state-of-ai-bot-traffic-q1-2026.html",
 ];
