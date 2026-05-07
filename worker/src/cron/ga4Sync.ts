@@ -18,8 +18,9 @@
 
 import type { Env } from "../types";
 import { decryptToken } from "../lib/ga4TokenCrypto";
-import { refreshAccessToken, fetchDailyTraffic } from "../lib/ga4";
+import { refreshAccessToken, fetchDailyTraffic, fetchDailyGeography } from "../lib/ga4";
 import { classifyTrafficSource } from "../lib/aiTrafficClassifier";
+import { aggregateGeoRows } from "../lib/geoAggregator";
 
 // A bit under 24h so the daily sync doesn't drift by small scheduling jitter.
 const SYNC_INTERVAL_HOURS = 23;
@@ -187,6 +188,33 @@ async function syncOneTenant(
       )
       .bind(now.toISOString(), row.slug)
       .run();
+
+    // Geography sync — separate report, separate upserts. Failures here
+    // don't fail the main sync (just logged); geography is supplementary.
+    try {
+      const geoRows = await fetchDailyGeography({ propertyId: row.property_id, startDate, endDate, accessToken });
+      const buckets = aggregateGeoRows(geoRows);
+      for (const b of buckets.values()) {
+        await env.DB.prepare(
+          `INSERT INTO traffic_geo_daily (slug, date, country, city, ai_sessions, human_sessions)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(slug, date, country, city) DO UPDATE SET
+             ai_sessions    = excluded.ai_sessions,
+             human_sessions = excluded.human_sessions`,
+        )
+        .bind(row.slug, b.date, b.country, b.city, b.ai_sessions, b.human_sessions)
+        .run();
+      }
+    } catch (geoErr) {
+      // Geography is supplementary — log + continue. Main traffic_daily
+      // already wrote successfully.
+      console.error(JSON.stringify({
+        cron:  "ga4Sync_geo",
+        event: "geo_failed",
+        slug:  row.slug,
+        error: String(geoErr instanceof Error ? geoErr.message : geoErr).slice(0, 500),
+      }));
+    }
   } catch (err) {
     const msg = String(err instanceof Error ? err.message : err).slice(0, 500);
     console.error(JSON.stringify({

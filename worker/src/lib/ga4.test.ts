@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { refreshAccessToken, listProperties, fetchDailyTraffic } from "./ga4.js";
+import { refreshAccessToken, listProperties, fetchDailyTraffic, fetchDailyGeography } from "./ga4.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -322,5 +322,141 @@ describe("fetchDailyTraffic", () => {
     expect(rows[0].bounceRate).toBe(0);
     expect(rows[0].newUsers).toBe(0);
     expect(rows[0].totalUsers).toBe(0);
+  });
+});
+
+// ── fetchDailyGeography ───────────────────────────────────────────────────────
+
+describe("fetchDailyGeography", () => {
+  const geoOpts = {
+    propertyId:  "properties/987654321",
+    startDate:   "2026-04-01",
+    endDate:     "2026-04-07",
+    accessToken: "ya29.geo-token",
+  };
+
+  it("19. POSTs to the correct runReport endpoint with geo dimensions", async () => {
+    mockFetch({ rows: [] });
+    await fetchDailyGeography(geoOpts);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "https://analyticsdata.googleapis.com/v1beta/properties/987654321:runReport",
+      expect.objectContaining({ method: "POST" }),
+    );
+    const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [
+      string,
+      RequestInit,
+    ];
+    const body = JSON.parse(init.body as string);
+    expect(body.dimensions).toEqual([
+      { name: "date" },
+      { name: "country" },
+      { name: "city" },
+      { name: "sessionSource" },
+      { name: "sessionMedium" },
+    ]);
+    expect(body.metrics).toEqual([{ name: "sessions" }]);
+    expect(body.limit).toBe(100000);
+    expect(body.dateRanges).toEqual([{ startDate: "2026-04-01", endDate: "2026-04-07" }]);
+  });
+
+  it("20. parses a multi-row response correctly with date conversion", async () => {
+    mockFetch({
+      rows: [
+        {
+          dimensionValues: [
+            { value: "20260403" },
+            { value: "United States" },
+            { value: "New York" },
+            { value: "perplexity.ai" },
+            { value: "referral" },
+          ],
+          metricValues: [{ value: "55" }],
+        },
+        {
+          dimensionValues: [
+            { value: "20260404" },
+            { value: "United Kingdom" },
+            { value: "London" },
+            { value: "google" },
+            { value: "organic" },
+          ],
+          metricValues: [{ value: "20" }],
+        },
+      ],
+    });
+    const rows = await fetchDailyGeography(geoOpts);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toEqual({
+      date:     "2026-04-03",
+      country:  "United States",
+      city:     "New York",
+      source:   "perplexity.ai",
+      medium:   "referral",
+      sessions: 55,
+    });
+    expect(rows[1]).toEqual({
+      date:     "2026-04-04",
+      country:  "United Kingdom",
+      city:     "London",
+      source:   "google",
+      medium:   "organic",
+      sessions: 20,
+    });
+  });
+
+  it("21. returns empty array when rows is absent or empty", async () => {
+    mockFetch({ rows: [] });
+    const rows1 = await fetchDailyGeography(geoOpts);
+    expect(rows1).toEqual([]);
+
+    mockFetch({});
+    const rows2 = await fetchDailyGeography(geoOpts);
+    expect(rows2).toEqual([]);
+  });
+
+  it("22. throws ga4-prefixed error with status snippet on non-200 response", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response('{"error":{"code":403,"message":"Permission denied"}}', { status: 403 }),
+    );
+    await expect(fetchDailyGeography(geoOpts)).rejects.toThrow(
+      /ga4: runReport failed: 403 .*Permission denied/,
+    );
+  });
+
+  it('23. normalizes GA4 "(not set)" placeholder to empty string for country and city', async () => {
+    // GA4 returns "(not set)" for dimensions it can't resolve (anonymous /
+    // ad-blocker / VPN traffic). Normalising to "" makes the country/city
+    // columns consistent with the schema's empty-string sentinel and
+    // collapses unresolvable rows into one bucket instead of fragmenting.
+    mockFetch({
+      rows: [
+        {
+          dimensionValues: [
+            { value: "20260506" },
+            { value: "(not set)" },
+            { value: "(not set)" },
+            { value: "(direct)" },
+            { value: "(none)" },
+          ],
+          metricValues: [{ value: "5" }],
+        },
+        {
+          dimensionValues: [
+            { value: "20260506" },
+            { value: "United States" },
+            { value: "(not set)" },        // city unresolvable but country known
+            { value: "google" },
+            { value: "organic" },
+          ],
+          metricValues: [{ value: "12" }],
+        },
+      ],
+    });
+    const rows = await fetchDailyGeography(geoOpts);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].country).toBe("");
+    expect(rows[0].city).toBe("");
+    expect(rows[1].country).toBe("United States");
+    expect(rows[1].city).toBe("");
   });
 });
