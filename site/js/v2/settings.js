@@ -41,7 +41,7 @@
     const af = window.AMCP && window.AMCP.authedFetch;
     const slug = (window.AMCP_DATA && window.AMCP_DATA.slug) || '';
     const suffix = slug ? `?slug=${encodeURIComponent(slug)}` : '';
-    const [me, metrics, domain, activity, revenue, ga4Status, gscStatus] = await Promise.all([
+    const [me, metrics, domain, activity, revenue, ga4Status, gscStatus, verifiedRevenue] = await Promise.all([
       af('/api/client/me').then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/metrics').then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/domain-info' + suffix).then(r => r.ok ? r.json() : null).catch(() => null),
@@ -61,14 +61,22 @@
       // (May 6 2026 PR 5). Returns { connected, slug, site_url, status,
       //   last_sync_at, last_sync_error } or { connected: false }.
       af('/api/client/gsc/status').then(r => r.ok ? r.json() : { connected: false }).catch(() => ({ connected: false })),
+      // Verified-revenue feed status (PR 2). Shows webhook configured/event
+      // counts in the Revenue tracking card without touching secret management.
+      // 402 means Pro gate — treat as null (no status row shown).
+      af('/api/client/traffic-impact/verified-revenue').then(r => {
+        if (r.status === 402) return null;
+        return r.ok ? r.json() : null;
+      }).catch(() => null),
     ]);
     return Object.assign({}, metrics || {}, {
       _me: me,
-      domain:    domain || {},
-      activity:  activity || {},
-      revenue:   revenue || null,
-      ga4Status:  ga4Status  || { connected: false },
-      gscStatus:  gscStatus  || { connected: false },
+      domain:          domain || {},
+      activity:        activity || {},
+      revenue:         revenue || null,
+      ga4Status:       ga4Status        || { connected: false },
+      gscStatus:       gscStatus        || { connected: false },
+      verifiedRevenue: verifiedRevenue  || null,
     });
   }
 
@@ -106,6 +114,7 @@
     const biz   = d.business_name || (window.AMCP_DATA && window.AMCP_DATA.business_name) || 'your business';
     const plan  = (d.plan || (window.AMCP_DATA && window.AMCP_DATA.plan) || 'base').toLowerCase();
     const domain = d.domain || {};
+    const verifiedRevenue = d.verifiedRevenue || null;
     const reputation = (d.activity && d.activity.agent_reputation) || [];
 
     const jsonLdSnippet = `<script type="application/ld+json">
@@ -273,13 +282,24 @@
               <div id="rev-secret-status" style="font-size:11.5px;color:var(--muted);max-width:340px;text-align:right;line-height:1.5"></div>
             </div>
           </div>
+          ${verifiedRevenue && verifiedRevenue.webhook_configured === true ? `
+          <div class="set-row" style="border-bottom:0">
+            <div class="l">Webhook status</div>
+            <div class="r">
+              <span class="chip sage dot-chip"><span class="dot"></span>Configured</span>
+              ${verifiedRevenue.total_events > 0
+                ? `<span style="font-size:12.5px;color:var(--muted);margin-left:10px">${verifiedRevenue.total_events} event${verifiedRevenue.total_events === 1 ? '' : 's'} received · ${verifiedRevenue.ai_events} attributed to AI</span>`
+                : `<span style="font-size:12.5px;color:var(--muted);margin-left:10px">Awaiting first event</span>`
+              }
+            </div>
+          </div>` : `
           <div class="set-row" style="border-bottom:0">
             <div class="l">&nbsp;</div>
             <div class="r" style="font-size:11.5px;color:var(--muted);max-width:480px;line-height:1.55;font-style:italic">
               Estimated revenue is a calculation from your supplied average ticket. Actuals may differ.
               Configure the webhook for confirmed numbers. Not financial advice.
             </div>
-          </div>
+          </div>`}
         </div>
       </div>
 
