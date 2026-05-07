@@ -12,7 +12,7 @@
 import type { Env } from "../types";
 import { decryptToken } from "../lib/ga4TokenCrypto";
 import { refreshAccessToken } from "../lib/ga4";
-import { fetchSearchAnalytics } from "../lib/gsc";
+import { fetchSearchAnalytics, fetchAiOverviewQueries } from "../lib/gsc";
 
 // A bit under 24h so the daily sync doesn't drift by small scheduling jitter.
 const SYNC_INTERVAL_HOURS = 23;
@@ -122,6 +122,42 @@ async function syncOneTenant(
         .bind(row.slug, date, r.query, r.impressions, r.clicks, r.ctr, r.position)
         .run();
       }
+    }
+
+    // AI Overview detection (Phase 3 PR 4): a SECOND GSC query filtered by
+    // searchAppearance=aiOverview returns the (date, query) tuples where
+    // Google showed an AI Overview at search time. Cross-reference into
+    // gsc_daily and flip ai_overview_shown=1 on matching rows.
+    //
+    // Failure-isolated: AI Overview detection is supplementary. If the
+    // filtered query fails (Google quota, transient error), the main
+    // search analytics rows still upsert with ai_overview_shown=0 and
+    // next sync corrects it.
+    //
+    // Phase 3 PR 1 future TODO: extract markAiOverviewRows(env, slug, rows)
+    // helper. The same UPDATE loop now lives in 3 places (cron + select-site
+    // + resync). Wait until the broader 3-site dedup happens — coupling
+    // to the existing aggregation duplication.
+    try {
+      const aiOverviewRows = await fetchAiOverviewQueries({
+        siteUrl:     row.site_url,
+        startDate,
+        endDate,
+        accessToken,
+      });
+      for (const r of aiOverviewRows) {
+        await env.DB
+          .prepare("UPDATE gsc_daily SET ai_overview_shown = 1 WHERE slug = ? AND date = ? AND query = ?")
+          .bind(row.slug, r.date, r.query)
+          .run();
+      }
+    } catch (aiErr) {
+      console.error(JSON.stringify({
+        cron:  "gscSync_ai",
+        event: "ai_overview_failed",
+        slug:  row.slug,
+        error: String(aiErr instanceof Error ? aiErr.message : aiErr).slice(0, 500),
+      }));
     }
 
     await env.DB

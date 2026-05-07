@@ -28,8 +28,10 @@ vi.mock("../lib/ga4", () => ({
 }));
 
 const mockFetchSearchAnalytics = vi.fn();
+const mockFetchAiOverviewQueries = vi.fn();
 vi.mock("../lib/gsc", () => ({
-  fetchSearchAnalytics: (...args: unknown[]) => mockFetchSearchAnalytics(...args),
+  fetchSearchAnalytics:    (...args: unknown[]) => mockFetchSearchAnalytics(...args),
+  fetchAiOverviewQueries:  (...args: unknown[]) => mockFetchAiOverviewQueries(...args),
 }));
 
 // ── D1 stub factory ──────────────────────────────────────────────────────────
@@ -101,6 +103,7 @@ beforeEach(() => {
   mockDecryptToken.mockResolvedValue("decrypted-refresh-token");
   mockRefreshAccessToken.mockResolvedValue({ accessToken: "ya29.fresh", expiresIn: 3600 });
   mockFetchSearchAnalytics.mockResolvedValue([]);
+  mockFetchAiOverviewQueries.mockResolvedValue([]);
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -135,8 +138,8 @@ describe("runGSCSyncBatch", () => {
     expect(runCalls).toHaveLength(0);
   });
 
-  // 3. Happy path: stale tenant → fetch → upsert → last_sync_at updated
-  it("5. happy path: upserts gsc_daily and stamps last_sync_at for stale tenant", async () => {
+  // 3. Happy path: stale tenant → fetch → upsert → AI Overview UPDATE → last_sync_at updated
+  it("5. happy path: upserts gsc_daily, fires ai_overview UPDATE for matching rows, stamps last_sync_at", async () => {
     const encryptedToken = await encryptToken("rt-gsc", TEST_KEY);
     const staleRow = {
       slug: "tenant-a",
@@ -147,6 +150,10 @@ describe("runGSCSyncBatch", () => {
     mockFetchSearchAnalytics.mockResolvedValue([
       { date: "2026-05-04", query: "best plumber austin", impressions: 200, clicks: 10, ctr: 0.05, position: 3.1 },
       { date: "2026-05-04", query: "emergency plumber",   impressions: 80,  clicks:  4, ctr: 0.05, position: 5.0 },
+    ]);
+    // One of the two queries appeared in an AI Overview
+    mockFetchAiOverviewQueries.mockResolvedValue([
+      { date: "2026-05-04", query: "best plumber austin", impressions: 150, clicks: 3 },
     ]);
 
     const { env, dbCalls } = makeEnv({
@@ -177,6 +184,16 @@ describe("runGSCSyncBatch", () => {
     expect(fetchArgs.accessToken).toBe("ya29.fresh");
     expect(fetchArgs.startDate < fetchArgs.endDate).toBe(true);
 
+    // fetchAiOverviewQueries called once with the same siteUrl + date window
+    expect(mockFetchAiOverviewQueries).toHaveBeenCalledOnce();
+    const aiArgs = mockFetchAiOverviewQueries.mock.calls[0][0] as {
+      siteUrl: string; startDate: string; endDate: string; accessToken: string;
+    };
+    expect(aiArgs.siteUrl).toBe("https://example.com/");
+    expect(aiArgs.accessToken).toBe("ya29.fresh");
+    expect(aiArgs.startDate).toBe(fetchArgs.startDate);
+    expect(aiArgs.endDate).toBe(fetchArgs.endDate);
+
     // gsc_daily upserts must have fired (two rows)
     const upsertCalls = dbCalls.filter(
       (c) => c.sql.includes("gsc_daily") && c.sql.includes("ON CONFLICT"),
@@ -185,6 +202,15 @@ describe("runGSCSyncBatch", () => {
     // Each upsert bind: slug, date, query, impressions, clicks, ctr, position = 7 args
     expect((upsertCalls[0].args as unknown[]).length).toBe(7);
     expect(upsertCalls[0].args[0]).toBe("tenant-a");
+
+    // ai_overview_shown UPDATE must have fired for the matching row
+    const aiUpdateCalls = dbCalls.filter(
+      (c) => c.sql.includes("ai_overview_shown") && c.sql.includes("UPDATE gsc_daily"),
+    );
+    expect(aiUpdateCalls).toHaveLength(1);
+    expect(aiUpdateCalls[0].args[0]).toBe("tenant-a");
+    expect(aiUpdateCalls[0].args[1]).toBe("2026-05-04");
+    expect(aiUpdateCalls[0].args[2]).toBe("best plumber austin");
 
     // last_sync_at UPDATE must have fired
     const updateCall = dbCalls.find(
@@ -341,5 +367,75 @@ describe("runGSCSyncBatch", () => {
     expect(typeof errMsg).toBe("string");
     expect(errMsg).toContain("401 expired");
     expect(errMsg.length).toBeLessThanOrEqual(500);
+  });
+
+  // AI Overview failure isolation
+  it("13. AI Overview detection failure does NOT block main upsert or last_sync_at stamp", async () => {
+    const enc = await encryptToken("rt-ai", TEST_KEY);
+    const staleRow = { slug: "tenant-ai", refresh_token_enc: enc, site_url: "https://ai.com/" };
+
+    mockFetchSearchAnalytics.mockResolvedValue([
+      { date: "2026-05-04", query: "emergency plumber", impressions: 80, clicks: 4, ctr: 0.05, position: 5.0 },
+    ]);
+    // AI Overview fetch fails with a 500-style error
+    mockFetchAiOverviewQueries.mockRejectedValue(new Error("gsc: aiOverview query failed: 500 Internal"));
+
+    const { env, dbCalls } = makeEnv({
+      _dbResponses: { "gsc_connections": [staleRow] },
+    });
+
+    // Must not throw
+    await expect(runGSCSyncBatch(env as never)).resolves.toBeUndefined();
+
+    // Main upsert still fired for the GSC row
+    const upsertCalls = dbCalls.filter(
+      (c) => c.sql.includes("gsc_daily") && c.sql.includes("ON CONFLICT"),
+    );
+    expect(upsertCalls.length).toBeGreaterThanOrEqual(1);
+
+    // last_sync_at still got stamped (success path for the main sync)
+    const successUpdate = dbCalls.find(
+      (c) => c.sql.includes("last_sync_at") && c.sql.includes("last_sync_error = NULL")
+             && Array.isArray(c.args) && c.args.includes("tenant-ai"),
+    );
+    expect(successUpdate).toBeDefined();
+
+    // last_sync_error must NOT have been set to the AI error
+    const errorUpdate = dbCalls.find(
+      (c) => c.sql.includes("last_sync_error") && !c.sql.includes("NULL")
+             && Array.isArray(c.args) && c.args.includes("tenant-ai"),
+    );
+    expect(errorUpdate).toBeUndefined();
+  });
+
+  it("14. AI Overview UPDATE fires for each row returned by fetchAiOverviewQueries", async () => {
+    const enc = await encryptToken("rt-multi-ai", TEST_KEY);
+    const staleRow = { slug: "tenant-multi", refresh_token_enc: enc, site_url: "https://multi.com/" };
+
+    mockFetchSearchAnalytics.mockResolvedValue([
+      { date: "2026-05-03", query: "query a", impressions: 100, clicks: 5, ctr: 0.05, position: 2.0 },
+      { date: "2026-05-03", query: "query b", impressions: 80,  clicks: 3, ctr: 0.04, position: 3.0 },
+      { date: "2026-05-04", query: "query c", impressions: 60,  clicks: 2, ctr: 0.03, position: 4.0 },
+    ]);
+    // Two AI Overview hits across two different dates
+    mockFetchAiOverviewQueries.mockResolvedValue([
+      { date: "2026-05-03", query: "query a", impressions: 90, clicks: 4 },
+      { date: "2026-05-04", query: "query c", impressions: 50, clicks: 1 },
+    ]);
+
+    const { env, dbCalls } = makeEnv({
+      _dbResponses: { "gsc_connections": [staleRow] },
+    });
+
+    await runGSCSyncBatch(env as never);
+
+    const aiUpdateCalls = dbCalls.filter(
+      (c) => c.sql.includes("ai_overview_shown") && c.sql.includes("UPDATE gsc_daily"),
+    );
+    // One UPDATE per AI Overview row
+    expect(aiUpdateCalls).toHaveLength(2);
+    // Each UPDATE is scoped to (slug, date, query)
+    expect(aiUpdateCalls[0].args).toEqual(["tenant-multi", "2026-05-03", "query a"]);
+    expect(aiUpdateCalls[1].args).toEqual(["tenant-multi", "2026-05-04", "query c"]);
   });
 });

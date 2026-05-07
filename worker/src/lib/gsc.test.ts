@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { listSites, fetchSearchAnalytics } from "./gsc.js";
+import { listSites, fetchSearchAnalytics, fetchAiOverviewQueries } from "./gsc.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -198,5 +198,77 @@ describe("fetchSearchAnalytics", () => {
 
     const [url] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string];
     expect(url).toContain("https%3A%2F%2Fmy-site.example.co.uk%2F");
+  });
+});
+
+// ── fetchAiOverviewQueries ────────────────────────────────────────────────────
+
+describe("fetchAiOverviewQueries", () => {
+  const opts = {
+    siteUrl:     "https://example.com/",
+    startDate:   "2026-05-01",
+    endDate:     "2026-05-06",
+    accessToken: "ya29.ai-token",
+  };
+
+  it("11. sends correct POST with dimensions [date,query] and searchAppearance=aiOverview filter", async () => {
+    mockFetch({ rows: [] });
+    await fetchAiOverviewQueries(opts);
+
+    const [url, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [
+      string,
+      RequestInit,
+    ];
+
+    // Same endpoint as fetchSearchAnalytics — URL-encoded siteUrl in path
+    expect(url).toBe(
+      "https://searchconsole.googleapis.com/webmasters/v3/sites/https%3A%2F%2Fexample.com%2F/searchAnalytics/query",
+    );
+    // POST method
+    expect(init.method).toBe("POST");
+    // Bearer auth
+    expect((init.headers as Record<string, string>)["Authorization"]).toBe("Bearer ya29.ai-token");
+
+    // Body: dimensions [date, query] and dimensionFilterGroups with aiOverview filter
+    const body = JSON.parse(init.body as string);
+    expect(body.dimensions).toEqual(["date", "query"]);
+    expect(body.dimensionFilterGroups).toHaveLength(1);
+    expect(body.dimensionFilterGroups[0].filters).toHaveLength(1);
+    const filter = body.dimensionFilterGroups[0].filters[0];
+    expect(filter.dimension).toBe("searchAppearance");
+    expect(filter.operator).toBe("equals");
+    expect(filter.expression).toBe("aiOverview");
+    expect(body.rowLimit).toBe(25000);
+    expect(body.startDate).toBe("2026-05-01");
+    expect(body.endDate).toBe("2026-05-06");
+  });
+
+  it("12. parses happy-path AI Overview rows (date, query, impressions, clicks)", async () => {
+    mockFetch({
+      rows: [
+        { keys: ["2026-05-04", "best plumber austin"], clicks: 3, impressions: 150 },
+        { keys: ["2026-05-05", "emergency plumber"],   clicks: 1, impressions: 60 },
+      ],
+    });
+    const rows = await fetchAiOverviewQueries(opts);
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toEqual({ date: "2026-05-04", query: "best plumber austin", impressions: 150, clicks: 3 });
+    expect(rows[1]).toEqual({ date: "2026-05-05", query: "emergency plumber",   impressions: 60,  clicks: 1 });
+  });
+
+  it("13. returns empty array when no AI Overviews in the window (rows absent)", async () => {
+    mockFetch({});
+    const rows = await fetchAiOverviewQueries(opts);
+    expect(rows).toEqual([]);
+  });
+
+  it("14. throws gsc-prefixed error with status snippet on 403", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response('{"error":{"code":403,"message":"Request had insufficient authentication scopes"}}', { status: 403 }),
+    );
+    await expect(fetchAiOverviewQueries(opts)).rejects.toThrow(
+      /gsc: aiOverview query failed: 403 .*insufficient authentication/,
+    );
   });
 });
