@@ -250,7 +250,13 @@ const COOKIE_DOMAIN = ".advocatemcp.com";
 // cross-site requests from any other origin — exactly the CSRF surface
 // the prior Lax policy left open. The Origin allowlist on
 // /api/client/* (see assertSafeOrigin) is the second defense layer.
-const SESSION_SAMESITE = "SameSite=Strict";
+// SameSite=Lax matches the project's documented auth spec in CLAUDE.md.
+// Strict was over-cautious — it blocks the cookie on URL-bar-typed navigations
+// (and the initial leg of any cross-subdomain redirect like the GA4 OAuth
+// callback bouncing through Google). Lax still rejects cross-site POST/iframe
+// attacks but allows legitimate top-level navigations between *.advocatemcp.com
+// surfaces. May 6 2026 fix.
+const SESSION_SAMESITE = "SameSite=Lax";
 
 export function sessionCookieHeader(token: string): string {
   return [
