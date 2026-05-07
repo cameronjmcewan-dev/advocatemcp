@@ -238,6 +238,11 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/crm/disconnect"  && method === "POST") return apiCrmDisconnect(request, env);
   if (pathname === "/api/client/me"       && method === "GET")  return apiMe(request, env);
   if (pathname === "/api/client/me"       && method === "PATCH") return apiPatchMe(request, env);
+  // Marketing-site auth probe. Always returns 200 (with body indicating
+  // logged-in state) so the marketing pages don't pollute the visitor's
+  // browser console with 401 errors on every page load.
+  if (pathname === "/api/client/auth-probe" && method === "GET")     return apiAuthProbe(request, env);
+  if (pathname === "/api/client/auth-probe" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/metrics"  && method === "GET")  return apiMetrics(request, env);
   if (pathname === "/api/client/activity"   && method === "GET")  return apiActivity(request, env);
   if (pathname === "/api/client/clicks"          && method === "GET")  return apiClicks(request, env);
@@ -845,6 +850,43 @@ async function apiMe(request: Request, env: Env): Promise<Response> {
 
   return withCors(
     jsonOk({ id: ctx.user_id, email: ctx.email, full_name: ctx.full_name, role: ctx.role, dns_configured, domain: apiMeDomain, is_hosted: apiMeIsHosted, accessible_businesses }),
+    request,
+    { credentials: true },
+  );
+}
+
+// ── GET /api/client/auth-probe ─────────────────────────────────────────────
+//
+// Marketing-site nav swap probe. Returns 200 in every case so a logged-out
+// visitor's DevTools console doesn't show a red 401 on every marketing page
+// load. (`/api/client/me` is the dashboard's own /me endpoint and DOES return
+// 401 when there's no session — needed there because the dashboard relies on
+// 401 to redirect to login. This endpoint exists so the marketing site can
+// probe auth state without polluting the console.)
+//
+// Body shape:
+//   { authenticated: false }                                  ← logged out
+//   { authenticated: true, user: { id, email, full_name } }   ← logged in
+//
+// We deliberately return only the minimum identity needed to render the
+// avatar dropdown — full /me payload (accessible_businesses, dns_configured,
+// etc.) stays gated behind the real /api/client/me endpoint.
+
+async function apiAuthProbe(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) {
+    return withCors(
+      jsonOk({ authenticated: false }),
+      request,
+      { credentials: true },
+    );
+  }
+  const ctx = guard.ctx;
+  return withCors(
+    jsonOk({
+      authenticated: true,
+      user: { id: ctx.user_id, email: ctx.email, full_name: ctx.full_name },
+    }),
     request,
     { credentials: true },
   );

@@ -36,11 +36,16 @@
   // session cookie travels via the Domain=.advocatemcp.com scope.
   var API_ORIGIN     = 'https://customers.advocatemcp.com';     // /api + /auth
   var SITE_ORIGIN    = 'https://advocatemcp.com';                // HTML pages
-  var ME_URL         = API_ORIGIN + '/api/client/me';
+  // Probe endpoint always returns 200 (body indicates auth state) so a
+  // logged-out marketing visitor's DevTools console isn't littered with
+  // a red 401 on every page load. The dashboard's own /api/client/me still
+  // returns 401 when unauthenticated — that's intentional there because the
+  // dashboard relies on 401 to redirect to login. Two endpoints, two jobs.
+  var PROBE_URL      = API_ORIGIN + '/api/client/auth-probe';
   var LOGOUT_URL     = API_ORIGIN + '/auth/logout';
 
   function checkAuth() {
-    fetch(ME_URL, {
+    fetch(PROBE_URL, {
       method:      'GET',
       credentials: 'include',
       headers:     { 'Accept': 'application/json' },
@@ -49,8 +54,10 @@
         if (!r.ok) return null;
         return r.json();
       })
-      .then(function (me) {
-        if (me && me.id) renderLoggedIn(me);
+      .then(function (body) {
+        if (body && body.authenticated && body.user && body.user.id) {
+          renderLoggedIn(body.user);
+        }
       })
       .catch(function () { /* network blip — leave nav as-is */ });
   }
