@@ -1170,7 +1170,12 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
       <span>Claude</span>
     </div>
     <div class="ai-icon-item">
-      <img src="https://cdn.simpleicons.org/openai/ffffff" alt="ChatGPT" width="32" height="32" />
+      <!-- simpleicons CDN doesn't support color overrides for OpenAI's icon
+           (other brands work fine; this is OpenAI-specific — likely a brand-
+           guideline restriction). Use the natural-color URL + filter:invert(1)
+           to flip the black SVG to white, matching the other AI icons.
+           (May 7 2026 fix.) -->
+      <img src="https://cdn.simpleicons.org/openai" alt="ChatGPT" width="32" height="32" style="filter:invert(1)" />
       <span>ChatGPT</span>
     </div>
     <div class="ai-icon-item">
