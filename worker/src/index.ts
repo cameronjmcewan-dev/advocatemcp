@@ -19,6 +19,7 @@ import { handlePortal } from "./routes/portal";
 import { handleDemo } from "./routes/demo";
 import { reconcileRailwaySync } from "./lib/railwayReconciler";
 import { runGA4SyncBatch } from "./cron/ga4Sync";
+import { runGSCSyncBatch } from "./cron/gscSync";
 import { verifyToken, base64urlToBytes } from "./lib/tracked-url";
 import { buildSignedClickBody } from "./lib/clickBody";
 import { getTenant } from "./routes/onboard";
@@ -1250,6 +1251,25 @@ export default Sentry.withSentry(
             });
             console.error(JSON.stringify({
               cron:  "ga4_sync",
+              event: "top_level_throw",
+              error: String(err),
+            }));
+          }
+        })(),
+      );
+      // GSC search-analytics sync — independent of GA4. Per-tenant errors
+      // are already persisted into last_sync_error; top-level catch here
+      // guards against unexpected throws outside the per-tenant try/catch.
+      ctx.waitUntil(
+        (async () => {
+          try {
+            await runGSCSyncBatch(env);
+          } catch (err) {
+            Sentry.captureException(err, {
+              tags: { cron: "gsc_sync", phase: "top_level_throw" },
+            });
+            console.error(JSON.stringify({
+              cron:  "gsc_sync",
               event: "top_level_throw",
               error: String(err),
             }));
