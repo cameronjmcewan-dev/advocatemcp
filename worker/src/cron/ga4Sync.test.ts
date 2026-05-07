@@ -22,11 +22,18 @@ vi.mock("../lib/ga4TokenCrypto", async (importOriginal) => {
   };
 });
 
+vi.mock("../lib/geoAggregator", () => ({
+  aggregateGeoRows: (...args: unknown[]) => mockAggregateGeoRows(...args),
+}));
+const mockAggregateGeoRows = vi.fn();
+
 const mockRefreshAccessToken = vi.fn();
 const mockFetchDailyTraffic = vi.fn();
+const mockFetchDailyGeography = vi.fn();
 vi.mock("../lib/ga4", () => ({
-  refreshAccessToken: (...args: unknown[]) => mockRefreshAccessToken(...args),
-  fetchDailyTraffic:  (...args: unknown[]) => mockFetchDailyTraffic(...args),
+  refreshAccessToken:   (...args: unknown[]) => mockRefreshAccessToken(...args),
+  fetchDailyTraffic:    (...args: unknown[]) => mockFetchDailyTraffic(...args),
+  fetchDailyGeography:  (...args: unknown[]) => mockFetchDailyGeography(...args),
 }));
 
 const mockClassify = vi.fn();
@@ -111,6 +118,8 @@ beforeEach(() => {
   mockDecryptToken.mockResolvedValue("decrypted-refresh-token");
   mockRefreshAccessToken.mockResolvedValue({ accessToken: "ya29.fresh", expiresIn: 3600 });
   mockFetchDailyTraffic.mockResolvedValue([]);
+  mockFetchDailyGeography.mockResolvedValue([]);
+  mockAggregateGeoRows.mockReturnValue(new Map());
   mockClassify.mockReturnValue("human");
 });
 
@@ -147,8 +156,8 @@ describe("runGA4SyncBatch", () => {
     expect(runCalls).toHaveLength(0);
   });
 
-  // 3. Happy path: stale tenant → fetch → upsert → last_sync_at updated
-  it("5. happy path: upserts traffic_daily and stamps last_sync_at for stale tenant", async () => {
+  // 3. Happy path: stale tenant → fetch → upsert → last_sync_at updated → geo upserts fire
+  it("5. happy path: upserts traffic_daily, stamps last_sync_at, and fires geo upserts for stale tenant", async () => {
     const encryptedToken = await encryptToken("rt-abc", TEST_KEY);
     const staleRow = { slug: "tenant-a", refresh_token_enc: encryptedToken, property_id: "properties/123" };
 
@@ -166,6 +175,16 @@ describe("runGA4SyncBatch", () => {
     mockClassify.mockImplementation((_src: string, _med: string) =>
       _src.includes("perplexity") ? "ai" : "human",
     );
+
+    // Geo mock: one geo bucket for the date
+    const geoBuckets = new Map([
+      [
+        "2026-05-05|United States|New York",
+        { date: "2026-05-05", country: "United States", city: "New York", ai_sessions: 10, human_sessions: 5 },
+      ],
+    ]);
+    mockFetchDailyGeography.mockResolvedValue([]);  // raw rows not used — aggregator is mocked
+    mockAggregateGeoRows.mockReturnValue(geoBuckets);
 
     const { env, dbCalls } = makeEnv({
       _dbResponses: { "ga4_connections": [staleRow] },
@@ -196,7 +215,18 @@ describe("runGA4SyncBatch", () => {
     // startDate is 2 days ago; endDate is 1 day ago — just verify they differ
     expect(fetchArgs.startDate < fetchArgs.endDate).toBe(true);
 
-    // An INSERT ... ON CONFLICT upsert must have fired with all 11 columns bound
+    // fetchDailyGeography called with the same property + date window + access token
+    expect(mockFetchDailyGeography).toHaveBeenCalledOnce();
+    const geoFetchArgs = mockFetchDailyGeography.mock.calls[0][0] as {
+      propertyId: string;
+      startDate: string;
+      endDate: string;
+      accessToken: string;
+    };
+    expect(geoFetchArgs.propertyId).toBe("properties/123");
+    expect(geoFetchArgs.accessToken).toBe("ya29.fresh");
+
+    // An INSERT ... ON CONFLICT upsert must have fired on traffic_daily with all 11 columns bound
     const upsertCall = dbCalls.find((c) => c.sql.includes("traffic_daily") && c.sql.includes("ON CONFLICT"));
     expect(upsertCall).toBeDefined();
     // 11 bind args: slug, date, ai_sessions, human_sessions, total_sessions,
@@ -204,6 +234,17 @@ describe("runGA4SyncBatch", () => {
     //   bounce_rate, new_users, returning_users
     expect(Array.isArray(upsertCall?.args)).toBe(true);
     expect((upsertCall?.args as unknown[]).length).toBe(11);
+
+    // A geo upsert must have fired on traffic_geo_daily with 6 bind args
+    const geoUpsertCall = dbCalls.find((c) => c.sql.includes("traffic_geo_daily") && c.sql.includes("ON CONFLICT"));
+    expect(geoUpsertCall).toBeDefined();
+    // 6 bind args: slug, date, country, city, ai_sessions, human_sessions
+    expect(Array.isArray(geoUpsertCall?.args)).toBe(true);
+    expect((geoUpsertCall?.args as unknown[]).length).toBe(6);
+    expect((geoUpsertCall?.args as unknown[])[0]).toBe("tenant-a");
+    expect((geoUpsertCall?.args as unknown[])[1]).toBe("2026-05-05");
+    expect((geoUpsertCall?.args as unknown[])[2]).toBe("United States");
+    expect((geoUpsertCall?.args as unknown[])[3]).toBe("New York");
 
     // last_sync_at UPDATE must have fired for slug=tenant-a
     const updateCall = dbCalls.find(
@@ -213,6 +254,35 @@ describe("runGA4SyncBatch", () => {
 
     // last_sync_error must be cleared (NULL) in the success update
     expect(updateCall?.sql).toContain("last_sync_error = NULL");
+  });
+
+  // Geo failure isolation: geo fetch throws → main sync still succeeded
+  it("12. geo failure does not fail the main sync — last_sync_at still stamped", async () => {
+    const enc = await encryptToken("rt-geo-fail", TEST_KEY);
+    const staleRow = { slug: "tenant-geo-fail", refresh_token_enc: enc, property_id: "properties/999" };
+
+    mockFetchDailyTraffic.mockResolvedValue([]);
+    mockFetchDailyGeography.mockRejectedValue(new Error("ga4: runReport failed: 429 Quota exceeded"));
+
+    const { env, dbCalls } = makeEnv({
+      _dbResponses: { "ga4_connections": [staleRow] },
+    });
+
+    // Must not throw — geo failure is swallowed
+    await expect(runGA4SyncBatch(env as never)).resolves.toBeUndefined();
+
+    // last_sync_at must still be stamped (main sync was successful)
+    const successUpdate = dbCalls.find(
+      (c) => c.sql.includes("last_sync_at") && c.sql.includes("last_sync_error = NULL")
+             && Array.isArray(c.args) && c.args.includes("tenant-geo-fail"),
+    );
+    expect(successUpdate).toBeDefined();
+
+    // No error update on ga4_connections status — geo error is NOT persisted there
+    const errorUpdate = dbCalls.find(
+      (c) => c.sql.includes("status = 'error'") && Array.isArray(c.args) && c.args.includes("tenant-geo-fail"),
+    );
+    expect(errorUpdate).toBeUndefined();
   });
 
   // 4. Error isolation: tenant A throws → tenant B still succeeds

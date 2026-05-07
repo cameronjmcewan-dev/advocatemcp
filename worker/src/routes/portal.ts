@@ -70,7 +70,8 @@ import {
 import { handleGA4Start, handleGA4Callback } from "./ga4Oauth";
 import { signGA4State } from "../lib/ga4State";
 import { decryptToken } from "../lib/ga4TokenCrypto";
-import { refreshAccessToken, listProperties, fetchDailyTraffic } from "../lib/ga4";
+import { refreshAccessToken, listProperties, fetchDailyTraffic, fetchDailyGeography } from "../lib/ga4";
+import { aggregateGeoRows } from "../lib/geoAggregator";
 import { classifyTrafficSource } from "../lib/aiTrafficClassifier";
 import { trafficImpactPayload } from "../lib/trafficImpactPayload";
 
@@ -3671,6 +3672,33 @@ async function apiGA4SelectProperty(request: Request, env: Env): Promise<Respons
           .prepare("UPDATE ga4_connections SET last_sync_at = ?, last_sync_error = NULL, status = 'connected' WHERE slug = ?")
           .bind(now, biz.slug)
           .run();
+
+        // Geography sync — separate report, separate upserts. Failures here
+        // don't fail the main sync (just logged); geography is supplementary.
+        try {
+          const geoRows = await fetchDailyGeography({ propertyId: body.property_id, startDate, endDate, accessToken });
+          const buckets = aggregateGeoRows(geoRows);
+          for (const b of buckets.values()) {
+            await env.DB.prepare(
+              `INSERT INTO traffic_geo_daily (slug, date, country, city, ai_sessions, human_sessions)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(slug, date, country, city) DO UPDATE SET
+                 ai_sessions    = excluded.ai_sessions,
+                 human_sessions = excluded.human_sessions`,
+            )
+            .bind(biz.slug, b.date, b.country, b.city, b.ai_sessions, b.human_sessions)
+            .run();
+          }
+        } catch (geoErr) {
+          // Geography is supplementary — log + continue. Main traffic_daily
+          // already wrote successfully.
+          console.error(JSON.stringify({
+            cron:  "ga4Sync_geo",
+            event: "geo_failed",
+            slug:  biz.slug,
+            error: String(geoErr instanceof Error ? geoErr.message : geoErr).slice(0, 500),
+          }));
+        }
       }
     } catch (err) {
       const msg = String(err instanceof Error ? err.message : err).slice(0, 500);
@@ -3837,6 +3865,33 @@ async function apiGA4Resync(request: Request, env: Env): Promise<Response> {
       .prepare("UPDATE ga4_connections SET last_sync_at = ?, last_sync_error = NULL, status = 'connected' WHERE slug = ?")
       .bind(new Date().toISOString(), biz.slug)
       .run();
+
+    // Geography sync — separate report, separate upserts. Failures here
+    // don't fail the main sync (just logged); geography is supplementary.
+    try {
+      const geoRows = await fetchDailyGeography({ propertyId: conn.property_id, startDate, endDate, accessToken });
+      const buckets = aggregateGeoRows(geoRows);
+      for (const b of buckets.values()) {
+        await env.DB.prepare(
+          `INSERT INTO traffic_geo_daily (slug, date, country, city, ai_sessions, human_sessions)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(slug, date, country, city) DO UPDATE SET
+             ai_sessions    = excluded.ai_sessions,
+             human_sessions = excluded.human_sessions`,
+        )
+        .bind(biz.slug, b.date, b.country, b.city, b.ai_sessions, b.human_sessions)
+        .run();
+      }
+    } catch (geoErr) {
+      // Geography is supplementary — log + continue. Main traffic_daily
+      // already wrote successfully.
+      console.error(JSON.stringify({
+        cron:  "ga4Sync_geo",
+        event: "geo_failed",
+        slug:  biz.slug,
+        error: String(geoErr instanceof Error ? geoErr.message : geoErr).slice(0, 500),
+      }));
+    }
   } catch (err) {
     syncError = String(err instanceof Error ? err.message : err).slice(0, 500);
     await env.DB

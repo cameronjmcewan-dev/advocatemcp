@@ -97,6 +97,94 @@ export async function listProperties(accessToken: string): Promise<GA4Property[]
   return properties;
 }
 
+// ── fetchDailyGeography ───────────────────────────────────────────────────────
+
+/**
+ * Per-day per-country/city session data, broken down by source/medium so
+ * downstream classifier can split AI vs Human. Separate from
+ * fetchDailyTraffic so country×city cardinality doesn't blow the main
+ * report's row budget.
+ */
+export interface GA4GeoRow {
+  date:     string;   // YYYY-MM-DD
+  country:  string;   // Country name as GA4 returns it
+  city:     string;
+  source:   string;
+  medium:   string;
+  sessions: number;
+}
+
+export async function fetchDailyGeography(opts: {
+  propertyId:  string;
+  startDate:   string;   // YYYY-MM-DD
+  endDate:     string;   // YYYY-MM-DD
+  accessToken: string;
+}): Promise<GA4GeoRow[]> {
+  const { propertyId, startDate, endDate, accessToken } = opts;
+
+  const res = await fetch(
+    `https://analyticsdata.googleapis.com/v1beta/${propertyId}:runReport`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        dateRanges: [{ startDate, endDate }],
+        dimensions: [
+          { name: "date" },
+          { name: "country" },
+          { name: "city" },
+          { name: "sessionSource" },
+          { name: "sessionMedium" },
+        ],
+        metrics: [
+          { name: "sessions" },
+        ],
+        limit: 100000,
+      }),
+    },
+  );
+
+  if (!res.ok) {
+    const snippet = (await res.text()).slice(0, 200);
+    throw new Error(`ga4: runReport failed: ${res.status} ${snippet}`);
+  }
+
+  // Typed inline — GA4 Data API row shape
+  const json = (await res.json()) as {
+    rows?: Array<{
+      dimensionValues: Array<{ value: string }>;
+      metricValues: Array<{ value: string }>;
+    }>;
+  };
+
+  // GA4 returns "(not set)" for dimensions it can't resolve (country/city
+  // for direct/anonymous traffic, etc.). Normalize to "" so the empty-string
+  // sentinel matches the column's NOT NULL DEFAULT '' AND the (slug, date,
+  // country, city) PK collapses unresolvable rows into a single bucket per
+  // day instead of producing both `(not set)` and other GA4 placeholder
+  // variations as separate rows.
+  const normalize = (v: string): string => (v === "(not set)" ? "" : v);
+
+  const rows: GA4GeoRow[] = [];
+  for (const row of json.rows ?? []) {
+    const rawDate = row.dimensionValues[0].value;  // "YYYYMMDD"
+    // GA4 returns dates without hyphens — insert them for ISO 8601
+    const date = `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`;
+    rows.push({
+      date,
+      country:  normalize(row.dimensionValues[1].value),
+      city:     normalize(row.dimensionValues[2].value),
+      source:   row.dimensionValues[3].value,
+      medium:   row.dimensionValues[4].value,
+      sessions: parseInt(row.metricValues[0]?.value ?? "0", 10),
+    });
+  }
+  return rows;
+}
+
 // ── fetchDailyTraffic ─────────────────────────────────────────────────────────
 
 export async function fetchDailyTraffic(opts: {
