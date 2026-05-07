@@ -18,9 +18,10 @@
 
 import type { Env } from "../types";
 import { decryptToken } from "../lib/ga4TokenCrypto";
-import { refreshAccessToken, fetchDailyTraffic, fetchDailyGeography } from "../lib/ga4";
+import { refreshAccessToken, fetchDailyTraffic, fetchDailyGeography, fetchDailyConversions } from "../lib/ga4";
 import { classifyTrafficSource } from "../lib/aiTrafficClassifier";
 import { aggregateGeoRows } from "../lib/geoAggregator";
+import { aggregateConversionRows } from "../lib/conversionAggregator";
 
 // A bit under 24h so the daily sync doesn't drift by small scheduling jitter.
 const SYNC_INTERVAL_HOURS = 23;
@@ -213,6 +214,38 @@ async function syncOneTenant(
         event: "geo_failed",
         slug:  row.slug,
         error: String(geoErr instanceof Error ? geoErr.message : geoErr).slice(0, 500),
+      }));
+    }
+
+    // Phase 3 PR 1 TODO: extract writeConversions(env, slug, buckets) helper.
+    // This try/catch + upsert loop is duplicated across syncOneTenant,
+    // apiGA4SelectProperty, and apiGA4Resync — three near-identical blocks.
+    // Roadmap calls for shared-helper extraction in Phase 3 PR 1
+    // alongside the OAuth state lib refactor.
+    try {
+      const convRows = await fetchDailyConversions({ propertyId: row.property_id, startDate, endDate, accessToken });
+      const buckets = aggregateConversionRows(convRows);
+      for (const b of buckets.values()) {
+        await env.DB.prepare(
+          `INSERT INTO conversion_daily (slug, date, source_class, event_name, event_count, total_revenue, currency)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(slug, date, source_class, event_name) DO UPDATE SET
+             event_count   = excluded.event_count,
+             total_revenue = excluded.total_revenue,
+             currency      = excluded.currency`,
+        )
+        .bind(row.slug, b.date, b.source_class, b.event_name, b.event_count, b.total_revenue, b.currency)
+        .run();
+      }
+    } catch (convErr) {
+      // Conversions are supplementary — log + continue. Tenant may not
+      // have key_events configured, which legitimately returns zero rows
+      // (handled implicitly above), but actual fetch errors here surface.
+      console.error(JSON.stringify({
+        cron:  "ga4Sync_conv",
+        event: "conv_failed",
+        slug:  row.slug,
+        error: String(convErr instanceof Error ? convErr.message : convErr).slice(0, 500),
       }));
     }
   } catch (err) {
