@@ -105,6 +105,56 @@
     </table>`;
   }
 
+  // ── Engagement / acquisition helpers ─────────────────────────────
+
+  /** Format 0..1 as percentage string, or '—' if null. */
+  function pct(v) {
+    if (v == null || isNaN(v)) return '—';
+    return Math.round(v * 100) + '%';
+  }
+
+  /** Format integer seconds as m:ss, or '—' if null. */
+  function formatDuration(sec) {
+    if (sec == null || isNaN(sec)) return '—';
+    const s = Math.round(sec);
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return m + ':' + (r < 10 ? '0' : '') + r;
+  }
+
+  /**
+   * Compute session-count-weighted averages for engagement_rate, bounce_rate,
+   * and avg_session_duration_sec across all daily rows.
+   * Returns { engagement: 0..1|null, bounce: 0..1|null, duration: int|null,
+   *           newTotal: int, returningTotal: int }.
+   */
+  function computeEngagementMetrics(daily) {
+    var totalSessions = 0, engSum = 0, bounceSum = 0, durSum = 0;
+    var hasEng = false, hasBounce = false, hasDur = false;
+    var newTotal = 0, returningTotal = 0;
+
+    for (var i = 0; i < daily.length; i++) {
+      var r = daily[i];
+      var s = r.total || 0;
+      totalSessions += s;
+      newTotal      += r.new_users      || 0;
+      returningTotal += r.returning_users || 0;
+
+      if (r.engagement_rate != null) { engSum   += r.engagement_rate * s; hasEng   = true; }
+      if (r.bounce_rate     != null) { bounceSum += r.bounce_rate    * s; hasBounce = true; }
+      if (r.avg_session_duration_sec != null) {
+        durSum += r.avg_session_duration_sec * s; hasDur = true;
+      }
+    }
+    return {
+      engagement:  (hasEng   && totalSessions > 0) ? engSum   / totalSessions : null,
+      bounce:      (hasBounce && totalSessions > 0) ? bounceSum / totalSessions : null,
+      duration:    (hasDur   && totalSessions > 0) ? durSum   / totalSessions : null,
+      newTotal:    newTotal,
+      returningTotal: returningTotal,
+    };
+  }
+
   // ── KPI computations ──────────────────────────────────────────────
 
   function computeKpis(daily, bleedAt) {
@@ -135,6 +185,92 @@
     const aiShare = last30total > 0 ? (last30ai / last30total) * 100 : null;
 
     return { pre: preAvg, post: postAvg, uplift, aiShare };
+  }
+
+  // ── New cards (engagement / acquisition / geography) ─────────────
+
+  function renderEngagementCard(daily) {
+    var m = computeEngagementMetrics(daily);
+    return [
+      '<section class="card-dash">',
+      '  <div class="card-head"><div>',
+      '    <h3>Engagement quality</h3>',
+      '    <div class="sub">How engaged your visitors are overall — across the window.</div>',
+      '  </div></div>',
+      '  <div class="kpis" style="grid-template-columns:1fr 1fr 1fr">',
+      '    <div class="kpi"><div class="head"><div class="k">Engagement rate</div></div>',
+      '      <div class="v tabular">' + pct(m.engagement) + '</div></div>',
+      '    <div class="kpi"><div class="head"><div class="k">Avg session duration</div></div>',
+      '      <div class="v tabular">' + formatDuration(m.duration) + '</div></div>',
+      '    <div class="kpi"><div class="head"><div class="k">Bounce rate</div></div>',
+      '      <div class="v tabular">' + pct(m.bounce) + '</div></div>',
+      '  </div>',
+      '  <p style="margin:8px 20px 16px;font-size:11.5px;color:var(--muted)">',
+      '    Engagement metrics are tenant-wide. GA4 doesn\'t expose per-source-class engagement separately.',
+      '  </p>',
+      '</section>',
+    ].join('');
+  }
+
+  function renderAcquisitionCard(daily) {
+    var m = computeEngagementMetrics(daily);
+    var grand = m.newTotal + m.returningTotal;
+    var newPct = grand > 0 ? m.newTotal / grand : null;
+    var retPct = grand > 0 ? m.returningTotal / grand : null;
+    return [
+      '<section class="card-dash">',
+      '  <div class="card-head"><div>',
+      '    <h3>New vs returning</h3>',
+      '    <div class="sub">First-time visitors vs ones who\'d been before — across all traffic.</div>',
+      '  </div></div>',
+      '  <div style="display:flex;gap:32px;align-items:center;padding:16px 0">',
+      '    <div style="flex:1;text-align:center">',
+      '      <div class="v tabular" style="font-size:42px">' + pct(newPct) + '</div>',
+      '      <div class="d">New visitors</div>',
+      '    </div>',
+      '    <div style="flex:1;text-align:center">',
+      '      <div class="v tabular" style="font-size:42px">' + pct(retPct) + '</div>',
+      '      <div class="d">Returning visitors</div>',
+      '    </div>',
+      '  </div>',
+      '  <p style="margin:0 20px 16px;font-size:11.5px;color:var(--muted)">',
+      '    New/returning split is tenant-wide; GA4 doesn\'t break this down by source class.',
+      '  </p>',
+      '</section>',
+    ].join('');
+  }
+
+  function renderGeographyCard() {
+    // Populated lazily in afterMount → loadGeography().
+    return [
+      '<section class="card-dash" id="geo-card">',
+      '  <div class="card-head"><div>',
+      '    <h3>Where they\'re coming from</h3>',
+      '    <div class="sub">Top countries &amp; cities for the selected window.</div>',
+      '  </div></div>',
+      '  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;padding:16px">',
+      '    <div>',
+      '      <div style="font-size:12px;color:var(--maroon);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">From AI search</div>',
+      '      <div id="geo-ai-list" style="display:flex;flex-direction:column;gap:6px">Loading&hellip;</div>',
+      '    </div>',
+      '    <div>',
+      '      <div style="font-size:12px;color:#a39b8e;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">From everything else</div>',
+      '      <div id="geo-human-list" style="display:flex;flex-direction:column;gap:6px">Loading&hellip;</div>',
+      '    </div>',
+      '  </div>',
+      '</section>',
+    ].join('');
+  }
+
+  function geoRow(row, side) {
+    var label   = row.city ? (esc(row.city) + ', ' + esc(row.country || '')) : (esc(row.country) || '(unknown)');
+    var sessions = row.sessions || 0;
+    var color   = side === 'ai' ? 'var(--maroon)' : '#a39b8e';
+    return '<div style="display:flex;justify-content:space-between;align-items:center;' +
+      'padding:6px 8px;border-bottom:1px solid var(--line);font-size:13px">' +
+      '<span>' + label + '</span>' +
+      '<span class="tabular" style="color:' + color + ';font-weight:500">' + fmtCount(sessions) + '</span>' +
+      '</div>';
   }
 
   // ── Render ────────────────────────────────────────────────────────
@@ -247,6 +383,10 @@
         </div>
         <div id="chart-aivshuman" style="width:100%; height:320px;"></div>
       </section>
+
+      ${renderEngagementCard(daily)}
+      ${renderAcquisitionCard(daily)}
+      ${renderGeographyCard()}
 
       <details class="card-dash" style="padding:16px 20px;">
         <summary style="cursor:pointer; font-weight:500; font-size:14px;">Direct AI agent clicks (${fmtCount(clickCount)})</summary>
@@ -499,7 +639,7 @@
       });
     }
 
-    // State C — mount charts
+    // State C — mount charts + lazy-load geography
     if (impact.ga4_connected && impact.daily && impact.daily.length) {
       pollEcharts(function () {
         bootMaroonTheme();
@@ -510,6 +650,30 @@
           try { if (instAiVsHuman) instAiVsHuman.resize(); } catch (_) {}
         });
       });
+      loadGeography();
+    }
+  }
+
+  // ── Geography lazy-loader ─────────────────────────────────────────
+
+  async function loadGeography() {
+    var aiEl = document.getElementById('geo-ai-list');
+    var huEl = document.getElementById('geo-human-list');
+    if (!aiEl || !huEl) return;
+    try {
+      var range = (window.AdvocateChrome && window.AdvocateChrome.getRange)
+        ? window.AdvocateChrome.getRange() : '30d';
+      var r = await window.AMCP.authedFetch('/api/client/traffic-impact/geography?range=' + encodeURIComponent(range));
+      var j = await r.json();
+      aiEl.innerHTML = (!Array.isArray(j.ai) || j.ai.length === 0)
+        ? '<div style="color:var(--muted);font-size:13px">No AI traffic by location yet.</div>'
+        : j.ai.map(function (row) { return geoRow(row, 'ai'); }).join('');
+      huEl.innerHTML = (!Array.isArray(j.human) || j.human.length === 0)
+        ? '<div style="color:var(--muted);font-size:13px">No data yet.</div>'
+        : j.human.map(function (row) { return geoRow(row, 'human'); }).join('');
+    } catch (_err) {
+      if (aiEl) aiEl.innerHTML = '<div style="color:var(--muted);font-size:13px">Couldn\'t load — try refresh.</div>';
+      if (huEl) huEl.innerHTML = '';
     }
   }
 
@@ -547,7 +711,14 @@
       const ai    = isPre
         ? Math.round(2 + Math.random() * 4)
         : Math.round(15 + Math.random() * 30 + (30 - i) * 0.6);
-      daily.push({ date: date, ai: ai, human: human, total: ai + human, top_sources: [] });
+      daily.push({
+        date: date, ai: ai, human: human, total: ai + human, top_sources: [],
+        engagement_rate: 0.55 + Math.random() * 0.2,
+        avg_session_duration_sec: Math.round(90 + Math.random() * 90),
+        bounce_rate: 0.25 + Math.random() * 0.2,
+        new_users: Math.round((ai + human) * (0.55 + Math.random() * 0.2)),
+        returning_users: Math.round((ai + human) * (0.25 + Math.random() * 0.2)),
+      });
     }
     return {
       ga4Status: { connected: true, property_label: 'Demo property' },
