@@ -302,6 +302,10 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   const radarBasketDel = pathname.match(/^\/api\/client\/radar\/basket\/([^/]+)$/);
   if (pathname === "/api/client/radar/basket"  && method === "POST")   return apiRadarBasketAdd(request, env);
   if (radarBasketDel && method === "DELETE")                            return apiRadarBasketDelete(request, env, radarBasketDel[1]);
+  // Off-site authority config (Phase 6 PR 2) — Pro-gated.
+  if (pathname === "/api/client/authority/status"     && method === "GET")  return apiAuthorityStatus(request, env);
+  if (pathname === "/api/client/authority/configure"  && method === "POST") return apiAuthorityConfigure(request, env);
+  if (pathname === "/api/client/authority/disconnect" && method === "POST") return apiAuthorityDisconnect(request, env);
   if (pathname === "/api/client/domain-info"   && method === "GET")    return apiDomainInfo(request, env);
   if (pathname === "/api/client/onboarding"      && method === "GET")  return apiGetOnboarding(request, env);
   if (pathname === "/api/client/onboarding/step" && method === "POST") return apiMarkOnboardingStep(request, env);
@@ -418,6 +422,9 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/radar"         && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/radar/basket"  && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (radarBasketDel && method === "OPTIONS")                            return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/authority/status"     && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/authority/configure"  && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/authority/disconnect" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/domain-info"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/onboarding"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/onboarding/step" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
@@ -5607,5 +5614,227 @@ async function fetchLtvTrend(
   }
 
   return Array.from(byDate.values());
+}
+
+// ── GET /api/client/authority/status ─────────────────────────────────────────
+// Pro-gated. Returns the tenant's authority_config row (if any) + a summary
+// of the latest off_site_authority_daily rows (last 30 days, grouped by
+// platform).
+
+async function apiAuthorityStatus(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  const planRow = await env.DB
+    .prepare("SELECT plan FROM businesses WHERE slug = ?")
+    .bind(biz.slug)
+    .first<{ plan: string | null }>();
+  const plan = planRow?.plan ?? "base";
+  if (plan !== "pro" && plan !== "enterprise") {
+    return withCors(jsonErr(402, "plan_required"), request, { credentials: true });
+  }
+
+  const config = await env.DB
+    .prepare(
+      `SELECT slug, brand_keyword, reddit_enabled, google_place_id,
+              configured_at, last_synced_at, last_sync_error
+         FROM authority_config
+        WHERE slug = ?`,
+    )
+    .bind(biz.slug)
+    .first<{
+      slug:             string;
+      brand_keyword:    string | null;
+      reddit_enabled:   number;
+      google_place_id:  string | null;
+      configured_at:    string | null;
+      last_synced_at:   string | null;
+      last_sync_error:  string | null;
+    }>();
+
+  // Fetch last 30 days of aggregate summary per platform.
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const recentRows = await env.DB
+    .prepare(
+      `SELECT platform, SUM(mention_count) as total_mentions,
+              SUM(positive_count) as total_positive,
+              SUM(negative_count) as total_negative,
+              AVG(avg_sentiment) as avg_sentiment,
+              MAX(rating) as latest_rating,
+              MAX(rating_count) as latest_rating_count
+         FROM off_site_authority_daily
+        WHERE slug = ? AND date >= ?
+        GROUP BY platform`,
+    )
+    .bind(biz.slug, cutoff)
+    .all<{
+      platform:             string;
+      total_mentions:       number;
+      total_positive:       number;
+      total_negative:       number;
+      avg_sentiment:        number | null;
+      latest_rating:        number | null;
+      latest_rating_count:  number | null;
+    }>();
+
+  return withCors(
+    jsonOk({
+      configured: config !== null,
+      config:     config ?? null,
+      summary:    recentRows.results ?? [],
+    }),
+    request,
+    { credentials: true },
+  );
+}
+
+// ── POST /api/client/authority/configure ──────────────────────────────────────
+// Pro-gated. Upserts authority_config row.
+// Body: { brand_keyword?: string, google_place_id?: string }
+
+const GOOGLE_PLACE_ID_RE = /^[A-Za-z0-9_]{20,200}$/;
+
+async function apiAuthorityConfigure(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  const planRow = await env.DB
+    .prepare("SELECT plan FROM businesses WHERE slug = ?")
+    .bind(biz.slug)
+    .first<{ plan: string | null }>();
+  const plan = planRow?.plan ?? "base";
+  if (plan !== "pro" && plan !== "enterprise") {
+    return withCors(jsonErr(402, "plan_required"), request, { credentials: true });
+  }
+
+  let body: { brand_keyword?: unknown; google_place_id?: unknown };
+  try {
+    body = await request.json() as typeof body;
+  } catch {
+    return withCors(jsonErr(400, "Body must be JSON"), request, { credentials: true });
+  }
+
+  // Validate brand_keyword (optional — null clears it)
+  let brandKeyword: string | null = null;
+  if (body.brand_keyword !== undefined && body.brand_keyword !== null) {
+    if (typeof body.brand_keyword !== "string") {
+      return withCors(jsonErr(400, "brand_keyword must be a string"), request, { credentials: true });
+    }
+    const trimmed = body.brand_keyword.trim();
+    if (trimmed.length < 1 || trimmed.length > 100) {
+      return withCors(jsonErr(400, "brand_keyword must be 1–100 characters"), request, { credentials: true });
+    }
+    brandKeyword = trimmed;
+  }
+
+  // Validate google_place_id (optional — null clears it)
+  let googlePlaceId: string | null = null;
+  if (body.google_place_id !== undefined && body.google_place_id !== null) {
+    if (typeof body.google_place_id !== "string") {
+      return withCors(jsonErr(400, "google_place_id must be a string"), request, { credentials: true });
+    }
+    if (!GOOGLE_PLACE_ID_RE.test(body.google_place_id)) {
+      return withCors(
+        jsonErr(400, "google_place_id must be alphanumeric/underscores, 20–200 characters"),
+        request,
+        { credentials: true },
+      );
+    }
+    googlePlaceId = body.google_place_id;
+  }
+
+  const configuredAt = new Date().toISOString();
+  await env.DB
+    .prepare(
+      `INSERT OR REPLACE INTO authority_config
+         (slug, brand_keyword, reddit_enabled, google_place_id, configured_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      biz.slug,
+      brandKeyword,
+      brandKeyword !== null ? 1 : 0,
+      googlePlaceId,
+      configuredAt,
+    )
+    .run();
+
+  return withCors(
+    jsonOk({ ok: true, slug: biz.slug, brand_keyword: brandKeyword, google_place_id: googlePlaceId }),
+    request,
+    { credentials: true },
+  );
+}
+
+// ── POST /api/client/authority/disconnect ─────────────────────────────────────
+// Pro-gated. Clears authority_config row (stops future syncing).
+// Historical off_site_authority_daily rows are preserved by default.
+// Body: { delete_history?: boolean }
+
+async function apiAuthorityDisconnect(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const slug = new URL(request.url).searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  const planRow = await env.DB
+    .prepare("SELECT plan FROM businesses WHERE slug = ?")
+    .bind(biz.slug)
+    .first<{ plan: string | null }>();
+  const plan = planRow?.plan ?? "base";
+  if (plan !== "pro" && plan !== "enterprise") {
+    return withCors(jsonErr(402, "plan_required"), request, { credentials: true });
+  }
+
+  let body: { delete_history?: unknown } = {};
+  try {
+    body = await request.json() as typeof body;
+  } catch {
+    // Missing body is fine — delete_history defaults to false.
+  }
+
+  const deleteHistory = body.delete_history === true;
+
+  // Delete the config row — this stops future syncing.
+  await env.DB
+    .prepare("DELETE FROM authority_config WHERE slug = ?")
+    .bind(biz.slug)
+    .run();
+
+  // Optionally purge historical aggregate rows.
+  if (deleteHistory) {
+    await env.DB
+      .prepare("DELETE FROM off_site_authority_daily WHERE slug = ?")
+      .bind(biz.slug)
+      .run();
+  }
+
+  return withCors(
+    jsonOk({ ok: true, slug: biz.slug, history_deleted: deleteHistory }),
+    request,
+    { credentials: true },
+  );
 }
 
