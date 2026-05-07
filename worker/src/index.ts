@@ -20,6 +20,7 @@ import { handleDemo } from "./routes/demo";
 import { reconcileRailwaySync } from "./lib/railwayReconciler";
 import { runGA4SyncBatch } from "./cron/ga4Sync";
 import { runGSCSyncBatch } from "./cron/gscSync";
+import { runCrmLtvSnapshotBatch } from "./cron/crmLtvSync";
 import { verifyToken, base64urlToBytes } from "./lib/tracked-url";
 import { buildSignedClickBody } from "./lib/clickBody";
 import { getTenant } from "./routes/onboard";
@@ -1273,6 +1274,18 @@ export default Sentry.withSentry(
               event: "top_level_throw",
               error: String(err),
             }));
+          }
+        })(),
+      );
+      // CRM LTV daily snapshot — aggregate-only, zero PII written to D1.
+      // Per-tenant errors are isolated inside runCrmLtvSnapshotBatch.
+      ctx.waitUntil(
+        (async () => {
+          try {
+            await runCrmLtvSnapshotBatch(env);
+          } catch (err) {
+            Sentry.captureException(err, { tags: { cron: "crm_ltv_snapshot", phase: "top_level_throw" } });
+            console.error(JSON.stringify({ cron: "crm_ltv_snapshot", event: "top_level_throw", error: String(err) }));
           }
         })(),
       );
