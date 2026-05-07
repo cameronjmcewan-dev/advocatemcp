@@ -200,4 +200,26 @@ export interface Env {
    * Set via: `cd worker && npx wrangler secret put GA4_TOKEN_ENCRYPTION_KEY`
    */
   GA4_TOKEN_ENCRYPTION_KEY?: string;
+
+  // ── GSC OAuth (Traffic Impact Phase 3 PR 2) ──────────────────────────
+  /**
+   * Google OAuth2 client ID for the Search Console connection flow.
+   * Issued in Google Cloud Console under OAuth 2.0 Client IDs.
+   * Set via: `cd worker && npx wrangler secret put GSC_OAUTH_CLIENT_ID`
+   */
+  GSC_OAUTH_CLIENT_ID?: string;
+
+  /**
+   * Google OAuth2 client secret matching GSC_OAUTH_CLIENT_ID.
+   * Set via: `cd worker && npx wrangler secret put GSC_OAUTH_CLIENT_SECRET`
+   */
+  GSC_OAUTH_CLIENT_SECRET?: string;
+
+  /**
+   * The redirect URI registered in the Google Cloud Console for this OAuth
+   * client — must match exactly. Typically:
+   *   https://customers.advocatemcp.com/oauth/gsc/callback
+   * Set via: `cd worker && npx wrangler secret put GSC_OAUTH_REDIRECT_URI`
+   */
+  GSC_OAUTH_REDIRECT_URI?: string;
 }
