@@ -153,8 +153,14 @@ describe("runGA4SyncBatch", () => {
     const staleRow = { slug: "tenant-a", refresh_token_enc: encryptedToken, property_id: "properties/123" };
 
     mockFetchDailyTraffic.mockResolvedValue([
-      { date: "2026-05-05", source: "perplexity.ai", medium: "referral", sessions: 10 },
-      { date: "2026-05-05", source: "google", medium: "organic", sessions: 20 },
+      {
+        date: "2026-05-05", source: "perplexity.ai", medium: "referral", sessions: 10,
+        engagedSessions: 8, averageSessionDuration: 95.0, bounceRate: 0.20, newUsers: 6, totalUsers: 10,
+      },
+      {
+        date: "2026-05-05", source: "google", medium: "organic", sessions: 20,
+        engagedSessions: 14, averageSessionDuration: 110.5, bounceRate: 0.30, newUsers: 12, totalUsers: 20,
+      },
     ]);
     // perplexity is ai, google is human
     mockClassify.mockImplementation((_src: string, _med: string) =>
@@ -190,9 +196,14 @@ describe("runGA4SyncBatch", () => {
     // startDate is 2 days ago; endDate is 1 day ago — just verify they differ
     expect(fetchArgs.startDate < fetchArgs.endDate).toBe(true);
 
-    // An INSERT ... ON CONFLICT upsert must have fired
+    // An INSERT ... ON CONFLICT upsert must have fired with all 11 columns bound
     const upsertCall = dbCalls.find((c) => c.sql.includes("traffic_daily") && c.sql.includes("ON CONFLICT"));
     expect(upsertCall).toBeDefined();
+    // 11 bind args: slug, date, ai_sessions, human_sessions, total_sessions,
+    //   top_sources_json, engagement_rate, avg_session_duration_sec,
+    //   bounce_rate, new_users, returning_users
+    expect(Array.isArray(upsertCall?.args)).toBe(true);
+    expect((upsertCall?.args as unknown[]).length).toBe(11);
 
     // last_sync_at UPDATE must have fired for slug=tenant-a
     const updateCall = dbCalls.find(

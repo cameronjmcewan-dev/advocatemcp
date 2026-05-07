@@ -3583,16 +3583,41 @@ async function apiGA4SelectProperty(request: Request, env: Env): Promise<Respons
         backfillRowsReceived = rows.length;
 
         // Aggregate per (slug, date): sum AI rows + sum Human rows. Track top
-        // sources for the dashboard tooltip.
-        type Agg = { ai: number; human: number; sources: Record<string, number> };
+        // sources for the dashboard tooltip. Rates (engagement_rate, bounce_rate)
+        // are session-weighted so we accumulate counts and derive at write time.
+        type Agg = {
+          ai: number; human: number;
+          engaged_sessions_total: number;
+          total_session_seconds: number;   // sessions × averageSessionDuration
+          bounced_sessions_total: number;  // sessions × bounceRate
+          new_users: number;
+          returning_users: number;         // totalUsers − newUsers
+          sources: Record<string, number>;
+        };
         const byDate = new Map<string, Agg>();
         for (const r of rows) {
           const key = r.date;
           let agg = byDate.get(key);
-          if (!agg) { agg = { ai: 0, human: 0, sources: {} }; byDate.set(key, agg); }
+          if (!agg) {
+            agg = {
+              ai: 0, human: 0,
+              engaged_sessions_total: 0, total_session_seconds: 0,
+              bounced_sessions_total: 0, new_users: 0, returning_users: 0,
+              sources: {},
+            };
+            byDate.set(key, agg);
+          }
           const cls = classifyTrafficSource(r.source, r.medium);
           if (cls === "ai")    agg.ai    += r.sessions;
           else                 agg.human += r.sessions;
+          agg.engaged_sessions_total += r.engagedSessions;
+          agg.total_session_seconds  += r.sessions * r.averageSessionDuration;
+          agg.bounced_sessions_total += r.sessions * r.bounceRate;
+          agg.new_users              += r.newUsers;
+          // Clamp to >= 0 — GA4 sampling can produce rows where totalUsers <
+          // newUsers, which would otherwise write a negative integer into the
+          // NOT NULL DEFAULT 0 column.
+          agg.returning_users        += Math.max(0, r.totalUsers - r.newUsers);
           const srcKey = `${r.source}|${r.medium}`;
           agg.sources[srcKey] = (agg.sources[srcKey] || 0) + r.sessions;
         }
@@ -3606,22 +3631,38 @@ async function apiGA4SelectProperty(request: Request, env: Env): Promise<Respons
             .sort((a, b) => b[1] - a[1])
             .slice(0, 5)
             .map(([sm, n]) => { const [s, m] = sm.split("|"); return { source: s, medium: m, sessions: n }; });
+          const total = agg.ai + agg.human;
+          const engagement_rate          = total > 0 ? agg.engaged_sessions_total / total : null;
+          const avg_session_duration_sec = total > 0 ? Math.round(agg.total_session_seconds / total) : null;
+          const bounce_rate              = total > 0 ? agg.bounced_sessions_total / total : null;
           await env.DB.prepare(
-            `INSERT INTO traffic_daily (slug, date, ai_sessions, human_sessions, total_sessions, top_sources_json)
-             VALUES (?, ?, ?, ?, ?, ?)
+            `INSERT INTO traffic_daily (
+               slug, date, ai_sessions, human_sessions, total_sessions, top_sources_json,
+               engagement_rate, avg_session_duration_sec, bounce_rate, new_users, returning_users
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(slug, date) DO UPDATE SET
-               ai_sessions     = excluded.ai_sessions,
-               human_sessions  = excluded.human_sessions,
-               total_sessions  = excluded.total_sessions,
-               top_sources_json = excluded.top_sources_json`
+               ai_sessions              = excluded.ai_sessions,
+               human_sessions           = excluded.human_sessions,
+               total_sessions           = excluded.total_sessions,
+               top_sources_json         = excluded.top_sources_json,
+               engagement_rate          = excluded.engagement_rate,
+               avg_session_duration_sec = excluded.avg_session_duration_sec,
+               bounce_rate              = excluded.bounce_rate,
+               new_users                = excluded.new_users,
+               returning_users          = excluded.returning_users`
           )
           .bind(
             biz.slug,
             date,
             agg.ai,
             agg.human,
-            agg.ai + agg.human,
+            total,
             JSON.stringify(top),
+            engagement_rate,
+            avg_session_duration_sec,
+            bounce_rate,
+            agg.new_users,
+            agg.returning_users,
           )
           .run();
         }
@@ -3723,14 +3764,39 @@ async function apiGA4Resync(request: Request, env: Env): Promise<Response> {
     });
     rowsReceived = ga4Rows.length;
 
-    type Agg = { ai: number; human: number; sources: Record<string, number> };
-    const byDate = new Map<string, Agg>();
+    // Same aggregation as select-property backfill. Rates are session-weighted.
+    type ResyncAgg = {
+      ai: number; human: number;
+      engaged_sessions_total: number;
+      total_session_seconds: number;
+      bounced_sessions_total: number;
+      new_users: number;
+      returning_users: number;
+      sources: Record<string, number>;
+    };
+    const byDate = new Map<string, ResyncAgg>();
     for (const r of ga4Rows) {
       let agg = byDate.get(r.date);
-      if (!agg) { agg = { ai: 0, human: 0, sources: {} }; byDate.set(r.date, agg); }
+      if (!agg) {
+        agg = {
+          ai: 0, human: 0,
+          engaged_sessions_total: 0, total_session_seconds: 0,
+          bounced_sessions_total: 0, new_users: 0, returning_users: 0,
+          sources: {},
+        };
+        byDate.set(r.date, agg);
+      }
       const cls = classifyTrafficSource(r.source, r.medium);
       if (cls === "ai") agg.ai    += r.sessions;
       else              agg.human += r.sessions;
+      agg.engaged_sessions_total += r.engagedSessions;
+      agg.total_session_seconds  += r.sessions * r.averageSessionDuration;
+      agg.bounced_sessions_total += r.sessions * r.bounceRate;
+      agg.new_users              += r.newUsers;
+      // Clamp to >= 0 — GA4 sampling can produce rows where totalUsers <
+      // newUsers, which would otherwise write a negative integer into the
+      // NOT NULL DEFAULT 0 column.
+      agg.returning_users        += Math.max(0, r.totalUsers - r.newUsers);
       const srcKey = `${r.source}|${r.medium}`;
       agg.sources[srcKey] = (agg.sources[srcKey] || 0) + r.sessions;
     }
@@ -3741,16 +3807,29 @@ async function apiGA4Resync(request: Request, env: Env): Promise<Response> {
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5)
         .map(([sm, n]) => { const [s, m] = sm.split("|"); return { source: s, medium: m, sessions: n }; });
+      const total = agg.ai + agg.human;
+      const engagement_rate          = total > 0 ? agg.engaged_sessions_total / total : null;
+      const avg_session_duration_sec = total > 0 ? Math.round(agg.total_session_seconds / total) : null;
+      const bounce_rate              = total > 0 ? agg.bounced_sessions_total / total : null;
       await env.DB.prepare(
-        `INSERT INTO traffic_daily (slug, date, ai_sessions, human_sessions, total_sessions, top_sources_json)
-         VALUES (?, ?, ?, ?, ?, ?)
+        `INSERT INTO traffic_daily (
+           slug, date, ai_sessions, human_sessions, total_sessions, top_sources_json,
+           engagement_rate, avg_session_duration_sec, bounce_rate, new_users, returning_users
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(slug, date) DO UPDATE SET
-           ai_sessions     = excluded.ai_sessions,
-           human_sessions  = excluded.human_sessions,
-           total_sessions  = excluded.total_sessions,
-           top_sources_json = excluded.top_sources_json`
+           ai_sessions              = excluded.ai_sessions,
+           human_sessions           = excluded.human_sessions,
+           total_sessions           = excluded.total_sessions,
+           top_sources_json         = excluded.top_sources_json,
+           engagement_rate          = excluded.engagement_rate,
+           avg_session_duration_sec = excluded.avg_session_duration_sec,
+           bounce_rate              = excluded.bounce_rate,
+           new_users                = excluded.new_users,
+           returning_users          = excluded.returning_users`
       )
-      .bind(biz.slug, date, agg.ai, agg.human, agg.ai + agg.human, JSON.stringify(top))
+      .bind(biz.slug, date, agg.ai, agg.human, total, JSON.stringify(top),
+            engagement_rate, avg_session_duration_sec, bounce_rate,
+            agg.new_users, agg.returning_users)
       .run();
     }
 

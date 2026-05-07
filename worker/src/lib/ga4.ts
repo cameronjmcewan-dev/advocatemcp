@@ -17,10 +17,15 @@ export interface GA4Property {
 }
 
 export interface GA4DailyRow {
-  date: string;     // ISO YYYY-MM-DD
+  date: string;                    // ISO YYYY-MM-DD
   source: string;
   medium: string;
   sessions: number;
+  engagedSessions: number;         // count of engaged sessions
+  averageSessionDuration: number;  // seconds (float)
+  bounceRate: number;              // 0..1
+  newUsers: number;
+  totalUsers: number;              // used to derive returning = total - new
 }
 
 // ── refreshAccessToken ────────────────────────────────────────────────────────
@@ -117,7 +122,14 @@ export async function fetchDailyTraffic(opts: {
           { name: "sessionSource" },
           { name: "sessionMedium" },
         ],
-        metrics: [{ name: "sessions" }],
+        metrics: [
+          { name: "sessions" },
+          { name: "engagedSessions" },
+          { name: "averageSessionDuration" },
+          { name: "bounceRate" },
+          { name: "newUsers" },
+          { name: "totalUsers" },
+        ],
         limit: 100000,
       }),
     },
@@ -143,11 +155,19 @@ export async function fetchDailyTraffic(opts: {
     const rawDate = row.dimensionValues[0].value;  // "YYYYMMDD"
     // GA4 returns dates without hyphens — insert them for ISO 8601
     const date = `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`;
+    // Metric values arrive as strings; use safe accessors so partial GA4 responses
+    // (e.g. properties with sampling) don't throw on missing indices.
+    const mv = row.metricValues;
     rows.push({
       date,
       source: row.dimensionValues[1].value,
       medium: row.dimensionValues[2].value,
-      sessions: parseInt(row.metricValues[0].value, 10),
+      sessions:               parseInt(mv[0]?.value ?? "0", 10),
+      engagedSessions:        parseInt(mv[1]?.value ?? "0", 10),
+      averageSessionDuration: parseFloat(mv[2]?.value ?? "0"),
+      bounceRate:             parseFloat(mv[3]?.value ?? "0"),
+      newUsers:               parseInt(mv[4]?.value ?? "0", 10),
+      totalUsers:             parseInt(mv[5]?.value ?? "0", 10),
     });
   }
   return rows;

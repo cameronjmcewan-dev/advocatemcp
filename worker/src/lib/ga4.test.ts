@@ -150,7 +150,14 @@ describe("fetchDailyTraffic", () => {
           { value: "perplexity.ai" },
           { value: "referral" },
         ],
-        metricValues: [{ value: "42" }],
+        metricValues: [
+          { value: "42" },   // sessions
+          { value: "35" },   // engagedSessions
+          { value: "90.5" }, // averageSessionDuration
+          { value: "0.19" }, // bounceRate
+          { value: "30" },   // newUsers
+          { value: "42" },   // totalUsers
+        ],
       },
       {
         dimensionValues: [
@@ -158,7 +165,14 @@ describe("fetchDailyTraffic", () => {
           { value: "google" },
           { value: "organic" },
         ],
-        metricValues: [{ value: "108" }],
+        metricValues: [
+          { value: "108" },  // sessions
+          { value: "80" },   // engagedSessions
+          { value: "120.0" },// averageSessionDuration
+          { value: "0.26" }, // bounceRate
+          { value: "55" },   // newUsers
+          { value: "108" },  // totalUsers
+        ],
       },
     ],
   };
@@ -179,7 +193,7 @@ describe("fetchDailyTraffic", () => {
     );
   });
 
-  it("11. sends correct JSON body with dateRanges, dimensions, metrics", async () => {
+  it("11. sends correct JSON body with dateRanges, dimensions, all six metrics", async () => {
     mockFetch(gaResponse);
     await fetchDailyTraffic(opts);
     const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [
@@ -193,7 +207,14 @@ describe("fetchDailyTraffic", () => {
       { name: "sessionSource" },
       { name: "sessionMedium" },
     ]);
-    expect(body.metrics).toEqual([{ name: "sessions" }]);
+    expect(body.metrics).toEqual([
+      { name: "sessions" },
+      { name: "engagedSessions" },
+      { name: "averageSessionDuration" },
+      { name: "bounceRate" },
+      { name: "newUsers" },
+      { name: "totalUsers" },
+    ]);
     expect(body.limit).toBe(100000);
   });
 
@@ -204,7 +225,7 @@ describe("fetchDailyTraffic", () => {
     expect(rows[1].date).toBe("2026-05-05");
   });
 
-  it("13. parses source, medium, and sessions correctly", async () => {
+  it("13. parses source, medium, sessions and all new metric fields correctly", async () => {
     mockFetch(gaResponse);
     const rows = await fetchDailyTraffic(opts);
     expect(rows[0]).toEqual({
@@ -212,12 +233,22 @@ describe("fetchDailyTraffic", () => {
       source: "perplexity.ai",
       medium: "referral",
       sessions: 42,
+      engagedSessions: 35,
+      averageSessionDuration: 90.5,
+      bounceRate: 0.19,
+      newUsers: 30,
+      totalUsers: 42,
     });
     expect(rows[1]).toEqual({
       date: "2026-05-05",
       source: "google",
       medium: "organic",
       sessions: 108,
+      engagedSessions: 80,
+      averageSessionDuration: 120.0,
+      bounceRate: 0.26,
+      newUsers: 55,
+      totalUsers: 108,
     });
   });
 
@@ -238,5 +269,58 @@ describe("fetchDailyTraffic", () => {
     await expect(fetchDailyTraffic(opts)).rejects.toThrow(
       /ga4: runReport failed: 429 .*Quota exceeded/,
     );
+  });
+
+  it("16. parses bounceRate correctly when GA4 returns '0.42'", async () => {
+    mockFetch({
+      rows: [{
+        dimensionValues: [{ value: "20260506" }, { value: "google" }, { value: "organic" }],
+        metricValues: [
+          { value: "100" }, // sessions
+          { value: "58" },  // engagedSessions
+          { value: "75.0" },// averageSessionDuration
+          { value: "0.42" },// bounceRate
+          { value: "40" },  // newUsers
+          { value: "100" }, // totalUsers
+        ],
+      }],
+    });
+    const rows = await fetchDailyTraffic(opts);
+    expect(rows[0].bounceRate).toBe(0.42);
+  });
+
+  it("17. parses averageSessionDuration as float when GA4 returns '67.8'", async () => {
+    mockFetch({
+      rows: [{
+        dimensionValues: [{ value: "20260506" }, { value: "google" }, { value: "organic" }],
+        metricValues: [
+          { value: "50" },  // sessions
+          { value: "30" },  // engagedSessions
+          { value: "67.8" },// averageSessionDuration
+          { value: "0.30" },// bounceRate
+          { value: "20" },  // newUsers
+          { value: "50" },  // totalUsers
+        ],
+      }],
+    });
+    const rows = await fetchDailyTraffic(opts);
+    expect(rows[0].averageSessionDuration).toBe(67.8);
+  });
+
+  it("18. handles missing optional metric values gracefully (default to 0)", async () => {
+    mockFetch({
+      rows: [{
+        dimensionValues: [{ value: "20260506" }, { value: "google" }, { value: "organic" }],
+        // Only sessions metric value present — others absent
+        metricValues: [{ value: "50" }],
+      }],
+    });
+    const rows = await fetchDailyTraffic(opts);
+    expect(rows[0].sessions).toBe(50);
+    expect(rows[0].engagedSessions).toBe(0);
+    expect(rows[0].averageSessionDuration).toBe(0);
+    expect(rows[0].bounceRate).toBe(0);
+    expect(rows[0].newUsers).toBe(0);
+    expect(rows[0].totalUsers).toBe(0);
   });
 });
