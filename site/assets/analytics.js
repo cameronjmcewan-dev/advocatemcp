@@ -16,9 +16,12 @@
 (function () {
   var MEASUREMENT_ID = 'G-XXXXXXXXXX'; // <-- replaced post-deploy with the real ID
 
-  // No-op if the placeholder hasn't been replaced yet (avoids 404 noise on
-  // googletagmanager.com for an unconfigured ID).
-  if (!/^G-[A-Z0-9]+$/.test(MEASUREMENT_ID)) return;
+  // No-op until the placeholder is replaced with a real measurement ID.
+  // The literal placeholder string DOES pass the GA4 ID regex, so we have to
+  // exclude it explicitly — otherwise the browser would fire a 404 to
+  // googletagmanager.com on every marketing page load.
+  if (MEASUREMENT_ID === 'G-XXXXXXXXXX')              return;
+  if (!/^G-[A-Z0-9]{6,}$/.test(MEASUREMENT_ID))       return;
 
   // Respect Do-Not-Track and an explicit opt-out.
   try {
