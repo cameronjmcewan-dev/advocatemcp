@@ -70,12 +70,14 @@ import {
 import { handleGA4Start, handleGA4Callback } from "./ga4Oauth";
 import { handleGSCStart, handleGSCCallback } from "./gscOauth";
 import { handleHubspotStart, handleHubspotCallback } from "./hubspotOauth";
+import { handleSalesforceStart, handleSalesforceCallback } from "./salesforceOauth";
 import { signGA4State } from "../lib/ga4State";
 import { signState } from "../lib/oauthState";
 import { decryptToken } from "../lib/ga4TokenCrypto";
 import { refreshAccessToken, listProperties, fetchDailyTraffic, fetchDailyGeography, fetchDailyConversions } from "../lib/ga4";
 import { listSites, fetchSearchAnalytics, fetchAiOverviewQueries } from "../lib/gsc";
 import { refreshHubspotAccessToken, fetchContactsWithRevenue } from "../lib/hubspot";
+import { refreshSalesforceAccessToken, fetchContactsWithRevenue as fetchSalesforceContactsWithRevenue } from "../lib/salesforce";
 import { aggregateLtv } from "../lib/ltvAggregator";
 import { aggregateGeoRows } from "../lib/geoAggregator";
 import { aggregateConversionRows } from "../lib/conversionAggregator";
@@ -226,8 +228,10 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/traffic-impact/verified-revenue"        && method === "GET")     return apiTrafficImpactVerifiedRevenue(request, env);
   if (pathname === "/api/client/traffic-impact/ltv"                     && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/traffic-impact/ltv"                     && method === "GET")     return apiTrafficImpactLtv(request, env);
-  if (pathname === "/oauth/hubspot/start"      && method === "GET")  return handleHubspotStartProtected(request, env);
-  if (pathname === "/oauth/hubspot/callback"   && method === "GET")  return handleHubspotCallback(request, env);
+  if (pathname === "/oauth/hubspot/start"         && method === "GET")  return handleHubspotStartProtected(request, env);
+  if (pathname === "/oauth/hubspot/callback"      && method === "GET")  return handleHubspotCallback(request, env);
+  if (pathname === "/oauth/salesforce/start"      && method === "GET")  return handleSalesforceStartProtected(request, env);
+  if (pathname === "/oauth/salesforce/callback"   && method === "GET")  return handleSalesforceCallback(request, env);
   if (pathname === "/api/client/crm/status"      && method === "GET")  return apiCrmStatus(request, env);
   if (pathname === "/api/client/crm/start-link"  && method === "POST") return apiCrmStartLink(request, env);
   if (pathname === "/api/client/crm/disconnect"  && method === "POST") return apiCrmDisconnect(request, env);
@@ -5160,6 +5164,36 @@ async function handleHubspotStartProtected(request: Request, env: Env): Promise<
   return handleHubspotStart(request, env);
 }
 
+// ── GET /oauth/salesforce/start (protected wrapper) ───────────────────────────
+
+async function handleSalesforceStartProtected(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const reqUrl    = new URL(request.url);
+  const querySlug = reqUrl.searchParams.get("slug");
+  if (!querySlug) return withCors(jsonErr(400, "slug query param required"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const owns = businesses.some(b => b.slug === querySlug);
+  if (!owns) return withCors(jsonErr(403, "no access to this business"), request, { credentials: true });
+
+  // Pro plan gate — Salesforce CRM is a Pro feature.
+  const planRow = await env.DB
+    .prepare("SELECT plan FROM businesses WHERE slug = ?")
+    .bind(querySlug)
+    .first<{ plan: string | null }>();
+  const plan = planRow?.plan ?? "base";
+  if (plan !== "pro" && plan !== "enterprise") {
+    return withCors(jsonErr(402, "plan_required"), request, { credentials: true });
+  }
+
+  return handleSalesforceStart(request, env);
+}
+
 // ── POST /api/client/crm/start-link?provider=hubspot ─────────────────────────
 //
 // JSON-returning counterpart of /oauth/hubspot/start. Frontend calls this
@@ -5179,8 +5213,7 @@ async function apiCrmStartLink(request: Request, env: Env): Promise<Response> {
     return withCors(jsonErr(400, "slug query param required"), request, { credentials: true });
   }
 
-  if (provider !== "hubspot") {
-    // Salesforce ships in Phase 5 PR 2.
+  if (provider !== "hubspot" && provider !== "salesforce") {
     return withCors(jsonErr(400, "provider_not_supported_yet"), request, { credentials: true });
   }
 
@@ -5202,27 +5235,53 @@ async function apiCrmStartLink(request: Request, env: Env): Promise<Response> {
     return withCors(jsonErr(402, "plan_required"), request, { credentials: true });
   }
 
-  if (!env.TOKEN_SIGNING_KEY || !env.HUBSPOT_OAUTH_CLIENT_ID || !env.HUBSPOT_OAUTH_REDIRECT_URI) {
-    return withCors(jsonErr(503, "HubSpot integration not configured"), request, { credentials: true });
+  if (provider === "hubspot") {
+    if (!env.TOKEN_SIGNING_KEY || !env.HUBSPOT_OAUTH_CLIENT_ID || !env.HUBSPOT_OAUTH_REDIRECT_URI) {
+      return withCors(jsonErr(503, "HubSpot integration not configured"), request, { credentials: true });
+    }
+
+    const nonceBytes = crypto.getRandomValues(new Uint8Array(16));
+    const nonce = Array.from(nonceBytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+    const state = await signState(
+      { slug: querySlug, nonce, ts: Math.floor(Date.now() / 1000) },
+      env.TOKEN_SIGNING_KEY,
+      "hubspot-state:v1:",
+    );
+
+    const params = new URLSearchParams({
+      client_id:    env.HUBSPOT_OAUTH_CLIENT_ID,
+      redirect_uri: env.HUBSPOT_OAUTH_REDIRECT_URI,
+      scope:        "crm.objects.contacts.read crm.objects.deals.read",
+      state,
+    });
+    const url = `https://app.hubspot.com/oauth/authorize?${params.toString()}`;
+
+    return withCors(jsonOk({ url }), request, { credentials: true });
+  } else {
+    // provider === "salesforce"
+    if (!env.TOKEN_SIGNING_KEY || !env.SALESFORCE_OAUTH_CLIENT_ID || !env.SALESFORCE_OAUTH_REDIRECT_URI) {
+      return withCors(jsonErr(503, "Salesforce integration not configured"), request, { credentials: true });
+    }
+
+    const nonceBytes = crypto.getRandomValues(new Uint8Array(16));
+    const nonce = Array.from(nonceBytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+    const state = await signState(
+      { slug: querySlug, nonce, ts: Math.floor(Date.now() / 1000) },
+      env.TOKEN_SIGNING_KEY,
+      "salesforce-state:v1:",
+    );
+
+    const params = new URLSearchParams({
+      client_id:     env.SALESFORCE_OAUTH_CLIENT_ID,
+      redirect_uri:  env.SALESFORCE_OAUTH_REDIRECT_URI,
+      scope:         "api refresh_token offline_access",
+      response_type: "code",
+      state,
+    });
+    const url = `https://login.salesforce.com/services/oauth2/authorize?${params.toString()}`;
+
+    return withCors(jsonOk({ url }), request, { credentials: true });
   }
-
-  const nonceBytes = crypto.getRandomValues(new Uint8Array(16));
-  const nonce = Array.from(nonceBytes).map((b) => b.toString(16).padStart(2, "0")).join("");
-  const state = await signState(
-    { slug: querySlug, nonce, ts: Math.floor(Date.now() / 1000) },
-    env.TOKEN_SIGNING_KEY,
-    "hubspot-state:v1:",
-  );
-
-  const params = new URLSearchParams({
-    client_id:    env.HUBSPOT_OAUTH_CLIENT_ID,
-    redirect_uri: env.HUBSPOT_OAUTH_REDIRECT_URI,
-    scope:        "crm.objects.contacts.read crm.objects.deals.read",
-    state,
-  });
-  const url = `https://app.hubspot.com/oauth/authorize?${params.toString()}`;
-
-  return withCors(jsonOk({ url }), request, { credentials: true });
 }
 
 // ── GET /api/client/crm/status?provider=hubspot ───────────────────────────────
@@ -5337,11 +5396,11 @@ async function apiTrafficImpactLtv(request: Request, env: Env): Promise<Response
     cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
   }
 
-  // Look up CRM connection. v1 supports hubspot only.
+  // Look up CRM connection — supports hubspot and salesforce.
   const conn = await env.DB
-    .prepare("SELECT provider, refresh_token_enc FROM crm_connections WHERE slug = ? AND status = 'connected' LIMIT 1")
+    .prepare("SELECT provider, refresh_token_enc, account_id FROM crm_connections WHERE slug = ? AND status = 'connected' LIMIT 1")
     .bind(biz.slug)
-    .first<{ provider: string; refresh_token_enc: string }>();
+    .first<{ provider: string; refresh_token_enc: string; account_id: string | null }>();
 
   if (!conn) {
     return withCors(
@@ -5351,64 +5410,130 @@ async function apiTrafficImpactLtv(request: Request, env: Env): Promise<Response
     );
   }
 
-  if (conn.provider !== "hubspot") {
-    // Salesforce ships in Phase 5 PR 2.
+  if (conn.provider === "hubspot") {
+    if (!env.GA4_TOKEN_ENCRYPTION_KEY || !env.HUBSPOT_OAUTH_CLIENT_ID || !env.HUBSPOT_OAUTH_CLIENT_SECRET) {
+      return withCors(jsonErr(503, "HubSpot integration not configured"), request, { credentials: true });
+    }
+
+    try {
+      const refreshToken = await decryptToken(conn.refresh_token_enc, env.GA4_TOKEN_ENCRYPTION_KEY);
+      const { accessToken } = await refreshHubspotAccessToken(
+        refreshToken,
+        env.HUBSPOT_OAUTH_CLIENT_ID,
+        env.HUBSPOT_OAUTH_CLIENT_SECRET,
+      );
+
+      const contacts = await fetchContactsWithRevenue({ accessToken, createdAfter: cutoff, maxContacts: 1000 });
+
+      const clickEventsResult = await env.DB
+        .prepare("SELECT ref, timestamp FROM click_events WHERE business_slug = ? AND timestamp >= ? ORDER BY timestamp DESC LIMIT 5000")
+        .bind(biz.slug, cutoff)
+        .all<{ ref: string | null; timestamp: string }>();
+      const clickEvents = clickEventsResult.results ?? [];
+
+      const result = aggregateLtv(contacts, clickEvents);
+
+      // Track last activity — useful for ops visibility into active connections.
+      await env.DB
+        .prepare("UPDATE crm_connections SET last_used_at = ?, last_error = NULL WHERE slug = ? AND provider = ?")
+        .bind(new Date().toISOString(), biz.slug, "hubspot")
+        .run();
+
+      return withCors(
+        jsonOk({
+          crm_connected:  true,
+          provider:       "hubspot",
+          slug:           biz.slug,
+          since:          cutoff,
+          ai:             result.ai,
+          unknown:        result.unknown,
+          errored:        result.errored,
+          total_contacts: result.ai.contact_count + result.unknown.contact_count + result.errored,
+        }),
+        request,
+        { credentials: true },
+      );
+    } catch (err) {
+      const msg = String(err instanceof Error ? err.message : err).slice(0, 500);
+      await env.DB
+        .prepare("UPDATE crm_connections SET last_error = ? WHERE slug = ? AND provider = ?")
+        .bind(msg, biz.slug, "hubspot")
+        .run();
+      return withCors(jsonErr(502, "Failed to fetch CRM data"), request, { credentials: true });
+    }
+  } else if (conn.provider === "salesforce") {
+    // TODO(Phase 5 PR 3): extract cross-reference + aggregation into a shared
+    // helper — the logic below is structurally identical to the HubSpot path
+    // above; the only difference is the CRM client called. Deferred to keep
+    // this PR scope tight.
+    if (!env.SALESFORCE_OAUTH_CLIENT_ID || !env.SALESFORCE_OAUTH_CLIENT_SECRET) {
+      return withCors(jsonErr(503, "Salesforce integration not configured"), request, { credentials: true });
+    }
+
+    if (!env.GA4_TOKEN_ENCRYPTION_KEY) {
+      return withCors(jsonErr(503, "Token encryption not configured"), request, { credentials: true });
+    }
+
+    try {
+      const refreshToken = await decryptToken(conn.refresh_token_enc, env.GA4_TOKEN_ENCRYPTION_KEY);
+      const { accessToken, instanceUrl } = await refreshSalesforceAccessToken(
+        refreshToken,
+        env.SALESFORCE_OAUTH_CLIENT_ID,
+        env.SALESFORCE_OAUTH_CLIENT_SECRET,
+      );
+
+      // Use instance_url from the fresh token response — it may differ from
+      // the stored account_id if the org migrated since OAuth time.
+      const contacts = await fetchSalesforceContactsWithRevenue({
+        accessToken,
+        instanceUrl,
+        createdAfter: cutoff,
+        maxContacts:  1000,
+      });
+
+      const clickEventsResult = await env.DB
+        .prepare("SELECT ref, timestamp FROM click_events WHERE business_slug = ? AND timestamp >= ? ORDER BY timestamp DESC LIMIT 5000")
+        .bind(biz.slug, cutoff)
+        .all<{ ref: string | null; timestamp: string }>();
+      const clickEvents = clickEventsResult.results ?? [];
+
+      const result = aggregateLtv(contacts, clickEvents);
+
+      // Track last activity and refresh account_id if instance_url changed.
+      await env.DB
+        .prepare("UPDATE crm_connections SET last_used_at = ?, last_error = NULL, account_id = ? WHERE slug = ? AND provider = ?")
+        .bind(new Date().toISOString(), instanceUrl, biz.slug, "salesforce")
+        .run();
+
+      return withCors(
+        jsonOk({
+          crm_connected:  true,
+          provider:       "salesforce",
+          slug:           biz.slug,
+          since:          cutoff,
+          ai:             result.ai,
+          unknown:        result.unknown,
+          errored:        result.errored,
+          total_contacts: result.ai.contact_count + result.unknown.contact_count + result.errored,
+        }),
+        request,
+        { credentials: true },
+      );
+    } catch (err) {
+      const msg = String(err instanceof Error ? err.message : err).slice(0, 500);
+      await env.DB
+        .prepare("UPDATE crm_connections SET last_error = ? WHERE slug = ? AND provider = ?")
+        .bind(msg, biz.slug, "salesforce")
+        .run();
+      return withCors(jsonErr(502, "Failed to fetch CRM data"), request, { credentials: true });
+    }
+  } else {
+    // Unknown provider — guard against future schema drift.
     return withCors(
       jsonOk({ crm_connected: true, provider: conn.provider, slug: biz.slug, ai: emptyBucket(), unknown: emptyBucket(), since: cutoff, error: "provider_not_supported_yet" }),
       request,
       { credentials: true },
     );
-  }
-
-  if (!env.GA4_TOKEN_ENCRYPTION_KEY || !env.HUBSPOT_OAUTH_CLIENT_ID || !env.HUBSPOT_OAUTH_CLIENT_SECRET) {
-    return withCors(jsonErr(503, "HubSpot integration not configured"), request, { credentials: true });
-  }
-
-  try {
-    const refreshToken = await decryptToken(conn.refresh_token_enc, env.GA4_TOKEN_ENCRYPTION_KEY);
-    const { accessToken } = await refreshHubspotAccessToken(
-      refreshToken,
-      env.HUBSPOT_OAUTH_CLIENT_ID,
-      env.HUBSPOT_OAUTH_CLIENT_SECRET,
-    );
-
-    const contacts = await fetchContactsWithRevenue({ accessToken, createdAfter: cutoff, maxContacts: 1000 });
-
-    const clickEventsResult = await env.DB
-      .prepare("SELECT ref, timestamp FROM click_events WHERE business_slug = ? AND timestamp >= ? ORDER BY timestamp DESC LIMIT 5000")
-      .bind(biz.slug, cutoff)
-      .all<{ ref: string | null; timestamp: string }>();
-    const clickEvents = clickEventsResult.results ?? [];
-
-    const result = aggregateLtv(contacts, clickEvents);
-
-    // Track last activity — useful for ops visibility into active connections.
-    await env.DB
-      .prepare("UPDATE crm_connections SET last_used_at = ?, last_error = NULL WHERE slug = ? AND provider = ?")
-      .bind(new Date().toISOString(), biz.slug, "hubspot")
-      .run();
-
-    return withCors(
-      jsonOk({
-        crm_connected:  true,
-        provider:       "hubspot",
-        slug:           biz.slug,
-        since:          cutoff,
-        ai:             result.ai,
-        unknown:        result.unknown,
-        errored:        result.errored,
-        total_contacts: result.ai.contact_count + result.unknown.contact_count + result.errored,
-      }),
-      request,
-      { credentials: true },
-    );
-  } catch (err) {
-    const msg = String(err instanceof Error ? err.message : err).slice(0, 500);
-    await env.DB
-      .prepare("UPDATE crm_connections SET last_error = ? WHERE slug = ? AND provider = ?")
-      .bind(msg, biz.slug, "hubspot")
-      .run();
-    return withCors(jsonErr(502, "Failed to fetch CRM data"), request, { credentials: true });
   }
 }
 

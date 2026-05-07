@@ -243,4 +243,25 @@ export interface Env {
    * Set via: `cd worker && npx wrangler secret put HUBSPOT_OAUTH_REDIRECT_URI`
    */
   HUBSPOT_OAUTH_REDIRECT_URI?: string;
+
+  // ── Salesforce CRM OAuth (Traffic Impact Phase 5 PR 2) ───────────────
+  /**
+   * Salesforce Connected App consumer key (client ID).
+   * Created in Setup > App Manager > New Connected App.
+   * Set via: `cd worker && npx wrangler secret put SALESFORCE_OAUTH_CLIENT_ID`
+   */
+  SALESFORCE_OAUTH_CLIENT_ID?: string;
+
+  /**
+   * Salesforce Connected App consumer secret matching SALESFORCE_OAUTH_CLIENT_ID.
+   * Set via: `cd worker && npx wrangler secret put SALESFORCE_OAUTH_CLIENT_SECRET`
+   */
+  SALESFORCE_OAUTH_CLIENT_SECRET?: string;
+
+  /**
+   * The redirect URI registered in the Salesforce Connected App.
+   * Typically: https://customers.advocatemcp.com/oauth/salesforce/callback
+   * Set via: `cd worker && npx wrangler secret put SALESFORCE_OAUTH_REDIRECT_URI`
+   */
+  SALESFORCE_OAUTH_REDIRECT_URI?: string;
 }
