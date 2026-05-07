@@ -5439,6 +5439,8 @@ async function apiTrafficImpactLtv(request: Request, env: Env): Promise<Response
         .bind(new Date().toISOString(), biz.slug, "hubspot")
         .run();
 
+      const trend = await fetchLtvTrend(env.DB, biz.slug, "hubspot");
+
       return withCors(
         jsonOk({
           crm_connected:  true,
@@ -5449,6 +5451,7 @@ async function apiTrafficImpactLtv(request: Request, env: Env): Promise<Response
           unknown:        result.unknown,
           errored:        result.errored,
           total_contacts: result.ai.contact_count + result.unknown.contact_count + result.errored,
+          trend,
         }),
         request,
         { credentials: true },
@@ -5505,6 +5508,8 @@ async function apiTrafficImpactLtv(request: Request, env: Env): Promise<Response
         .bind(new Date().toISOString(), instanceUrl, biz.slug, "salesforce")
         .run();
 
+      const trend = await fetchLtvTrend(env.DB, biz.slug, "salesforce");
+
       return withCors(
         jsonOk({
           crm_connected:  true,
@@ -5515,6 +5520,7 @@ async function apiTrafficImpactLtv(request: Request, env: Env): Promise<Response
           unknown:        result.unknown,
           errored:        result.errored,
           total_contacts: result.ai.contact_count + result.unknown.contact_count + result.errored,
+          trend,
         }),
         request,
         { credentials: true },
@@ -5539,5 +5545,67 @@ async function apiTrafficImpactLtv(request: Request, env: Env): Promise<Response
 
 function emptyBucket() {
   return { contact_count: 0, customer_count: 0, total_revenue_cents: 0, avg_ltv_cents: 0 };
+}
+
+// ── fetchLtvTrend ─────────────────────────────────────────────────────────────
+//
+// Reads ltv_daily rows for the given slug + provider (last 90 days),
+// collapses the ai and unknown source_class rows by date into a single
+// trend entry per day. Returns [] when no snapshot rows exist yet.
+
+interface LtvTrendEntry {
+  date:    string;
+  ai:      { contact_count: number; customer_count: number; total_revenue_cents: number; avg_ltv_cents: number };
+  unknown: { contact_count: number; customer_count: number; total_revenue_cents: number; avg_ltv_cents: number };
+}
+
+async function fetchLtvTrend(
+  db:       D1Database,
+  slug:     string,
+  provider: string,
+): Promise<LtvTrendEntry[]> {
+  const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const result = await db
+    .prepare(
+      `SELECT date, source_class, contact_count, customer_count, total_revenue_cents, avg_ltv_cents
+         FROM ltv_daily
+        WHERE slug = ? AND provider = ? AND date >= ?
+        ORDER BY date ASC`,
+    )
+    .bind(slug, provider, cutoff)
+    .all<{
+      date:                string;
+      source_class:        string;
+      contact_count:       number;
+      customer_count:      number;
+      total_revenue_cents: number;
+      avg_ltv_cents:       number;
+    }>();
+
+  const rows = result.results ?? [];
+  if (rows.length === 0) return [];
+
+  // Collapse ai + unknown rows by date into a single entry per date.
+  const byDate = new Map<string, LtvTrendEntry>();
+  for (const r of rows) {
+    if (!byDate.has(r.date)) {
+      byDate.set(r.date, {
+        date:    r.date,
+        ai:      { contact_count: 0, customer_count: 0, total_revenue_cents: 0, avg_ltv_cents: 0 },
+        unknown: { contact_count: 0, customer_count: 0, total_revenue_cents: 0, avg_ltv_cents: 0 },
+      });
+    }
+    const entry = byDate.get(r.date)!;
+    if (r.source_class === "ai" || r.source_class === "unknown") {
+      entry[r.source_class] = {
+        contact_count:       r.contact_count,
+        customer_count:      r.customer_count,
+        total_revenue_cents: r.total_revenue_cents,
+        avg_ltv_cents:       r.avg_ltv_cents,
+      };
+    }
+  }
+
+  return Array.from(byDate.values());
 }
 
