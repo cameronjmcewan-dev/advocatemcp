@@ -68,7 +68,9 @@ import {
   handleAdminProfileScores,
 } from "./adminInsightsProxy";
 import { handleGA4Start, handleGA4Callback } from "./ga4Oauth";
+import { handleGSCStart, handleGSCCallback } from "./gscOauth";
 import { signGA4State } from "../lib/ga4State";
+import { signState } from "../lib/oauthState";
 import { decryptToken } from "../lib/ga4TokenCrypto";
 import { refreshAccessToken, listProperties, fetchDailyTraffic, fetchDailyGeography, fetchDailyConversions } from "../lib/ga4";
 import { aggregateGeoRows } from "../lib/geoAggregator";
@@ -204,6 +206,11 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/ga4/select-property" && method === "POST") return apiGA4SelectProperty(request, env);
   if (pathname === "/api/client/ga4/resync"          && method === "POST") return apiGA4Resync(request, env);
   if (pathname === "/api/client/ga4/disconnect"      && method === "POST") return apiGA4Disconnect(request, env);
+  if (pathname === "/oauth/gsc/start"      && method === "GET")  return handleGSCStartProtected(request, env);
+  if (pathname === "/oauth/gsc/callback"   && method === "GET")  return handleGSCCallback(request, env);
+  if (pathname === "/api/client/gsc/status"     && method === "GET")  return apiGSCStatus(request, env);
+  if (pathname === "/api/client/gsc/start-link" && method === "POST") return apiGSCStartLink(request, env);
+  if (pathname === "/api/client/gsc/disconnect" && method === "POST") return apiGSCDisconnect(request, env);
   if (pathname === "/api/client/traffic-impact"              && method === "GET")  return apiTrafficImpact(request, env);
   if (pathname === "/api/client/traffic-impact/geography"   && method === "GET")  return apiTrafficImpactGeography(request, env);
   if (pathname === "/api/client/traffic-impact/conversions" && method === "GET")  return apiTrafficImpactConversions(request, env);
@@ -368,6 +375,9 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/ga4/select-property" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/ga4/resync"          && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/ga4/disconnect"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/gsc/status"     && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/gsc/start-link" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/gsc/disconnect" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/traffic-impact"               && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/traffic-impact/geography"    && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/traffic-impact/conversions"  && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
@@ -3990,6 +4000,177 @@ async function apiGA4Disconnect(request: Request, env: Env): Promise<Response> {
   }
 
   await env.DB.prepare("DELETE FROM ga4_connections WHERE slug = ?").bind(biz.slug).run();
+  return withCors(jsonOk({ ok: true }), request, { credentials: true });
+}
+
+// ── GSC OAuth protected start ─────────────────────────────────────────────
+//
+// Pro plan gate: GSC is a Pro-only feature per the Traffic Impact data-depth
+// roadmap. Base tenants get a 402 rather than being redirected to Google —
+// we never want a base tenant to complete the OAuth flow and end up with a
+// gsc_connections row that the sync job won't touch.
+
+async function handleGSCStartProtected(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const reqUrl = new URL(request.url);
+  const querySlug = reqUrl.searchParams.get("slug");
+  if (!querySlug) return withCors(jsonErr(400, "slug query param required"), request, { credentials: true });
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const owns = businesses.some(b => b.slug === querySlug);
+  if (!owns) return withCors(jsonErr(403, "no access to this business"), request, { credentials: true });
+
+  // Plan gate — Pro only. GSC is a Pro feature per the data-depth roadmap.
+  const planRow = await env.DB
+    .prepare("SELECT plan FROM businesses WHERE slug = ?")
+    .bind(querySlug)
+    .first<{ plan: string | null }>();
+  const plan = planRow?.plan ?? "base";
+  if (plan !== "pro" && plan !== "enterprise") {
+    return withCors(jsonErr(402, "plan_required"), request, { credentials: true });
+  }
+
+  return handleGSCStart(request, env);
+}
+
+// ── POST /api/client/gsc/start-link ────────────────────────────────────────
+//
+// JSON-returning sibling of /oauth/gsc/start. Necessary because the customer
+// dashboard's auth model is bearer-token in JS memory — URL-bar typed
+// navigations to /oauth/gsc/start can't carry a bearer header, so the GET
+// path 401s for everyone except legacy admin-cookie sessions.
+//
+// Frontend calls this with bearer auth, gets back {url}, then sets
+// window.location.href = url. The signed state binds the slug so the OAuth
+// callback knows which tenant the connection is for.
+
+async function apiGSCStartLink(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const reqUrl = new URL(request.url);
+  const querySlug = reqUrl.searchParams.get("slug");
+  if (!querySlug) {
+    return withCors(jsonErr(400, "slug query param required"), request, { credentials: true });
+  }
+
+  // Same ownership check as handleGSCStartProtected.
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const owns = businesses.some(b => b.slug === querySlug);
+  if (!owns) {
+    return withCors(jsonErr(403, "no access to this business"), request, { credentials: true });
+  }
+
+  // Plan gate — Pro only. Matches handleGSCStartProtected.
+  const planRow = await env.DB
+    .prepare("SELECT plan FROM businesses WHERE slug = ?")
+    .bind(querySlug)
+    .first<{ plan: string | null }>();
+  const plan = planRow?.plan ?? "base";
+  if (plan !== "pro" && plan !== "enterprise") {
+    return withCors(jsonErr(402, "plan_required"), request, { credentials: true });
+  }
+
+  if (!env.TOKEN_SIGNING_KEY || !env.GSC_OAUTH_CLIENT_ID || !env.GSC_OAUTH_REDIRECT_URI) {
+    return withCors(jsonErr(503, "GSC integration not configured"), request, { credentials: true });
+  }
+
+  // Generate a 16-byte hex nonce + sign the state with the GSC domain prefix.
+  const nonceBytes = crypto.getRandomValues(new Uint8Array(16));
+  const nonce = Array.from(nonceBytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+  const state = await signState(
+    { slug: querySlug, nonce, ts: Math.floor(Date.now() / 1000) },
+    env.TOKEN_SIGNING_KEY,
+    "gsc-state:v1:",
+  );
+
+  const params = new URLSearchParams({
+    client_id:     env.GSC_OAUTH_CLIENT_ID,
+    redirect_uri:  env.GSC_OAUTH_REDIRECT_URI,
+    response_type: "code",
+    scope:         "https://www.googleapis.com/auth/webmasters.readonly",
+    access_type:   "offline",
+    prompt:        "consent",
+    state,
+  });
+  const url = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+
+  return withCors(jsonOk({ url }), request, { credentials: true });
+}
+
+// ── GET /api/client/gsc/status ─────────────────────────────────────────────
+
+async function apiGSCStatus(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const reqUrl = new URL(request.url);
+  const slugParam = reqUrl.searchParams.get("slug");
+  const biz = (slugParam ? businesses.find(b => b.slug === slugParam) : null) ?? businesses[0] ?? null;
+  if (!biz) {
+    return withCors(jsonOk({ connected: false }), request, { credentials: true });
+  }
+
+  const row = await env.DB
+    .prepare("SELECT site_url, status, last_sync_at, last_sync_error, connected_at FROM gsc_connections WHERE slug = ? LIMIT 1")
+    .bind(biz.slug)
+    .first<{
+      site_url: string | null;
+      status: string;
+      last_sync_at: string | null;
+      last_sync_error: string | null;
+      connected_at: string;
+    }>();
+
+  if (!row) {
+    return withCors(jsonOk({ connected: false, slug: biz.slug }), request, { credentials: true });
+  }
+
+  return withCors(
+    jsonOk({
+      connected: true,
+      slug: biz.slug,
+      site_url: row.site_url,
+      status: row.status,
+      last_sync_at: row.last_sync_at,
+      last_sync_error: row.last_sync_error,
+      connected_at: row.connected_at,
+    }),
+    request,
+    { credentials: true },
+  );
+}
+
+// ── POST /api/client/gsc/disconnect ───────────────────────────────────────
+
+async function apiGSCDisconnect(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const reqUrl = new URL(request.url);
+  const slugParam = reqUrl.searchParams.get("slug");
+  const biz = (slugParam ? businesses.find(b => b.slug === slugParam) : null) ?? businesses[0] ?? null;
+  if (!biz) {
+    return withCors(jsonErr(404, "No business"), request, { credentials: true });
+  }
+
+  await env.DB.prepare("DELETE FROM gsc_connections WHERE slug = ?").bind(biz.slug).run();
   return withCors(jsonOk({ ok: true }), request, { credentials: true });
 }
 
