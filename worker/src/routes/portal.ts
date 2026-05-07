@@ -3510,6 +3510,13 @@ async function apiGA4Properties(request: Request, env: Env): Promise<Response> {
 // ── POST /api/client/ga4/select-property ──────────────────────────────────
 
 async function apiGA4SelectProperty(request: Request, env: Env): Promise<Response> {
+  // Diagnostic counters surfaced in the response so we can tell, on a fresh
+  // connection, whether GA4 returned any rows at all (vs the property being
+  // empty / freshly installed). Settings UI can also display these.
+  let backfillRowsReceived = 0;
+  let backfillDaysUpserted = 0;
+  let backfillStartDate: string | null = null;
+  let backfillEndDate:   string | null = null;
   const guard = await requireVerifiedSession(request, env);
   if (!guard.ok) return guard.resp;
   const ctx = guard.ctx;
@@ -3560,6 +3567,8 @@ async function apiGA4SelectProperty(request: Request, env: Env): Promise<Respons
         start.setUTCDate(start.getUTCDate() - 540);  // ~18 months
         const startDate = start.toISOString().slice(0, 10);
         const endDate = new Date(today.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);  // yesterday
+        backfillStartDate = startDate;
+        backfillEndDate   = endDate;
 
         const rows = await fetchDailyTraffic({
           propertyId: body.property_id,
@@ -3567,6 +3576,7 @@ async function apiGA4SelectProperty(request: Request, env: Env): Promise<Respons
           endDate,
           accessToken,
         });
+        backfillRowsReceived = rows.length;
 
         // Aggregate per (slug, date): sum AI rows + sum Human rows. Track top
         // sources for the dashboard tooltip.
@@ -3585,6 +3595,7 @@ async function apiGA4SelectProperty(request: Request, env: Env): Promise<Respons
 
         // Upsert each daily row.
         const now = new Date().toISOString();
+        backfillDaysUpserted = byDate.size;
         for (const [date, agg] of byDate.entries()) {
           // Top-5 source/medium tuples for tooltips
           const top = Object.entries(agg.sources)
@@ -3626,7 +3637,19 @@ async function apiGA4SelectProperty(request: Request, env: Env): Promise<Respons
     }
   }
 
-  return withCors(jsonOk({ ok: true }), request, { credentials: true });
+  return withCors(
+    jsonOk({
+      ok: true,
+      backfill: {
+        rows_received_from_ga4: backfillRowsReceived,
+        days_upserted:           backfillDaysUpserted,
+        start_date:              backfillStartDate,
+        end_date:                backfillEndDate,
+      },
+    }),
+    request,
+    { credentials: true },
+  );
 }
 
 // ── POST /api/client/ga4/disconnect ───────────────────────────────────────
