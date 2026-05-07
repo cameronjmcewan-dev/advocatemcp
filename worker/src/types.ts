@@ -244,6 +244,16 @@ export interface Env {
    */
   HUBSPOT_OAUTH_REDIRECT_URI?: string;
 
+  // ── Google Places API (Traffic Impact Phase 6 PR 2) ─────────────────
+  /**
+   * Server-side Google Places API key. Single key held by Advocate;
+   * customers paste their public Place ID into Settings — no per-tenant
+   * OAuth required. Used by the authority-sync cron to fetch reviews +
+   * aggregate rating for the customer's Place.
+   * Set via: `cd worker && npx wrangler secret put GOOGLE_PLACES_API_KEY`
+   */
+  GOOGLE_PLACES_API_KEY?: string;
+
   // ── Salesforce CRM OAuth (Traffic Impact Phase 5 PR 2) ───────────────
   /**
    * Salesforce Connected App consumer key (client ID).

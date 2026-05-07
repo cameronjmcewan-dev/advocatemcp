@@ -1,8 +1,8 @@
 /**
  * Tests for worker/src/cron/authoritySync.ts
  *
- * Mocks D1, searchRedditMentions, classifySentimentBatch, and
- * aggregateAuthorityMentions at the module boundary.
+ * Mocks D1, searchRedditMentions, classifySentimentBatch,
+ * aggregateAuthorityMentions, and fetchPlaceDetails at the module boundary.
  * No real network calls.
  */
 
@@ -48,6 +48,18 @@ vi.mock("../lib/sentimentClassifier", () => ({
 const mockAggregateAuthorityMentions = vi.fn();
 vi.mock("../lib/authorityAggregator", () => ({
   aggregateAuthorityMentions: (...args: unknown[]) => mockAggregateAuthorityMentions(...args),
+}));
+
+const mockFetchPlaceDetails = vi.fn();
+vi.mock("../lib/googlePlaces", () => ({
+  fetchPlaceDetails:        (...args: unknown[]) => mockFetchPlaceDetails(...args),
+  googleRatingToSentiment:  (rating: number) => {
+    if (rating >= 4.5) return { label: "positive", score: 1.0 };
+    if (rating >= 3.5) return { label: "positive", score: 0.5 };
+    if (rating >= 2.5) return { label: "neutral",  score: 0.0 };
+    if (rating >= 1.5) return { label: "negative", score: -0.5 };
+    return                     { label: "negative", score: -1.0 };
+  },
 }));
 
 // ── D1 stub factory ───────────────────────────────────────────────────────────
@@ -139,6 +151,30 @@ const SAMPLE_BUCKET = new Map([
   }],
 ]);
 
+// Google Places fixtures
+const SAMPLE_PLACE_DETAILS = {
+  name:               "Bamboo Brace",
+  rating:             4.8,
+  user_ratings_total: 320,
+  reviews: [
+    { author_name: "Alice", rating: 5, text: "Amazing!", time: 1746489600 },
+    { author_name: "Bob",   rating: 3, text: "Average.", time: 1745884800 },
+  ],
+};
+
+const SAMPLE_GOOGLE_BUCKET = new Map([
+  ["2026-05-06", {
+    date:              "2026-05-06",
+    platform:          "google_reviews",
+    mention_count:     2,
+    positive_count:    1,
+    neutral_count:     1,
+    negative_count:    0,
+    avg_sentiment:     0.25,
+    top_mentions_json: "[]",
+  }],
+]);
+
 // ── Setup ─────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -146,17 +182,22 @@ beforeEach(() => {
   mockSearchRedditMentions.mockResolvedValue([SAMPLE_MENTION]);
   mockClassifySentimentBatch.mockResolvedValue(SAMPLE_SENTIMENT);
   mockAggregateAuthorityMentions.mockReturnValue(SAMPLE_BUCKET);
+  mockFetchPlaceDetails.mockResolvedValue(SAMPLE_PLACE_DETAILS);
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("runAuthoritySyncBatch", () => {
-  // 1. Quiet-skip when API key missing
-  it("1. quiet-skip when ANTHROPIC_API_KEY is unset", async () => {
-    const { env, dbCalls } = makeEnv({ ANTHROPIC_API_KEY: undefined });
+  // 1. Quiet-skip when both API keys missing
+  it("1. quiet-skip when both ANTHROPIC_API_KEY and GOOGLE_PLACES_API_KEY are unset", async () => {
+    const { env, dbCalls } = makeEnv({
+      ANTHROPIC_API_KEY:    undefined,
+      GOOGLE_PLACES_API_KEY: undefined,
+    });
     await runAuthoritySyncBatch(env as never);
     expect(dbCalls).toHaveLength(0);
     expect(mockSearchRedditMentions).not.toHaveBeenCalled();
+    expect(mockFetchPlaceDetails).not.toHaveBeenCalled();
   });
 
   // 2. No-op when no stale tenants
@@ -170,9 +211,9 @@ describe("runAuthoritySyncBatch", () => {
     expect(nonSelectCalls).toHaveLength(0);
   });
 
-  // 3. Happy path
+  // 3. Happy path (Reddit)
   it("3. happy path: stale tenant → Reddit fetch → sentiment classify → aggregate → upsert + stamp", async () => {
-    const staleRow = { slug: "acme-co", brand_keyword: "acme" };
+    const staleRow = { slug: "acme-co", brand_keyword: "acme", google_place_id: null };
     const { env, dbCalls } = makeEnv({
       _dbResponses: { authority_config: [staleRow] },
     });
@@ -210,8 +251,8 @@ describe("runAuthoritySyncBatch", () => {
 
   // 4. Per-tenant error isolation
   it("4. error isolation: tenant B succeeds even when tenant A throws", async () => {
-    const rowA = { slug: "biz-a", brand_keyword: "brand-a" };
-    const rowB = { slug: "biz-b", brand_keyword: "brand-b" };
+    const rowA = { slug: "biz-a", brand_keyword: "brand-a", google_place_id: null };
+    const rowB = { slug: "biz-b", brand_keyword: "brand-b", google_place_id: null };
 
     mockSearchRedditMentions
       .mockResolvedValueOnce([]) // A: empty mentions — success path (stamp immediately)
@@ -240,7 +281,7 @@ describe("runAuthoritySyncBatch", () => {
 
   // 5. Reddit 429 doesn't mark tenant as error (transient)
   it("5. Reddit 429 (RedditRateLimitError) does not write last_sync_error — logged only", async () => {
-    const staleRow = { slug: "rate-limited-biz", brand_keyword: "brand" };
+    const staleRow = { slug: "rate-limited-biz", brand_keyword: "brand", google_place_id: null };
     mockSearchRedditMentions.mockRejectedValueOnce(new RedditRateLimitError(60));
 
     const { env, dbCalls } = makeEnv({
@@ -274,12 +315,163 @@ describe("runAuthoritySyncBatch", () => {
     const selectCall = dbCalls.find((c) => c.sql.includes("authority_config"));
     expect(selectCall).toBeDefined();
     expect(selectCall!.sql).toContain("LIMIT 50");
-    expect(selectCall!.sql).toContain("reddit_enabled = 1");
 
     const cutoff = new Date(selectCall!.args[0] as string);
     const msBefore = before.getTime() - 23 * 60 * 60 * 1000 - 5000;
     const msAfter  = after.getTime()  - 23 * 60 * 60 * 1000 + 5000;
     expect(cutoff.getTime()).toBeGreaterThanOrEqual(msBefore);
     expect(cutoff.getTime()).toBeLessThanOrEqual(msAfter);
+  });
+
+  // 7. Google Places happy path
+  it("7. Google Places happy path: fetchPlaceDetails → sentiment → aggregate → upsert with rating + rating_count", async () => {
+    const staleRow = {
+      slug:            "bamboo-co",
+      brand_keyword:   null,        // no Reddit for this tenant
+      google_place_id: "ChIJbamboo",
+    };
+
+    // Override the aggregator to return a google_reviews bucket
+    mockAggregateAuthorityMentions.mockReturnValueOnce(new Map([
+      ["2026-05-06", {
+        date:              "2026-05-06",
+        platform:          "google_reviews",
+        mention_count:     2,
+        positive_count:    1,
+        neutral_count:     1,
+        negative_count:    0,
+        avg_sentiment:     0.25,
+        top_mentions_json: "[]",
+        rating:            undefined,
+        rating_count:      undefined,
+      }],
+    ]));
+
+    const { env, dbCalls } = makeEnv({
+      ANTHROPIC_API_KEY:    undefined, // no Reddit
+      GOOGLE_PLACES_API_KEY: "gp_key_test",
+      _dbResponses: { authority_config: [staleRow] },
+    });
+
+    await runAuthoritySyncBatch(env as never);
+
+    // fetchPlaceDetails called with correct args
+    expect(mockFetchPlaceDetails).toHaveBeenCalledOnce();
+    const placesArgs = mockFetchPlaceDetails.mock.calls[0][0] as { placeId: string; apiKey: string };
+    expect(placesArgs.placeId).toBe("ChIJbamboo");
+    expect(placesArgs.apiKey).toBe("gp_key_test");
+
+    // Aggregator called with "google_reviews" platform
+    expect(mockAggregateAuthorityMentions).toHaveBeenCalledOnce();
+    const [platform] = mockAggregateAuthorityMentions.mock.calls[0] as [string];
+    expect(platform).toBe("google_reviews");
+
+    // No Claude call — Google reviews use star rating, not sentiment classifier
+    expect(mockClassifySentimentBatch).not.toHaveBeenCalled();
+
+    // UPSERT into off_site_authority_daily with rating + rating_count populated
+    const upserts = dbCalls.filter((c) => c.sql.includes("off_site_authority_daily"));
+    expect(upserts).toHaveLength(1);
+    const uArgs = upserts[0]!.args;
+    expect(uArgs[0]).toBe("bamboo-co");
+    expect(uArgs[2]).toBe("google_reviews");
+    // args[9] = rating, args[10] = rating_count
+    expect(uArgs[9]).toBe(4.8);
+    expect(uArgs[10]).toBe(320);
+
+    // Stamp success
+    const stampCall = dbCalls.find(
+      (c) => c.sql.includes("last_synced_at") && c.sql.includes("last_sync_error = NULL")
+             && Array.isArray(c.args) && c.args.includes("bamboo-co"),
+    );
+    expect(stampCall).toBeDefined();
+  });
+
+  // 8. Tenant with both Reddit AND Google runs both branches
+  it("8. tenant with both Reddit and Google configured: both branches run, both upsert", async () => {
+    const staleRow = {
+      slug:            "dual-co",
+      brand_keyword:   "dualbrand",
+      google_place_id: "ChIJdual",
+    };
+
+    // Reddit bucket mock (first call)
+    const redditBucket = new Map([
+      ["2026-05-06", {
+        date: "2026-05-06", platform: "reddit",
+        mention_count: 1, positive_count: 1, neutral_count: 0, negative_count: 0,
+        avg_sentiment: 0.8, top_mentions_json: "[]",
+      }],
+    ]);
+    // Google bucket mock (second call)
+    const googleBucket = new Map([
+      ["2026-05-06", {
+        date: "2026-05-06", platform: "google_reviews",
+        mention_count: 2, positive_count: 2, neutral_count: 0, negative_count: 0,
+        avg_sentiment: 0.75, top_mentions_json: "[]",
+      }],
+    ]);
+
+    mockAggregateAuthorityMentions
+      .mockReturnValueOnce(redditBucket)
+      .mockReturnValueOnce(googleBucket);
+
+    const { env, dbCalls } = makeEnv({
+      GOOGLE_PLACES_API_KEY: "gp_key_test",
+      _dbResponses: { authority_config: [staleRow] },
+    });
+
+    await runAuthoritySyncBatch(env as never);
+
+    // Both fetches called
+    expect(mockSearchRedditMentions).toHaveBeenCalledOnce();
+    expect(mockFetchPlaceDetails).toHaveBeenCalledOnce();
+
+    // Two upserts — one per platform
+    const upserts = dbCalls.filter((c) => c.sql.includes("off_site_authority_daily"));
+    expect(upserts).toHaveLength(2);
+    const platforms = upserts.map((u) => u.args[2]);
+    expect(platforms).toContain("reddit");
+    expect(platforms).toContain("google_reviews");
+
+    // One stamp after both complete
+    const stamps = dbCalls.filter(
+      (c) => c.sql.includes("last_synced_at") && Array.isArray(c.args) && c.args.includes("dual-co"),
+    );
+    expect(stamps).toHaveLength(1);
+  });
+
+  // 9. Google Places API failure: error isolated, Reddit still runs
+  it("9. Google Places API failure: error stamped, Reddit branch still succeeds", async () => {
+    const staleRow = {
+      slug:            "partial-co",
+      brand_keyword:   "partialbrand",
+      google_place_id: "ChIJpartial",
+    };
+
+    mockFetchPlaceDetails.mockRejectedValueOnce(
+      new Error("googlePlaces: fetch failed: 403 REQUEST_DENIED"),
+    );
+
+    const { env, dbCalls } = makeEnv({
+      GOOGLE_PLACES_API_KEY: "bad_key",
+      _dbResponses: { authority_config: [staleRow] },
+    });
+
+    await runAuthoritySyncBatch(env as never);
+
+    // The Google failure propagates out of syncOneTenant, so the whole tenant
+    // is marked as failed (both branches run serially within the same try/catch).
+    // Reddit fetch still called before the Google failure.
+    expect(mockSearchRedditMentions).toHaveBeenCalledOnce();
+
+    // last_sync_error should be stamped (Google failure propagated)
+    const errUpdate = dbCalls.find(
+      (c) => c.sql.includes("last_sync_error") && !c.sql.includes("NULL")
+             && Array.isArray(c.args) && c.args.includes("partial-co"),
+    );
+    expect(errUpdate).toBeDefined();
+    const errMsg = errUpdate!.args[0] as string;
+    expect(errMsg).toContain("googlePlaces: fetch failed: 403");
   });
 });
