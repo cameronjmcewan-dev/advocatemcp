@@ -263,6 +263,40 @@
   .price ul { list-style: none; padding: 0; margin: 20px 0 24px; display: grid; gap: 10px; }
   .price ul li { font-size: 14px; color: var(--ink-2); padding-left: 22px; position: relative; }
   .price ul li::before { content: '✓'; color: var(--maroon); position: absolute; left: 0; top: 0; }
+  .price ul li.muted { color: var(--muted); }
+  .price ul li.muted::before { content: ''; }
+  .price-cta { margin-top: 24px; }
+
+  /* Billing toggle — Monthly / Yearly. Mirrors /Pricing.html visual contract.
+     Defaults to YEARLY on the homepage to nudge yearly conversion (better LTV
+     + already-discounted price feels like a deal). The user can flip to
+     monthly if they want; the price + sub-line swap with a 250ms fade. */
+  .toggle-row { display: flex; justify-content: center; margin: 28px 0 40px; }
+  .billing-toggle {
+    display: inline-flex; background: var(--paper-2); border: 1px solid var(--line);
+    border-radius: 999px; padding: 4px;
+  }
+  .billing-toggle button {
+    padding: 10px 20px; border-radius: 999px; font-size: 14px;
+    color: var(--muted); font-weight: 500; background: transparent;
+    border: none; cursor: pointer; font-family: inherit;
+    transition: background .2s ease, color .2s ease;
+  }
+  .billing-toggle button.active {
+    background: var(--paper); color: var(--ink); box-shadow: var(--shadow-sm);
+  }
+  .billing-toggle .save {
+    color: var(--sage); font-size: 11px; margin-left: 6px;
+    font-weight: 600; letter-spacing: 0.04em;
+  }
+  .billing-toggle button[data-cycle="yearly"].active .save { color: var(--maroon); }
+  .price-fade { animation: priceSwap .35s ease; }
+  @keyframes priceSwap {
+    0%   { opacity: .35; transform: translateY(2px); }
+    100% { opacity: 1;    transform: translateY(0); }
+  }
+  @media (prefers-reduced-motion: reduce) { .price-fade { animation: none; } }
+  .all-plans-cta { display: flex; justify-content: center; margin-top: 40px; }
 
   /* --- Final CTA ---
      Fixed oxblood card with white copy in both modes. Previously used
@@ -1064,55 +1098,145 @@
     </div>
   </section>
 
-  <!-- PRICING PREVIEW -->
+  <!-- PRICING PREVIEW
+       3-card layout: Base / Pro / Enterprise, Pro featured as "Most popular".
+       Defaults to YEARLY billing (20% off) — same conversion lever
+       /Pricing.html uses, brought to the homepage. Bullets reflect the May 7
+       2026 audit (Phases 1-6 of the Traffic Impact roadmap, all gated by
+       the worker's 402 plan_required response on /api/client/traffic-impact/*
+       endpoints). The "Custom click-through routing" line that used to live
+       on Pro is intentionally absent — no plan-gated implementation exists
+       for it; re-add when shipped. -->
   <section class="section" style="background:var(--paper-2);border-top:1px solid var(--line);border-bottom:1px solid var(--line);">
     <div class="container">
-      <div class="reveal" style="max-width:720px;margin-bottom:40px;text-align:center;margin-left:auto;margin-right:auto;">
+      <div class="reveal" style="max-width:720px;margin-bottom:24px;text-align:center;margin-left:auto;margin-right:auto;">
         <span class="eyebrow no-rule">Simple pricing</span>
         <h2 class="mt-4">Pick the plan that matches your business.</h2>
       </div>
-      <!-- Homepage shows Base + Pro side-by-side, Pro featured as "Most popular".
-           Enterprise lives on /Pricing.html. Pro is the badge target because
-           it's the tier that funds Competitor Radar (the only ground-truth
-           signal we have) and lands the highest-LTV customers; the homepage
-           visual hierarchy reflects what's most valuable to the customer
-           (deeper attribution + revenue + competitor data) and to us. -->
-      <div class="price-row" style="grid-template-columns: minmax(0,1fr) minmax(0,1fr); max-width: 880px; margin-left:auto; margin-right:auto;">
-        <div class="price reveal">
-          <h3>Base</h3>
-          <p class="text-muted text-sm">Everything you need to be discoverable by AI assistants and bookable by AI agents.</p>
-          <div class="cost">$149<small> / month</small></div>
-          <ul>
-            <li>Per-bot HTML rendering for Perplexity, ChatGPT, Claude, Google AI Overview</li>
-            <li>Live MCP endpoint (agents can call <code>get_availability</code>, <code>reserve_slot</code>, <code>get_quote</code>)</li>
-            <li>Plain-English dashboard with real bot traffic + click-throughs</li>
-            <li>Tracked-redirect attribution from every AI mention</li>
-            <li>Email support</li>
-          </ul>
-          <a href="/onboarding.html?plan=base" class="btn btn-ghost" style="width:100%;">Start free trial</a>
+
+      <!-- Billing-cycle toggle. Defaults to YEARLY per the May 6 design spec
+           because yearly is the higher-LTV path AND the discounted prices
+           ($119 / $279) feel like a better deal at first glance than the
+           full $149 / $349 monthly. -->
+      <div class="toggle-row reveal">
+        <div class="billing-toggle" id="home-billing" role="tablist" aria-label="Billing cycle">
+          <button type="button" data-cycle="monthly" role="tab" aria-selected="false">Pay monthly</button>
+          <button type="button" data-cycle="yearly" class="active" role="tab" aria-selected="true">Pay yearly <span class="save">save 20%</span></button>
         </div>
-        <div class="price featured reveal">
+      </div>
+
+      <div class="price-row reveal" style="max-width: 1100px; margin-left:auto; margin-right:auto;">
+        <!-- Base -->
+        <div class="price">
+          <h3>Base</h3>
+          <p class="text-muted text-sm">For single-location shops getting started with AI.</p>
+          <div class="cost"><span class="price-amount" data-monthly="149" data-yearly="119">$119</span><small> / month</small></div>
+          <p class="price-note text-muted text-sm" style="margin:0 0 8px;">Billed yearly · cancel anytime</p>
+          <ul>
+            <li>Accurate answers across every major AI tool</li>
+            <li>Plain-English dashboard with built-in tutorial</li>
+            <li>Traffic impact dashboard — AI vs human attribution</li>
+            <li>Engagement, acquisition, and geography breakdowns</li>
+            <li>Click-back links &amp; click tracking</li>
+            <li>Weekly email digest</li>
+            <li>Email support (reply within 1 business day)</li>
+          </ul>
+          <div class="price-cta">
+            <a href="/onboarding.html?plan=base" class="btn btn-ghost" style="width:100%;">Start free trial</a>
+          </div>
+        </div>
+
+        <!-- Pro (featured) -->
+        <div class="price featured">
           <h3>Pro</h3>
-          <p class="text-muted text-sm">For busy shops ready to out-rank the competition. Everything in Base, plus the deeper attribution and competitor data.</p>
-          <div class="cost">$349<small> / month</small></div>
+          <p class="text-muted text-sm">For busy shops ready to out-rank the competition.</p>
+          <div class="cost"><span class="price-amount" data-monthly="349" data-yearly="279">$279</span><small> / month</small></div>
+          <p class="price-note text-muted text-sm" style="margin:0 0 8px;">Billed yearly · cancel anytime</p>
           <ul>
             <li>Everything in Base</li>
-            <li><strong>Competitor Radar</strong> — weekly Perplexity polling for real citation tracking</li>
-            <li><strong>Revenue attribution</strong> — see dollars from AI in your dashboard</li>
+            <li><strong>Competitor Radar</strong> — weekly head-to-head tracking</li>
+            <li><strong>Revenue from AI</strong> — GA4 conversion tracking</li>
+            <li><strong>Verified revenue</strong> — first-touch Stripe / Shopify webhook</li>
+            <li><strong>Google Search Console</strong> — AI Overview presence + cite rate</li>
+            <li><strong>CRM LTV</strong> — HubSpot &amp; Salesforce, by acquisition source</li>
+            <li><strong>Authority Kit</strong> — Reddit + Google reviews tracking</li>
             <li>Up to 3 locations</li>
             <li>Priority support (1-hour reply) + 30-min onboarding call</li>
           </ul>
-          <a href="/onboarding.html?plan=pro" class="btn btn-primary" style="width:100%;">Start free trial</a>
+          <div class="price-cta">
+            <a href="/onboarding.html?plan=pro" class="btn btn-primary" style="width:100%;">Start free trial</a>
+          </div>
+        </div>
+
+        <!-- Enterprise -->
+        <div class="price">
+          <h3>Enterprise</h3>
+          <p class="text-muted text-sm">For franchises, chains, and agencies.</p>
+          <div class="cost" style="font-style:italic;font-size:38px;">Let's talk</div>
+          <p class="price-note text-muted text-sm" style="margin:0 0 8px;">Custom pricing based on locations</p>
+          <ul>
+            <li>Everything in Pro</li>
+            <li>Unlimited locations</li>
+            <li>Team accounts &amp; role-based access</li>
+            <li>Dedicated success manager</li>
+            <li>White-glove setup for every location</li>
+            <li>Custom integrations on request</li>
+          </ul>
+          <div class="price-cta">
+            <a href="/Contact.html" class="btn btn-ghost" style="width:100%;">Book a call</a>
+          </div>
         </div>
       </div>
-      <!-- Enterprise + full comparison live on the dedicated pricing page so
-           the homepage stays focused on the Base-vs-Pro decision. -->
-      <p style="text-align:center;margin-top:24px;font-size:14px;color:var(--muted);">
-        Need multiple locations, dedicated onboarding, or agency volume pricing?
-        <a href="/Pricing.html" style="color:var(--maroon);">See Enterprise &amp; all plans →</a>
-      </p>
+
+      <!-- Below-cards CTA: links to the dedicated pricing page for the
+           full comparison table + FAQ + money-back guarantee detail. -->
+      <div class="all-plans-cta reveal">
+        <a href="/Pricing.html" class="btn btn-ghost btn-lg">Learn more about all plans →</a>
+      </div>
     </div>
   </section>
+
+  <script>
+    /* Homepage billing-cycle toggle.
+       Defaults to YEARLY (already marked .active in markup).
+       - Yearly: Base $119, Pro $279, "Billed yearly · cancel anytime"
+       - Monthly: Base $149, Pro $349, "Billed monthly · cancel anytime"
+       Enterprise card has no data-monthly/data-yearly so it's skipped. */
+    (function wireHomeBilling() {
+      var billing = document.getElementById('home-billing');
+      if (!billing) return;
+      var btns   = billing.querySelectorAll('button');
+      var prices = document.querySelectorAll('.price-amount[data-monthly]');
+      var notes  = document.querySelectorAll('.price-note');
+
+      function setCycle(cycle) {
+        btns.forEach(function (b) {
+          var on = b.dataset.cycle === cycle;
+          b.classList.toggle('active', on);
+          b.setAttribute('aria-selected', String(on));
+        });
+        prices.forEach(function (el) {
+          var v = cycle === 'yearly' ? el.dataset.yearly : el.dataset.monthly;
+          el.textContent = '$' + v;
+          el.classList.remove('price-fade');
+          void el.offsetWidth; /* reflow so animation restarts */
+          el.classList.add('price-fade');
+        });
+        notes.forEach(function (n) {
+          /* Skip the Enterprise note (it talks about per-location custom pricing,
+             not monthly/yearly billing). Identify by absence of 'Billed' word. */
+          if (!/Billed/.test(n.textContent)) return;
+          n.textContent = cycle === 'yearly'
+            ? 'Billed yearly · cancel anytime'
+            : 'Billed monthly · cancel anytime';
+        });
+      }
+
+      btns.forEach(function (b) {
+        b.addEventListener('click', function () { setCycle(b.dataset.cycle); });
+      });
+    })();
+  </script>
 
   <!-- FINAL CTA -->
   <section class="container section">
