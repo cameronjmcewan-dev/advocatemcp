@@ -76,8 +76,24 @@ adminRouter.use("/admin", requireAdmin, purgeTenantRouter);
 // Worker → Railway revenue_events mirror (Apr 27 2026). Uses
 // requireApiKey (X-API-Key / Bearer SERVER_API_KEY) instead of
 // requireAdmin so the worker's existing env.API_KEY authenticates it.
-// Mounted unprefixed (the route declares /admin/revenue-events/mirror
-// inline) and routed via the requireApiKey middleware that /register
-// already uses.
+//
+// CRITICAL: this used to be `adminRouter.use("/", requireApiKey,
+// adminRevenueEventsRouter)` — mounting at `/` meant requireApiKey
+// fired for EVERY request that reached adminRouter, including paths
+// that don't belong to this router at all. Because adminRouter is
+// registered before demoRouter in testApp.ts, every request to
+// public unauth routes that didn't match a router earlier in the
+// chain (e.g. /demo/agent/run on the homepage live demo widget,
+// /demo/agent/availability) hit this middleware first and got a
+// 401 "Invalid or missing api_key" before demoRouter could handle
+// them. Discovered May 7 2026.
+//
+// Fix: split the auth middleware from the router mount. The
+// middleware is now scoped to /admin/revenue-events/* (only
+// requests targeting THIS router's actual path get auth-gated),
+// and the router itself stays mounted at "/" so its declared
+// absolute path /admin/revenue-events/mirror still resolves.
+// Public unrelated routes pass through cleanly.
 import { requireApiKey } from "../../middleware/auth.js";
-adminRouter.use("/", requireApiKey, adminRevenueEventsRouter);
+adminRouter.use("/admin/revenue-events", requireApiKey);
+adminRouter.use("/", adminRevenueEventsRouter);

@@ -1071,12 +1071,14 @@
         <span class="eyebrow no-rule">Simple pricing</span>
         <h2 class="mt-4">Pick the plan that matches your business.</h2>
       </div>
-      <!-- Homepage shows Base front-and-center. Pro and Enterprise live on /Pricing.html
-           so the home page is one decision: try the Base tier or learn more. Pro funds
-           the Competitor Radar polls (the only ground-truth signal we have) so it stays
-           in the product, just not on the homepage hero. -->
+      <!-- Homepage shows Base + Pro side-by-side, Pro featured as "Most popular".
+           Enterprise lives on /Pricing.html. Pro is the badge target because
+           it's the tier that funds Competitor Radar (the only ground-truth
+           signal we have) and lands the highest-LTV customers; the homepage
+           visual hierarchy reflects what's most valuable to the customer
+           (deeper attribution + revenue + competitor data) and to us. -->
       <div class="price-row" style="grid-template-columns: minmax(0,1fr) minmax(0,1fr); max-width: 880px; margin-left:auto; margin-right:auto;">
-        <div class="price featured reveal">
+        <div class="price reveal">
           <h3>Base</h3>
           <p class="text-muted text-sm">Everything you need to be discoverable by AI assistants and bookable by AI agents.</p>
           <div class="cost">$149<small> / month</small></div>
@@ -1087,20 +1089,28 @@
             <li>Tracked-redirect attribution from every AI mention</li>
             <li>Email support</li>
           </ul>
-          <a href="/onboarding.html?plan=base" class="btn btn-primary" style="width:100%;">Start free trial</a>
+          <a href="/onboarding.html?plan=base" class="btn btn-ghost" style="width:100%;">Start free trial</a>
         </div>
-        <div class="price reveal">
-          <h3>Need more?</h3>
-          <p class="text-muted text-sm">Multiple locations, weekly Competitor Radar polls, dedicated onboarding, custom integrations, all on the full pricing page.</p>
-          <div class="cost serif-italic" style="font-size:32px;color:var(--ink-2);">Pro &amp; Enterprise</div>
+        <div class="price featured reveal">
+          <h3>Pro</h3>
+          <p class="text-muted text-sm">For busy shops ready to out-rank the competition. Everything in Base, plus the deeper attribution and competitor data.</p>
+          <div class="cost">$349<small> / month</small></div>
           <ul>
-            <li>Pro tier with weekly Perplexity polling for real citation tracking</li>
-            <li>Enterprise white-glove setup for franchises and multi-location brands</li>
-            <li>Volume pricing for agencies</li>
+            <li>Everything in Base</li>
+            <li><strong>Competitor Radar</strong> — weekly Perplexity polling for real citation tracking</li>
+            <li><strong>Revenue attribution</strong> — see dollars from AI in your dashboard</li>
+            <li>Up to 3 locations</li>
+            <li>Priority support (1-hour reply) + 30-min onboarding call</li>
           </ul>
-          <a href="/Pricing.html" class="btn btn-ghost" style="width:100%;">See all plans →</a>
+          <a href="/onboarding.html?plan=pro" class="btn btn-primary" style="width:100%;">Start free trial</a>
         </div>
       </div>
+      <!-- Enterprise + full comparison live on the dedicated pricing page so
+           the homepage stays focused on the Base-vs-Pro decision. -->
+      <p style="text-align:center;margin-top:24px;font-size:14px;color:var(--muted);">
+        Need multiple locations, dedicated onboarding, or agency volume pricing?
+        <a href="/Pricing.html" style="color:var(--maroon);">See Enterprise &amp; all plans →</a>
+      </p>
     </div>
   </section>
 
