@@ -222,4 +222,25 @@ export interface Env {
    * Set via: `cd worker && npx wrangler secret put GSC_OAUTH_REDIRECT_URI`
    */
   GSC_OAUTH_REDIRECT_URI?: string;
+
+  // ── HubSpot CRM OAuth (Traffic Impact Phase 5 PR 1) ──────────────────
+  /**
+   * HubSpot OAuth2 app client ID. Created in HubSpot developer portal
+   * under Apps > OAuth. Set via:
+   *   cd worker && npx wrangler secret put HUBSPOT_OAUTH_CLIENT_ID
+   */
+  HUBSPOT_OAUTH_CLIENT_ID?: string;
+
+  /**
+   * HubSpot OAuth2 app client secret matching HUBSPOT_OAUTH_CLIENT_ID.
+   * Set via: `cd worker && npx wrangler secret put HUBSPOT_OAUTH_CLIENT_SECRET`
+   */
+  HUBSPOT_OAUTH_CLIENT_SECRET?: string;
+
+  /**
+   * The redirect URI registered in the HubSpot app for the OAuth flow.
+   * Typically: https://customers.advocatemcp.com/oauth/hubspot/callback
+   * Set via: `cd worker && npx wrangler secret put HUBSPOT_OAUTH_REDIRECT_URI`
+   */
+  HUBSPOT_OAUTH_REDIRECT_URI?: string;
 }
