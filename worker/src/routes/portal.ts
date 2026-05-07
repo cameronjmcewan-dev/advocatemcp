@@ -228,6 +228,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/traffic-impact/verified-revenue"        && method === "GET")     return apiTrafficImpactVerifiedRevenue(request, env);
   if (pathname === "/api/client/traffic-impact/ltv"                     && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/traffic-impact/ltv"                     && method === "GET")     return apiTrafficImpactLtv(request, env);
+  if (pathname === "/api/client/traffic-impact/authority"               && method === "GET")     return apiTrafficImpactAuthority(request, env);
   if (pathname === "/oauth/hubspot/start"         && method === "GET")  return handleHubspotStartProtected(request, env);
   if (pathname === "/oauth/hubspot/callback"      && method === "GET")  return handleHubspotCallback(request, env);
   if (pathname === "/oauth/salesforce/start"      && method === "GET")  return handleSalesforceStartProtected(request, env);
@@ -425,6 +426,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/authority/status"     && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/authority/configure"  && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/authority/disconnect" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/traffic-impact/authority" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/domain-info"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/onboarding"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/onboarding/step" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
@@ -5777,6 +5779,123 @@ async function apiAuthorityConfigure(request: Request, env: Env): Promise<Respon
 
   return withCors(
     jsonOk({ ok: true, slug: biz.slug, brand_keyword: brandKeyword, google_place_id: googlePlaceId }),
+    request,
+    { credentials: true },
+  );
+}
+
+// ── GET /api/client/traffic-impact/authority ──────────────────────────────────
+// Pro / Enterprise only — 402 for base-tier tenants.
+// Returns aggregated off-site authority stats per platform plus a daily
+// time-series and top mentions, so the dashboard can render the Authority Kit
+// section without a second round-trip to /authority/status.
+
+async function apiTrafficImpactAuthority(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const reqUrl    = new URL(request.url);
+  const slugParam = reqUrl.searchParams.get("slug");
+  const biz = (slugParam ? businesses.find(b => b.slug === slugParam) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business"), request, { credentials: true });
+
+  // Pro plan gate — mirror apiTrafficImpactGSC.
+  const planRow = await env.DB
+    .prepare("SELECT plan FROM businesses WHERE slug = ?")
+    .bind(biz.slug)
+    .first<{ plan: string | null }>();
+  const plan = planRow?.plan ?? "base";
+  if (plan !== "pro" && plan !== "enterprise") {
+    return withCors(jsonErr(402, "plan_required"), request, { credentials: true });
+  }
+
+  // Default range: last 30 days.
+  const range = reqUrl.searchParams.get("range");
+  let cutoff: string;
+  if (range && /^\d+d$/.test(range)) {
+    const days = parseInt(range, 10);
+    cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  } else {
+    cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  }
+
+  // Per-platform roll-up.
+  const result = await env.DB
+    .prepare(
+      `SELECT platform,
+              SUM(mention_count)   AS mentions,
+              SUM(positive_count)  AS positive,
+              SUM(neutral_count)   AS neutral,
+              SUM(negative_count)  AS negative,
+              AVG(avg_sentiment)   AS avg_sentiment,
+              MAX(rating)          AS rating,
+              MAX(rating_count)    AS rating_count,
+              MAX(date)            AS last_date
+         FROM off_site_authority_daily
+        WHERE slug = ? AND date >= ?
+        GROUP BY platform`,
+    )
+    .bind(biz.slug, cutoff)
+    .all<{
+      platform: string;
+      mentions: number;
+      positive: number;
+      neutral: number;
+      negative: number;
+      avg_sentiment: number | null;
+      rating: number | null;
+      rating_count: number | null;
+      last_date: string;
+    }>();
+
+  // Daily series for the line chart (mention counts per day per platform).
+  const dailyResult = await env.DB
+    .prepare(
+      `SELECT date, platform, mention_count, avg_sentiment
+         FROM off_site_authority_daily
+        WHERE slug = ? AND date >= ?
+        ORDER BY date ASC`,
+    )
+    .bind(biz.slug, cutoff)
+    .all<{ date: string; platform: string; mention_count: number; avg_sentiment: number | null }>();
+
+  // Recent top-3 mentions across the latest day with data.
+  const topResult = await env.DB
+    .prepare(
+      `SELECT platform, top_mentions_json
+         FROM off_site_authority_daily
+        WHERE slug = ? AND top_mentions_json IS NOT NULL
+        ORDER BY date DESC
+        LIMIT 5`,
+    )
+    .bind(biz.slug)
+    .all<{ platform: string; top_mentions_json: string }>();
+
+  // Pull config so the frontend knows what's been wired.
+  const config = await env.DB
+    .prepare("SELECT brand_keyword, google_place_id, last_synced_at, last_sync_error FROM authority_config WHERE slug = ? LIMIT 1")
+    .bind(biz.slug)
+    .first<{ brand_keyword: string | null; google_place_id: string | null; last_synced_at: string | null; last_sync_error: string | null }>();
+
+  return withCors(
+    jsonOk({
+      slug:            biz.slug,
+      configured:      !!(config && (config.brand_keyword || config.google_place_id)),
+      brand_keyword:   config?.brand_keyword ?? null,
+      google_place_id: config?.google_place_id ?? null,
+      last_synced_at:  config?.last_synced_at ?? null,
+      last_sync_error: config?.last_sync_error ?? null,
+      platforms:       result.results ?? [],
+      daily:           dailyResult.results ?? [],
+      top_mentions:    (topResult.results ?? []).map(r => ({
+        platform: r.platform,
+        mentions: (() => { try { return JSON.parse(r.top_mentions_json) as unknown[]; } catch { return []; } })(),
+      })),
+    }),
     request,
     { credentials: true },
   );
