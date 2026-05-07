@@ -29,6 +29,7 @@
  */
 
 import type { Env } from "../types";
+import { lookupFirstTouchAttribution } from "../lib/revenueAttribution";
 
 // ── Inline HMAC-SHA256 + constant-time compare ────────────────────────────────
 // We don't reuse worker/src/lib/tracked-url.ts because that one signs
@@ -214,16 +215,38 @@ export async function handleRevenueEvent(
   const body = validation.data;
   const currency = body.currency ?? row.revenue_currency ?? "USD";
 
+  // First-touch attribution lookup (Phase 4 PR 1). 24h time-window match
+  // against click_events for the same business_slug. Returns 'unknown'
+  // (never 'human') if no AI click is found — we don't fabricate.
+  // Best-effort: if D1 throws (e.g. click_events table not yet mirrored),
+  // attribution degrades to 'unknown' and the event is still recorded.
+  const attribution = await lookupFirstTouchAttribution(env.DB, slug, body.occurred_at);
+
   // INSERT OR IGNORE — UNIQUE(business_slug, external_ref) handles dedup
   // when the customer's webhook retries. We log inserted=true|false so
   // operators can tell from wrangler tail whether a delivery was new.
+  //
+  // Bind order (13 args):
+  //   1  id
+  //   2  business_slug
+  //   3  reservation_id
+  //   4  amount_cents
+  //   5  currency
+  //   6  occurred_at
+  //   7  external_ref           (source is literal 'webhook')
+  //   8  referrer_classification
+  //   9  first_touch_source
+  //   10 first_touch_medium
+  //   11 first_touch_clicked_at
   const id = eventId();
   const result = await env.DB
     .prepare(
       `INSERT OR IGNORE INTO revenue_events
          (id, business_slug, reservation_id, amount_cents, currency,
-          occurred_at, source, external_ref)
-       VALUES (?, ?, ?, ?, ?, ?, 'webhook', ?)`,
+          occurred_at, source, external_ref,
+          referrer_classification, first_touch_source, first_touch_medium,
+          first_touch_clicked_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'webhook', ?, ?, ?, ?, ?)`,
     )
     .bind(
       id,
@@ -233,6 +256,10 @@ export async function handleRevenueEvent(
       currency,
       body.occurred_at,
       body.external_ref,
+      attribution.classification,
+      attribution.first_touch_source ?? null,
+      attribution.first_touch_medium ?? null,
+      attribution.first_touch_clicked_at ?? null,
     )
     .run();
 

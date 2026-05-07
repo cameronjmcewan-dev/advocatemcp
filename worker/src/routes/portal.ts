@@ -215,10 +215,12 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/gsc/sites"       && method === "GET")  return apiGSCSites(request, env);
   if (pathname === "/api/client/gsc/select-site" && method === "POST") return apiGSCSelectSite(request, env);
   if (pathname === "/api/client/gsc/resync"      && method === "POST") return apiGSCResync(request, env);
-  if (pathname === "/api/client/traffic-impact"              && method === "GET")  return apiTrafficImpact(request, env);
-  if (pathname === "/api/client/traffic-impact/geography"   && method === "GET")  return apiTrafficImpactGeography(request, env);
-  if (pathname === "/api/client/traffic-impact/conversions" && method === "GET")  return apiTrafficImpactConversions(request, env);
-  if (pathname === "/api/client/traffic-impact/gsc"         && method === "GET")  return apiTrafficImpactGSC(request, env);
+  if (pathname === "/api/client/traffic-impact"                          && method === "GET")     return apiTrafficImpact(request, env);
+  if (pathname === "/api/client/traffic-impact/geography"               && method === "GET")     return apiTrafficImpactGeography(request, env);
+  if (pathname === "/api/client/traffic-impact/conversions"             && method === "GET")     return apiTrafficImpactConversions(request, env);
+  if (pathname === "/api/client/traffic-impact/gsc"                     && method === "GET")     return apiTrafficImpactGSC(request, env);
+  if (pathname === "/api/client/traffic-impact/verified-revenue"        && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/traffic-impact/verified-revenue"        && method === "GET")     return apiTrafficImpactVerifiedRevenue(request, env);
   if (pathname === "/api/client/me"       && method === "GET")  return apiMe(request, env);
   if (pathname === "/api/client/me"       && method === "PATCH") return apiPatchMe(request, env);
   if (pathname === "/api/client/metrics"  && method === "GET")  return apiMetrics(request, env);
@@ -4918,6 +4920,100 @@ async function apiTrafficImpactGSC(request: Request, env: Env): Promise<Response
       cite_rate:               citeRate,
       daily,
       top_ai_overview_queries: topAiResult.results ?? [],
+    }),
+    request,
+    { credentials: true },
+  );
+}
+
+// ── GET /api/client/traffic-impact/verified-revenue ───────────────────────
+// Pro / Enterprise only — 402 for base-tier tenants.
+// Returns verified-revenue rollup with AI vs unknown attribution split.
+// Phase 4 PR 1 — first-touch time-window attribution via click_events.
+
+async function apiTrafficImpactVerifiedRevenue(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const reqUrl    = new URL(request.url);
+  const slugParam = reqUrl.searchParams.get("slug");
+  const biz       = (slugParam ? businesses.find(b => b.slug === slugParam) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business"), request, { credentials: true });
+
+  // Pro plan gate — mirror apiTrafficImpactGSC.
+  const planRow = await env.DB
+    .prepare("SELECT plan FROM businesses WHERE slug = ?")
+    .bind(biz.slug)
+    .first<{ plan: string | null }>();
+  const plan = planRow?.plan ?? "base";
+  if (plan !== "pro" && plan !== "enterprise") {
+    return withCors(jsonErr(402, "plan_required"), request, { credentials: true });
+  }
+
+  // Date filter same shape as apiTrafficImpact. revenue_events uses
+  // occurred_at (ISO-8601 TEXT), not a date column, so we filter against it.
+  const range    = reqUrl.searchParams.get("range");
+  const startQs  = reqUrl.searchParams.get("start_date");
+  const endQs    = reqUrl.searchParams.get("end_date");
+  let dateFilterSql  = "";
+  let dateFilterArgs: string[] = [];
+  if (startQs && endQs) {
+    dateFilterSql  = " AND occurred_at >= ? AND occurred_at <= ?";
+    dateFilterArgs = [startQs, endQs];
+  } else if (range && /^\d+d$/.test(range)) {
+    const days   = parseInt(range, 10);
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    dateFilterSql  = " AND occurred_at >= ?";
+    dateFilterArgs = [cutoff];
+  }
+
+  // Roll-up: total verified revenue, AI vs unknown split, event counts.
+  const summary = await env.DB
+    .prepare(
+      `SELECT
+         SUM(CASE WHEN referrer_classification = 'ai' THEN amount_cents ELSE 0 END) AS ai_cents,
+         SUM(CASE WHEN referrer_classification IS NULL OR referrer_classification = 'unknown' THEN amount_cents ELSE 0 END) AS unknown_cents,
+         COUNT(*) AS total_events,
+         SUM(CASE WHEN referrer_classification = 'ai' THEN 1 ELSE 0 END) AS ai_events
+       FROM revenue_events
+      WHERE business_slug = ?${dateFilterSql}`,
+    )
+    .bind(biz.slug, ...dateFilterArgs)
+    .first<{ ai_cents: number; unknown_cents: number; total_events: number; ai_events: number }>();
+
+  // Recent events (last 10) for the table.
+  const recent = await env.DB
+    .prepare(
+      `SELECT amount_cents, currency, occurred_at, referrer_classification, first_touch_source
+         FROM revenue_events
+        WHERE business_slug = ?${dateFilterSql}
+        ORDER BY occurred_at DESC
+        LIMIT 10`,
+    )
+    .bind(biz.slug, ...dateFilterArgs)
+    .all<{ amount_cents: number; currency: string; occurred_at: string; referrer_classification: string | null; first_touch_source: string | null }>();
+
+  // Webhook configuration status — presence of revenue_webhook_secret.
+  // Never expose the secret itself.
+  const config = await env.DB
+    .prepare("SELECT revenue_webhook_secret IS NOT NULL AS has_secret, revenue_currency FROM businesses WHERE slug = ?")
+    .bind(biz.slug)
+    .first<{ has_secret: number; revenue_currency: string | null }>();
+
+  return withCors(
+    jsonOk({
+      slug:               biz.slug,
+      currency:           config?.revenue_currency ?? "USD",
+      webhook_configured: !!(config?.has_secret),
+      ai_cents:           summary?.ai_cents         ?? 0,
+      unknown_cents:      summary?.unknown_cents     ?? 0,
+      total_events:       summary?.total_events      ?? 0,
+      ai_events:          summary?.ai_events         ?? 0,
+      recent_events:      recent.results             ?? [],
     }),
     request,
     { credentials: true },
