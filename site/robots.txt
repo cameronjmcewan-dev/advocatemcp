@@ -17,6 +17,7 @@ Disallow: /Settings.html
 Disallow: /BusinessProfile.html
 Disallow: /BotTraffic.html
 Disallow: /ClickThroughs.html
+Disallow: /TrafficImpact.html
 Disallow: /Mentions.html
 Disallow: /CompetitorRadar.html
 Disallow: /ActivityFeed.html

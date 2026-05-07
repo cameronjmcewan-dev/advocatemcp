@@ -2,46 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#fbf9f5" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#141210" media="(prefers-color-scheme: dark)">
-<meta name="robots" content="noindex, nofollow">
-<title>Click-throughs, Advocate</title>
-<link rel="icon" type="image/png" sizes="32x32"  href="/favicon-32.png">
-<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
-<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preconnect" href="https://api.fontshare.com">
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
-<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/styles.css">
-<link rel="stylesheet" href="/assets/dashboard.css">
-<style>
-  #boot-splash { position: fixed; inset: 0; display: grid; place-items: center; background: #fbf9f5; color: #766f63; font-family: "General Sans", system-ui, -apple-system, sans-serif; font-size: 14px; z-index: 1; } @media (prefers-color-scheme: dark) { #boot-splash { background: #141210; color: #8a7c78; } }
-  .sb-nav a .badge { color: #fff; }
-</style>
+<title>Traffic impact, Advocate</title>
+<meta name="robots" content="noindex">
+<script>
+(function () {
+  var u = new URL(window.location.href);
+  u.pathname = '/TrafficImpact.html';
+  window.location.replace(u.toString());
+})();
+</script>
+<meta http-equiv="refresh" content="0; url=/TrafficImpact.html">
 </head>
 <body>
-<div id="boot-splash" aria-live="polite">Loading&hellip;</div>
-<script src="/assets/shared.js"></script>
-<script src="/assets/dashboard-chrome.js"></script>
-<script src="/js/dashboard-auth.js"></script>
-<script src="/js/v2/shell.js"></script>
-<script src="/js/v2/clicks.js"></script>
-<!-- ECharts for the family-grouped source donut. Deferred + polled. -->
-<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js" defer></script>
-<script>
-window.AMCP_SHELL.boot({
-  activeId: 'clicks',
-  crumb:    'Dashboard · Click-throughs',
-  title:    'Click-throughs',
-  demo:       window.AMCP_CLICKS.demo,
-  fetchReal:  window.AMCP_CLICKS.fetch,
-  render:     window.AMCP_CLICKS.render,
-  afterMount: window.AMCP_CLICKS.afterMount,
-});
-</script>
+<p>Redirecting to <a href="/TrafficImpact.html">Traffic impact</a>&hellip;</p>
 </body>
 </html>

@@ -316,7 +316,7 @@
         <div class="card-dash">
           <div class="card-head">
             <div><h3>All recent mentions</h3><div class="sub">Last 20, oldest → newest</div></div>
-            <a href="/ClickThroughs.html" class="btn btn-ghost btn-sm">See clicks →</a>
+            <a href="/TrafficImpact.html" class="btn btn-ghost btn-sm">See traffic impact →</a>
           </div>
           <table class="tbl">
             <thead><tr><th>When</th><th>AI tool</th><th>They were asked</th><th>What happened · intent</th></tr></thead>

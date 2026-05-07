@@ -38,7 +38,7 @@
   const ROUTES = [
     { path: /^\/app(\.html)?\/?$/,                script: '/js/v2/overview.js',     module: 'AMCP_OVERVIEW',       activeId: 'overview',       crumb: 'Dashboard · Overview',         title: null /* dynamic via function */, titleFn: (d) => `Welcome back${window.AMCP_DATA && window.AMCP_DATA.full_name ? ', ' + window.AMCP_DATA.full_name.split(' ')[0] : ''}.` },
     { path: /^\/Mentions(\.html)?\/?$/,            script: '/js/v2/mentions.js',     module: 'AMCP_MENTIONS',       activeId: 'mentions',       crumb: 'Dashboard · Mentions',         title: 'Mentions' },
-    { path: /^\/ClickThroughs(\.html)?\/?$/,       script: '/js/v2/clicks.js',       module: 'AMCP_CLICKS',         activeId: 'clicks',         crumb: 'Dashboard · Click-throughs',   title: 'Click-throughs' },
+    { path: /^\/TrafficImpact(\.html)?\/?$/,       script: '/js/v2/traffic-impact.js', module: 'AMCP_TRAFFIC_IMPACT', activeId: 'traffic-impact', crumb: 'Dashboard · Traffic impact',   title: 'Traffic impact' },
     { path: /^\/CompetitorRadar(\.html)?\/?$/,     script: '/js/v2/radar.js',        module: 'AMCP_RADAR',          activeId: 'radar',          crumb: 'Dashboard · Competitor Radar', title: 'Competitor Radar' },
     { path: /^\/A2APipeline(\.html)?\/?$/,         script: '/js/v2/a2a-pipeline.js', module: 'AMCP_A2A',            activeId: 'a2a',            crumb: 'Dashboard · AI bookings',     title: 'AI-attributed bookings' },
     { path: /^\/ActivityFeed(\.html)?\/?$/,        script: '/js/v2/activity.js',     module: 'AMCP_ACTIVITY',       activeId: 'activity',       crumb: 'Dashboard · Activity',         title: 'Activity feed' },
@@ -143,6 +143,16 @@
     // Preserve query string + hash so ?as=<slug>&range=<w> survive.
     if (/^\/BotTraffic(\.html)?\/?$/.test(u.pathname)) {
       u.pathname = '/Mentions.html';
+      if (opts.push !== false) {
+        history.replaceState(null, '', u.pathname + u.search + u.hash);
+      }
+    }
+
+    // Legacy redirect: /ClickThroughs.html was renamed to /TrafficImpact.html.
+    // The page now ingests GA4 traffic instead of just our tagged-URL clicks
+    // (which become a secondary section). Preserve query string + hash.
+    if (/^\/ClickThroughs(\.html)?\/?$/.test(u.pathname)) {
+      u.pathname = '/TrafficImpact.html';
       if (opts.push !== false) {
         history.replaceState(null, '', u.pathname + u.search + u.hash);
       }
