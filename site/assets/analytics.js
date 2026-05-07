@@ -14,7 +14,7 @@
  * so dogfooding visits + the operator's own browser don't pollute data.
  */
 (function () {
-  var MEASUREMENT_ID = 'G-XXXXXXXXXX'; // <-- replaced post-deploy with the real ID
+  var MEASUREMENT_ID = 'G-Y3M6NS86ZV'; // GA4 property 532200123, advocatemcp.com web stream
 
   // No-op until the placeholder is replaced with a real measurement ID.
   // The literal placeholder string DOES pass the GA4 ID regex, so we have to
