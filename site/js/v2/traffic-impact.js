@@ -302,38 +302,88 @@
     // Last 2 points flagged as "unfinalized" in tooltip
     const lastTwo = dates.length >= 2 ? [dates[dates.length - 2], dates[dates.length - 1]] : [];
 
-    const pieces = bleedIdx >= 0
-      ? [{ lt: bleedIdx, color: grayHex }, { gte: bleedIdx, color: maroon }]
-      : [{ gte: 0, color: maroon }];
+    // Two-series approach for the bleed effect — visualMap with
+    // dimension:0 doesn't match against category-axis string dates, so the
+    // earlier single-series + visualMap approach rendered the line
+    // invisibly. Splitting into pre/post series guarantees both segments
+    // render at their respective colors. The bleed-day datum is shared by
+    // both series so the line is visually continuous across the join.
+    const preData  = totals.map(function (v, i) {
+      if (bleedIdx < 0) return null;
+      return i <= bleedIdx ? v : null;
+    });
+    const postData = totals.map(function (v, i) {
+      if (bleedIdx < 0) return v;       // no bleed yet — color whole line maroon
+      return i >= bleedIdx ? v : null;
+    });
 
+    // Bleed marker: a dashed vertical hairline plus a horizontal pill
+    // label sitting just above the chart top (rotate:0, distance:-22 puts
+    // the text outside the chart area so it doesn't overlap the line).
     const markLine = bleedIdx >= 0 ? {
       symbol: 'none',
-      data: [{ xAxis: bleedDate, label: { formatter: 'Advocate activated · ' + fmtDate(bleedDate), position: 'insideMiddleTop', fontSize: 11 } }],
-      lineStyle: { type: 'dashed', color: 'rgba(125,37,80,0.4)' },
+      silent: true,
+      label: {
+        show: true,
+        formatter: 'Advocate activated · ' + fmtDate(bleedDate),
+        position: 'insideEndTop',
+        rotate: 0,
+        distance: -22,
+        fontSize: 11,
+        fontWeight: 500,
+        color: maroon,
+        backgroundColor: 'rgba(255,255,255,0.85)',
+        padding: [3, 8],
+        borderRadius: 4,
+        borderColor: 'rgba(125,37,80,0.3)',
+        borderWidth: 1,
+      },
+      lineStyle: { type: 'dashed', color: 'rgba(125,37,80,0.45)', width: 1.5 },
+      data: [{ xAxis: bleedDate }],
     } : undefined;
 
     const inst = window.echarts.init(el, 'advocate-maroon');
     inst.setOption({
-      grid: { left: 48, right: 16, top: 24, bottom: 32 },
+      grid: { left: 48, right: 24, top: 36, bottom: 32 },
       tooltip: {
         trigger: 'axis',
         formatter: function (params) {
-          const p = params[0];
-          const suffix = lastTwo.indexOf(p.axisValue) >= 0 ? '<br><span style="font-size:11px;color:#aaa">(GA4 finalizes within 48h)</span>' : '';
-          return '<b>' + p.axisValue + '</b><br>' + fmtCount(p.value) + ' sessions' + suffix;
+          // Both series fire — pick the one that has a numeric value at this point
+          const pt = params.find(function (p) { return p.value != null; }) || params[0];
+          if (!pt || pt.value == null) return '';
+          const isPost = bleedIdx >= 0 && dates.indexOf(pt.axisValue) >= bleedIdx;
+          const tag = isPost
+            ? '<span style="font-size:10.5px;color:' + maroon + ';text-transform:uppercase;letter-spacing:0.04em">post-Advocate</span>'
+            : '<span style="font-size:10.5px;color:#888;text-transform:uppercase;letter-spacing:0.04em">pre-Advocate</span>';
+          const suffix = lastTwo.indexOf(pt.axisValue) >= 0 ? '<br><span style="font-size:11px;color:#aaa">(GA4 finalizes within 48h)</span>' : '';
+          return tag + '<br><b>' + pt.axisValue + '</b><br>' + fmtCount(pt.value) + ' sessions' + suffix;
         },
       },
       xAxis: { type: 'category', data: dates, boundaryGap: false },
       yAxis: { type: 'value' },
-      visualMap: { show: false, dimension: 0, pieces: pieces },
-      series: [{
-        type: 'line',
-        data: totals,
-        showSymbol: false,
-        areaStyle: { opacity: 0.18 },
-        smooth: true,
-        markLine: markLine,
-      }],
+      series: [
+        {
+          name: 'Pre-Advocate',
+          type: 'line',
+          data: preData,
+          showSymbol: false,
+          smooth: true,
+          lineStyle: { color: grayHex, width: 2 },
+          areaStyle: { color: grayHex, opacity: 0.18 },
+          itemStyle: { color: grayHex },
+          markLine: markLine,  // attach to one series only
+        },
+        {
+          name: 'Post-Advocate',
+          type: 'line',
+          data: postData,
+          showSymbol: false,
+          smooth: true,
+          lineStyle: { color: maroon, width: 2.25 },
+          areaStyle: { color: maroon, opacity: 0.22 },
+          itemStyle: { color: maroon },
+        },
+      ],
     });
     return inst;
   }
