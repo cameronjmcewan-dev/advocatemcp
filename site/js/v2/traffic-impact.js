@@ -55,6 +55,23 @@
     const r = Math.round(v);
     return signed ? (r >= 0 ? '+' + r + '%' : r + '%') : r + '%';
   }
+  function formatMoney(value, currency) {
+    if (value == null || isNaN(value)) return '—';
+    try {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: (currency || 'USD').toUpperCase(),
+        maximumFractionDigits: value >= 1000 ? 0 : 2,
+      }).format(value);
+    } catch (_) {
+      // Invalid currency code falls through to USD
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: value >= 1000 ? 0 : 2 }).format(value);
+    }
+  }
+  function formatPct(num, den) {
+    if (!den || den <= 0) return '—';
+    return Math.round((num / den) * 100) + '%';
+  }
   function timeAgo(iso) {
     if (!iso) return '';
     const t = typeof iso === 'number' ? iso : new Date(iso).getTime();
@@ -273,6 +290,114 @@
       '</div>';
   }
 
+  // ── Conversion revenue banner ─────────────────────────────────────
+
+  /**
+   * Returns one of three banner variants based on Pro-gate + data state.
+   * conv is data.conversions — null means skip entirely.
+   */
+  function renderRevenueBanner(conv, rangeLabel) {
+    if (conv == null) return '';
+
+    // Variant C — base tenant hit a 402
+    if (conv.__planRequired) {
+      return [
+        '<section class="card-dash" style="background:var(--paper);border:1px solid var(--line);padding:20px 24px;margin-bottom:16px;">',
+        '  <div style="display:flex;justify-content:space-between;align-items:center;gap:24px;flex-wrap:wrap;">',
+        '    <div>',
+        '      <div style="display:inline-block;font-size:11px;font-weight:600;color:var(--maroon);background:var(--maroon-tint);padding:3px 10px;border-radius:999px;letter-spacing:0.05em;margin-bottom:8px">PRO</div>',
+        '      <div style="font-size:14px;font-weight:500;color:var(--ink)">See exactly how much revenue AI search drove to your site</div>',
+        '      <div style="font-size:13px;color:var(--ink-2);margin-top:6px;max-width:560px;line-height:1.5">',
+        '        Pro tenants get verified per-event revenue attribution split AI vs Human. Connect your GA4 key events and Advocate calculates the dollars per source.',
+        '      </div>',
+        '    </div>',
+        '    <a href="/Billing.html" class="btn btn-primary btn-sm">Upgrade to Pro →</a>',
+        '  </div>',
+        '</section>',
+      ].join('');
+    }
+
+    // Variant B — Pro but no conversion data
+    if (!conv.has_conversion_data) {
+      return [
+        '<section class="card-dash" style="border:1px dashed var(--line);padding:20px 24px;margin-bottom:16px;">',
+        '  <div style="display:flex;justify-content:space-between;align-items:center;gap:24px;flex-wrap:wrap;">',
+        '    <div>',
+        '      <div style="font-size:14px;font-weight:500;color:var(--ink);">Configure GA4 key events to unlock revenue tracking</div>',
+        '      <div style="font-size:13px;color:var(--ink-2);margin-top:6px;max-width:560px;line-height:1.5">',
+        '        Mark form submissions, purchases, or sign-ups as key events in your GA4 property and we\'ll show how much revenue each AI search engine drove to your site.',
+        '      </div>',
+        '    </div>',
+        '    <a href="https://support.google.com/analytics/answer/12844695" target="_blank" rel="noopener" class="btn btn-ghost btn-sm">How to set up key events →</a>',
+        '  </div>',
+        '</section>',
+      ].join('');
+    }
+
+    // Variant A — Pro tenant with conversion data
+    var aiRevenue   = (conv.ai    || {}).revenue     || 0;
+    var humanRevenue= (conv.human || {}).revenue     || 0;
+    var aiEventCount= (conv.ai    || {}).event_count || 0;
+    var currency    = conv.currency || 'USD';
+    var totalRevenue= aiRevenue + humanRevenue;
+    var aiSharePct  = totalRevenue > 0 ? Math.round((aiRevenue / totalRevenue) * 100) : 0;
+    var convWord    = aiEventCount === 1 ? 'conversion' : 'conversions';
+    return [
+      '<section class="card-dash" style="background:linear-gradient(135deg,var(--maroon-tint),transparent);border:1px solid var(--maroon-tint);padding:24px 28px;margin-bottom:16px;">',
+      '  <div style="display:flex;justify-content:space-between;align-items:center;gap:24px;flex-wrap:wrap;">',
+      '    <div>',
+      '      <div style="font-size:13px;color:var(--maroon);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">Revenue from AI search</div>',
+      '      <div style="font-family:var(--serif);font-size:42px;line-height:1;">' + esc(formatMoney(aiRevenue, currency)) + '</div>',
+      '      <div style="font-size:13px;color:var(--ink-2);margin-top:6px">From ' + fmtCount(aiEventCount) + ' ' + convWord + ' attributed to AI sources · ' + esc(rangeLabel || '') + '</div>',
+      '    </div>',
+      '    <div style="text-align:right;font-size:13px;color:var(--muted)">',
+      '      <div>vs ' + esc(formatMoney(humanRevenue, currency)) + ' from Human</div>',
+      '      <div style="margin-top:4px">' + aiSharePct + '% of total revenue</div>',
+      '    </div>',
+      '  </div>',
+      '</section>',
+    ].join('');
+  }
+
+  /**
+   * Renders the top conversions table. Only shown when Variant A.
+   */
+  function renderTopConversions(conv) {
+    if (!conv || !conv.has_conversion_data) return '';
+    var events = (conv.events || []).slice().sort(function (a, b) { return (b.revenue || 0) - (a.revenue || 0); });
+    var currency = conv.currency || 'USD';
+    if (!events.length) return '';
+    var rows = events.map(function (ev) {
+      return [
+        '<tr>',
+        '  <td><strong>' + esc(ev.event_name) + '</strong></td>',
+        '  <td style="text-align:right" class="tabular">' + fmtCount(ev.ai) + '</td>',
+        '  <td style="text-align:right" class="tabular">' + fmtCount(ev.human) + '</td>',
+        '  <td style="text-align:right" class="tabular" style="color:var(--maroon)">' + esc(formatMoney(ev.revenue, currency)) + '</td>',
+        '</tr>',
+      ].join('');
+    }).join('');
+    return [
+      '<section class="card-dash">',
+      '  <div class="card-head">',
+      '    <div>',
+      '      <h3>Top conversions</h3>',
+      '      <div class="sub">Which key events drove the most revenue this window — split AI vs Human.</div>',
+      '    </div>',
+      '  </div>',
+      '  <table class="tbl" style="width:100%">',
+      '    <thead><tr>',
+      '      <th style="text-align:left">Event</th>',
+      '      <th style="text-align:right">From AI</th>',
+      '      <th style="text-align:right">From Human</th>',
+      '      <th style="text-align:right">Revenue</th>',
+      '    </tr></thead>',
+      '    <tbody>' + rows + '</tbody>',
+      '  </table>',
+      '</section>',
+    ].join('');
+  }
+
   // ── Render ────────────────────────────────────────────────────────
 
   function render(data) {
@@ -283,6 +408,7 @@
     const connected = !!impact.ga4_connected;
     const daily     = impact.daily || [];
     const propLabel = ga4St.property_label || impact.property_label || '';
+    const conv      = d.conversions !== undefined ? d.conversions : null;
 
     const clickCount = Array.isArray(clicksPay.clicks)
       ? clicksPay.clicks.length
@@ -336,7 +462,30 @@
     const upliftColor = kpis.uplift == null ? '' :
       (kpis.uplift >= 0 ? 'color:#10a37f' : 'color:#ea4335');
 
+    // Determine range label for the revenue banner subtitle
+    const range = (window.AdvocateChrome && window.AdvocateChrome.getRange)
+      ? window.AdvocateChrome.getRange() : '30d';
+    const rangeLabel = range === '7d' ? 'last 7 days'
+      : range === '90d' ? 'last 90 days'
+      : range === '180d' ? 'last 180 days'
+      : 'last 30 days';
+
+    // Conversion KPI card — Variant A only
+    const convHasData = conv && !conv.__planRequired && conv.has_conversion_data;
+    const aiTotalSessions = daily.reduce(function (s, r) { return s + (r.ai || 0); }, 0);
+    const humanTotalSessions = daily.reduce(function (s, r) { return s + (r.human || 0); }, 0);
+    const convAiCount    = convHasData ? ((conv.ai || {}).event_count || 0) : 0;
+    const convHumanCount = convHasData ? ((conv.human || {}).event_count || 0) : 0;
+    const convKpiCard = convHasData ? `
+        <div class="kpi">
+          <div class="head"><div class="k">AI conversion rate</div></div>
+          <div class="v tabular">${formatPct(convAiCount, aiTotalSessions)}</div>
+          <div class="d">vs ${formatPct(convHumanCount, humanTotalSessions)} Human</div>
+        </div>` : '';
+
     return `
+      ${renderRevenueBanner(conv, rangeLabel)}
+
       <div class="plain-banner">
         <strong>In plain English:</strong> Here's how AI search has changed who's reaching your site, before vs after you turned Advocate on.
       </div>
@@ -362,6 +511,7 @@
           <div class="v tabular">${fmtPct(kpis.aiShare, false)}</div>
           <div class="d">Of total sessions</div>
         </div>
+        ${convKpiCard}
       </div>
 
       <section class="card-dash">
@@ -386,6 +536,7 @@
 
       ${renderEngagementCard(daily)}
       ${renderAcquisitionCard(daily)}
+      ${convHasData ? renderTopConversions(conv) : ''}
       ${renderGeographyCard()}
 
       <details class="card-dash" style="padding:16px 20px;">
@@ -683,17 +834,23 @@
     const range = (window.AdvocateChrome && window.AdvocateChrome.getRange)
       ? window.AdvocateChrome.getRange() : '30d';
     const rq = '?range=' + encodeURIComponent(range);
-    const [status, impact, clicks, metrics] = await Promise.allSettled([
+    const [status, impact, clicks, metrics, conversions] = await Promise.allSettled([
       window.AMCP.authedFetch('/api/client/ga4/status').then(function (r) { return r.json(); }),
       window.AMCP.authedFetch('/api/client/traffic-impact' + rq).then(function (r) { return r.json(); }),
       window.AMCP.authedFetch('/api/client/clicks' + rq).then(function (r) { return r.json(); }),
       window.AMCP.authedFetch('/api/client/metrics' + rq).then(function (r) { return r.json(); }),
+      window.AMCP.authedFetch('/api/client/traffic-impact/conversions').then(function (r) {
+        if (r.status === 402) return { __planRequired: true };
+        if (!r.ok) return null;
+        return r.json();
+      }),
     ]);
     return {
-      ga4Status: status.status  === 'fulfilled' ? status.value  : { connected: false },
-      impact:    impact.status  === 'fulfilled' ? impact.value  : { ga4_connected: false, daily: [], bleed_at: null },
-      clicks:    clicks.status  === 'fulfilled' ? clicks.value  : { clicks: [] },
-      metrics:   metrics.status === 'fulfilled' ? (metrics.value.metrics || metrics.value) : {},
+      ga4Status:   status.status      === 'fulfilled' ? status.value      : { connected: false },
+      impact:      impact.status      === 'fulfilled' ? impact.value      : { ga4_connected: false, daily: [], bleed_at: null },
+      clicks:      clicks.status      === 'fulfilled' ? clicks.value      : { clicks: [] },
+      metrics:     metrics.status     === 'fulfilled' ? (metrics.value.metrics || metrics.value) : {},
+      conversions: conversions.status === 'fulfilled' ? conversions.value : null,
     };
   }
 
@@ -725,6 +882,18 @@
       impact:    { ga4_connected: true, bleed_at: bleedAt, slug: 'demo', daily: daily },
       clicks:    { clicks: [] },
       metrics:   {},
+      conversions: {
+        slug: 'preview-demo',
+        currency: 'USD',
+        ai:    { event_count: 47,  revenue: 12450 },
+        human: { event_count: 162, revenue: 38200 },
+        events: [
+          { event_name: 'purchase',          ai: 24, human: 87, revenue: 38200 },
+          { event_name: 'lead_form_submit',  ai: 18, human: 51, revenue: 8100 },
+          { event_name: 'newsletter_signup', ai: 5,  human: 24, revenue: 0 },
+        ],
+        has_conversion_data: true,
+      },
     };
   }
 
