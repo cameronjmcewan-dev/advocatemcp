@@ -41,7 +41,7 @@
     const af = window.AMCP && window.AMCP.authedFetch;
     const slug = (window.AMCP_DATA && window.AMCP_DATA.slug) || '';
     const suffix = slug ? `?slug=${encodeURIComponent(slug)}` : '';
-    const [me, metrics, domain, activity, revenue, ga4Status, gscStatus, verifiedRevenue, crmHubspot, crmSalesforce] = await Promise.all([
+    const [me, metrics, domain, activity, revenue, ga4Status, gscStatus, verifiedRevenue, crmHubspot, crmSalesforce, authorityStatus] = await Promise.all([
       af('/api/client/me').then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/metrics').then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/domain-info' + suffix).then(r => r.ok ? r.json() : null).catch(() => null),
@@ -72,6 +72,11 @@
       af('/api/client/crm/status?provider=hubspot').then(r => r.ok ? r.json() : null).catch(() => null),
       // CRM connection status — Salesforce (PR 4). 402 = Pro gate → null.
       af('/api/client/crm/status?provider=salesforce').then(r => r.ok ? r.json() : null).catch(() => null),
+      // Authority Kit config status (Phase 6 PR 3). 402 = Pro gate → null.
+      af('/api/client/authority/status').then(r => {
+        if (r.status === 402) return null;
+        return r.ok ? r.json() : null;
+      }).catch(() => null),
     ]);
     return Object.assign({}, metrics || {}, {
       _me: me,
@@ -83,6 +88,7 @@
       verifiedRevenue: verifiedRevenue  || null,
       crmHubspot:      crmHubspot       || null,
       crmSalesforce:   crmSalesforce    || null,
+      authorityStatus: authorityStatus  || null,
     });
   }
 
@@ -210,6 +216,13 @@
            Pro-only — base tenants see an upgrade CTA. -->
       <div class="row single">
         ${renderCrmCard(d.crmHubspot || null, d.crmSalesforce || null, plan)}
+      </div>
+
+      <!-- Authority Kit (Phase 6 PR 3). Brand keyword + Google Place ID
+           configuration for the off-site authority nightly cron.
+           Pro-only — base tenants see an upgrade CTA. -->
+      <div class="row single" id="authority">
+        ${renderAuthorityCard(d.authorityStatus || null, plan)}
       </div>
 
       <!-- Team (Apr 27 2026 Enterprise honesty pass). Owner-only invite/
@@ -858,6 +871,151 @@
     wireProvider('salesforce');
   }
 
+  /* Authority Kit card — Phase 6 PR 3.
+   *
+   * Three variants:
+   *   1. Base tenant        → Pro upsell
+   *   2. Pro, not configured → empty inputs + Save
+   *   3. Pro, configured    → current values (editable) + last sync timestamp
+   */
+  function renderAuthorityCard(authorityStatus, plan) {
+    const isPro = plan === 'pro' || plan === 'enterprise';
+
+    // Base tenant — upsell
+    if (!isPro) {
+      return `
+        <div class="card-dash">
+          <div class="card-head">
+            <div>
+              <h3>Off-site authority <span class="chip maroon" style="margin-left:6px">Pro</span></h3>
+              <div class="sub">Track public brand mentions and sentiment across Reddit and Google reviews.</div>
+            </div>
+          </div>
+          <div class="set-row" style="border-bottom:0;padding:20px 0">
+            <div class="l"></div>
+            <div class="r" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+              <div style="font-size:13px;color:var(--ink-2);max-width:480px;line-height:1.5">
+                Upgrade to Pro to track what the public web says about you — brand mentions on Reddit and Google reviews, with sentiment breakdown, synced nightly.
+              </div>
+              <a href="/Billing.html" class="btn btn-primary btn-sm">Upgrade to Pro →</a>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    const cfg = authorityStatus && authorityStatus.config ? authorityStatus.config : null;
+    const isConfigured = !!(cfg && (cfg.brand_keyword || cfg.google_place_id));
+    const syncLabel = cfg && cfg.last_synced_at ? timeAgo(cfg.last_synced_at) : null;
+    const syncError = cfg && cfg.last_sync_error ? String(cfg.last_sync_error).slice(0, 120) : null;
+
+    return `
+      <div class="card-dash">
+        <div class="card-head">
+          <div>
+            <h3>Off-site authority</h3>
+            <div class="sub">Connect a brand keyword + Google Place ID to track public mentions and sentiment — synced nightly.</div>
+          </div>
+        </div>
+        <div class="set-row" style="align-items:center">
+          <div class="l">Brand keyword
+            <div style="font-size:11.5px;color:var(--muted);margin-top:2px;font-weight:400;line-height:1.4">Searched on Reddit. Use your business name or product name.</div>
+          </div>
+          <div class="r">
+            <input type="text" id="authority-brand-keyword" class="key-input" style="min-width:220px"
+                   value="${cfg && cfg.brand_keyword ? esc(cfg.brand_keyword) : ''}"
+                   placeholder="e.g. Advocate MCP">
+          </div>
+        </div>
+        <div class="set-row" style="align-items:center">
+          <div class="l">Google Place ID
+            <div style="font-size:11.5px;color:var(--muted);margin-top:2px;font-weight:400;line-height:1.4">From Google Maps. Optional — needed for Google review tracking.</div>
+          </div>
+          <div class="r">
+            <input type="text" id="authority-place-id" class="key-input" style="min-width:220px"
+                   value="${cfg && cfg.google_place_id ? esc(cfg.google_place_id) : ''}"
+                   placeholder="e.g. ChIJ…">
+          </div>
+        </div>
+        ${isConfigured && syncLabel ? `
+        <div class="set-row">
+          <div class="l">Last sync</div>
+          <div class="r">
+            ${esc(syncLabel)}
+            ${syncError ? `<span style="color:var(--red);font-size:12.5px;margin-left:8px">· ${esc(syncError)}</span>` : ''}
+          </div>
+        </div>` : ''}
+        <div class="set-row" style="border-bottom:0;padding-top:14px">
+          <div class="l"></div>
+          <div class="r" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" id="btn-authority-save" type="button">${isConfigured ? 'Save changes' : 'Save configuration'}</button>
+            ${isConfigured ? `<button class="btn btn-ghost btn-sm" id="btn-authority-disconnect" type="button" style="color:var(--red)">Disconnect</button>` : ''}
+            <a class="btn btn-ghost btn-sm" href="/TrafficImpact.html">View mentions →</a>
+            <span id="authority-status-msg" style="font-size:12.5px;color:var(--muted)"></span>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  /* Wires the Authority Kit card buttons. Called from afterMount(). */
+  function wireAuthorityCard() {
+    const af = window.AMCP && window.AMCP.authedFetch;
+    const msg = document.getElementById('authority-status-msg');
+    const setMsg = (text, kind) => {
+      if (!msg) return;
+      msg.textContent = text || '';
+      msg.style.color = kind === 'error' ? 'var(--red)' : kind === 'success' ? 'var(--sage)' : 'var(--muted)';
+    };
+
+    const saveBtn = document.getElementById('btn-authority-save');
+    if (saveBtn && af) {
+      saveBtn.addEventListener('click', async () => {
+        const kwInput = document.getElementById('authority-brand-keyword');
+        const pidInput = document.getElementById('authority-place-id');
+        const kw = (kwInput && kwInput.value || '').trim() || null;
+        const pid = (pidInput && pidInput.value || '').trim() || null;
+        if (!kw && !pid) {
+          setMsg('Enter at least a brand keyword or Google Place ID.', 'error');
+          return;
+        }
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving…';
+        setMsg('');
+        try {
+          const r = await af('/api/client/authority/configure', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ brand_keyword: kw, google_place_id: pid }),
+          });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+          setMsg('Saved. First sync runs tonight.', 'success');
+          saveBtn.textContent = 'Save changes';
+        } catch (err) {
+          setMsg('Save failed: ' + String(err && err.message || err), 'error');
+        } finally {
+          saveBtn.disabled = false;
+        }
+      });
+    }
+
+    const disconnectBtn = document.getElementById('btn-authority-disconnect');
+    if (disconnectBtn && af) {
+      disconnectBtn.addEventListener('click', async () => {
+        if (!window.confirm('Disconnect the Authority Kit? Your historical mention data is kept. Future syncs stop until you reconnect.')) return;
+        disconnectBtn.disabled = true;
+        setMsg('Disconnecting…');
+        try {
+          await af('/api/client/authority/disconnect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+          setMsg('Disconnected.', 'success');
+          setTimeout(() => window.location.reload(), 1000);
+        } catch (err) {
+          setMsg('Could not disconnect: ' + String(err && err.message || err), 'error');
+          disconnectBtn.disabled = false;
+        }
+      });
+    }
+  }
+
   function afterMount(data) {
     const preview = !!window.__ADVOCATE_PREVIEW;
     const slug = (window.AMCP_DATA && window.AMCP_DATA.slug) || '';
@@ -877,6 +1035,9 @@
 
     // Wire the CRM connection card (PR 4, May 6 2026). Same no-op safety.
     wireCrmCard();
+
+    // Wire the Authority Kit card (Phase 6 PR 3). Same no-op safety.
+    wireAuthorityCard();
 
     // Open DNS wizard — launches the existing legacy module in a modal.
     // The wizard's own public API (window.AMCP_DNS_WIZARD.open) is

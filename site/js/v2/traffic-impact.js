@@ -749,6 +749,234 @@
     ].join('');
   }
 
+  // ── Off-site authority section ────────────────────────────────────
+
+  function sentimentChip(score) {
+    if (score == null) return '';
+    var label, style;
+    if (score >= 0.15) {
+      label = 'positive';
+      style = 'background:var(--sage-tint,#d8e8d2);color:var(--sage,#4a7a3e);border:1px solid rgba(74,122,62,.2)';
+    } else if (score <= -0.15) {
+      label = 'negative';
+      style = 'background:rgba(234,99,53,.1);color:#c24a1a;border:1px solid rgba(234,99,53,.2)';
+    } else {
+      label = 'neutral';
+      style = 'background:var(--paper-2);color:var(--muted);border:1px solid var(--line)';
+    }
+    return '<span style="display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;font-weight:600;' + style + '">' + label + '</span>';
+  }
+
+  function sentimentScoreChip(score) {
+    if (score == null) return '<span style="color:var(--muted)">—</span>';
+    var style;
+    if (score >= 0.15) {
+      style = 'color:var(--sage,#4a7a3e);font-weight:600';
+    } else if (score <= -0.15) {
+      style = 'color:#c24a1a;font-weight:600';
+    } else {
+      style = 'color:var(--muted)';
+    }
+    var s = score >= 0 ? '+' + score.toFixed(2) : score.toFixed(2);
+    return '<span style="font-family:var(--mono);font-size:12.5px;' + style + '">' + s + '</span>';
+  }
+
+  function renderSentimentBar(positive, neutral, negative) {
+    var total = (positive || 0) + (neutral || 0) + (negative || 0);
+    if (!total) return '';
+    var posPct = Math.round((positive || 0) / total * 100);
+    var neuPct = Math.round((neutral  || 0) / total * 100);
+    var negPct = 100 - posPct - neuPct;
+    return [
+      '<div style="display:flex;height:6px;border-radius:3px;overflow:hidden;margin:6px 0 4px">',
+      '  <div style="flex:' + posPct + ';background:var(--sage,#4a7a3e)"></div>',
+      '  <div style="flex:' + neuPct + ';background:var(--line)"></div>',
+      '  <div style="flex:' + negPct + ';background:#e07040"></div>',
+      '</div>',
+      '<div style="display:flex;gap:12px;font-size:11px;color:var(--muted)">',
+      '  <span style="color:var(--sage,#4a7a3e)">' + fmtCount(positive) + ' positive</span>',
+      '  <span>' + fmtCount(neutral) + ' neutral</span>',
+      '  <span style="color:#c24a1a">' + fmtCount(negative) + ' negative</span>',
+      '</div>',
+    ].join('');
+  }
+
+  function platformLabel(p) {
+    if (p === 'reddit') return 'Reddit';
+    if (p === 'google_reviews') return 'Google reviews';
+    return esc(p);
+  }
+
+  function platformGlyph(p) {
+    // Unicode-safe glyphs that render without icon fonts.
+    if (p === 'reddit') return '&#128172;'; // speech-bubble
+    if (p === 'google_reviews') return '&#9733;'; // star
+    return '&#9679;';
+  }
+
+  function renderAuthoritySection(authority) {
+    // Variant AU-error — null or network error
+    if (!authority) return '';
+
+    // Variant AU-pro-required — base tenant
+    if (authority.__planRequired) {
+      return [
+        '<section class="card-dash">',
+        '  <div class="card-head">',
+        '    <div>',
+        '      <h3>Off-site authority <span class="chip maroon" style="margin-left:6px">Pro</span></h3>',
+        '      <div class="sub">Track what the public web is saying about you on Reddit and Google.</div>',
+        '    </div>',
+        '  </div>',
+        '  <div style="padding:24px 0 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">',
+        '    <div style="font-size:13px;color:var(--ink-2);max-width:480px;line-height:1.5">',
+        '      Upgrade to Pro to track brand mentions and sentiment across Reddit and Google reviews — automatically, every night.',
+        '    </div>',
+        '    <a href="/Billing.html" class="btn btn-primary btn-sm">Upgrade to Pro →</a>',
+        '  </div>',
+        '</section>',
+      ].join('');
+    }
+
+    // Variant AU-not-configured — Pro but no brand_keyword or place_id
+    if (!authority.configured) {
+      return [
+        '<section class="card-dash">',
+        '  <div class="card-head">',
+        '    <div>',
+        '      <h3>Off-site authority</h3>',
+        '      <div class="sub">Track what the public web is saying about you on Reddit and Google.</div>',
+        '    </div>',
+        '  </div>',
+        '  <div style="padding:24px 0 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap">',
+        '    <div style="font-size:13px;color:var(--ink-2);max-width:480px;line-height:1.5">',
+        '      Connect your brand keyword and Google Place ID to start tracking public mentions and sentiment — runs nightly.',
+        '    </div>',
+        '    <a href="/Settings.html#authority" class="btn btn-primary btn-sm">Configure →</a>',
+        '  </div>',
+        '</section>',
+      ].join('');
+    }
+
+    var platforms = Array.isArray(authority.platforms) ? authority.platforms : [];
+
+    // Variant AU-empty — configured but no data rows yet
+    if (!platforms.length) {
+      var keyword = esc(authority.brand_keyword || 'your brand');
+      return [
+        '<section class="card-dash">',
+        '  <div class="card-head">',
+        '    <div>',
+        '      <h3>Off-site authority</h3>',
+        '      <div class="sub">Tracking <strong>' + keyword + '</strong> across Reddit and Google reviews.</div>',
+        '    </div>',
+        '  </div>',
+        '  <div style="padding:32px;text-align:center;color:var(--muted);font-size:13.5px">',
+        '    Connected to <strong>' + keyword + '</strong>. Waiting for the first sync — runs nightly.',
+        '    You\'ll see public mentions + sentiment here once data lands.',
+        '  </div>',
+        '</section>',
+      ].join('');
+    }
+
+    // Variant AU — Pro + configured + has data
+    var syncLabel = authority.last_synced_at ? timeAgo(authority.last_synced_at) : 'Not synced yet';
+    var errorPill = authority.last_sync_error
+      ? '<span class="chip" style="background:rgba(180,40,40,.08);color:var(--red);border:1px solid rgba(180,40,40,.25);margin-left:8px">Sync error</span>'
+      : '';
+
+    var platformCards = platforms.map(function (p) {
+      var ratingHtml = '';
+      if (p.platform === 'google_reviews' && p.rating != null) {
+        ratingHtml = [
+          '<div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">',
+          '  <span style="font-size:13px;color:var(--muted)">Google rating</span>',
+          '  <strong style="font-size:18px;font-family:var(--serif)">' + Number(p.rating).toFixed(1) + '</strong>',
+          '  <span style="color:#d29922">★</span>',
+          '  <span style="font-size:12.5px;color:var(--muted)">from ' + fmtCount(p.rating_count) + ' reviews</span>',
+          '</div>',
+        ].join('');
+      }
+      return [
+        '<div style="flex:1;min-width:220px;border:1px solid var(--line);border-radius:8px;padding:16px">',
+        '  <div style="font-size:22px;margin-bottom:4px">' + platformGlyph(p.platform) + '</div>',
+        '  <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:2px">' + platformLabel(p.platform) + '</div>',
+        '  <div style="font-size:28px;font-family:var(--serif);line-height:1.1">' + fmtCount(p.mentions) + '</div>',
+        '  <div style="font-size:12px;color:var(--muted);margin-bottom:8px">mentions in window</div>',
+        '  <div style="font-size:12px;color:var(--muted);margin-bottom:2px">Sentiment</div>',
+        renderSentimentBar(p.positive, p.neutral, p.negative),
+        '  <div style="margin-top:8px;display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)">',
+        '    Avg score: ' + sentimentScoreChip(p.avg_sentiment),
+        '  </div>',
+        ratingHtml,
+        '</div>',
+      ].join('');
+    }).join('');
+
+    // Top mentions list
+    var topMentionRows = '';
+    var topMentions = Array.isArray(authority.top_mentions) ? authority.top_mentions : [];
+    var allMentions = [];
+    topMentions.forEach(function (tm) {
+      var list = Array.isArray(tm.mentions) ? tm.mentions : [];
+      list.forEach(function (m) {
+        allMentions.push({ platform: tm.platform, item: m });
+      });
+    });
+    // Sort by absolute score (most extreme first)
+    allMentions.sort(function (a, b) {
+      return Math.abs((b.item.score || 0)) - Math.abs((a.item.score || 0));
+    });
+    var topN = allMentions.slice(0, 5);
+
+    if (topN.length) {
+      var mentionItems = topN.map(function (e) {
+        var m = e.item;
+        var linkHtml = m.permalink
+          ? '<a href="' + esc(m.permalink) + '" target="_blank" rel="noopener" style="font-size:12px;color:var(--maroon);white-space:nowrap">View →</a>'
+          : '';
+        var themeHtml = m.theme
+          ? '<span style="font-size:11px;color:var(--muted);font-style:italic">' + esc(m.theme) + '</span>'
+          : '';
+        return [
+          '<div style="display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)">',
+          '  <div style="flex:1">',
+          '    <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">',
+          '      <span style="font-size:11px;padding:2px 7px;border-radius:999px;background:var(--paper-2);color:var(--muted);border:1px solid var(--line)">' + platformLabel(e.platform) + '</span>',
+          sentimentChip(m.score),
+          themeHtml,
+          '    </div>',
+          '    <div style="font-size:13px;color:var(--ink-2);line-height:1.5">' + esc(String(m.text || '').slice(0, 200)) + (String(m.text || '').length > 200 ? '…' : '') + '</div>',
+          '  </div>',
+          linkHtml ? '<div style="flex-shrink:0;padding-top:2px">' + linkHtml + '</div>' : '',
+          '</div>',
+        ].join('');
+      }).join('');
+
+      topMentionRows = [
+        '<div style="margin-top:20px">',
+        '  <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:4px">Top mentions</div>',
+        mentionItems,
+        '</div>',
+      ].join('');
+    }
+
+    return [
+      '<section class="card-dash">',
+      '  <div class="card-head">',
+      '    <div>',
+      '      <h3>Off-site authority</h3>',
+      '      <div class="sub">Public brand mentions &amp; sentiment · last synced ' + esc(syncLabel) + errorPill + '</div>',
+      '    </div>',
+      '  </div>',
+      '  <div style="display:flex;gap:16px;flex-wrap:wrap;padding:4px 0 8px">',
+      platformCards,
+      '  </div>',
+      topMentionRows,
+      '</section>',
+    ].join('');
+  }
+
   // ── Render ────────────────────────────────────────────────────────
 
   function render(data) {
@@ -763,6 +991,7 @@
     const gsc       = d.gsc !== undefined ? d.gsc : null;
     const verified  = d.verifiedRevenue !== undefined ? d.verifiedRevenue : null;
     const ltv       = d.ltv !== undefined ? d.ltv : null;
+    const authority = d.authority !== undefined ? d.authority : null;
 
     const clickCount = Array.isArray(clicksPay.clicks)
       ? clicksPay.clicks.length
@@ -894,6 +1123,7 @@
       ${renderAiOverviewSection(gsc)}
       ${(verified && !verified.__planRequired && verified.webhook_configured === true && (verified.ai_cents > 0 || verified.total_events > 0)) ? renderVerifiedRevenueEvents(verified) : ''}
       ${renderLtvSection(ltv)}
+      ${renderAuthoritySection(authority)}
       ${renderGeographyCard()}
 
       <details class="card-dash" style="padding:16px 20px;">
@@ -1323,7 +1553,7 @@
     const range = (window.AdvocateChrome && window.AdvocateChrome.getRange)
       ? window.AdvocateChrome.getRange() : '30d';
     const rq = '?range=' + encodeURIComponent(range);
-    const [status, impact, clicks, metrics, conversions, gscResult, verifiedRevResult, ltvResult] = await Promise.allSettled([
+    const [status, impact, clicks, metrics, conversions, gscResult, verifiedRevResult, ltvResult, authorityResult] = await Promise.allSettled([
       window.AMCP.authedFetch('/api/client/ga4/status').then(function (r) { return r.json(); }),
       window.AMCP.authedFetch('/api/client/traffic-impact' + rq).then(function (r) { return r.json(); }),
       window.AMCP.authedFetch('/api/client/clicks' + rq).then(function (r) { return r.json(); }),
@@ -1348,6 +1578,11 @@
         if (!r.ok) return null;
         return r.json();
       }),
+      window.AMCP.authedFetch('/api/client/traffic-impact/authority' + rq).then(function (r) {
+        if (r.status === 402) return { __planRequired: true };
+        if (!r.ok) return null;
+        return r.json();
+      }),
     ]);
     return {
       ga4Status:       status.status          === 'fulfilled' ? status.value          : { connected: false },
@@ -1358,6 +1593,7 @@
       gsc:             gscResult.status       === 'fulfilled' ? gscResult.value       : null,
       verifiedRevenue: verifiedRevResult.status === 'fulfilled' ? verifiedRevResult.value : null,
       ltv:             ltvResult.status       === 'fulfilled' ? ltvResult.value       : null,
+      authority:       authorityResult.status === 'fulfilled' ? authorityResult.value : null,
     };
   }
 
@@ -1468,6 +1704,39 @@
           errored: 0,
           total_contacts: 229,
           trend: ltvTrend,
+        };
+      }()),
+      authority: (function () {
+        var authDaily = [];
+        for (var ai = 13; ai >= 0; ai--) {
+          var ad = new Date(today.getTime() - ai * 86400000);
+          var adate = ad.toISOString().slice(0, 10);
+          authDaily.push(
+            { date: adate, platform: 'reddit',         mention_count: Math.round(2 + Math.random() * 6),  avg_sentiment:  0.2 + Math.random() * 0.3 },
+            { date: adate, platform: 'google_reviews', mention_count: Math.round(0 + Math.random() * 2),  avg_sentiment:  0.55 + Math.random() * 0.3 }
+          );
+        }
+        return {
+          slug: 'preview-demo',
+          configured: true,
+          brand_keyword: 'preview-demo',
+          google_place_id: 'ChIJDemoPlace12345',
+          last_synced_at: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
+          last_sync_error: null,
+          platforms: [
+            { platform: 'reddit',         mentions: 47, positive: 21, neutral: 18, negative: 8, avg_sentiment: 0.32, rating: null,  rating_count: null, last_date: '2026-05-06' },
+            { platform: 'google_reviews', mentions: 12, positive: 9,  neutral: 2,  negative: 1, avg_sentiment: 0.71, rating: 4.7,   rating_count: 312,  last_date: '2026-05-06' },
+          ],
+          daily: authDaily,
+          top_mentions: [
+            { platform: 'reddit', mentions: [
+              { text: "Just started using @preview-demo for our agency’s SEO work, the AI dashboard is genuinely useful for client reporting...", score: 0.85, theme: 'product praise', permalink: 'https://reddit.com/r/marketing/comments/abc123/' },
+              { text: "Anyone else having issues with @preview-demo’s onboarding flow? Took me 3 tries to get past the DNS step.", score: -0.65, theme: 'onboarding friction', permalink: 'https://reddit.com/r/saas/comments/def456/' },
+            ]},
+            { platform: 'google_reviews', mentions: [
+              { text: "Excellent service, the team responded within an hour and resolved our analytics setup question.", score: 1.0, theme: 'support quality', permalink: null },
+            ]},
+          ],
         };
       }()),
     };
