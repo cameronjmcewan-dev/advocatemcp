@@ -450,11 +450,18 @@
     window.addEventListener('resize', () => { try { inst.resize(); } catch (_) {} });
   }
 
-  /** Weekly share-of-voice trend line. Pulls from the new
-   *  /api/competitor-radar/:slug/share-of-voice/weekly endpoint
-   *  (server-side aggregate added in PR #145, never wired in the UI
-   *  until now). Falls through silently if the endpoint isn't
-   *  available (old worker) or returns an empty series. */
+  /** Weekly share-of-voice trend line. Pulls from
+   *  /api/client/radar/share-of-voice (the worker proxies to Railway's
+   *  /api/competitor-radar/:slug/share-of-voice/weekly internally).
+   *
+   *  Important: hits a /api/client/* path (not the bare /api/competitor-
+   *  radar/* path) so the worker's session-auth proxy + proper CORS
+   *  headers apply. Bare Railway paths fall through to the worker's
+   *  catch-all which returns wildcard ACAO and breaks credentialed
+   *  cross-origin fetches. (May 7 2026 fix.)
+   *
+   *  Falls through silently if the endpoint isn't available (old worker)
+   *  or returns an empty series. */
   async function drawSovTrend() {
     const host = document.querySelector('[data-radar-sov-trend]');
     if (!host) return;
@@ -463,14 +470,12 @@
 
     const slug = new URL(location.href).searchParams.get('as')
       || (window.AMCP_DATA && window.AMCP_DATA.slug) || '';
-    if (!slug) {
-      host.innerHTML = '<div style="padding:16px 0;color:var(--muted);font-size:13.5px">Sign in to a tenant first to see share-of-voice trend.</div>';
-      return;
-    }
     let series = [];
     try {
       // Endpoint shape: { range_weeks, series: [{ week_start, polls, cited, share }] }
-      const res = await af(`/api/competitor-radar/${encodeURIComponent(slug)}/share-of-voice/weekly?weeks=12`);
+      // Slug is forwarded so admin impersonation hits the right tenant.
+      const slugQuery = slug ? `&slug=${encodeURIComponent(slug)}` : '';
+      const res = await af(`/api/client/radar/share-of-voice?weeks=12${slugQuery}`);
       if (res.ok) {
         const body = await res.json();
         series = (body && body.series) || [];

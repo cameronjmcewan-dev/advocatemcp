@@ -304,10 +304,11 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (locUpdMatch && method === "DELETE")  return apiLocationsDelete(request, env, locUpdMatch[1]);
   const locPromoteMatch = pathname.match(/^\/api\/client\/locations\/([a-zA-Z0-9_]+)\/promote$/);
   if (locPromoteMatch && method === "POST") return apiLocationsPromote(request, env, locPromoteMatch[1]);
-  if (pathname === "/api/client/radar"         && method === "GET")    return apiRadar(request, env);
+  if (pathname === "/api/client/radar"             && method === "GET")    return apiRadar(request, env);
+  if (pathname === "/api/client/radar/share-of-voice" && method === "GET") return apiRadarShareOfVoice(request, env);
   const radarBasketDel = pathname.match(/^\/api\/client\/radar\/basket\/([^/]+)$/);
-  if (pathname === "/api/client/radar/basket"  && method === "POST")   return apiRadarBasketAdd(request, env);
-  if (radarBasketDel && method === "DELETE")                            return apiRadarBasketDelete(request, env, radarBasketDel[1]);
+  if (pathname === "/api/client/radar/basket"      && method === "POST")   return apiRadarBasketAdd(request, env);
+  if (radarBasketDel && method === "DELETE")                                return apiRadarBasketDelete(request, env, radarBasketDel[1]);
   // Off-site authority config (Phase 6 PR 2) — Pro-gated.
   if (pathname === "/api/client/authority/status"     && method === "GET")  return apiAuthorityStatus(request, env);
   if (pathname === "/api/client/authority/configure"  && method === "POST") return apiAuthorityConfigure(request, env);
@@ -425,9 +426,10 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/recommendations" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/profile"         && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/rotate-key"  && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
-  if (pathname === "/api/client/radar"         && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
-  if (pathname === "/api/client/radar/basket"  && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
-  if (radarBasketDel && method === "OPTIONS")                            return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/radar"             && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/radar/share-of-voice" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/radar/basket"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (radarBasketDel && method === "OPTIONS")                                return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/authority/status"     && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/authority/configure"  && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/authority/disconnect" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
@@ -1981,6 +1983,56 @@ async function apiRadar(request: Request, env: Env): Promise<Response> {
     const authority = authorityRes.ok ? await authorityRes.json() : null;
 
     return withCors(jsonOk({ summary, basket, losses, authority }), request, { credentials: true });
+  } catch (err) {
+    return withCors(jsonErr(502, `Backend unreachable: ${String(err)}`), request, { credentials: true });
+  }
+}
+
+// ── GET /api/client/radar/share-of-voice ──────────────────────────────────
+// Proxy to Railway's /api/competitor-radar/:slug/share-of-voice/weekly so
+// the dashboard's weekly-trend chart can fetch behind a session-auth path
+// (with proper credentialed CORS headers) instead of hitting the Railway
+// path directly — that path isn't routed by the worker, so credentialed
+// fetches to it get rejected by the catch-all's wildcard ACAO.
+// Lazy-loaded by v2/radar.js after the page first renders so the heavier
+// time-series chart doesn't block the KPI strip.
+
+async function apiRadarShareOfVoice(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const reqUrl = new URL(request.url);
+  const slug = reqUrl.searchParams.get("slug");
+  const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+
+  // Forward `weeks` query param if present; default to 12 (matches the
+  // chart's render assumption + the original frontend call signature).
+  const weeks = reqUrl.searchParams.get("weeks") ?? "12";
+  const base  = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+  const url   = `${base}/api/competitor-radar/${encodeURIComponent(biz.slug)}/share-of-voice/weekly?weeks=${encodeURIComponent(weeks)}`;
+
+  try {
+    const upstream = await fetch(url, { headers: { Authorization: `Bearer ${biz.api_key}` } });
+    const body     = await upstream.text();
+    if (!upstream.ok) {
+      // Pass through upstream status so 402 plan-gates surface to the
+      // dashboard's locked-view branch.
+      return withCors(
+        new Response(body, { status: upstream.status, headers: { "Content-Type": "application/json" } }),
+        request,
+        { credentials: true },
+      );
+    }
+    let parsed: unknown;
+    try { parsed = JSON.parse(body); } catch {
+      return withCors(jsonErr(502, "upstream_parse_error: share-of-voice"), request, { credentials: true });
+    }
+    return withCors(jsonOk(parsed as Record<string, unknown>), request, { credentials: true });
   } catch (err) {
     return withCors(jsonErr(502, `Backend unreachable: ${String(err)}`), request, { credentials: true });
   }
