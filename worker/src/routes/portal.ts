@@ -439,6 +439,20 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/profile-score"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/ai-recommendations" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/verify-rating"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  // Missing OPTIONS preflights — without these, browser preflight hits the
+  // worker's catch-all path which returns Access-Control-Allow-Origin:*,
+  // and credentialed fetches from the dashboard fail CORS. Discovered
+  // May 7 2026 via 4 red errors in the dashboard console for revenue-
+  // summary + locations. Adding all 9 missing endpoints in one pass.
+  if (pathname === "/api/client/revenue-summary" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/revenue-aov"     && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/revenue-webhook" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/locations"       && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/team"            && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/team/invite"     && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/crm/status"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/crm/start-link"  && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/crm/disconnect"  && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
 
   // ── Stripe / new onboarding API ──────────────────────────────────────────
   if (pathname === "/api/onboard/basic"     && method === "POST") return handleBasicOnboard(request, env);
