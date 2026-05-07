@@ -203,7 +203,8 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/ga4/select-property" && method === "POST") return apiGA4SelectProperty(request, env);
   if (pathname === "/api/client/ga4/resync"          && method === "POST") return apiGA4Resync(request, env);
   if (pathname === "/api/client/ga4/disconnect"      && method === "POST") return apiGA4Disconnect(request, env);
-  if (pathname === "/api/client/traffic-impact"      && method === "GET")  return apiTrafficImpact(request, env);
+  if (pathname === "/api/client/traffic-impact"              && method === "GET")  return apiTrafficImpact(request, env);
+  if (pathname === "/api/client/traffic-impact/geography"   && method === "GET")  return apiTrafficImpactGeography(request, env);
   if (pathname === "/api/client/me"       && method === "GET")  return apiMe(request, env);
   if (pathname === "/api/client/me"       && method === "PATCH") return apiPatchMe(request, env);
   if (pathname === "/api/client/metrics"  && method === "GET")  return apiMetrics(request, env);
@@ -365,7 +366,8 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/ga4/select-property" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/ga4/resync"          && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/ga4/disconnect"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
-  if (pathname === "/api/client/traffic-impact"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/traffic-impact"            && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/traffic-impact/geography" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/all-metrics" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/all-metrics" && method === "GET")     return apiAllMetrics(request, env);
   if (pathname === "/api/client/activity-detail" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
@@ -3947,6 +3949,73 @@ async function apiTrafficImpact(request: Request, env: Env): Promise<Response> {
 
   const payload = await trafficImpactPayload(env, biz, reqUrl);
   return withCors(jsonOk(payload), request, { credentials: true });
+}
+
+// ── GET /api/client/traffic-impact/geography ──────────────────────────────
+
+async function apiTrafficImpactGeography(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const reqUrl    = new URL(request.url);
+  const slugParam = reqUrl.searchParams.get("slug");
+  const biz       = (slugParam ? businesses.find(b => b.slug === slugParam) : null) ?? businesses[0] ?? null;
+  if (!biz) {
+    return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  }
+
+  const range    = reqUrl.searchParams.get("range");
+  const startQs  = reqUrl.searchParams.get("start_date");
+  const endQs    = reqUrl.searchParams.get("end_date");
+
+  let dateFilterSql  = "";
+  let dateFilterArgs: string[] = [];
+
+  if (startQs && endQs) {
+    dateFilterSql  = " AND date >= ? AND date <= ?";
+    dateFilterArgs = [startQs, endQs];
+  } else if (range && /^\d+d$/.test(range)) {
+    const days   = parseInt(range, 10);
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    dateFilterSql  = " AND date >= ?";
+    dateFilterArgs = [cutoff];
+  }
+
+  const result = await env.DB
+    .prepare(
+      `SELECT country, city,
+              SUM(ai_sessions)    AS ai,
+              SUM(human_sessions) AS human
+         FROM traffic_geo_daily
+        WHERE slug = ?${dateFilterSql}
+        GROUP BY country, city`,
+    )
+    .bind(biz.slug, ...dateFilterArgs)
+    .all<{ country: string | null; city: string | null; ai: number; human: number }>();
+
+  const rows = result.results ?? [];
+
+  // Sort server-side so the client only has to render — top 10 by each metric.
+  const byAi    = [...rows].sort((a, b) => (b.ai    || 0) - (a.ai    || 0)).slice(0, 10);
+  const byHuman = [...rows].sort((a, b) => (b.human || 0) - (a.human || 0)).slice(0, 10);
+
+  const toEntry = (r: { country: string | null; city: string | null; ai: number; human: number }) => ({
+    country:  r.country ?? null,
+    city:     r.city    ?? null,
+    sessions: 0,  // field overridden per-side below
+  });
+
+  // Each side's entry exposes sessions = the metric that side is sorted by.
+  const aiEntries    = byAi.map(r    => ({ ...toEntry(r),    sessions: r.ai    || 0 }));
+  const humanEntries = byHuman.map(r => ({ ...toEntry(r),    sessions: r.human || 0 }));
+
+  return withCors(jsonOk({ ai: aiEntries, human: humanEntries }), request, { credentials: true });
 }
 
 // ── Response helpers ───────────────────────────────────────────────────────

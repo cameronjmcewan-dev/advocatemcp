@@ -10,6 +10,13 @@ export interface DailyRow {
   human:       number;
   total:       number;
   top_sources: unknown;
+  // Engagement metrics — tenant-wide per day (GA4 does not split these by
+  // source classification; null when the column has not been populated yet).
+  engagement_rate:           number | null;
+  avg_session_duration_sec:  number | null;
+  bounce_rate:               number | null;
+  new_users:                 number;
+  returning_users:           number;
 }
 
 export interface TrafficImpactPayload {
@@ -60,26 +67,38 @@ export async function trafficImpactPayload(
 
   const result = await env.DB
     .prepare(
-      `SELECT date, ai_sessions, human_sessions, total_sessions, top_sources_json
+      `SELECT date, ai_sessions, human_sessions, total_sessions, top_sources_json,
+              engagement_rate, avg_session_duration_sec, bounce_rate,
+              new_users, returning_users
          FROM traffic_daily
         WHERE slug = ?${dateFilterSql}
         ORDER BY date ASC`,
     )
     .bind(biz.slug, ...dateFilterArgs)
     .all<{
-      date:             string;
-      ai_sessions:      number;
-      human_sessions:   number;
-      total_sessions:   number;
-      top_sources_json: string | null;
+      date:                      string;
+      ai_sessions:               number;
+      human_sessions:            number;
+      total_sessions:            number;
+      top_sources_json:          string | null;
+      engagement_rate:           number | null;
+      avg_session_duration_sec:  number | null;
+      bounce_rate:               number | null;
+      new_users:                 number;
+      returning_users:           number;
     }>();
 
   const daily: DailyRow[] = (result.results ?? []).map((r) => ({
-    date:        r.date,
-    ai:          r.ai_sessions,
-    human:       r.human_sessions,
-    total:       r.total_sessions,
-    top_sources: r.top_sources_json ? safeParseJson(r.top_sources_json) : [],
+    date:                     r.date,
+    ai:                       r.ai_sessions,
+    human:                    r.human_sessions,
+    total:                    r.total_sessions,
+    top_sources:              r.top_sources_json ? safeParseJson(r.top_sources_json) : [],
+    engagement_rate:          r.engagement_rate          ?? null,
+    avg_session_duration_sec: r.avg_session_duration_sec ?? null,
+    bounce_rate:              r.bounce_rate              ?? null,
+    new_users:                r.new_users                ?? 0,
+    returning_users:          r.returning_users          ?? 0,
   }));
 
   const conn = await env.DB

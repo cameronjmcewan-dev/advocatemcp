@@ -74,18 +74,28 @@ describe("trafficImpactPayload", () => {
   it("returns daily rows, bleed_at, and ga4_connected=true when GA4 row exists", async () => {
     const rows = [
       {
-        date:             "2026-05-01",
-        ai_sessions:      42,
-        human_sessions:   1234,
-        total_sessions:   1276,
-        top_sources_json: JSON.stringify([{ source: "perplexity.ai", medium: "referral", sessions: 42 }]),
+        date:                     "2026-05-01",
+        ai_sessions:              42,
+        human_sessions:           1234,
+        total_sessions:           1276,
+        top_sources_json:         JSON.stringify([{ source: "perplexity.ai", medium: "referral", sessions: 42 }]),
+        engagement_rate:          0.62,
+        avg_session_duration_sec: 145,
+        bounce_rate:              0.38,
+        new_users:                900,
+        returning_users:          376,
       },
       {
-        date:             "2026-05-02",
-        ai_sessions:      10,
-        human_sessions:   500,
-        total_sessions:   510,
-        top_sources_json: null,
+        date:                     "2026-05-02",
+        ai_sessions:              10,
+        human_sessions:           500,
+        total_sessions:           510,
+        top_sources_json:         null,
+        engagement_rate:          null,
+        avg_session_duration_sec: null,
+        bounce_rate:              null,
+        new_users:                0,
+        returning_users:          0,
       },
     ];
 
@@ -108,8 +118,23 @@ describe("trafficImpactPayload", () => {
     expect(first.total).toBe(1276);
     expect(first.top_sources).toEqual([{ source: "perplexity.ai", medium: "referral", sessions: 42 }]);
 
+    // New engagement columns are passed through.
+    expect(first.engagement_rate).toBe(0.62);
+    expect(first.avg_session_duration_sec).toBe(145);
+    expect(first.bounce_rate).toBe(0.38);
+    expect(first.new_users).toBe(900);
+    expect(first.returning_users).toBe(376);
+
+    // Null columns on row 2 pass through as null / 0.
+    const second = payload.daily[1];
+    expect(second.engagement_rate).toBeNull();
+    expect(second.avg_session_duration_sec).toBeNull();
+    expect(second.bounce_rate).toBeNull();
+    expect(second.new_users).toBe(0);
+    expect(second.returning_users).toBe(0);
+
     // Null top_sources_json becomes an empty array.
-    expect(payload.daily[1].top_sources).toEqual([]);
+    expect(second.top_sources).toEqual([]);
   });
 
   it("returns daily=[] and ga4_connected=false for empty / disconnected state", async () => {
