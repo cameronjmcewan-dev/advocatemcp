@@ -33,13 +33,15 @@
         { agent_id: 'chatgpt-actions/1.0', window: '7d', request_count: 6,  quality: 0.40, tier: 'unverified' },
       ],
     },
+    ga4Status:  { connected: false },
+    gscStatus:  { connected: false },
   };
 
   async function fetchReal() {
     const af = window.AMCP && window.AMCP.authedFetch;
     const slug = (window.AMCP_DATA && window.AMCP_DATA.slug) || '';
     const suffix = slug ? `?slug=${encodeURIComponent(slug)}` : '';
-    const [me, metrics, domain, activity, revenue, ga4Status] = await Promise.all([
+    const [me, metrics, domain, activity, revenue, ga4Status, gscStatus] = await Promise.all([
       af('/api/client/me').then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/metrics').then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/domain-info' + suffix).then(r => r.ok ? r.json() : null).catch(() => null),
@@ -55,13 +57,18 @@
       //   { connected, slug, property_id, property_label, status,
       //     last_sync_at, last_sync_error, connected_at } or { connected:false }.
       af('/api/client/ga4/status').then(r => r.ok ? r.json() : { connected: false }).catch(() => ({ connected: false })),
+      // GSC connection status — populates the Search Console card
+      // (May 6 2026 PR 5). Returns { connected, slug, site_url, status,
+      //   last_sync_at, last_sync_error } or { connected: false }.
+      af('/api/client/gsc/status').then(r => r.ok ? r.json() : { connected: false }).catch(() => ({ connected: false })),
     ]);
     return Object.assign({}, metrics || {}, {
       _me: me,
       domain:    domain || {},
       activity:  activity || {},
       revenue:   revenue || null,
-      ga4Status: ga4Status || { connected: false },
+      ga4Status:  ga4Status  || { connected: false },
+      gscStatus:  gscStatus  || { connected: false },
     });
   }
 
@@ -174,6 +181,13 @@
            connection that powers /TrafficImpact.html. -->
       <div class="row single">
         ${renderGa4Card(d.ga4Status || { connected: false })}
+      </div>
+
+      <!-- Google Search Console (May 6 2026 PR 5). Manages the GSC OAuth
+           connection that powers the AI Overview section on /TrafficImpact.html.
+           Pro-only — base tenants see an upgrade CTA. -->
+      <div class="row single">
+        ${renderGscCard(d.gscStatus || { connected: false }, plan)}
       </div>
 
       <!-- Team (Apr 27 2026 Enterprise honesty pass). Owner-only invite/
@@ -513,6 +527,176 @@
     }
   }
 
+  /* GSC connection card — May 6 2026, PR 5 of the Traffic Impact feature.
+   *
+   * Four render states:
+   *   1. Base tenant           → Pro upsell card
+   *   2. Pro, not connected    → Connect button
+   *   3. Pro, connected, no site selected → site picker
+   *   4. Pro, connected with site → status row + Resync + Disconnect + View link
+   */
+  function renderGscCard(s, plan) {
+    const isPro = plan === 'pro' || plan === 'enterprise';
+
+    // Variant: base tenant — upsell
+    if (!isPro) {
+      return `
+        <div class="card-dash">
+          <div class="card-head">
+            <div>
+              <h3>Google Search Console <span class="chip maroon" style="margin-left:6px">Pro</span></h3>
+              <div class="sub">See how often Google shows AI Overviews for your queries — and whether they cite you.</div>
+            </div>
+          </div>
+          <div class="set-row" style="border-bottom:0;padding:20px 0">
+            <div class="l"></div>
+            <div class="r" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+              <div style="font-size:13px;color:var(--ink-2);max-width:480px;line-height:1.5">
+                Connect Search Console to track AI Overview presence rate and cite rate — the best signal GSC gives for whether Google's AI answers are citing your site.
+              </div>
+              <a href="/Billing.html" class="btn btn-primary btn-sm">Upgrade to Pro →</a>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    const connected = !!(s && s.connected);
+    const hasSite = connected && !!s.site_url;
+    const errorPill = (s && s.last_sync_error)
+      ? `<span class="chip" style="background:rgba(180,40,40,.08);color:var(--red);border:1px solid rgba(180,40,40,.25)">Sync error</span>`
+      : '';
+
+    let body;
+    if (!connected) {
+      body = `
+        <div class="set-row"><div class="l">Status</div><div class="r"><span class="chip">Not connected</span></div></div>
+        <div class="set-row" style="border-bottom:0;padding-top:14px">
+          <div class="l"></div>
+          <div class="r" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" id="btn-gsc-connect" type="button">Connect Search Console →</button>
+            <span id="gsc-status-msg" style="font-size:12.5px;color:var(--muted)"></span>
+          </div>
+        </div>
+        <div class="set-row" style="border-bottom:0;padding-top:0">
+          <div class="l"></div>
+          <div class="r" style="font-size:12.5px;color:var(--muted);max-width:520px;line-height:1.5">
+            We read aggregate impression and click data only — never individual query data or PII. Disconnect any time.
+          </div>
+        </div>`;
+    } else if (!hasSite) {
+      body = `
+        <div class="set-row"><div class="l">Status</div><div class="r"><span class="chip amber dot-chip"><span class="dot"></span>Connected · pick a site</span></div></div>
+        <div class="set-row" style="border-bottom:0;padding-top:14px">
+          <div class="l"></div>
+          <div class="r">
+            <button class="btn btn-ghost btn-sm" id="btn-gsc-pick-site" type="button">Choose site →</button>
+            <button class="btn btn-ghost btn-sm" id="btn-gsc-disconnect" type="button" style="margin-left:6px">Disconnect</button>
+            <span id="gsc-status-msg" style="font-size:12.5px;color:var(--muted);margin-left:10px"></span>
+          </div>
+        </div>`;
+    } else {
+      body = `
+        <div class="set-row"><div class="l">Status</div><div class="r"><span class="chip sage dot-chip"><span class="dot"></span>Connected</span> ${errorPill}</div></div>
+        <div class="set-row"><div class="l">Site</div><div class="r"><strong>${esc(s.site_url || '')}</strong></div></div>
+        <div class="set-row"><div class="l">Last sync</div><div class="r">${esc(timeAgo(s.last_sync_at))}${s.last_sync_error ? ` <span style="color:var(--red);font-size:12.5px">· ${esc(String(s.last_sync_error).slice(0, 120))}</span>` : ''}</div></div>
+        <div class="set-row" style="border-bottom:0;padding-top:14px">
+          <div class="l"></div>
+          <div class="r" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" id="btn-gsc-resync" type="button">Resync now</button>
+            <button class="btn btn-ghost btn-sm" id="btn-gsc-disconnect" type="button">Disconnect</button>
+            <a class="btn btn-ghost btn-sm" href="/TrafficImpact.html">View AI Overviews →</a>
+            <span id="gsc-status-msg" style="font-size:12.5px;color:var(--muted)"></span>
+          </div>
+        </div>`;
+    }
+
+    return `
+      <div class="card-dash">
+        <div class="card-head">
+          <div>
+            <h3>Google Search Console</h3>
+            <div class="sub">Track AI Overview presence and cite rate for your top queries.</div>
+          </div>
+        </div>
+        ${body}
+      </div>`;
+  }
+
+  /* Wires the GSC card buttons. Called from afterMount(). Mirrors wireGa4Card()
+   * but points at the /api/client/gsc/* endpoints. The Connect button POSTs
+   * /api/client/gsc/start-link → window.location.href to the returned OAuth URL. */
+  function wireGscCard() {
+    const af = window.AMCP && window.AMCP.authedFetch;
+    const msg = document.getElementById('gsc-status-msg');
+    const setMsg = (text, kind) => {
+      if (!msg) return;
+      msg.textContent = text || '';
+      msg.style.color = kind === 'error' ? 'var(--red)' : kind === 'success' ? 'var(--sage)' : 'var(--muted)';
+    };
+
+    const connectBtn = document.getElementById('btn-gsc-connect');
+    if (connectBtn) {
+      connectBtn.addEventListener('click', async () => {
+        connectBtn.disabled = true;
+        setMsg('Opening Google…');
+        try {
+          const r = await af('/api/client/gsc/start-link', { method: 'POST' });
+          const j = await r.json();
+          if (j && j.url) { window.location.href = j.url; return; }
+          throw new Error(j && (j.customer_message || j.error_code) || 'Could not start GSC connection');
+        } catch (err) {
+          setMsg(String(err && err.message || err), 'error');
+          connectBtn.disabled = false;
+        }
+      });
+    }
+
+    const resyncBtn = document.getElementById('btn-gsc-resync');
+    if (resyncBtn) {
+      resyncBtn.addEventListener('click', async () => {
+        resyncBtn.disabled = true;
+        setMsg('Pulling last 7 days from Search Console…');
+        try {
+          const r = await af('/api/client/gsc/resync', { method: 'POST' });
+          const j = await r.json();
+          if (j && j.error) throw new Error(j.error);
+          setMsg(`Synced — ${j.rows_written || 0} rows written.`, 'success');
+          // Reload after 1.5s so the status card re-renders with fresh
+          // last_sync_at timestamp + cleared error.
+          setTimeout(() => window.location.reload(), 1500);
+        } catch (err) {
+          setMsg('Sync failed: ' + String(err && err.message || err), 'error');
+          resyncBtn.disabled = false;
+        }
+      });
+    }
+
+    const disconnectBtn = document.getElementById('btn-gsc-disconnect');
+    if (disconnectBtn) {
+      disconnectBtn.addEventListener('click', async () => {
+        if (!window.confirm('Disconnect Google Search Console? Imported data stays in your account; new syncs will stop until you reconnect.')) return;
+        disconnectBtn.disabled = true;
+        setMsg('Disconnecting…');
+        try {
+          await af('/api/client/gsc/disconnect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+          setMsg('Disconnected.', 'success');
+          setTimeout(() => window.location.reload(), 1000);
+        } catch (err) {
+          setMsg('Could not disconnect: ' + String(err && err.message || err), 'error');
+          disconnectBtn.disabled = false;
+        }
+      });
+    }
+
+    // Site-picker stub — routes back through OAuth which re-selects the site.
+    const pickSiteBtn = document.getElementById('btn-gsc-pick-site');
+    if (pickSiteBtn) {
+      pickSiteBtn.addEventListener('click', () => {
+        if (connectBtn) connectBtn.click();
+      });
+    }
+  }
+
   function afterMount(data) {
     const preview = !!window.__ADVOCATE_PREVIEW;
     const slug = (window.AMCP_DATA && window.AMCP_DATA.slug) || '';
@@ -526,6 +710,9 @@
     // Wire the GA4 connection card (PR 3, May 6 2026). Safe to call even
     // if the card isn't rendered — wireGa4Card() no-ops on missing buttons.
     wireGa4Card();
+
+    // Wire the GSC connection card (PR 5, May 6 2026). Same no-op safety.
+    wireGscCard();
 
     // Open DNS wizard — launches the existing legacy module in a modal.
     // The wizard's own public API (window.AMCP_DNS_WIZARD.open) is

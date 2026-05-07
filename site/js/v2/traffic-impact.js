@@ -398,6 +398,115 @@
     ].join('');
   }
 
+  // ── AI Overview section helpers ───────────────────────────────────
+
+  function topAiOverviewQueriesTable(queries) {
+    if (!queries || queries.length === 0) {
+      return '<div style="color:var(--muted);font-size:13px;text-align:center;padding:16px">No AI Overviews detected for your queries in this window.</div>';
+    }
+    var rows = queries.slice(0, 10).map(function (q) {
+      return '<tr>' +
+        '<td>' + esc(q.query) + '</td>' +
+        '<td style="text-align:right" class="tabular">' + fmtCount(q.impressions) + '</td>' +
+        '<td style="text-align:right" class="tabular">' + fmtCount(q.clicks) + '</td>' +
+        '<td style="text-align:right" class="tabular">' + (q.impressions > 0 ? Math.round((q.clicks / q.impressions) * 100) : 0) + '%</td>' +
+        '</tr>';
+    }).join('');
+    return '<div style="margin-top:24px;">' +
+      '<div style="font-size:13px; color:var(--ink-2); margin-bottom: 8px">Top queries triggering AI Overviews</div>' +
+      '<table class="tbl" style="width:100%; font-size:13.5px">' +
+        '<thead><tr>' +
+          '<th style="text-align:left">Query</th>' +
+          '<th style="text-align:right">Impressions</th>' +
+          '<th style="text-align:right">Clicks</th>' +
+          '<th style="text-align:right">CTR</th>' +
+        '</tr></thead>' +
+        '<tbody>' + rows + '</tbody>' +
+      '</table>' +
+      '</div>';
+  }
+
+  /**
+   * Renders the AI Overview section for State C — one of four variants
+   * depending on whether GSC is connected and whether the tenant is Pro.
+   *
+   * Variant A: Pro + connected + has data
+   * Variant B: Pro + connected but no data / not connected
+   * Variant C: Base tenant (planRequired flag)
+   * Variant D: null/error — render nothing
+   */
+  function renderAiOverviewSection(gsc) {
+    if (!gsc) return '';
+
+    // Variant C — base tenant
+    if (gsc.__planRequired) {
+      return [
+        '<section class="card-dash" style="background:var(--paper);border:1px solid var(--line);padding:20px 24px;">',
+        '  <div style="display:flex;justify-content:space-between;align-items:center;gap:24px;flex-wrap:wrap;">',
+        '    <div>',
+        '      <div style="display:inline-block;font-size:11px;font-weight:600;color:var(--maroon);background:var(--maroon-tint);padding:3px 10px;border-radius:999px;letter-spacing:0.05em;margin-bottom:8px">PRO</div>',
+        '      <div style="font-size:14px;font-weight:500;color:var(--ink)">Detect Google AI Overview presence</div>',
+        '      <div style="font-size:13px;color:var(--ink-2);margin-top:6px;max-width:560px;line-height:1.5">',
+        '        Pro tenants can connect Google Search Console to see how often AI Overviews show for your top queries — and whether they\'re citing your site.',
+        '      </div>',
+        '    </div>',
+        '    <a href="/Billing.html" class="btn btn-primary btn-sm">Upgrade to Pro →</a>',
+        '  </div>',
+        '</section>',
+      ].join('');
+    }
+
+    // Variant B — Pro + not connected
+    if (!gsc.gsc_connected) {
+      return [
+        '<section class="card-dash" style="border: 1px dashed var(--line); padding: 24px;">',
+        '  <div style="display:flex; justify-content:space-between; align-items:center; gap:24px; flex-wrap:wrap;">',
+        '    <div>',
+        '      <div style="font-size:14px; font-weight:500; color:var(--ink);">Detect Google AI Overview presence</div>',
+        '      <div style="font-size:13px; color:var(--ink-2); margin-top:6px; max-width:540px; line-height:1.5">',
+        '        Connect Google Search Console to see how often AI Overviews show for your top queries — and whether they\'re citing your site.',
+        '      </div>',
+        '    </div>',
+        '    <button class="btn btn-primary btn-sm" id="ti-gsc-connect">Connect Search Console →</button>',
+        '  </div>',
+        '</section>',
+      ].join('');
+    }
+
+    // Variant B — connected but no daily data yet
+    if (!gsc.daily || !gsc.daily.length) {
+      return [
+        '<section class="card-dash" style="border: 1px dashed var(--line); padding: 24px;">',
+        '  <div>',
+        '    <div style="font-size:14px; font-weight:500; color:var(--ink);">Google AI Overview presence</div>',
+        '    <div style="font-size:13px; color:var(--ink-2); margin-top:6px; line-height:1.5">',
+        '      Connected to <strong>' + esc(gsc.site_url || '') + '</strong>. No data yet — GSC data syncs daily.',
+        '    </div>',
+        '  </div>',
+        '</section>',
+      ].join('');
+    }
+
+    // Variant A — Pro + connected + has data
+    return [
+      '<section class="card-dash">',
+      '  <div class="card-head">',
+      '    <div>',
+      '      <h3>Google AI Overview presence</h3>',
+      '      <div class="sub">How often Google shows an AI Overview when someone searches for queries you rank for — and how often that Overview cites you.</div>',
+      '    </div>',
+      '  </div>',
+      '  <div class="kpis" style="grid-template-columns: 1fr 1fr 1fr; padding-bottom: 16px;">',
+      '    <div class="kpi"><div class="head"><div class="k">Impressions w/ AI Overview</div></div><div class="v tabular">' + pct(gsc.ai_overview_pct) + '</div><div class="d">' + fmtCount(gsc.ai_overview_impressions) + ' of ' + fmtCount(gsc.total_impressions) + '</div></div>',
+      '    <div class="kpi"><div class="head"><div class="k">AI Overview cite rate</div></div><div class="v tabular">' + pct(gsc.cite_rate) + '</div><div class="d">Clicks per AI Overview impression</div></div>',
+      '    <div class="kpi"><div class="head"><div class="k">Total Google clicks</div></div><div class="v tabular">' + fmtCount(gsc.total_clicks) + '</div><div class="d">From organic search</div></div>',
+      '  </div>',
+      '  <div id="gsc-ai-chart" style="width:100%; height: 240px"></div>',
+      topAiOverviewQueriesTable(gsc.top_ai_overview_queries),
+      '</section>',
+    ].join('');
+  }
+
   // ── Render ────────────────────────────────────────────────────────
 
   function render(data) {
@@ -409,6 +518,7 @@
     const daily     = impact.daily || [];
     const propLabel = ga4St.property_label || impact.property_label || '';
     const conv      = d.conversions !== undefined ? d.conversions : null;
+    const gsc       = d.gsc !== undefined ? d.gsc : null;
 
     const clickCount = Array.isArray(clicksPay.clicks)
       ? clicksPay.clicks.length
@@ -537,6 +647,7 @@
       ${renderEngagementCard(daily)}
       ${renderAcquisitionCard(daily)}
       ${convHasData ? renderTopConversions(conv) : ''}
+      ${renderAiOverviewSection(gsc)}
       ${renderGeographyCard()}
 
       <details class="card-dash" style="padding:16px 20px;">
@@ -764,6 +875,37 @@
     return inst;
   }
 
+  function mountChartAiOverview(daily) {
+    var el = document.getElementById('gsc-ai-chart');
+    if (!el || !window.echarts) return null;
+    var maroon = readCssVar('--maroon', '#7d2550');
+    var dates = daily.map(function (d) { return d.date; });
+    var pcts  = daily.map(function (d) {
+      return d.impressions > 0 ? Math.round((d.ai_overview_impressions / d.impressions) * 100) : 0;
+    });
+    var inst = window.echarts.init(el, 'advocate-maroon');
+    inst.setOption({
+      grid: { left: 48, right: 24, top: 24, bottom: 32 },
+      tooltip: {
+        trigger: 'axis',
+        formatter: function (p) {
+          return '<b>' + p[0].axisValue + '</b><br>' + p[0].value + '% of impressions w/ AI Overview';
+        },
+      },
+      xAxis: { type: 'category', data: dates, boundaryGap: false },
+      yAxis: { type: 'value', max: 100, axisLabel: { formatter: '{value}%' } },
+      series: [{
+        type: 'line',
+        data: pcts,
+        smooth: true,
+        showSymbol: false,
+        lineStyle: { color: maroon, width: 2 },
+        areaStyle: { color: maroon, opacity: 0.18 },
+      }],
+    });
+    return inst;
+  }
+
   // ── afterMount ────────────────────────────────────────────────────
 
   function afterMount(data) {
@@ -790,15 +932,45 @@
       });
     }
 
+    // State A — wire GSC connect button (ti-gsc-connect may appear in any state
+    // where GSC is not yet connected, even in State C alongside GA4 data).
+    var gscConnectBtn = document.getElementById('ti-gsc-connect');
+    if (gscConnectBtn) {
+      gscConnectBtn.addEventListener('click', async function (e) {
+        e.preventDefault();
+        gscConnectBtn.disabled = true;
+        gscConnectBtn.textContent = 'Opening Google…';
+        try {
+          var r = await window.AMCP.authedFetch('/api/client/gsc/start-link', { method: 'POST' });
+          var j = await r.json();
+          if (j.url) { window.location.href = j.url; return; }
+          throw new Error(j.customer_message || j.error_code || 'Could not start GSC connection');
+        } catch (err) {
+          gscConnectBtn.disabled = false;
+          gscConnectBtn.textContent = 'Connect Search Console →';
+          alert('Could not connect: ' + (err.message || err));
+        }
+      });
+    }
+
     // State C — mount charts + lazy-load geography
     if (impact.ga4_connected && impact.daily && impact.daily.length) {
       pollEcharts(function () {
         bootMaroonTheme();
         var instTotal      = mountChartTotal(impact.daily, impact.bleed_at);
         var instAiVsHuman  = mountChartAiVsHuman(impact.daily);
+
+        // AI Overview chart — only mount when Variant A data is available.
+        var gscData = d.gsc;
+        var instAiOverview = null;
+        if (gscData && !gscData.__planRequired && gscData.gsc_connected && gscData.daily && gscData.daily.length) {
+          instAiOverview = mountChartAiOverview(gscData.daily);
+        }
+
         window.addEventListener('resize', function () {
-          try { if (instTotal)     instTotal.resize();     } catch (_) {}
-          try { if (instAiVsHuman) instAiVsHuman.resize(); } catch (_) {}
+          try { if (instTotal)      instTotal.resize();      } catch (_) {}
+          try { if (instAiVsHuman)  instAiVsHuman.resize();  } catch (_) {}
+          try { if (instAiOverview) instAiOverview.resize(); } catch (_) {}
         });
       });
       loadGeography();
@@ -834,12 +1006,17 @@
     const range = (window.AdvocateChrome && window.AdvocateChrome.getRange)
       ? window.AdvocateChrome.getRange() : '30d';
     const rq = '?range=' + encodeURIComponent(range);
-    const [status, impact, clicks, metrics, conversions] = await Promise.allSettled([
+    const [status, impact, clicks, metrics, conversions, gscResult] = await Promise.allSettled([
       window.AMCP.authedFetch('/api/client/ga4/status').then(function (r) { return r.json(); }),
       window.AMCP.authedFetch('/api/client/traffic-impact' + rq).then(function (r) { return r.json(); }),
       window.AMCP.authedFetch('/api/client/clicks' + rq).then(function (r) { return r.json(); }),
       window.AMCP.authedFetch('/api/client/metrics' + rq).then(function (r) { return r.json(); }),
       window.AMCP.authedFetch('/api/client/traffic-impact/conversions').then(function (r) {
+        if (r.status === 402) return { __planRequired: true };
+        if (!r.ok) return null;
+        return r.json();
+      }),
+      window.AMCP.authedFetch('/api/client/traffic-impact/gsc' + rq).then(function (r) {
         if (r.status === 402) return { __planRequired: true };
         if (!r.ok) return null;
         return r.json();
@@ -851,6 +1028,7 @@
       clicks:      clicks.status      === 'fulfilled' ? clicks.value      : { clicks: [] },
       metrics:     metrics.status     === 'fulfilled' ? (metrics.value.metrics || metrics.value) : {},
       conversions: conversions.status === 'fulfilled' ? conversions.value : null,
+      gsc:         gscResult.status   === 'fulfilled' ? gscResult.value   : null,
     };
   }
 
@@ -877,6 +1055,17 @@
         returning_users: Math.round((ai + human) * (0.25 + Math.random() * 0.2)),
       });
     }
+    // Synthetic GSC daily data — 30 days of AI Overview presence
+    var gscDaily = [];
+    for (var gi = 29; gi >= 0; gi--) {
+      var gd   = new Date(today.getTime() - gi * 86400000);
+      var gdate = gd.toISOString().slice(0, 10);
+      var gimp = Math.round(3800 + Math.random() * 800);
+      var gai  = Math.round(gimp * (0.28 + Math.random() * 0.08));
+      var gcl  = Math.round(gai * (0.10 + Math.random() * 0.06));
+      gscDaily.push({ date: gdate, impressions: gimp, clicks: gcl, ai_overview_impressions: gai });
+    }
+
     return {
       ga4Status: { connected: true, property_label: 'Demo property' },
       impact:    { ga4_connected: true, bleed_at: bleedAt, slug: 'demo', daily: daily },
@@ -893,6 +1082,22 @@
           { event_name: 'newsletter_signup', ai: 5,  human: 24, revenue: 0 },
         ],
         has_conversion_data: true,
+      },
+      gsc: {
+        gsc_connected:           true,
+        slug:                    'preview-demo',
+        site_url:                'https://example.com/',
+        total_impressions:       124000,
+        total_clicks:            3200,
+        ai_overview_impressions: 38000,
+        ai_overview_pct:         0.31,
+        cite_rate:               0.12,
+        daily: gscDaily,
+        top_ai_overview_queries: [
+          { query: 'best ai search analytics tool',  impressions: 4200, clicks: 180 },
+          { query: 'advocate vs scrunch',            impressions: 1800, clicks: 95 },
+          { query: 'perplexity citation tracking',   impressions: 1500, clicks: 30 },
+        ],
       },
     };
   }

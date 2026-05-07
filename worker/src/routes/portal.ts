@@ -218,6 +218,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/traffic-impact"              && method === "GET")  return apiTrafficImpact(request, env);
   if (pathname === "/api/client/traffic-impact/geography"   && method === "GET")  return apiTrafficImpactGeography(request, env);
   if (pathname === "/api/client/traffic-impact/conversions" && method === "GET")  return apiTrafficImpactConversions(request, env);
+  if (pathname === "/api/client/traffic-impact/gsc"         && method === "GET")  return apiTrafficImpactGSC(request, env);
   if (pathname === "/api/client/me"       && method === "GET")  return apiMe(request, env);
   if (pathname === "/api/client/me"       && method === "PATCH") return apiPatchMe(request, env);
   if (pathname === "/api/client/metrics"  && method === "GET")  return apiMetrics(request, env);
@@ -388,6 +389,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/traffic-impact"               && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/traffic-impact/geography"    && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/traffic-impact/conversions"  && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/traffic-impact/gsc"          && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/all-metrics" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/all-metrics" && method === "GET")     return apiAllMetrics(request, env);
   if (pathname === "/api/client/activity-detail" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
@@ -4775,6 +4777,147 @@ async function apiTrafficImpactConversions(request: Request, env: Env): Promise<
       // "no data yet" (could be either: not configured, or configured
       // but no conversions) and shows a configuration hint.
       has_conversion_data: rows.length > 0,
+    }),
+    request,
+    { credentials: true },
+  );
+}
+
+// ── GET /api/client/traffic-impact/gsc ────────────────────────────────────
+// Pro / Enterprise only — 402 for base-tier tenants.
+// Returns AI Overview presence stats from the gsc_daily table.
+
+async function apiTrafficImpactGSC(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const reqUrl = new URL(request.url);
+  const slugParam = reqUrl.searchParams.get("slug");
+  const biz = (slugParam ? businesses.find(b => b.slug === slugParam) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business"), request, { credentials: true });
+
+  // Pro plan gate.
+  const planRow = await env.DB
+    .prepare("SELECT plan FROM businesses WHERE slug = ?")
+    .bind(biz.slug)
+    .first<{ plan: string | null }>();
+  const plan = planRow?.plan ?? "base";
+  if (plan !== "pro" && plan !== "enterprise") {
+    return withCors(jsonErr(402, "plan_required"), request, { credentials: true });
+  }
+
+  // Date filter same shape as apiTrafficImpact.
+  const range = reqUrl.searchParams.get("range");
+  const startQs = reqUrl.searchParams.get("start_date");
+  const endQs   = reqUrl.searchParams.get("end_date");
+  let dateFilterSql = "";
+  let dateFilterArgs: string[] = [];
+  if (startQs && endQs) {
+    dateFilterSql = " AND date >= ? AND date <= ?";
+    dateFilterArgs = [startQs, endQs];
+  } else if (range && /^\d+d$/.test(range)) {
+    const days = parseInt(range, 10);
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    dateFilterSql = " AND date >= ?";
+    dateFilterArgs = [cutoff];
+  }
+
+  // Connection status check first — frontend wants to differentiate
+  // not-connected from no-data-yet.
+  const conn = await env.DB
+    .prepare("SELECT site_url, status FROM gsc_connections WHERE slug = ? LIMIT 1")
+    .bind(biz.slug)
+    .first<{ site_url: string | null; status: string }>();
+
+  if (!conn || !conn.site_url) {
+    return withCors(jsonOk({
+      gsc_connected: false,
+      slug:          biz.slug,
+      site_url:      null,
+      total_impressions:       0,
+      total_clicks:            0,
+      ai_overview_impressions: 0,
+      ai_overview_pct:         0,
+      cite_rate:               0,
+      daily: [],
+      top_ai_overview_queries: [],
+    }), request, { credentials: true });
+  }
+
+  // Per-day rollup: total impressions, AI Overview impressions
+  const dailyResult = await env.DB
+    .prepare(
+      `SELECT date,
+              SUM(impressions) AS impressions,
+              SUM(clicks)      AS clicks,
+              SUM(CASE WHEN ai_overview_shown = 1 THEN impressions ELSE 0 END) AS ai_overview_impressions
+         FROM gsc_daily
+        WHERE slug = ?${dateFilterSql}
+        GROUP BY date
+        ORDER BY date ASC`,
+    )
+    .bind(biz.slug, ...dateFilterArgs)
+    .all<{ date: string; impressions: number; clicks: number; ai_overview_impressions: number }>();
+  const daily = (dailyResult.results ?? []).map(d => ({
+    date: d.date,
+    impressions:             d.impressions             ?? 0,
+    clicks:                  d.clicks                  ?? 0,
+    ai_overview_impressions: d.ai_overview_impressions ?? 0,
+  }));
+
+  let totalImpressions = 0, totalClicks = 0, aiOverviewImpressions = 0;
+  for (const d of daily) {
+    totalImpressions      += d.impressions;
+    totalClicks           += d.clicks;
+    aiOverviewImpressions += d.ai_overview_impressions;
+  }
+
+  // Cite rate: of queries where AI Overview was shown, how many got
+  // CLICKS for our customer. Proxy for "we were cited in the Overview"
+  // since GSC reports clicks as "user clicked our link" — if the AI
+  // Overview was shown AND we got clicks, plausibly we were cited.
+  // (NOT 100% accurate — user could have clicked another result on the
+  // same SERP — but it's the best signal GSC gives us.)
+  const aiOverviewClicksResult = await env.DB
+    .prepare(
+      `SELECT SUM(clicks) AS clicks
+         FROM gsc_daily
+        WHERE slug = ? AND ai_overview_shown = 1${dateFilterSql}`,
+    )
+    .bind(biz.slug, ...dateFilterArgs)
+    .first<{ clicks: number | null }>();
+  const aiOverviewClicks = aiOverviewClicksResult?.clicks ?? 0;
+  const citeRate = aiOverviewImpressions > 0 ? aiOverviewClicks / aiOverviewImpressions : 0;
+
+  // Top AI Overview queries — for the table
+  const topAiResult = await env.DB
+    .prepare(
+      `SELECT query, SUM(impressions) AS impressions, SUM(clicks) AS clicks
+         FROM gsc_daily
+        WHERE slug = ? AND ai_overview_shown = 1${dateFilterSql}
+        GROUP BY query
+        ORDER BY impressions DESC
+        LIMIT 10`,
+    )
+    .bind(biz.slug, ...dateFilterArgs)
+    .all<{ query: string; impressions: number; clicks: number }>();
+
+  return withCors(
+    jsonOk({
+      gsc_connected:           true,
+      slug:                    biz.slug,
+      site_url:                conn.site_url,
+      total_impressions:       totalImpressions,
+      total_clicks:            totalClicks,
+      ai_overview_impressions: aiOverviewImpressions,
+      ai_overview_pct:         totalImpressions > 0 ? aiOverviewImpressions / totalImpressions : 0,
+      cite_rate:               citeRate,
+      daily,
+      top_ai_overview_queries: topAiResult.results ?? [],
     }),
     request,
     { credentials: true },
