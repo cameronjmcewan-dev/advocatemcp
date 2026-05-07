@@ -33,6 +33,7 @@ import {
   releaseForSlug,
 } from "../middleware/tenantBudget.js";
 import crypto from "crypto";
+import { computeRevenueWindow } from "../lib/revenue.js";
 import { z } from "zod";
 import { scanForPromptInjection } from "../lib/promptInjectionScanner.js";
 import {
@@ -856,11 +857,13 @@ agentRouter.get("/agents/:slug/revenue-summary", requireSlugOrAdminKey, (req: Re
     locationId = ownedRow.id;
   }
 
-  // Lazy import to avoid circular deps on agent.ts → revenue.ts → db.ts.
   // computeRevenueWindow throws nothing — it returns 'unconfigured' on
-  // any data shortfall — so no try/catch needed here.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { computeRevenueWindow } = require("../lib/revenue.js") as typeof import("../lib/revenue.js");
+  // any data shortfall — so no try/catch needed here. Imported statically
+  // at the top of the file because revenue.ts only depends on a type from
+  // better-sqlite3 (no circular dep on agent.ts), and the previous
+  // CommonJS `require()` doesn't exist in the ESM build Railway runs —
+  // every authenticated hit threw `ReferenceError: require is not defined`
+  // and surfaced as a 500 to the dashboard. (May 7 2026 fix.)
   const summary = computeRevenueWindow({ db: getDb(), slug, fromISO, toISO, locationId });
   res.json(summary);
 });
