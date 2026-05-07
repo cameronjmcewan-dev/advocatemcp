@@ -68,6 +68,7 @@ import {
   handleAdminProfileScores,
 } from "./adminInsightsProxy";
 import { handleGA4Start, handleGA4Callback } from "./ga4Oauth";
+import { signGA4State } from "../lib/ga4State";
 import { decryptToken } from "../lib/ga4TokenCrypto";
 import { refreshAccessToken, listProperties, fetchDailyTraffic } from "../lib/ga4";
 import { classifyTrafficSource } from "../lib/aiTrafficClassifier";
@@ -194,6 +195,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/oauth/ga4/start"     && method === "GET")  return handleGA4StartProtected(request, env);
   if (pathname === "/oauth/ga4/callback"  && method === "GET")  return handleGA4Callback(request, env);
   if (pathname === "/api/client/ga4/status"          && method === "GET")  return apiGA4Status(request, env);
+  if (pathname === "/api/client/ga4/start-link"      && method === "POST") return apiGA4StartLink(request, env);
   if (pathname === "/api/client/ga4/properties"      && method === "GET")  return apiGA4Properties(request, env);
   if (pathname === "/api/client/ga4/select-property" && method === "POST") return apiGA4SelectProperty(request, env);
   if (pathname === "/api/client/ga4/disconnect"      && method === "POST") return apiGA4Disconnect(request, env);
@@ -354,6 +356,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/me"         && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/metrics"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/ga4/status"          && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/ga4/start-link"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/ga4/properties"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/ga4/select-property" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/ga4/disconnect"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
@@ -3349,6 +3352,63 @@ async function handleGA4StartProtected(request: Request, env: Env): Promise<Resp
 
   // Authorized — delegate to the actual OAuth start handler.
   return handleGA4Start(request, env);
+}
+
+// ── POST /api/client/ga4/start-link ────────────────────────────────────────
+//
+// JSON-returning sibling of /oauth/ga4/start. Necessary because the customer
+// dashboard's auth model is bearer-token in JS memory — URL-bar typed
+// navigations to /oauth/ga4/start can't carry a bearer header, so the GET
+// path 401s for everyone except legacy admin-cookie sessions.
+//
+// Frontend calls this with bearer auth, gets back {url}, then sets
+// window.location.href = url. The signed state binds the slug so the OAuth
+// callback knows which tenant the connection is for.
+
+async function apiGA4StartLink(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const reqUrl = new URL(request.url);
+  const querySlug = reqUrl.searchParams.get("slug");
+  if (!querySlug) {
+    return withCors(jsonErr(400, "slug query param required"), request, { credentials: true });
+  }
+
+  // Same ownership check as handleGA4StartProtected.
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const owns = businesses.some(b => b.slug === querySlug);
+  if (!owns) {
+    return withCors(jsonErr(403, "no access to this business"), request, { credentials: true });
+  }
+
+  if (!env.TOKEN_SIGNING_KEY || !env.GA4_OAUTH_CLIENT_ID || !env.GA4_OAUTH_REDIRECT_URI) {
+    return withCors(jsonErr(503, "GA4 integration not configured"), request, { credentials: true });
+  }
+
+  // Generate a 16-byte hex nonce + sign the state.
+  const nonceBytes = crypto.getRandomValues(new Uint8Array(16));
+  const nonce = Array.from(nonceBytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+  const state = await signGA4State(
+    { slug: querySlug, nonce, ts: Math.floor(Date.now() / 1000) },
+    env.TOKEN_SIGNING_KEY,
+  );
+
+  const params = new URLSearchParams({
+    client_id:     env.GA4_OAUTH_CLIENT_ID,
+    redirect_uri:  env.GA4_OAUTH_REDIRECT_URI,
+    response_type: "code",
+    scope:         "https://www.googleapis.com/auth/analytics.readonly",
+    access_type:   "offline",
+    prompt:        "consent",
+    state,
+  });
+  const url = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+
+  return withCors(jsonOk({ url }), request, { credentials: true });
 }
 
 // ── GET /api/client/ga4/status ─────────────────────────────────────────────
