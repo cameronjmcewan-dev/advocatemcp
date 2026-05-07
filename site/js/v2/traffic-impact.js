@@ -649,6 +649,106 @@
     ].join('');
   }
 
+  // ── LTV section renderer ──────────────────────────────────────────
+
+  function renderLtvSection(ltv) {
+    // Variant L-error — null/error
+    if (!ltv) return '';
+
+    // Variant L-pro-required — base tenant
+    if (ltv.__planRequired) {
+      return [
+        '<section class="card-dash" style="background: var(--paper); border: 1px solid var(--line); padding: 20px 24px;">',
+        '  <div style="display:flex; justify-content:space-between; align-items:center; gap:24px; flex-wrap:wrap;">',
+        '    <div>',
+        '      <div style="display:inline-block; font-size:11px; font-weight:600; color:var(--maroon); background:var(--maroon-tint); padding:3px 10px; border-radius:999px; letter-spacing:0.05em; margin-bottom:8px">PRO</div>',
+        '      <div style="font-size:14px; font-weight:500; color:var(--ink)">See LTV per acquisition source from your HubSpot or Salesforce</div>',
+        '      <div style="font-size:13px; color:var(--ink-2); margin-top:6px; max-width:560px; line-height:1.5">',
+        '        Pro tenants connect their CRM and Advocate computes average lifetime value per AI-acquired vs unknown-source customer cohorts.',
+        '      </div>',
+        '    </div>',
+        '    <a href="/Billing.html" class="btn btn-primary btn-sm">Upgrade to Pro →</a>',
+        '  </div>',
+        '</section>',
+      ].join('');
+    }
+
+    // Variant L-not-connected — Pro + crm_connected: false
+    if (!ltv.crm_connected) {
+      return [
+        '<section class="card-dash" style="border: 1px dashed var(--line); padding: 24px;">',
+        '  <div style="display:flex; justify-content:space-between; align-items:center; gap:24px; flex-wrap:wrap;">',
+        '    <div>',
+        '      <div style="font-size:14px; font-weight:500; color:var(--ink);">Track customer LTV by acquisition source</div>',
+        '      <div style="font-size:13px; color:var(--ink-2); margin-top:6px; max-width:540px; line-height:1.5">',
+        '        Connect HubSpot or Salesforce so Advocate can show how much lifetime value AI-acquired customers generate vs unknown sources. Aggregate roll-ups only — your contact data stays in your CRM.',
+        '      </div>',
+        '    </div>',
+        '    <div style="display:flex; gap:8px;">',
+        '      <button class="btn btn-primary btn-sm" id="ti-crm-connect-hubspot">HubSpot →</button>',
+        '      <button class="btn btn-ghost btn-sm" id="ti-crm-connect-salesforce">Salesforce →</button>',
+        '    </div>',
+        '  </div>',
+        '</section>',
+      ].join('');
+    }
+
+    // Variant L — Pro + crm_connected
+    var ai      = ltv.ai      || { contact_count: 0, customer_count: 0, total_revenue_cents: 0, avg_ltv_cents: 0 };
+    var unknown = ltv.unknown || { contact_count: 0, customer_count: 0, total_revenue_cents: 0, avg_ltv_cents: 0 };
+    var provider = ltv.provider || 'CRM';
+
+    // No contacts in last 90 days
+    if (ai.contact_count === 0 && unknown.contact_count === 0) {
+      return [
+        '<section class="card-dash">',
+        '  <div class="card-head">',
+        '    <div>',
+        '      <h3>Customer LTV by acquisition source</h3>',
+        '      <div class="sub">Connected to ' + esc(provider) + ' CRM. No contacts created in the last 90 days yet.</div>',
+        '    </div>',
+        '  </div>',
+        '  <div style="padding: 32px; text-align: center; color: var(--muted); font-size: 13.5px">',
+        '    LTV data will appear here as new contacts land in your CRM.',
+        '  </div>',
+        '</section>',
+      ].join('');
+    }
+
+    var customerWord = ai.customer_count === 1 ? 'customer' : 'customers';
+    var leadWord     = ai.contact_count === 1 ? 'lead' : 'leads';
+    var trendHtml = (ltv.trend && ltv.trend.length > 0)
+      ? '<div id="ltv-trend-chart" style="width:100%; height: 280px; margin-top: 16px"></div>'
+      : '';
+
+    return [
+      '<section class="card-dash">',
+      '  <div class="card-head">',
+      '    <div>',
+      '      <h3>Customer LTV by acquisition source</h3>',
+      '      <div class="sub">Average customer lifetime value split by first-touch attribution from your ' + esc(provider) + ' CRM. Contacts created in the last 90 days.</div>',
+      '    </div>',
+      '  </div>',
+      '  <div class="kpis" style="grid-template-columns: 1fr 1fr;">',
+      '    <div class="kpi" style="background: linear-gradient(135deg, var(--maroon-tint), transparent); border: 1px solid var(--maroon-tint);">',
+      '      <div class="head"><div class="k" style="color:var(--maroon)">Acquired via AI search</div></div>',
+      '      <div class="v tabular">' + formatMoney(ai.avg_ltv_cents / 100, 'USD') + '</div>',
+      '      <div class="d">avg LTV \xb7 ' + ai.customer_count + ' ' + customerWord + ' from ' + ai.contact_count + ' ' + leadWord + '</div>',
+      '    </div>',
+      '    <div class="kpi" style="background: var(--paper-2); border: 1px solid var(--line);">',
+      '      <div class="head"><div class="k">Source unknown</div></div>',
+      '      <div class="v tabular">' + formatMoney(unknown.avg_ltv_cents / 100, 'USD') + '</div>',
+      '      <div class="d">avg LTV \xb7 ' + unknown.customer_count + ' customers from ' + unknown.contact_count + ' leads</div>',
+      '    </div>',
+      '  </div>',
+      trendHtml,
+      '  <div style="margin-top: 16px; padding: 12px 16px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line);">',
+      '    Attribution method: 24h time-window match against /r/&lt;token&gt; redirect clicks. “Source unknown” rows are leads we couldn’t match to an AI click — never assumed Human. Add UTM threading from your checkout to your CRM contact for deterministic attribution (future feature).',
+      '  </div>',
+      '</section>',
+    ].join('');
+  }
+
   // ── Render ────────────────────────────────────────────────────────
 
   function render(data) {
@@ -662,6 +762,7 @@
     const conv      = d.conversions !== undefined ? d.conversions : null;
     const gsc       = d.gsc !== undefined ? d.gsc : null;
     const verified  = d.verifiedRevenue !== undefined ? d.verifiedRevenue : null;
+    const ltv       = d.ltv !== undefined ? d.ltv : null;
 
     const clickCount = Array.isArray(clicksPay.clicks)
       ? clicksPay.clicks.length
@@ -792,6 +893,7 @@
       ${convHasData ? renderTopConversions(conv) : ''}
       ${renderAiOverviewSection(gsc)}
       ${(verified && !verified.__planRequired && verified.webhook_configured === true && (verified.ai_cents > 0 || verified.total_events > 0)) ? renderVerifiedRevenueEvents(verified) : ''}
+      ${renderLtvSection(ltv)}
       ${renderGeographyCard()}
 
       <details class="card-dash" style="padding:16px 20px;">
@@ -1019,6 +1121,46 @@
     return inst;
   }
 
+  function mountLtvTrendChart(trend) {
+    var el = document.getElementById('ltv-trend-chart');
+    if (!el || !window.echarts || !trend || trend.length === 0) return null;
+    var maroon = readCssVar('--maroon', '#7d2550');
+    var gray = '#a39b8e';
+    var dates     = trend.map(function (t) { return t.date; });
+    var aiLtv     = trend.map(function (t) { return (t.ai && t.ai.avg_ltv_cents) ? t.ai.avg_ltv_cents / 100 : 0; });
+    var unknownLtv = trend.map(function (t) { return (t.unknown && t.unknown.avg_ltv_cents) ? t.unknown.avg_ltv_cents / 100 : 0; });
+
+    var inst = window.echarts.init(el, 'advocate-maroon');
+    inst.setOption({
+      grid: { left: 60, right: 24, top: 36, bottom: 32 },
+      tooltip: {
+        trigger: 'axis',
+        formatter: function (params) {
+          return '<b>' + params[0].axisValue + '</b><br>' +
+            params.map(function (p) {
+              return '<span style="display:inline-block;width:9px;height:9px;background:' + p.color + ';border-radius:2px;margin-right:6px;vertical-align:middle"></span>' +
+                p.seriesName + ': <b>$' + p.value.toLocaleString() + '</b>';
+            }).join('<br>');
+        },
+      },
+      legend: {
+        data: [
+          { name: 'Acquired via AI', icon: 'roundRect' },
+          { name: 'Source unknown',  icon: 'roundRect' },
+        ],
+        top: 4, left: 0, itemWidth: 14, itemHeight: 14, itemGap: 18,
+        textStyle: { color: 'var(--ink)', fontSize: 13 },
+      },
+      xAxis: { type: 'category', data: dates, boundaryGap: false },
+      yAxis: { type: 'value', axisLabel: { formatter: '${value}' } },
+      series: [
+        { name: 'Acquired via AI',  type: 'line', data: aiLtv,      smooth: true, showSymbol: false, lineStyle: { width: 2, color: maroon }, areaStyle: { color: maroon, opacity: 0.18 }, color: maroon },
+        { name: 'Source unknown',   type: 'line', data: unknownLtv, smooth: true, showSymbol: false, lineStyle: { width: 2, color: gray },   areaStyle: { color: gray, opacity: 0.18 },   color: gray },
+      ],
+    });
+    return inst;
+  }
+
   function mountChartAiOverview(daily) {
     var el = document.getElementById('gsc-ai-chart');
     if (!el || !window.echarts) return null;
@@ -1097,6 +1239,29 @@
       });
     }
 
+    // CRM connect buttons — may appear in State C when crm_connected is false.
+    function wireCrmConnectBtn(id, provider) {
+      var btn = document.getElementById(id);
+      if (!btn) return;
+      btn.addEventListener('click', async function (e) {
+        e.preventDefault();
+        btn.disabled = true;
+        btn.textContent = 'Opening…';
+        try {
+          var r = await window.AMCP.authedFetch('/api/client/crm/start-link?provider=' + encodeURIComponent(provider), { method: 'POST' });
+          var j = await r.json();
+          if (j && j.url) { window.location.href = j.url; return; }
+          throw new Error((j && (j.customer_message || j.error_code)) || 'Could not start CRM connection');
+        } catch (err) {
+          btn.disabled = false;
+          btn.textContent = provider.charAt(0).toUpperCase() + provider.slice(1) + ' →';
+          alert('Could not connect: ' + (err.message || err));
+        }
+      });
+    }
+    wireCrmConnectBtn('ti-crm-connect-hubspot', 'hubspot');
+    wireCrmConnectBtn('ti-crm-connect-salesforce', 'salesforce');
+
     // State C — mount charts + lazy-load geography
     if (impact.ga4_connected && impact.daily && impact.daily.length) {
       pollEcharts(function () {
@@ -1111,10 +1276,18 @@
           instAiOverview = mountChartAiOverview(gscData.daily);
         }
 
+        // LTV trend chart — only mount when Variant L is active with trend data.
+        var ltvData = d.ltv;
+        var instLtvTrend = null;
+        if (ltvData && !ltvData.__planRequired && ltvData.crm_connected && ltvData.trend && ltvData.trend.length > 0) {
+          instLtvTrend = mountLtvTrendChart(ltvData.trend);
+        }
+
         window.addEventListener('resize', function () {
           try { if (instTotal)      instTotal.resize();      } catch (_) {}
           try { if (instAiVsHuman)  instAiVsHuman.resize();  } catch (_) {}
           try { if (instAiOverview) instAiOverview.resize(); } catch (_) {}
+          try { if (instLtvTrend)   instLtvTrend.resize();   } catch (_) {}
         });
       });
       loadGeography();
@@ -1150,7 +1323,7 @@
     const range = (window.AdvocateChrome && window.AdvocateChrome.getRange)
       ? window.AdvocateChrome.getRange() : '30d';
     const rq = '?range=' + encodeURIComponent(range);
-    const [status, impact, clicks, metrics, conversions, gscResult, verifiedRevResult] = await Promise.allSettled([
+    const [status, impact, clicks, metrics, conversions, gscResult, verifiedRevResult, ltvResult] = await Promise.allSettled([
       window.AMCP.authedFetch('/api/client/ga4/status').then(function (r) { return r.json(); }),
       window.AMCP.authedFetch('/api/client/traffic-impact' + rq).then(function (r) { return r.json(); }),
       window.AMCP.authedFetch('/api/client/clicks' + rq).then(function (r) { return r.json(); }),
@@ -1170,6 +1343,11 @@
         if (!r.ok) return null;
         return r.json();
       }),
+      window.AMCP.authedFetch('/api/client/traffic-impact/ltv').then(function (r) {
+        if (r.status === 402) return { __planRequired: true };
+        if (!r.ok) return null;
+        return r.json();
+      }),
     ]);
     return {
       ga4Status:       status.status          === 'fulfilled' ? status.value          : { connected: false },
@@ -1179,6 +1357,7 @@
       conversions:     conversions.status     === 'fulfilled' ? conversions.value     : null,
       gsc:             gscResult.status       === 'fulfilled' ? gscResult.value       : null,
       verifiedRevenue: verifiedRevResult.status === 'fulfilled' ? verifiedRevResult.value : null,
+      ltv:             ltvResult.status       === 'fulfilled' ? ltvResult.value       : null,
     };
   }
 
@@ -1263,6 +1442,34 @@
           { amount_cents: 24000, currency: 'USD', occurred_at: '2026-05-05T18:45:33Z', referrer_classification: 'ai',      first_touch_source: 'ChatGPT'        },
         ],
       },
+      ltv: (function () {
+        var ltvTrend = [];
+        for (var li = 29; li >= 0; li--) {
+          var ld = new Date(today.getTime() - li * 86400000);
+          var ldate = ld.toISOString().slice(0, 10);
+          // AI LTV grows from ~$140 to ~$180 over the period; unknown stays ~$110
+          var aiAvg = Math.round(14000 + (29 - li) * 133 + (Math.random() * 800 - 400));
+          var unAvg = Math.round(11000 + (Math.random() * 1000 - 500));
+          var aiCust = Math.round(1 + Math.random() * 2);
+          var unCust = Math.round(2 + Math.random() * 3);
+          ltvTrend.push({
+            date: ldate,
+            ai:      { contact_count: aiCust + 1, customer_count: aiCust, total_revenue_cents: aiCust * aiAvg, avg_ltv_cents: aiAvg },
+            unknown: { contact_count: unCust + 2, customer_count: unCust, total_revenue_cents: unCust * unAvg, avg_ltv_cents: unAvg },
+          });
+        }
+        return {
+          crm_connected: true,
+          provider: 'hubspot',
+          slug: 'preview-demo',
+          since: new Date(today.getTime() - 90 * 86400000).toISOString(),
+          ai:      { contact_count: 42, customer_count: 18, total_revenue_cents: 312000, avg_ltv_cents: 17333 },
+          unknown: { contact_count: 187, customer_count: 64, total_revenue_cents: 720000, avg_ltv_cents: 11250 },
+          errored: 0,
+          total_contacts: 229,
+          trend: ltvTrend,
+        };
+      }()),
     };
   }
 

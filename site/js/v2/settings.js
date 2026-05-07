@@ -41,7 +41,7 @@
     const af = window.AMCP && window.AMCP.authedFetch;
     const slug = (window.AMCP_DATA && window.AMCP_DATA.slug) || '';
     const suffix = slug ? `?slug=${encodeURIComponent(slug)}` : '';
-    const [me, metrics, domain, activity, revenue, ga4Status, gscStatus, verifiedRevenue] = await Promise.all([
+    const [me, metrics, domain, activity, revenue, ga4Status, gscStatus, verifiedRevenue, crmHubspot, crmSalesforce] = await Promise.all([
       af('/api/client/me').then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/metrics').then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/domain-info' + suffix).then(r => r.ok ? r.json() : null).catch(() => null),
@@ -68,6 +68,10 @@
         if (r.status === 402) return null;
         return r.ok ? r.json() : null;
       }).catch(() => null),
+      // CRM connection status — HubSpot (PR 4). 402 = Pro gate → null.
+      af('/api/client/crm/status?provider=hubspot').then(r => r.ok ? r.json() : null).catch(() => null),
+      // CRM connection status — Salesforce (PR 4). 402 = Pro gate → null.
+      af('/api/client/crm/status?provider=salesforce').then(r => r.ok ? r.json() : null).catch(() => null),
     ]);
     return Object.assign({}, metrics || {}, {
       _me: me,
@@ -77,6 +81,8 @@
       ga4Status:       ga4Status        || { connected: false },
       gscStatus:       gscStatus        || { connected: false },
       verifiedRevenue: verifiedRevenue  || null,
+      crmHubspot:      crmHubspot       || null,
+      crmSalesforce:   crmSalesforce    || null,
     });
   }
 
@@ -197,6 +203,13 @@
            Pro-only — base tenants see an upgrade CTA. -->
       <div class="row single">
         ${renderGscCard(d.gscStatus || { connected: false }, plan)}
+      </div>
+
+      <!-- CRM integration (May 6 2026 PR 4). Manages HubSpot + Salesforce OAuth
+           connections that power the LTV section on /TrafficImpact.html.
+           Pro-only — base tenants see an upgrade CTA. -->
+      <div class="row single">
+        ${renderCrmCard(d.crmHubspot || null, d.crmSalesforce || null, plan)}
       </div>
 
       <!-- Team (Apr 27 2026 Enterprise honesty pass). Owner-only invite/
@@ -717,6 +730,134 @@
     }
   }
 
+  /* CRM connection card — PR 4 of the Traffic Impact feature.
+   *
+   * Shows HubSpot and Salesforce connections side-by-side.
+   * Base tenants see an upgrade CTA. Pro tenants see connect/disconnect
+   * controls per provider. A tenant can have both connected simultaneously.
+   */
+  function renderCrmCard(hubspot, salesforce, plan) {
+    const isPro = plan === 'pro' || plan === 'enterprise';
+
+    // Base tenant — upsell
+    if (!isPro) {
+      return `
+        <div class="card-dash">
+          <div class="card-head">
+            <div>
+              <h3>CRM integration <span class="chip maroon" style="margin-left:6px">Pro</span></h3>
+              <div class="sub">Connect HubSpot or Salesforce to track LTV by AI vs unknown acquisition source.</div>
+            </div>
+          </div>
+          <div class="set-row" style="border-bottom:0;padding:20px 0">
+            <div class="l"></div>
+            <div class="r" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+              <div style="font-size:13px;color:var(--ink-2);max-width:480px;line-height:1.5">
+                Pro tenants connect their CRM and Advocate computes average lifetime value per AI-acquired vs unknown-source customer cohorts. Aggregate roll-ups only — contact data stays in your CRM.
+              </div>
+              <a href="/Billing.html" class="btn btn-primary btn-sm">Upgrade to Pro →</a>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function providerSection(provider, s, labelTitle) {
+      const connected = !!(s && s.connected);
+      const errorPill = (s && s.last_sync_error)
+        ? `<span class="chip" style="background:rgba(180,40,40,.08);color:var(--red);border:1px solid rgba(180,40,40,.25)">Sync error</span>`
+        : '';
+      const btnId = 'btn-crm-' + provider;
+      if (!connected) {
+        return `
+          <div style="flex:1;min-width:220px;border:1px solid var(--line);border-radius:8px;padding:16px">
+            <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:8px">${esc(labelTitle)}</div>
+            <div style="margin-bottom:10px"><span class="chip">Not connected</span></div>
+            <button class="btn btn-primary btn-sm" id="${btnId}-connect" type="button">Connect ${esc(labelTitle)} →</button>
+            <span id="${btnId}-msg" style="display:block;margin-top:6px;font-size:12.5px;color:var(--muted)"></span>
+          </div>`;
+      }
+      return `
+        <div style="flex:1;min-width:220px;border:1px solid var(--line);border-radius:8px;padding:16px">
+          <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:8px">${esc(labelTitle)}</div>
+          <div style="margin-bottom:6px"><span class="chip sage dot-chip"><span class="dot"></span>Connected</span> ${errorPill}</div>
+          ${s && s.last_used_at ? `<div style="font-size:12.5px;color:var(--muted);margin-bottom:10px">Last used ${esc(timeAgo(s.last_used_at))}</div>` : ''}
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <button class="btn btn-ghost btn-sm" id="${btnId}-disconnect" type="button">Disconnect</button>
+            <a class="btn btn-ghost btn-sm" href="/TrafficImpact.html">View LTV →</a>
+          </div>
+          <span id="${btnId}-msg" style="display:block;margin-top:6px;font-size:12.5px;color:var(--muted)"></span>
+        </div>`;
+    }
+
+    return `
+      <div class="card-dash">
+        <div class="card-head">
+          <div>
+            <h3>CRM integration</h3>
+            <div class="sub">Connect your CRM to see customer lifetime value split by AI vs unknown acquisition source on the Traffic Impact page.</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap;padding:4px 0 8px">
+          ${providerSection('hubspot', hubspot, 'HubSpot')}
+          ${providerSection('salesforce', salesforce, 'Salesforce')}
+        </div>
+      </div>`;
+  }
+
+  /* Wires the CRM card buttons. Called from afterMount(). Mirrors wireGscCard()
+   * but points at /api/client/crm/* endpoints with a provider query param. */
+  function wireCrmCard() {
+    const af = window.AMCP && window.AMCP.authedFetch;
+
+    function wireProvider(provider) {
+      const labelTitle = provider.charAt(0).toUpperCase() + provider.slice(1);
+      const btnId = 'btn-crm-' + provider;
+      const msgEl = document.getElementById(btnId + '-msg');
+      const setMsg = (text, kind) => {
+        if (!msgEl) return;
+        msgEl.textContent = text || '';
+        msgEl.style.color = kind === 'error' ? 'var(--red)' : kind === 'success' ? 'var(--sage)' : 'var(--muted)';
+      };
+
+      const connectBtn = document.getElementById(btnId + '-connect');
+      if (connectBtn) {
+        connectBtn.addEventListener('click', async () => {
+          connectBtn.disabled = true;
+          setMsg('Opening ' + labelTitle + '…');
+          try {
+            const r = await af('/api/client/crm/start-link?provider=' + encodeURIComponent(provider), { method: 'POST' });
+            const j = await r.json();
+            if (j && j.url) { window.location.href = j.url; return; }
+            throw new Error((j && (j.customer_message || j.error_code)) || 'Could not start CRM connection');
+          } catch (err) {
+            setMsg(String(err && err.message || err), 'error');
+            connectBtn.disabled = false;
+          }
+        });
+      }
+
+      const disconnectBtn = document.getElementById(btnId + '-disconnect');
+      if (disconnectBtn) {
+        disconnectBtn.addEventListener('click', async () => {
+          if (!window.confirm('Disconnect ' + labelTitle + '? Imported LTV data stays in your account; new syncs will stop until you reconnect.')) return;
+          disconnectBtn.disabled = true;
+          setMsg('Disconnecting…');
+          try {
+            await af('/api/client/crm/disconnect?provider=' + encodeURIComponent(provider), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+            setMsg('Disconnected.', 'success');
+            setTimeout(() => window.location.reload(), 1000);
+          } catch (err) {
+            setMsg('Could not disconnect: ' + String(err && err.message || err), 'error');
+            disconnectBtn.disabled = false;
+          }
+        });
+      }
+    }
+
+    wireProvider('hubspot');
+    wireProvider('salesforce');
+  }
+
   function afterMount(data) {
     const preview = !!window.__ADVOCATE_PREVIEW;
     const slug = (window.AMCP_DATA && window.AMCP_DATA.slug) || '';
@@ -733,6 +874,9 @@
 
     // Wire the GSC connection card (PR 5, May 6 2026). Same no-op safety.
     wireGscCard();
+
+    // Wire the CRM connection card (PR 4, May 6 2026). Same no-op safety.
+    wireCrmCard();
 
     // Open DNS wizard — launches the existing legacy module in a modal.
     // The wizard's own public API (window.AMCP_DNS_WIZARD.open) is
