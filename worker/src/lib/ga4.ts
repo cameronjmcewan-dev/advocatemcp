@@ -97,6 +97,57 @@ export async function listProperties(accessToken: string): Promise<GA4Property[]
   return properties;
 }
 
+// ── listDataStreams ───────────────────────────────────────────────────────────
+
+/**
+ * Lists GA4 web data streams for a property and returns the measurement IDs.
+ * Used by the one-off admin endpoint that helps the operator find the
+ * G-XXXXXXXXXX measurement ID for installing gtag.js on the marketing site
+ * without forcing a manual round-trip into the Google Analytics UI.
+ *
+ * Endpoint: analyticsadmin.googleapis.com/v1beta/properties/{id}/dataStreams
+ * Scope:    https://www.googleapis.com/auth/analytics.readonly  (already in OAuth grant)
+ */
+export interface GA4DataStream {
+  name:           string;   // "properties/123/dataStreams/456"
+  type:           string;   // "WEB_DATA_STREAM" | etc.
+  displayName:    string;
+  measurementId:  string | null;   // "G-XXXXXXXXXX" (web streams only)
+  defaultUri:     string | null;
+}
+
+export async function listDataStreams(
+  accessToken: string,
+  propertyId:  string,    // "properties/532200123"
+): Promise<GA4DataStream[]> {
+  const url = `https://analyticsadmin.googleapis.com/v1beta/${propertyId}/dataStreams`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!res.ok) {
+    const snippet = (await res.text()).slice(0, 200);
+    throw new Error(`ga4: listDataStreams failed: ${res.status} ${snippet}`);
+  }
+
+  const json = (await res.json()) as {
+    dataStreams?: Array<{
+      name:        string;
+      type:        string;
+      displayName: string;
+      webStreamData?: { measurementId?: string; defaultUri?: string };
+    }>;
+  };
+
+  return (json.dataStreams ?? []).map((s) => ({
+    name:          s.name,
+    type:          s.type,
+    displayName:   s.displayName,
+    measurementId: s.webStreamData?.measurementId ?? null,
+    defaultUri:    s.webStreamData?.defaultUri    ?? null,
+  }));
+}
+
 // ── fetchDailyGeography ───────────────────────────────────────────────────────
 
 /**

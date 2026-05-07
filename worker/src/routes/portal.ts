@@ -74,7 +74,7 @@ import { handleSalesforceStart, handleSalesforceCallback } from "./salesforceOau
 import { signGA4State } from "../lib/ga4State";
 import { signState } from "../lib/oauthState";
 import { decryptToken } from "../lib/ga4TokenCrypto";
-import { refreshAccessToken, listProperties, fetchDailyTraffic, fetchDailyGeography, fetchDailyConversions } from "../lib/ga4";
+import { refreshAccessToken, listProperties, listDataStreams, fetchDailyTraffic, fetchDailyGeography, fetchDailyConversions } from "../lib/ga4";
 import { listSites, fetchSearchAnalytics, fetchAiOverviewQueries } from "../lib/gsc";
 import { refreshHubspotAccessToken, fetchContactsWithRevenue } from "../lib/hubspot";
 import { refreshSalesforceAccessToken, fetchContactsWithRevenue as fetchSalesforceContactsWithRevenue } from "../lib/salesforce";
@@ -323,6 +323,13 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   // UI, only-this-tenant data) without sharing tenant credentials.
   if (pathname === "/admin/magic-login"        && method === "POST") return adminMagicLogin(request, env);
   if (pathname === "/admin/beta-tenants"       && method === "GET")  return adminBetaTenants(request, env);
+  // TEMP: one-off endpoint to fetch a tenant's GA4 measurement ID via the
+  // Admin API, so the operator can install gtag.js on the marketing site
+  // without round-tripping through the Google Analytics UI. Auth via
+  // requireVerifiedSession so the operator can hit it from their existing
+  // logged-in browser session. Remove after use.
+  if (pathname === "/api/client/ga4/streams"   && method === "GET")     return apiGa4Streams(request, env);
+  if (pathname === "/api/client/ga4/streams"   && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/auth/magic"               && method === "GET")  return handleMagicLogin(request, env);
   const resyncMatch = pathname.match(/^\/admin\/businesses\/([^/]+)\/resync-api-key$/);
   if (resyncMatch && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
@@ -3044,6 +3051,68 @@ async function adminBetaTenants(request: Request, env: Env): Promise<Response> {
     request,
     { credentials: true },
   );
+}
+
+/**
+ * TEMP endpoint: returns the GA4 web data streams (and their measurement IDs)
+ * for the caller's connected tenant. Used to find the G-XXXXXXXXXX ID needed
+ * when installing gtag.js on the marketing site.
+ *
+ *   GET /api/client/ga4/streams[?slug=...]
+ *   Auth: portal session (cookie) — same pattern as apiGA4Properties
+ *
+ * Remove this handler + its route line after the operator has captured the ID.
+ */
+async function apiGa4Streams(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const reqUrl = new URL(request.url);
+  const slugParam = reqUrl.searchParams.get("slug");
+  const biz = (slugParam ? businesses.find(b => b.slug === slugParam) : null) ?? businesses[0] ?? null;
+  if (!biz) {
+    return withCors(jsonErr(404, "No business"), request, { credentials: true });
+  }
+
+  if (!env.GA4_TOKEN_ENCRYPTION_KEY || !env.GA4_OAUTH_CLIENT_ID || !env.GA4_OAUTH_CLIENT_SECRET) {
+    return withCors(jsonErr(503, "GA4 integration not configured"), request, { credentials: true });
+  }
+
+  const row = await env.DB
+    .prepare(`SELECT refresh_token_enc, property_id FROM ga4_connections WHERE slug = ? LIMIT 1`)
+    .bind(biz.slug)
+    .first<{ refresh_token_enc: string; property_id: string | null }>();
+  if (!row) {
+    return withCors(jsonErr(404, "GA4 not connected"), request, { credentials: true });
+  }
+  if (!row.property_id) {
+    return withCors(jsonErr(400, "GA4 property not selected yet"), request, { credentials: true });
+  }
+
+  try {
+    const refreshToken = await decryptToken(row.refresh_token_enc, env.GA4_TOKEN_ENCRYPTION_KEY);
+    const { accessToken } = await refreshAccessToken(
+      refreshToken,
+      env.GA4_OAUTH_CLIENT_ID,
+      env.GA4_OAUTH_CLIENT_SECRET,
+    );
+    const streams = await listDataStreams(accessToken, row.property_id);
+    return withCors(
+      jsonOk({ ok: true, slug: biz.slug, property_id: row.property_id, streams }),
+      request,
+      { credentials: true },
+    );
+  } catch (err) {
+    return withCors(
+      jsonErr(502, `GA4 streams lookup failed: ${String(err).slice(0, 300)}`),
+      request,
+      { credentials: true },
+    );
+  }
 }
 
 async function adminMagicLogin(request: Request, env: Env): Promise<Response> {
