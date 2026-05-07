@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { refreshAccessToken, listProperties, fetchDailyTraffic, fetchDailyGeography } from "./ga4.js";
+import { refreshAccessToken, listProperties, fetchDailyTraffic, fetchDailyGeography, fetchDailyConversions } from "./ga4.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -458,5 +458,138 @@ describe("fetchDailyGeography", () => {
     expect(rows[0].city).toBe("");
     expect(rows[1].country).toBe("United States");
     expect(rows[1].city).toBe("");
+  });
+});
+
+// ── fetchDailyConversions ─────────────────────────────────────────────────────
+
+describe("fetchDailyConversions", () => {
+  const convOpts = {
+    propertyId:  "properties/111222333",
+    startDate:   "2026-04-01",
+    endDate:     "2026-04-07",
+    accessToken: "ya29.conv-token",
+  };
+
+  // Helper: a GA4 row with all 5 dimensions + 3 metrics
+  function makeRow(
+    date: string,
+    source: string,
+    medium: string,
+    eventName: string,
+    currency: string,
+    eventCount: string,
+    keyEvents: string,
+    eventValue: string,
+  ) {
+    return {
+      dimensionValues: [
+        { value: date },
+        { value: source },
+        { value: medium },
+        { value: eventName },
+        { value: currency },
+      ],
+      metricValues: [
+        { value: eventCount },
+        { value: keyEvents },
+        { value: eventValue },
+      ],
+    };
+  }
+
+  it("24. POSTs to correct runReport endpoint with 5 dimensions, 3 metrics, limit 100000", async () => {
+    mockFetch({ rows: [] });
+    await fetchDailyConversions(convOpts);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "https://analyticsdata.googleapis.com/v1beta/properties/111222333:runReport",
+      expect.objectContaining({ method: "POST" }),
+    );
+    const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [
+      string,
+      RequestInit,
+    ];
+    const body = JSON.parse(init.body as string);
+    expect(body.dimensions).toEqual([
+      { name: "date" },
+      { name: "sessionSource" },
+      { name: "sessionMedium" },
+      { name: "eventName" },
+      { name: "currency" },
+    ]);
+    expect(body.metrics).toEqual([
+      { name: "eventCount" },
+      { name: "keyEvents" },
+      { name: "eventValue" },
+    ]);
+    expect(body.limit).toBe(100000);
+    expect(body.dateRanges).toEqual([{ startDate: "2026-04-01", endDate: "2026-04-07" }]);
+  });
+
+  it("25. parses a happy-path response with date conversion and numeric parsing", async () => {
+    mockFetch({
+      rows: [
+        makeRow("20260403", "perplexity.ai", "referral", "purchase", "USD", "5", "5", "299.95"),
+        makeRow("20260404", "google",        "organic",  "sign_up",  "",    "12", "12", "0"),
+      ],
+    });
+    const rows = await fetchDailyConversions(convOpts);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toEqual({
+      date:       "2026-04-03",
+      source:     "perplexity.ai",
+      medium:     "referral",
+      eventName:  "purchase",
+      currency:   "USD",
+      eventCount: 5,
+      keyEvents:  5,
+      eventValue: 299.95,
+    });
+    expect(rows[1]).toEqual({
+      date:       "2026-04-04",
+      source:     "google",
+      medium:     "organic",
+      eventName:  "sign_up",
+      currency:   "",
+      eventCount: 12,
+      keyEvents:  12,
+      eventValue: 0,
+    });
+  });
+
+  it("26. filters out rows where keyEvents === 0 (non-key-event rows)", async () => {
+    mockFetch({
+      rows: [
+        // This is a key_event — keep
+        makeRow("20260403", "perplexity.ai", "referral", "purchase", "USD", "8", "8", "400.00"),
+        // This is NOT a key_event — discard
+        makeRow("20260403", "google",        "organic",  "page_view", "",  "200", "0", "0"),
+        // Another key_event — keep
+        makeRow("20260403", "claude.ai",     "referral", "sign_up",  "",   "3",  "3",  "0"),
+      ],
+    });
+    const rows = await fetchDailyConversions(convOpts);
+    expect(rows).toHaveLength(2);
+    expect(rows.map(r => r.eventName)).toEqual(["purchase", "sign_up"]);
+  });
+
+  it("27. empty rows → returns []", async () => {
+    mockFetch({ rows: [] });
+    const rows1 = await fetchDailyConversions(convOpts);
+    expect(rows1).toEqual([]);
+
+    // rows key absent entirely
+    mockFetch({});
+    const rows2 = await fetchDailyConversions(convOpts);
+    expect(rows2).toEqual([]);
+  });
+
+  it("28. non-200 throws ga4-prefixed error with status snippet", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response('{"error":{"code":403,"message":"Permission denied"}}', { status: 403 }),
+    );
+    await expect(fetchDailyConversions(convOpts)).rejects.toThrow(
+      /ga4: runReport failed: 403 .*Permission denied/,
+    );
   });
 });

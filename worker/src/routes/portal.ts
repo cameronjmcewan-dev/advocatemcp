@@ -70,8 +70,9 @@ import {
 import { handleGA4Start, handleGA4Callback } from "./ga4Oauth";
 import { signGA4State } from "../lib/ga4State";
 import { decryptToken } from "../lib/ga4TokenCrypto";
-import { refreshAccessToken, listProperties, fetchDailyTraffic, fetchDailyGeography } from "../lib/ga4";
+import { refreshAccessToken, listProperties, fetchDailyTraffic, fetchDailyGeography, fetchDailyConversions } from "../lib/ga4";
 import { aggregateGeoRows } from "../lib/geoAggregator";
+import { aggregateConversionRows } from "../lib/conversionAggregator";
 import { classifyTrafficSource } from "../lib/aiTrafficClassifier";
 import { trafficImpactPayload } from "../lib/trafficImpactPayload";
 
@@ -205,6 +206,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/ga4/disconnect"      && method === "POST") return apiGA4Disconnect(request, env);
   if (pathname === "/api/client/traffic-impact"              && method === "GET")  return apiTrafficImpact(request, env);
   if (pathname === "/api/client/traffic-impact/geography"   && method === "GET")  return apiTrafficImpactGeography(request, env);
+  if (pathname === "/api/client/traffic-impact/conversions" && method === "GET")  return apiTrafficImpactConversions(request, env);
   if (pathname === "/api/client/me"       && method === "GET")  return apiMe(request, env);
   if (pathname === "/api/client/me"       && method === "PATCH") return apiPatchMe(request, env);
   if (pathname === "/api/client/metrics"  && method === "GET")  return apiMetrics(request, env);
@@ -366,8 +368,9 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/ga4/select-property" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/ga4/resync"          && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/ga4/disconnect"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
-  if (pathname === "/api/client/traffic-impact"            && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
-  if (pathname === "/api/client/traffic-impact/geography" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/traffic-impact"               && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/traffic-impact/geography"    && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/traffic-impact/conversions"  && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/all-metrics" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/all-metrics" && method === "GET")     return apiAllMetrics(request, env);
   if (pathname === "/api/client/activity-detail" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
@@ -3701,6 +3704,36 @@ async function apiGA4SelectProperty(request: Request, env: Env): Promise<Respons
             error: String(geoErr instanceof Error ? geoErr.message : geoErr).slice(0, 500),
           }));
         }
+
+        // Phase 3 PR 1 TODO: extract writeConversions(env, slug, buckets) helper.
+        // This try/catch + upsert loop is duplicated across syncOneTenant,
+        // apiGA4SelectProperty, and apiGA4Resync — three near-identical blocks.
+        try {
+          const convRows = await fetchDailyConversions({ propertyId: body.property_id, startDate, endDate, accessToken });
+          const buckets = aggregateConversionRows(convRows);
+          for (const b of buckets.values()) {
+            await env.DB.prepare(
+              `INSERT INTO conversion_daily (slug, date, source_class, event_name, event_count, total_revenue, currency)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(slug, date, source_class, event_name) DO UPDATE SET
+                 event_count   = excluded.event_count,
+                 total_revenue = excluded.total_revenue,
+                 currency      = excluded.currency`,
+            )
+            .bind(biz.slug, b.date, b.source_class, b.event_name, b.event_count, b.total_revenue, b.currency)
+            .run();
+          }
+        } catch (convErr) {
+          // Conversions are supplementary — log + continue. Tenant may not
+          // have key_events configured, which legitimately returns zero rows
+          // (handled implicitly above), but actual fetch errors here surface.
+          console.error(JSON.stringify({
+            cron:  "ga4Sync_conv",
+            event: "conv_failed",
+            slug:  biz.slug,
+            error: String(convErr instanceof Error ? convErr.message : convErr).slice(0, 500),
+          }));
+        }
       }
     } catch (err) {
       const msg = String(err instanceof Error ? err.message : err).slice(0, 500);
@@ -3894,6 +3927,36 @@ async function apiGA4Resync(request: Request, env: Env): Promise<Response> {
         error: String(geoErr instanceof Error ? geoErr.message : geoErr).slice(0, 500),
       }));
     }
+
+    // Phase 3 PR 1 TODO: extract writeConversions(env, slug, buckets) helper.
+    // This try/catch + upsert loop is duplicated across syncOneTenant,
+    // apiGA4SelectProperty, and apiGA4Resync — three near-identical blocks.
+    try {
+      const convRows = await fetchDailyConversions({ propertyId: conn.property_id, startDate, endDate, accessToken });
+      const buckets = aggregateConversionRows(convRows);
+      for (const b of buckets.values()) {
+        await env.DB.prepare(
+          `INSERT INTO conversion_daily (slug, date, source_class, event_name, event_count, total_revenue, currency)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(slug, date, source_class, event_name) DO UPDATE SET
+             event_count   = excluded.event_count,
+             total_revenue = excluded.total_revenue,
+             currency      = excluded.currency`,
+        )
+        .bind(biz.slug, b.date, b.source_class, b.event_name, b.event_count, b.total_revenue, b.currency)
+        .run();
+      }
+    } catch (convErr) {
+      // Conversions are supplementary — log + continue. Tenant may not
+      // have key_events configured, which legitimately returns zero rows
+      // (handled implicitly above), but actual fetch errors here surface.
+      console.error(JSON.stringify({
+        cron:  "ga4Sync_conv",
+        event: "conv_failed",
+        slug:  biz.slug,
+        error: String(convErr instanceof Error ? convErr.message : convErr).slice(0, 500),
+      }));
+    }
   } catch (err) {
     syncError = String(err instanceof Error ? err.message : err).slice(0, 500);
     await env.DB
@@ -4016,6 +4079,104 @@ async function apiTrafficImpactGeography(request: Request, env: Env): Promise<Re
   const humanEntries = byHuman.map(r => ({ ...toEntry(r),    sessions: r.human || 0 }));
 
   return withCors(jsonOk({ ai: aiEntries, human: humanEntries }), request, { credentials: true });
+}
+
+// ── GET /api/client/traffic-impact/conversions ────────────────────────────
+// Pro / Enterprise only — 402 for base-tier tenants.
+
+async function apiTrafficImpactConversions(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const reqUrl    = new URL(request.url);
+  const slugParam = reqUrl.searchParams.get("slug");
+  const biz       = (slugParam ? businesses.find(b => b.slug === slugParam) : null) ?? businesses[0] ?? null;
+  if (!biz) return withCors(jsonErr(404, "No business"), request, { credentials: true });
+
+  // Plan gate — Pro / Enterprise only. Mirror apiUpdateRevenueSettings.
+  const planRow = await env.DB
+    .prepare("SELECT plan FROM businesses WHERE slug = ?")
+    .bind(biz.slug)
+    .first<{ plan: string | null }>();
+  const plan = planRow?.plan ?? "base";
+  if (plan !== "pro" && plan !== "enterprise") {
+    return withCors(jsonErr(402, "plan_required"), request, { credentials: true });
+  }
+
+  // Date filter mirrors apiTrafficImpact.
+  const range    = reqUrl.searchParams.get("range");
+  const startQs  = reqUrl.searchParams.get("start_date");
+  const endQs    = reqUrl.searchParams.get("end_date");
+  let dateFilterSql  = "";
+  let dateFilterArgs: string[] = [];
+  if (startQs && endQs) {
+    dateFilterSql  = " AND date >= ? AND date <= ?";
+    dateFilterArgs = [startQs, endQs];
+  } else if (range && /^\d+d$/.test(range)) {
+    const days   = parseInt(range, 10);
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    dateFilterSql  = " AND date >= ?";
+    dateFilterArgs = [cutoff];
+  }
+
+  const result = await env.DB
+    .prepare(
+      `SELECT date, source_class, event_name, event_count, total_revenue, currency
+         FROM conversion_daily
+        WHERE slug = ?${dateFilterSql}
+        ORDER BY date ASC`,
+    )
+    .bind(biz.slug, ...dateFilterArgs)
+    .all<{ date: string; source_class: string; event_name: string; event_count: number; total_revenue: number | null; currency: string | null }>();
+
+  const rows = result.results ?? [];
+
+  // Roll-up: total revenue + count per side, plus per-event breakdown.
+  // Currency: dominant by total_revenue.
+  let aiRev = 0, humanRev = 0, aiCount = 0, humanCount = 0;
+  const eventsByName: Record<string, { ai: number; human: number; revenue: number }> = {};
+  const currencyTally: Record<string, number> = {};
+  for (const r of rows) {
+    if (r.source_class === "ai") {
+      aiRev   += r.total_revenue ?? 0;
+      aiCount += r.event_count;
+    } else {
+      humanRev   += r.total_revenue ?? 0;
+      humanCount += r.event_count;
+    }
+    const ev = eventsByName[r.event_name] ?? { ai: 0, human: 0, revenue: 0 };
+    if (r.source_class === "ai") ev.ai += r.event_count;
+    else                          ev.human += r.event_count;
+    ev.revenue += r.total_revenue ?? 0;
+    eventsByName[r.event_name] = ev;
+    if (r.currency && r.total_revenue) {
+      currencyTally[r.currency] = (currencyTally[r.currency] ?? 0) + r.total_revenue;
+    }
+  }
+  const dominantCurrency = Object.entries(currencyTally).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "USD";
+
+  return withCors(
+    jsonOk({
+      slug:     biz.slug,
+      currency: dominantCurrency,
+      ai:    { event_count: aiCount,    revenue: aiRev },
+      human: { event_count: humanCount, revenue: humanRev },
+      events: Object.entries(eventsByName).map(([name, v]) => ({ event_name: name, ...v })),
+      // True iff conversion_daily has any rows for this tenant in the
+      // selected window. NOT a guarantee that key_events are configured
+      // in GA4 — a tenant could have configured them but have zero
+      // conversions in this window. The frontend treats false as
+      // "no data yet" (could be either: not configured, or configured
+      // but no conversions) and shows a configuration hint.
+      has_conversion_data: rows.length > 0,
+    }),
+    request,
+    { credentials: true },
+  );
 }
 
 // ── Response helpers ───────────────────────────────────────────────────────

@@ -185,6 +185,99 @@ export async function fetchDailyGeography(opts: {
   return rows;
 }
 
+// ── fetchDailyConversions ─────────────────────────────────────────────────────
+
+/**
+ * Per-day per-event conversion data from GA4 key_events. Pulled
+ * separately from fetchDailyTraffic so the dimensions don't blow the
+ * main report's row budget when the tenant has many event types.
+ *
+ * GA4 returns ALL events in the property — not just key_events —
+ * so we filter to keyEvents > 0 at row level. (We could also filter
+ * server-side via dimensionFilter on isKeyEvent, but client-side is
+ * simpler + lets us see non-key events in logs if needed.)
+ */
+export interface GA4ConversionRow {
+  date:       string;   // YYYY-MM-DD
+  source:     string;
+  medium:     string;
+  eventName:  string;
+  eventCount: number;   // count of this event for the (date, source, medium) tuple
+  keyEvents:  number;   // count of those that were key events
+  eventValue: number;   // sum of monetary values reported via gtag('event', { value: 99.99, currency: 'USD' })
+  currency:   string;   // empty string if event has no currency
+}
+
+export async function fetchDailyConversions(opts: {
+  propertyId:  string;
+  startDate:   string;
+  endDate:     string;
+  accessToken: string;
+}): Promise<GA4ConversionRow[]> {
+  const { propertyId, startDate, endDate, accessToken } = opts;
+
+  const res = await fetch(
+    `https://analyticsdata.googleapis.com/v1beta/${propertyId}:runReport`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        dateRanges: [{ startDate, endDate }],
+        dimensions: [
+          { name: "date" },
+          { name: "sessionSource" },
+          { name: "sessionMedium" },
+          { name: "eventName" },
+          { name: "currency" },
+        ],
+        metrics: [
+          { name: "eventCount" },
+          { name: "keyEvents" },
+          { name: "eventValue" },
+        ],
+        limit: 100000,
+      }),
+    },
+  );
+
+  if (!res.ok) {
+    const snippet = (await res.text()).slice(0, 200);
+    throw new Error(`ga4: runReport failed: ${res.status} ${snippet}`);
+  }
+
+  // Typed inline — GA4 Data API row shape
+  const json = (await res.json()) as {
+    rows?: Array<{
+      dimensionValues: Array<{ value: string }>;
+      metricValues: Array<{ value: string }>;
+    }>;
+  };
+
+  const rows: GA4ConversionRow[] = [];
+  for (const row of json.rows ?? []) {
+    const rawDate   = row.dimensionValues[0].value;  // "YYYYMMDD"
+    // GA4 returns dates without hyphens — insert them for ISO 8601
+    const date      = `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`;
+    const keyEvents = parseInt(row.metricValues[1]?.value ?? "0", 10);
+    // Skip rows with no key events so we only store actual conversion rows
+    if (keyEvents === 0) continue;
+    rows.push({
+      date,
+      source:     row.dimensionValues[1].value,
+      medium:     row.dimensionValues[2].value,
+      eventName:  row.dimensionValues[3].value,
+      currency:   row.dimensionValues[4].value,
+      eventCount: parseInt(row.metricValues[0]?.value ?? "0", 10),
+      keyEvents,
+      eventValue: parseFloat(row.metricValues[2]?.value ?? "0"),
+    });
+  }
+  return rows;
+}
+
 // ── fetchDailyTraffic ─────────────────────────────────────────────────────────
 
 export async function fetchDailyTraffic(opts: {
