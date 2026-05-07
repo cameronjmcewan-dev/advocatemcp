@@ -200,6 +200,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/ga4/start-link"      && method === "POST") return apiGA4StartLink(request, env);
   if (pathname === "/api/client/ga4/properties"      && method === "GET")  return apiGA4Properties(request, env);
   if (pathname === "/api/client/ga4/select-property" && method === "POST") return apiGA4SelectProperty(request, env);
+  if (pathname === "/api/client/ga4/resync"          && method === "POST") return apiGA4Resync(request, env);
   if (pathname === "/api/client/ga4/disconnect"      && method === "POST") return apiGA4Disconnect(request, env);
   if (pathname === "/api/client/traffic-impact"      && method === "GET")  return apiTrafficImpact(request, env);
   if (pathname === "/api/client/me"       && method === "GET")  return apiMe(request, env);
@@ -361,6 +362,7 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/ga4/start-link"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/ga4/properties"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/ga4/select-property" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/ga4/resync"          && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/ga4/disconnect"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/traffic-impact"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/all-metrics" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
@@ -3649,6 +3651,123 @@ async function apiGA4SelectProperty(request: Request, env: Env): Promise<Respons
         end_date:                backfillEndDate,
       },
     }),
+    request,
+    { credentials: true },
+  );
+}
+
+// ── POST /api/client/ga4/resync ───────────────────────────────────────────
+//
+// Manual sync trigger. The nightly cron (ga4Sync.ts) handles the steady-
+// state case; this endpoint exists for the Settings UI's "Resync now"
+// button — useful when a customer just installed gtag.js and wants to
+// confirm yesterday's data lands without waiting for the cron tick.
+//
+// Implementation: re-runs the same backfill logic as select-property,
+// but only over the last 7 days instead of 18 months. Same upsert path,
+// same classification, same last_sync_at update. Idempotent.
+
+async function apiGA4Resync(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const reqUrl = new URL(request.url);
+  const slugParam = reqUrl.searchParams.get("slug");
+  const biz = (slugParam ? businesses.find(b => b.slug === slugParam) : null) ?? businesses[0] ?? null;
+  if (!biz) {
+    return withCors(jsonErr(404, "No business"), request, { credentials: true });
+  }
+
+  if (!env.GA4_TOKEN_ENCRYPTION_KEY || !env.GA4_OAUTH_CLIENT_ID || !env.GA4_OAUTH_CLIENT_SECRET) {
+    return withCors(jsonErr(503, "GA4 integration not configured"), request, { credentials: true });
+  }
+
+  const conn = await env.DB
+    .prepare("SELECT refresh_token_enc, property_id FROM ga4_connections WHERE slug = ? LIMIT 1")
+    .bind(biz.slug)
+    .first<{ refresh_token_enc: string; property_id: string | null }>();
+  if (!conn) {
+    return withCors(jsonErr(404, "GA4 not connected"), request, { credentials: true });
+  }
+  if (!conn.property_id) {
+    return withCors(jsonErr(409, "No property selected — pick one in Settings first"), request, { credentials: true });
+  }
+
+  let rowsReceived = 0;
+  let daysUpserted = 0;
+  let syncError:    string | null = null;
+
+  try {
+    const refreshToken = await decryptToken(conn.refresh_token_enc, env.GA4_TOKEN_ENCRYPTION_KEY);
+    const { accessToken } = await refreshAccessToken(
+      refreshToken,
+      env.GA4_OAUTH_CLIENT_ID,
+      env.GA4_OAUTH_CLIENT_SECRET,
+    );
+
+    // Last 7 days, ending yesterday (GA4's 24-48h finalization lag means
+    // today's row would be partial).
+    const today     = new Date();
+    const startDate = new Date(today.getTime() - 8 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const endDate   = new Date(today.getTime() -     24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+    const ga4Rows = await fetchDailyTraffic({
+      propertyId: conn.property_id,
+      startDate,
+      endDate,
+      accessToken,
+    });
+    rowsReceived = ga4Rows.length;
+
+    type Agg = { ai: number; human: number; sources: Record<string, number> };
+    const byDate = new Map<string, Agg>();
+    for (const r of ga4Rows) {
+      let agg = byDate.get(r.date);
+      if (!agg) { agg = { ai: 0, human: 0, sources: {} }; byDate.set(r.date, agg); }
+      const cls = classifyTrafficSource(r.source, r.medium);
+      if (cls === "ai") agg.ai    += r.sessions;
+      else              agg.human += r.sessions;
+      const srcKey = `${r.source}|${r.medium}`;
+      agg.sources[srcKey] = (agg.sources[srcKey] || 0) + r.sessions;
+    }
+    daysUpserted = byDate.size;
+
+    for (const [date, agg] of byDate.entries()) {
+      const top = Object.entries(agg.sources)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([sm, n]) => { const [s, m] = sm.split("|"); return { source: s, medium: m, sessions: n }; });
+      await env.DB.prepare(
+        `INSERT INTO traffic_daily (slug, date, ai_sessions, human_sessions, total_sessions, top_sources_json)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(slug, date) DO UPDATE SET
+           ai_sessions     = excluded.ai_sessions,
+           human_sessions  = excluded.human_sessions,
+           total_sessions  = excluded.total_sessions,
+           top_sources_json = excluded.top_sources_json`
+      )
+      .bind(biz.slug, date, agg.ai, agg.human, agg.ai + agg.human, JSON.stringify(top))
+      .run();
+    }
+
+    await env.DB
+      .prepare("UPDATE ga4_connections SET last_sync_at = ?, last_sync_error = NULL, status = 'connected' WHERE slug = ?")
+      .bind(new Date().toISOString(), biz.slug)
+      .run();
+  } catch (err) {
+    syncError = String(err instanceof Error ? err.message : err).slice(0, 500);
+    await env.DB
+      .prepare("UPDATE ga4_connections SET last_sync_error = ?, status = 'error' WHERE slug = ?")
+      .bind(syncError, biz.slug)
+      .run();
+  }
+
+  return withCors(
+    jsonOk({ ok: true, rows_received: rowsReceived, days_upserted: daysUpserted, error: syncError }),
     request,
     { credentials: true },
   );

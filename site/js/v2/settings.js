@@ -39,7 +39,7 @@
     const af = window.AMCP && window.AMCP.authedFetch;
     const slug = (window.AMCP_DATA && window.AMCP_DATA.slug) || '';
     const suffix = slug ? `?slug=${encodeURIComponent(slug)}` : '';
-    const [me, metrics, domain, activity, revenue] = await Promise.all([
+    const [me, metrics, domain, activity, revenue, ga4Status] = await Promise.all([
       af('/api/client/me').then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/metrics').then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/domain-info' + suffix).then(r => r.ok ? r.json() : null).catch(() => null),
@@ -50,12 +50,18 @@
       // (legacy worker, network blip) → no prefill, fresh "Generate"
       // state — non-critical.
       af('/api/client/revenue-summary').then(r => r.ok ? r.json() : null).catch(() => null),
+      // GA4 connection status — populates the "Web traffic data" section
+      // (May 6 2026 PR 3). Endpoint added in PR 1, returns
+      //   { connected, slug, property_id, property_label, status,
+      //     last_sync_at, last_sync_error, connected_at } or { connected:false }.
+      af('/api/client/ga4/status').then(r => r.ok ? r.json() : { connected: false }).catch(() => ({ connected: false })),
     ]);
     return Object.assign({}, metrics || {}, {
       _me: me,
-      domain:   domain || {},
-      activity: activity || {},
-      revenue:  revenue || null,
+      domain:    domain || {},
+      activity:  activity || {},
+      revenue:   revenue || null,
+      ga4Status: ga4Status || { connected: false },
     });
   }
 
@@ -162,6 +168,12 @@
                 </div>`
           }
         </div>
+      </div>
+
+      <!-- Web traffic data (May 6 2026 PR 3). Manages the GA4 OAuth
+           connection that powers /TrafficImpact.html. -->
+      <div class="row single">
+        ${renderGa4Card(d.ga4Status || { connected: false })}
       </div>
 
       <!-- Team (Apr 27 2026 Enterprise honesty pass). Owner-only invite/
@@ -351,6 +363,156 @@
     `;
   }
 
+  /* GA4 connection card — May 6 2026, PR 3 of the Traffic Impact feature.
+   *
+   * Three render states matching /TrafficImpact.html itself:
+   *   1. Not connected → Connect button (POST /api/client/ga4/start-link)
+   *   2. Connected with no property selected → property picker
+   *   3. Connected with property → status row + Resync + Disconnect
+   */
+  function renderGa4Card(s) {
+    const connected = !!(s && s.connected);
+    const hasProperty = connected && !!s.property_id;
+    const errorPill = (s && s.last_sync_error)
+      ? `<span class="chip" style="background:rgba(180,40,40,.08);color:var(--red);border:1px solid rgba(180,40,40,.25)">Sync error</span>`
+      : '';
+
+    let body;
+    if (!connected) {
+      body = `
+        <div class="set-row"><div class="l">Status</div><div class="r"><span class="chip">Not connected</span></div></div>
+        <div class="set-row" style="border-bottom:0;padding-top:14px">
+          <div class="l"></div>
+          <div class="r" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" id="btn-ga4-connect" type="button">Connect Google Analytics →</button>
+            <span id="ga4-status-msg" style="font-size:12.5px;color:var(--muted)"></span>
+          </div>
+        </div>
+        <div class="set-row" style="border-bottom:0;padding-top:0">
+          <div class="l"></div>
+          <div class="r" style="font-size:12.5px;color:var(--muted);max-width:520px;line-height:1.5">
+            We read aggregate daily traffic only — never individual visitor data, events, or PII. Disconnect any time.
+          </div>
+        </div>`;
+    } else if (!hasProperty) {
+      body = `
+        <div class="set-row"><div class="l">Status</div><div class="r"><span class="chip amber dot-chip"><span class="dot"></span>Connected · pick a property</span></div></div>
+        <div class="set-row" style="border-bottom:0;padding-top:14px">
+          <div class="l"></div>
+          <div class="r">
+            <button class="btn btn-ghost btn-sm" id="btn-ga4-pick-property" type="button">Choose property →</button>
+            <button class="btn btn-ghost btn-sm" id="btn-ga4-disconnect" type="button" style="margin-left:6px">Disconnect</button>
+            <span id="ga4-status-msg" style="font-size:12.5px;color:var(--muted);margin-left:10px"></span>
+          </div>
+        </div>`;
+    } else {
+      body = `
+        <div class="set-row"><div class="l">Status</div><div class="r"><span class="chip sage dot-chip"><span class="dot"></span>Connected</span> ${errorPill}</div></div>
+        <div class="set-row"><div class="l">Property</div><div class="r"><strong>${esc(s.property_label || 'GA4 property')}</strong> <span style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-left:6px">${esc(s.property_id || '')}</span></div></div>
+        <div class="set-row"><div class="l">Last sync</div><div class="r">${esc(timeAgo(s.last_sync_at))}${s.last_sync_error ? ` <span style="color:var(--red);font-size:12.5px">· ${esc(String(s.last_sync_error).slice(0, 120))}</span>` : ''}</div></div>
+        <div class="set-row" style="border-bottom:0;padding-top:14px">
+          <div class="l"></div>
+          <div class="r" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" id="btn-ga4-resync" type="button">Resync now</button>
+            <button class="btn btn-ghost btn-sm" id="btn-ga4-disconnect" type="button">Disconnect</button>
+            <a class="btn btn-ghost btn-sm" href="/TrafficImpact.html">View charts →</a>
+            <span id="ga4-status-msg" style="font-size:12.5px;color:var(--muted)"></span>
+          </div>
+        </div>`;
+    }
+
+    return `
+      <div class="card-dash">
+        <div class="card-head">
+          <div>
+            <h3>Web traffic data</h3>
+            <div class="sub">Connect Google Analytics so the Traffic Impact dashboard can show how AI search is moving your site visits.</div>
+          </div>
+        </div>
+        ${body}
+      </div>`;
+  }
+
+  /* Wires the GA4 card buttons. Called from afterMount(). All buttons go
+   * through AMCP.authedFetch so the bearer token is injected. The Connect
+   * button POSTs /api/client/ga4/start-link → window.location.href to the
+   * returned Google authorize URL (same pattern the Traffic Impact page uses
+   * in its empty-state CTA). */
+  function wireGa4Card() {
+    const af = window.AMCP && window.AMCP.authedFetch;
+    const msg = document.getElementById('ga4-status-msg');
+    const setMsg = (text, kind) => {
+      if (!msg) return;
+      msg.textContent = text || '';
+      msg.style.color = kind === 'error' ? 'var(--red)' : kind === 'success' ? 'var(--sage)' : 'var(--muted)';
+    };
+
+    const connectBtn = document.getElementById('btn-ga4-connect');
+    if (connectBtn) {
+      connectBtn.addEventListener('click', async () => {
+        connectBtn.disabled = true;
+        setMsg('Opening Google…');
+        try {
+          const r = await af('/api/client/ga4/start-link', { method: 'POST' });
+          const j = await r.json();
+          if (j && j.url) { window.location.href = j.url; return; }
+          throw new Error(j && (j.customer_message || j.error_code) || 'Could not start GA4 connection');
+        } catch (err) {
+          setMsg(String(err && err.message || err), 'error');
+          connectBtn.disabled = false;
+        }
+      });
+    }
+
+    const resyncBtn = document.getElementById('btn-ga4-resync');
+    if (resyncBtn) {
+      resyncBtn.addEventListener('click', async () => {
+        resyncBtn.disabled = true;
+        setMsg('Pulling last 7 days from Google…');
+        try {
+          const r = await af('/api/client/ga4/resync', { method: 'POST' });
+          const j = await r.json();
+          if (j && j.error) throw new Error(j.error);
+          setMsg(`Synced — ${j.rows_received || 0} rows from GA4 across ${j.days_upserted || 0} days.`, 'success');
+          // Reload after 1.5s so the status card re-renders with fresh
+          // last_sync_at timestamp + cleared error.
+          setTimeout(() => window.location.reload(), 1500);
+        } catch (err) {
+          setMsg('Sync failed: ' + String(err && err.message || err), 'error');
+          resyncBtn.disabled = false;
+        }
+      });
+    }
+
+    const disconnectBtn = document.getElementById('btn-ga4-disconnect');
+    if (disconnectBtn) {
+      disconnectBtn.addEventListener('click', async () => {
+        if (!window.confirm('Disconnect Google Analytics? Imported daily traffic stays in your account; new data will stop syncing until you reconnect.')) return;
+        disconnectBtn.disabled = true;
+        setMsg('Disconnecting…');
+        try {
+          await af('/api/client/ga4/disconnect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+          setMsg('Disconnected.', 'success');
+          setTimeout(() => window.location.reload(), 1000);
+        } catch (err) {
+          setMsg('Could not disconnect: ' + String(err && err.message || err), 'error');
+          disconnectBtn.disabled = false;
+        }
+      });
+    }
+
+    // Property-picker stub — there's no full picker UI yet (handled by the
+    // OAuth callback which auto-selects the matching domain). For now,
+    // "Choose property" routes back through the OAuth flow which forces a
+    // re-consent and re-picks. Future PR can render a real list inline.
+    const pickBtn = document.getElementById('btn-ga4-pick-property');
+    if (pickBtn) {
+      pickBtn.addEventListener('click', () => {
+        if (connectBtn) connectBtn.click();
+      });
+    }
+  }
+
   function afterMount(data) {
     const preview = !!window.__ADVOCATE_PREVIEW;
     const slug = (window.AMCP_DATA && window.AMCP_DATA.slug) || '';
@@ -360,6 +522,10 @@
       status.textContent = msg || '';
       status.style.color = kind === 'error' ? 'var(--red)' : kind === 'success' ? 'var(--sage)' : 'var(--muted)';
     };
+
+    // Wire the GA4 connection card (PR 3, May 6 2026). Safe to call even
+    // if the card isn't rendered — wireGa4Card() no-ops on missing buttons.
+    wireGa4Card();
 
     // Open DNS wizard — launches the existing legacy module in a modal.
     // The wizard's own public API (window.AMCP_DNS_WIZARD.open) is
