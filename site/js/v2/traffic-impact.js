@@ -392,27 +392,54 @@
     const el = document.getElementById('chart-aivshuman');
     if (!el || !window.echarts) return null;
 
-    const maroon = readCssVar('--maroon', '#7d2550');
+    const maroon  = readCssVar('--maroon', '#7d2550');
+    const muted   = readCssVar('--muted',  '#766f63');
+    const ink     = readCssVar('--ink',    '#1a1816');
+    const humanColor = '#a39b8e';   // warm gray — opaque so the legend swatch reads cleanly
+    const aiColor    = maroon;
+
     const dates  = daily.map(function (d) { return d.date; });
     const humans = daily.map(function (d) { return d.human; });
     const ais    = daily.map(function (d) { return d.ai; });
 
     const inst = window.echarts.init(el, 'advocate-maroon');
     inst.setOption({
-      grid: { left: 48, right: 16, top: 24, bottom: 32 },
+      // Bigger top margin so the legend has its own breathing room
+      // separate from the chart body — was previously overlapping the
+      // x-axis labels at bottom:0.
+      grid: { left: 48, right: 24, top: 56, bottom: 32 },
       tooltip: {
         trigger: 'axis',
         formatter: function (params) {
-          const ai    = params.find(function (p) { return p.seriesName === 'AI'; });
+          const ai    = params.find(function (p) { return p.seriesName === 'AI search'; });
           const human = params.find(function (p) { return p.seriesName === 'Human'; });
-          const total = ((ai ? ai.value : 0) + (human ? human.value : 0));
+          const aiVal = ai ? ai.value : 0;
+          const huVal = human ? human.value : 0;
+          const total = aiVal + huVal;
+          const aiPct = total > 0 ? Math.round((aiVal / total) * 100) : 0;
           return '<b>' + (params[0] ? params[0].axisValue : '') + '</b><br>' +
-            'Human: ' + fmtCount(human ? human.value : 0) + '<br>' +
-            'AI: ' + fmtCount(ai ? ai.value : 0) + '<br>' +
-            'Total: ' + fmtCount(total);
+            '<span style="display:inline-block;width:9px;height:9px;background:' + humanColor + ';border-radius:2px;margin-right:6px;vertical-align:middle"></span>' +
+            'Human: <b>' + fmtCount(huVal) + '</b><br>' +
+            '<span style="display:inline-block;width:9px;height:9px;background:' + aiColor + ';border-radius:2px;margin-right:6px;vertical-align:middle"></span>' +
+            'AI search: <b>' + fmtCount(aiVal) + '</b> · ' + aiPct + '%<br>' +
+            '<span style="font-size:11.5px;color:#888">Total: ' + fmtCount(total) + '</span>';
         },
       },
-      legend: { data: ['Human', 'AI'], bottom: 0 },
+      legend: {
+        // Top-positioned legend — left-aligned, big square swatches with
+        // descriptive labels. Was previously overlapping the x-axis at
+        // bottom:0 with tiny dot markers + bare "Human"/"AI" text.
+        data: [
+          { name: 'Human',     icon: 'roundRect' },
+          { name: 'AI search', icon: 'roundRect' },
+        ],
+        top: 8,
+        left: 0,
+        itemWidth: 14,
+        itemHeight: 14,
+        itemGap: 18,
+        textStyle: { color: ink, fontSize: 13, fontWeight: 500 },
+      },
       xAxis: { type: 'category', data: dates, boundaryGap: false },
       yAxis: { type: 'value' },
       series: [
@@ -421,20 +448,25 @@
           type: 'line',
           stack: 'total',
           data: humans,
-          areaStyle: { opacity: 0.5 },
+          // Solid color + slightly higher opacity reads cleanly on both
+          // light + dark themes (rgba with low alpha was fading into the
+          // background).
+          areaStyle: { color: humanColor, opacity: 0.6 },
           lineStyle: { width: 0 },
           showSymbol: false,
-          color: 'rgba(120,116,108,0.6)',
+          color: humanColor,
+          smooth: true,
         },
         {
-          name: 'AI',
+          name: 'AI search',
           type: 'line',
           stack: 'total',
           data: ais,
-          areaStyle: { opacity: 0.85 },
+          areaStyle: { color: aiColor, opacity: 0.92 },
           lineStyle: { width: 0 },
           showSymbol: false,
-          color: maroon,
+          color: aiColor,
+          smooth: true,
         },
       ],
     });
