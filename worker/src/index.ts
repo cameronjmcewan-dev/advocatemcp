@@ -21,6 +21,7 @@ import { reconcileRailwaySync } from "./lib/railwayReconciler";
 import { runGA4SyncBatch } from "./cron/ga4Sync";
 import { runGSCSyncBatch } from "./cron/gscSync";
 import { runCrmLtvSnapshotBatch } from "./cron/crmLtvSync";
+import { runAuthoritySyncBatch } from "./cron/authoritySync";
 import { verifyToken, base64urlToBytes } from "./lib/tracked-url";
 import { buildSignedClickBody } from "./lib/clickBody";
 import { getTenant } from "./routes/onboard";
@@ -1286,6 +1287,20 @@ export default Sentry.withSentry(
           } catch (err) {
             Sentry.captureException(err, { tags: { cron: "crm_ltv_snapshot", phase: "top_level_throw" } });
             console.error(JSON.stringify({ cron: "crm_ltv_snapshot", event: "top_level_throw", error: String(err) }));
+          }
+        })(),
+      );
+      // Off-site Authority sync (Phase 6 PR 1) — Reddit brand-mention scrape
+      // + Claude sentiment classification + daily aggregate upsert.
+      // Pro-only feature; quiet-skips when ANTHROPIC_API_KEY is unset.
+      // Per-tenant errors are isolated inside runAuthoritySyncBatch.
+      ctx.waitUntil(
+        (async () => {
+          try {
+            await runAuthoritySyncBatch(env);
+          } catch (err) {
+            Sentry.captureException(err, { tags: { cron: "authority_sync", phase: "top_level_throw" } });
+            console.error(JSON.stringify({ cron: "authority_sync", event: "top_level_throw", error: String(err) }));
           }
         })(),
       );
