@@ -73,6 +73,7 @@ import { signGA4State } from "../lib/ga4State";
 import { signState } from "../lib/oauthState";
 import { decryptToken } from "../lib/ga4TokenCrypto";
 import { refreshAccessToken, listProperties, fetchDailyTraffic, fetchDailyGeography, fetchDailyConversions } from "../lib/ga4";
+import { listSites, fetchSearchAnalytics } from "../lib/gsc";
 import { aggregateGeoRows } from "../lib/geoAggregator";
 import { aggregateConversionRows } from "../lib/conversionAggregator";
 import { classifyTrafficSource } from "../lib/aiTrafficClassifier";
@@ -208,9 +209,12 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/ga4/disconnect"      && method === "POST") return apiGA4Disconnect(request, env);
   if (pathname === "/oauth/gsc/start"      && method === "GET")  return handleGSCStartProtected(request, env);
   if (pathname === "/oauth/gsc/callback"   && method === "GET")  return handleGSCCallback(request, env);
-  if (pathname === "/api/client/gsc/status"     && method === "GET")  return apiGSCStatus(request, env);
-  if (pathname === "/api/client/gsc/start-link" && method === "POST") return apiGSCStartLink(request, env);
-  if (pathname === "/api/client/gsc/disconnect" && method === "POST") return apiGSCDisconnect(request, env);
+  if (pathname === "/api/client/gsc/status"      && method === "GET")  return apiGSCStatus(request, env);
+  if (pathname === "/api/client/gsc/start-link"  && method === "POST") return apiGSCStartLink(request, env);
+  if (pathname === "/api/client/gsc/disconnect"  && method === "POST") return apiGSCDisconnect(request, env);
+  if (pathname === "/api/client/gsc/sites"       && method === "GET")  return apiGSCSites(request, env);
+  if (pathname === "/api/client/gsc/select-site" && method === "POST") return apiGSCSelectSite(request, env);
+  if (pathname === "/api/client/gsc/resync"      && method === "POST") return apiGSCResync(request, env);
   if (pathname === "/api/client/traffic-impact"              && method === "GET")  return apiTrafficImpact(request, env);
   if (pathname === "/api/client/traffic-impact/geography"   && method === "GET")  return apiTrafficImpactGeography(request, env);
   if (pathname === "/api/client/traffic-impact/conversions" && method === "GET")  return apiTrafficImpactConversions(request, env);
@@ -375,9 +379,12 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/ga4/select-property" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/ga4/resync"          && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/ga4/disconnect"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
-  if (pathname === "/api/client/gsc/status"     && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
-  if (pathname === "/api/client/gsc/start-link" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
-  if (pathname === "/api/client/gsc/disconnect" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/gsc/status"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/gsc/start-link"  && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/gsc/disconnect"  && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/gsc/sites"       && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/gsc/select-site" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
+  if (pathname === "/api/client/gsc/resync"      && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/traffic-impact"               && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/traffic-impact/geography"    && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/traffic-impact/conversions"  && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
@@ -4172,6 +4179,346 @@ async function apiGSCDisconnect(request: Request, env: Env): Promise<Response> {
 
   await env.DB.prepare("DELETE FROM gsc_connections WHERE slug = ?").bind(biz.slug).run();
   return withCors(jsonOk({ ok: true }), request, { credentials: true });
+}
+
+// ── GET /api/client/gsc/sites ─────────────────────────────────────────────
+//
+// Lists the customer's verified GSC sites post-OAuth. Requires a live
+// gsc_connections row (refresh token present). Mirrors apiGA4Properties.
+
+async function apiGSCSites(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const reqUrl = new URL(request.url);
+  const slugParam = reqUrl.searchParams.get("slug");
+  const biz = (slugParam ? businesses.find(b => b.slug === slugParam) : null) ?? businesses[0] ?? null;
+  if (!biz) {
+    return withCors(jsonErr(404, "No business"), request, { credentials: true });
+  }
+
+  // Pro plan gate — GSC is a Pro feature per the data-depth roadmap
+  const planRow = await env.DB
+    .prepare("SELECT plan FROM businesses WHERE slug = ?")
+    .bind(biz.slug)
+    .first<{ plan: string | null }>();
+  const plan = planRow?.plan ?? "base";
+  if (plan !== "pro" && plan !== "enterprise") {
+    return withCors(jsonErr(402, "plan_required"), request, { credentials: true });
+  }
+
+  if (!env.GA4_TOKEN_ENCRYPTION_KEY || !env.GSC_OAUTH_CLIENT_ID || !env.GSC_OAUTH_CLIENT_SECRET) {
+    return withCors(jsonErr(503, "GSC integration not configured"), request, { credentials: true });
+  }
+
+  const row = await env.DB
+    .prepare("SELECT refresh_token_enc FROM gsc_connections WHERE slug = ? LIMIT 1")
+    .bind(biz.slug)
+    .first<{ refresh_token_enc: string }>();
+  if (!row) {
+    return withCors(jsonErr(404, "GSC not connected"), request, { credentials: true });
+  }
+
+  try {
+    const refreshToken = await decryptToken(row.refresh_token_enc, env.GA4_TOKEN_ENCRYPTION_KEY);
+    const { accessToken } = await refreshAccessToken(
+      refreshToken,
+      env.GSC_OAUTH_CLIENT_ID,
+      env.GSC_OAUTH_CLIENT_SECRET,
+    );
+    const sites = await listSites(accessToken);
+    return withCors(jsonOk({ sites }), request, { credentials: true });
+  } catch {
+    return withCors(
+      jsonErr(502, "Failed to list GSC sites"),
+      request,
+      { credentials: true },
+    );
+  }
+}
+
+// ── POST /api/client/gsc/select-site ─────────────────────────────────────
+//
+// Saves the tenant's chosen GSC site_url and runs an inline 18-month
+// backfill. Chunked by 90 days to stay within GSC date-range soft caps.
+// Top-100 queries per day cap matches the cron sync.
+
+async function apiGSCSelectSite(request: Request, env: Env): Promise<Response> {
+  let backfillRowsReceived = 0;
+  let backfillDaysUpserted = 0;
+  let backfillStartDate: string | null = null;
+  let backfillEndDate:   string | null = null;
+
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  let body: { site_url?: string; slug?: string } = {};
+  try { body = await request.json() as typeof body; } catch {
+    return withCors(jsonErr(400, "Invalid JSON"), request, { credentials: true });
+  }
+  if (!body.site_url || typeof body.site_url !== "string") {
+    return withCors(jsonErr(400, "site_url required"), request, { credentials: true });
+  }
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const biz = (body.slug ? businesses.find(b => b.slug === body.slug) : null) ?? businesses[0] ?? null;
+  if (!biz) {
+    return withCors(jsonErr(404, "No business"), request, { credentials: true });
+  }
+
+  // Pro plan gate
+  const planRow = await env.DB
+    .prepare("SELECT plan FROM businesses WHERE slug = ?")
+    .bind(biz.slug)
+    .first<{ plan: string | null }>();
+  const plan = planRow?.plan ?? "base";
+  if (plan !== "pro" && plan !== "enterprise") {
+    return withCors(jsonErr(402, "plan_required"), request, { credentials: true });
+  }
+
+  // Save site choice immediately so even if backfill fails the selection
+  // persists and a manual resync can recover it.
+  await env.DB
+    .prepare("UPDATE gsc_connections SET site_url = ? WHERE slug = ?")
+    .bind(body.site_url, biz.slug)
+    .run();
+
+  // Inline backfill — 18 months chunked by 90 days to respect GSC date-range
+  // soft caps. Errors don't fail the request; surfaced via last_sync_error.
+  if (env.GA4_TOKEN_ENCRYPTION_KEY && env.GSC_OAUTH_CLIENT_ID && env.GSC_OAUTH_CLIENT_SECRET) {
+    try {
+      const conn = await env.DB
+        .prepare("SELECT refresh_token_enc FROM gsc_connections WHERE slug = ? LIMIT 1")
+        .bind(biz.slug)
+        .first<{ refresh_token_enc: string }>();
+      if (conn) {
+        const refreshToken = await decryptToken(conn.refresh_token_enc, env.GA4_TOKEN_ENCRYPTION_KEY);
+        const { accessToken } = await refreshAccessToken(
+          refreshToken,
+          env.GSC_OAUTH_CLIENT_ID,
+          env.GSC_OAUTH_CLIENT_SECRET,
+        );
+
+        const today     = new Date();
+        const totalEnd  = new Date(today.getTime() - 24 * 60 * 60 * 1000);  // yesterday
+        const totalStart = new Date(today.getTime() - 540 * 24 * 60 * 60 * 1000);  // ~18 months back
+        backfillStartDate = totalStart.toISOString().slice(0, 10);
+        backfillEndDate   = totalEnd.toISOString().slice(0, 10);
+
+        // Build list of 90-day chunks covering the full backfill window
+        const chunkDays = 90;
+        const chunks: Array<{ start: string; end: string }> = [];
+        let chunkStart = new Date(totalStart);
+        while (chunkStart < totalEnd) {
+          const chunkEnd = new Date(Math.min(
+            chunkStart.getTime() + chunkDays * 24 * 60 * 60 * 1000 - 1,
+            totalEnd.getTime(),
+          ));
+          chunks.push({
+            start: chunkStart.toISOString().slice(0, 10),
+            end:   chunkEnd.toISOString().slice(0, 10),
+          });
+          chunkStart = new Date(chunkEnd.getTime() + 24 * 60 * 60 * 1000);
+        }
+
+        // Aggregate across chunks into per-day top-100 query buckets
+        const byDate = new Map<string, Array<{ query: string; impressions: number; clicks: number; ctr: number; position: number }>>();
+
+        for (const chunk of chunks) {
+          const rows = await fetchSearchAnalytics({
+            siteUrl:     body.site_url,
+            startDate:   chunk.start,
+            endDate:     chunk.end,
+            accessToken,
+          });
+          backfillRowsReceived += rows.length;
+
+          for (const r of rows) {
+            const bucket = byDate.get(r.date) ?? [];
+            bucket.push({ query: r.query, impressions: r.impressions, clicks: r.clicks, ctr: r.ctr, position: r.position });
+            byDate.set(r.date, bucket);
+          }
+        }
+
+        const now = new Date().toISOString();
+        backfillDaysUpserted = byDate.size;
+
+        for (const [date, dayRows] of byDate.entries()) {
+          // Top-100 by impressions — same cap as cron sync
+          const top100 = dayRows
+            .sort((a, b) => b.impressions - a.impressions)
+            .slice(0, 100);
+
+          for (const r of top100) {
+            await env.DB.prepare(
+              `INSERT INTO gsc_daily (slug, date, query, impressions, clicks, ctr, position)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(slug, date, query) DO UPDATE SET
+                 impressions = excluded.impressions,
+                 clicks      = excluded.clicks,
+                 ctr         = excluded.ctr,
+                 position    = excluded.position`,
+            )
+            .bind(biz.slug, date, r.query, r.impressions, r.clicks, r.ctr, r.position)
+            .run();
+          }
+        }
+
+        await env.DB
+          .prepare("UPDATE gsc_connections SET last_sync_at = ?, last_sync_error = NULL, status = 'connected' WHERE slug = ?")
+          .bind(now, biz.slug)
+          .run();
+      }
+    } catch (err) {
+      const msg = String(err instanceof Error ? err.message : err).slice(0, 500);
+      await env.DB
+        .prepare("UPDATE gsc_connections SET last_sync_error = ?, status = 'error' WHERE slug = ?")
+        .bind(msg, biz.slug)
+        .run();
+      // Don't fail the request — site selection succeeded; backfill error is recoverable.
+    }
+  }
+
+  return withCors(
+    jsonOk({
+      ok: true,
+      backfill: {
+        rows_received_from_gsc: backfillRowsReceived,
+        days_upserted:          backfillDaysUpserted,
+        start_date:             backfillStartDate,
+        end_date:               backfillEndDate,
+      },
+    }),
+    request,
+    { credentials: true },
+  );
+}
+
+// ── POST /api/client/gsc/resync ───────────────────────────────────────────
+//
+// Manual sync trigger — pulls last 7 days. Mirrors apiGA4Resync exactly.
+// Useful for the Settings UI "Resync now" button to confirm recent data
+// landed without waiting for the nightly cron tick. Pro-gated.
+
+async function apiGSCResync(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const reqUrl = new URL(request.url);
+  const slugParam = reqUrl.searchParams.get("slug");
+  const biz = (slugParam ? businesses.find(b => b.slug === slugParam) : null) ?? businesses[0] ?? null;
+  if (!biz) {
+    return withCors(jsonErr(404, "No business"), request, { credentials: true });
+  }
+
+  // Pro plan gate
+  const planRow = await env.DB
+    .prepare("SELECT plan FROM businesses WHERE slug = ?")
+    .bind(biz.slug)
+    .first<{ plan: string | null }>();
+  const plan = planRow?.plan ?? "base";
+  if (plan !== "pro" && plan !== "enterprise") {
+    return withCors(jsonErr(402, "plan_required"), request, { credentials: true });
+  }
+
+  if (!env.GA4_TOKEN_ENCRYPTION_KEY || !env.GSC_OAUTH_CLIENT_ID || !env.GSC_OAUTH_CLIENT_SECRET) {
+    return withCors(jsonErr(503, "GSC integration not configured"), request, { credentials: true });
+  }
+
+  const conn = await env.DB
+    .prepare("SELECT refresh_token_enc, site_url FROM gsc_connections WHERE slug = ? LIMIT 1")
+    .bind(biz.slug)
+    .first<{ refresh_token_enc: string; site_url: string | null }>();
+  if (!conn) {
+    return withCors(jsonErr(404, "GSC not connected"), request, { credentials: true });
+  }
+  if (!conn.site_url) {
+    return withCors(jsonErr(409, "No site selected — pick one in Settings first"), request, { credentials: true });
+  }
+
+  let rowsReceived = 0;
+  let daysUpserted = 0;
+  let syncError:    string | null = null;
+
+  try {
+    const refreshToken = await decryptToken(conn.refresh_token_enc, env.GA4_TOKEN_ENCRYPTION_KEY);
+    const { accessToken } = await refreshAccessToken(
+      refreshToken,
+      env.GSC_OAUTH_CLIENT_ID,
+      env.GSC_OAUTH_CLIENT_SECRET,
+    );
+
+    // Last 7 days ending yesterday (GSC's 2-3 day processing lag means
+    // today's data would be partial or absent).
+    const today     = new Date();
+    const endDate   = new Date(today.getTime() -     24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const startDate = new Date(today.getTime() - 8 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+    const gscRows = await fetchSearchAnalytics({
+      siteUrl:     conn.site_url,
+      startDate,
+      endDate,
+      accessToken,
+    });
+    rowsReceived = gscRows.length;
+
+    // Group by date, cap top-100 per day, upsert
+    const byDate = new Map<string, typeof gscRows>();
+    for (const r of gscRows) {
+      const bucket = byDate.get(r.date) ?? [];
+      bucket.push(r);
+      byDate.set(r.date, bucket);
+    }
+    daysUpserted = byDate.size;
+
+    for (const [date, dayRows] of byDate.entries()) {
+      const top100 = dayRows
+        .sort((a, b) => b.impressions - a.impressions)
+        .slice(0, 100);
+
+      for (const r of top100) {
+        await env.DB.prepare(
+          `INSERT INTO gsc_daily (slug, date, query, impressions, clicks, ctr, position)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(slug, date, query) DO UPDATE SET
+             impressions = excluded.impressions,
+             clicks      = excluded.clicks,
+             ctr         = excluded.ctr,
+             position    = excluded.position`,
+        )
+        .bind(biz.slug, date, r.query, r.impressions, r.clicks, r.ctr, r.position)
+        .run();
+      }
+    }
+
+    await env.DB
+      .prepare("UPDATE gsc_connections SET last_sync_at = ?, last_sync_error = NULL, status = 'connected' WHERE slug = ?")
+      .bind(new Date().toISOString(), biz.slug)
+      .run();
+  } catch (err) {
+    syncError = String(err instanceof Error ? err.message : err).slice(0, 500);
+    await env.DB
+      .prepare("UPDATE gsc_connections SET last_sync_error = ?, status = 'error' WHERE slug = ?")
+      .bind(syncError, biz.slug)
+      .run();
+  }
+
+  return withCors(
+    jsonOk({ ok: true, rows_received: rowsReceived, days_upserted: daysUpserted, error: syncError }),
+    request,
+    { credentials: true },
+  );
 }
 
 // ── GET /api/client/traffic-impact ────────────────────────────────────────

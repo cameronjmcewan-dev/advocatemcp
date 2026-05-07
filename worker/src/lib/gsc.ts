@@ -1,0 +1,120 @@
+/**
+ * Thin TypeScript client for the Google Search Console (Webmasters)
+ * API. Pulls the customer's verified site list (post-OAuth picker)
+ * + per-day per-query search analytics (impressions, clicks, ctr,
+ * position).
+ *
+ * Errors are prefixed "gsc:" so cron logs are grep-friendly.
+ *
+ * AI Overview detection (searchAppearance: aiOverview filter) is
+ * Phase 3 PR 4 — this module ships without it. AI Overview rows
+ * will land alongside the regular rows once that filter is added.
+ */
+
+export interface GSCSite {
+  siteUrl:         string;   // "https://example.com/"
+  permissionLevel: string;   // "siteOwner" | "siteFullUser" | etc.
+}
+
+export interface GSCSearchRow {
+  date:        string;   // YYYY-MM-DD
+  query:       string;
+  impressions: number;
+  clicks:      number;
+  ctr:         number;   // 0..1
+  position:    number;   // 1.0+ (lower is better)
+}
+
+// ── listSites ─────────────────────────────────────────────────────────────────
+
+export async function listSites(accessToken: string): Promise<GSCSite[]> {
+  const res = await fetch(
+    "https://searchconsole.googleapis.com/webmasters/v3/sites",
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    },
+  );
+
+  if (!res.ok) {
+    const snippet = (await res.text()).slice(0, 200);
+    throw new Error(`gsc: listSites failed: ${res.status} ${snippet}`);
+  }
+
+  // Typed inline to avoid `any`
+  const json = (await res.json()) as {
+    siteEntry?: Array<{
+      siteUrl:         string;
+      permissionLevel: string;
+    }>;
+  };
+
+  // Filter to sites the customer can actually pull data from. Unverified
+  // sites (permissionLevel="siteUnverifiedUser") can't be queried via
+  // the Search Analytics API.
+  return (json.siteEntry ?? []).filter(
+    (e) => e.permissionLevel === "siteOwner" || e.permissionLevel === "siteFullUser",
+  );
+}
+
+// ── fetchSearchAnalytics ──────────────────────────────────────────────────────
+
+export async function fetchSearchAnalytics(opts: {
+  siteUrl:     string;
+  startDate:   string;   // YYYY-MM-DD
+  endDate:     string;
+  accessToken: string;
+  rowLimit?:   number;   // default 25000 (GSC max)
+}): Promise<GSCSearchRow[]> {
+  const { siteUrl, startDate, endDate, accessToken, rowLimit = 25000 } = opts;
+
+  // GSC requires siteUrl to be URL-encoded in the path
+  // e.g. "https://example.com/" → "https%3A%2F%2Fexample.com%2F"
+  const encodedSiteUrl = encodeURIComponent(siteUrl);
+
+  const res = await fetch(
+    `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodedSiteUrl}/searchAnalytics/query`,
+    {
+      method: "POST",
+      headers: {
+        Authorization:  `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        startDate,
+        endDate,
+        dimensions: ["date", "query"],
+        rowLimit,
+      }),
+    },
+  );
+
+  if (!res.ok) {
+    const snippet = (await res.text()).slice(0, 200);
+    throw new Error(`gsc: searchAnalytics failed: ${res.status} ${snippet}`);
+  }
+
+  // Typed inline — GSC Search Analytics row shape
+  const json = (await res.json()) as {
+    rows?: Array<{
+      keys:        [string, string];   // [date, query]
+      clicks:      number;
+      impressions: number;
+      ctr:         number;
+      position:    number;
+    }>;
+  };
+
+  const rows: GSCSearchRow[] = [];
+  for (const row of json.rows ?? []) {
+    // GSC returns dates with hyphens natively (YYYY-MM-DD) — no conversion needed
+    rows.push({
+      date:        row.keys[0],
+      query:       row.keys[1],
+      impressions: row.impressions,
+      clicks:      row.clicks,
+      ctr:         row.ctr,
+      position:    row.position,
+    });
+  }
+  return rows;
+}
