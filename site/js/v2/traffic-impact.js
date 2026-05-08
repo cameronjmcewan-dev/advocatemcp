@@ -1443,7 +1443,13 @@
         dispatch:     function (integrationId, action, btn) { return dispatchHubAction(integrationId, action, btn); },
       };
       window.AMCP_TI_WIZARD.mount(d.integrationsHub, document.getElementById('page-content'));
-      document.addEventListener('ti-wizard-dismissed', function () { window.location.reload(); }, { once: true });
+      document.addEventListener('ti-wizard-dismissed', () => {
+        if (window.AMCP_SHELL && typeof window.AMCP_SHELL.refresh === 'function') {
+          window.AMCP_SHELL.refresh();
+        } else {
+          window.location.reload();
+        }
+      }, { once: true });
       return; // skip legacy State A wiring
     }
 
@@ -1790,7 +1796,19 @@
 
   function legacyCardUrl(integrationId) {
     const id = LEGACY_CARD_IDS[integrationId];
-    return id ? '/Settings.html#' + id : '/Settings.html';
+    let url = id ? '/Settings.html#' + id : '/Settings.html';
+    // Preserve admin impersonation across the deep-link. authedFetch
+    // already does this for /api/* calls; nav links need it explicitly
+    // since the browser strips query params when following an anchor href.
+    try {
+      const asSlug = new URL(window.location.href).searchParams.get('as');
+      if (asSlug) {
+        url = url.indexOf('#') >= 0
+          ? url.replace('#', '?as=' + encodeURIComponent(asSlug) + '#')
+          : url + '?as=' + encodeURIComponent(asSlug);
+      }
+    } catch (_) { /* URL parse error → no slug appended */ }
+    return url;
   }
 
   async function startGoogleOauthForId(integrationId, btn) {

@@ -55,12 +55,6 @@
   function renderState(hub) {
     if (!hub) return renderError("Couldn't load setup state — refresh to retry.");
 
-    // Done card: completed via this session OR returned with everything done
-    const completion = hub.completion || { connected: 0, available: 0 };
-    if (hub.recommended_next == null && completion.connected >= 2) {
-      return renderDone(hub);
-    }
-
     // Welcome before any step
     if (stepIndex === 0) {
       return renderWelcome(hub);
@@ -112,23 +106,7 @@
         ${cardHtml}
         <div class="ti-wizard-step-foot">
           ${stepIndex > 1 ? `<button type="button" class="btn btn-ghost btn-sm ti-wizard-back">‹ Back</button>` : '<span></span>'}
-          <button type="button" class="btn btn-ghost btn-sm ti-wizard-skip-step">Skip this step</button>
-        </div>
-      </div>`;
-  }
-
-  function renderDone(hub) {
-    const completion = hub.completion || { connected: 0, available: 0 };
-    return `
-      <div id="ti-wizard-root" class="ti-wizard">
-        <div class="ti-wizard-done">
-          <div class="ti-wizard-eyebrow ti-wizard-done-eyebrow">Setup complete</div>
-          <h1 class="ti-wizard-title">You're set up.</h1>
-          <p class="ti-wizard-subtitle">${escHtml(completion.connected)} of ${escHtml(completion.available)} integrations connected. Your dashboard will populate as data syncs over the next 24 hours.</p>
-          <div class="ti-wizard-actions">
-            <button type="button" class="btn btn-primary ti-wizard-finish">View your dashboard →</button>
-            <a class="btn btn-ghost btn-sm" href="/Settings.html">Add more integrations</a>
-          </div>
+          <span></span>
         </div>
       </div>`;
   }
@@ -205,27 +183,6 @@
         stepIndex = Math.max(0, stepIndex - 1);
         root.outerHTML = renderState(hub);
         wireListeners(hub);
-      });
-    }
-
-    // Step nav: Skip this step (advances cursor in-memory only — server still recommends it next reload)
-    const skipStepBtn = root.querySelector('.ti-wizard-skip-step');
-    if (skipStepBtn) {
-      skipStepBtn.addEventListener('click', () => {
-        stepIndex = stepIndex + 1;
-        // Cap at total: if past end, show done.
-        // (Skip-step doesn't unlock done; we re-evaluate from hub.)
-        root.outerHTML = renderState(hub);
-        wireListeners(hub);
-      });
-    }
-
-    // Done → finish
-    const finishBtn = root.querySelector('.ti-wizard-finish');
-    if (finishBtn) {
-      finishBtn.addEventListener('click', () => {
-        dismissedThisSession = true;
-        notifyDismissed();
       });
     }
 

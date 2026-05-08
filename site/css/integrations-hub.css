@@ -409,3 +409,15 @@
   padding: 12px 24px;
   font-size: 15px;
 }
+
+.ti-wizard-error {
+  background: rgba(180, 40, 40, 0.08);
+  border: 1px solid rgba(180, 40, 40, 0.25);
+  color: var(--red, #b3261e);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0 auto;
+  max-width: 640px;
+}
