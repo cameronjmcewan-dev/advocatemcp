@@ -1027,20 +1027,31 @@
         ${clicksSection}`;
     }
 
-    // State B — connected, no data yet
-    if (!daily.length) {
+    // State B — connected, no data yet OR too sparse to be meaningful.
+    // KPIs comparing pre- vs post-Advocate trends need at least a few days
+    // each side of bleed_at, and the AI-share % is misleading on <1 week
+    // of data. Below the threshold we show a progress card instead of
+    // charts with one datapoint.
+    const MIN_DAILY_FOR_INSIGHT = 7;
+    if (daily.length < MIN_DAILY_FOR_INSIGHT) {
+      const headline = daily.length === 0
+        ? 'Connected to Google Analytics'
+        : 'Connected &middot; gathering data';
+      const dayWord = daily.length === 1 ? 'day' : 'days';
+      const body = daily.length === 0
+        ? 'Waiting for your first day of GA4 data. Google finalizes daily traffic stats within 24-48 hours after the day ends, and our nightly sync picks them up automatically.'
+        : `${daily.length} ${dayWord} of data so far. Your dashboard fills in around day ${MIN_DAILY_FOR_INSIGHT} — once we have enough history to compare pre-Advocate and post-Advocate trends.`;
+      const troubleshoot = daily.length === 0
+        ? `<p style="margin:0; color:var(--muted); font-size:13px;">No traffic in your GA4 property yet? Make sure the GA4 measurement code (gtag.js with your G-XXXXX ID) is installed on your site. Visit <a href="https://analytics.google.com" target="_blank" rel="noopener" style="color:var(--maroon)">analytics.google.com</a> &rarr; your property &rarr; Admin &rarr; Data Streams to verify.</p>`
+        : '';
       return `
         <section class="card-dash" style="padding:32px; max-width:720px; margin:24px auto; border:1px solid var(--line);">
           <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
             <div style="width:10px; height:10px; border-radius:50%; background:var(--maroon); animation:pulse 2s infinite;"></div>
-            <strong style="font-size:14px;">Connected to Google Analytics &middot; ${esc(propLabel || 'Your property')}</strong>
+            <strong style="font-size:14px;">${headline} &middot; ${esc(propLabel || 'Your property')}</strong>
           </div>
-          <p style="margin:0 0 16px; color:var(--ink-2); line-height:1.5;">
-            Waiting for your first day of GA4 data. Google finalizes daily traffic stats within 24-48 hours after the day ends, and our nightly sync picks them up automatically.
-          </p>
-          <p style="margin:0; color:var(--muted); font-size:13px;">
-            No traffic in your GA4 property yet? Make sure the GA4 measurement code (gtag.js with your G-XXXXX ID) is installed on your site. Visit <a href="https://analytics.google.com" target="_blank" rel="noopener" style="color:var(--maroon)">analytics.google.com</a> &rarr; your property &rarr; Admin &rarr; Data Streams to verify.
-          </p>
+          <p style="margin:0 0 16px; color:var(--ink-2); line-height:1.5;">${body}</p>
+          ${troubleshoot}
         </section>
         <style>@keyframes pulse { 0%, 100% { opacity:1; } 50% { opacity:0.4; } }</style>
         ${clicksSection}`;
@@ -1534,8 +1545,11 @@
     wireCrmConnectBtn('ti-crm-connect-hubspot', 'hubspot');
     wireCrmConnectBtn('ti-crm-connect-salesforce', 'salesforce');
 
-    // State C — mount charts + lazy-load geography
-    if (impact.ga4_connected && impact.daily && impact.daily.length) {
+    // State C — mount charts + lazy-load geography. Threshold matches
+    // the render-side State B/C cutoff (MIN_DAILY_FOR_INSIGHT = 7); below
+    // that, render() returned the State B "gathering data" panel and the
+    // chart DOM doesn't exist for these mountChart* calls to attach to.
+    if (impact.ga4_connected && impact.daily && impact.daily.length >= 7) {
       pollEcharts(function () {
         bootMaroonTheme();
         var instTotal      = mountChartTotal(impact.daily, impact.bleed_at);
