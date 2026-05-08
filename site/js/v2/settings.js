@@ -1198,6 +1198,10 @@
    * Hoisted to module scope so handleHubAction below (also module-scoped)
    * can call them. */
 
+  // TODO(phase-1.5): hub helpers use alert() for errors while legacy
+  // wireGa4Card/wireGscCard use inline status-msg spans. Phase 1.5
+  // removes the legacy cards and we can normalise on a status-msg span
+  // inside the connector card row.
   async function startGoogleOauth(path, btn) {
     const original = btn.textContent;
     btn.disabled = true;
@@ -1214,6 +1218,7 @@
     }
   }
 
+  // TODO(phase-1.5): wired in once runInlinePicker accepts a custom mount target.
   function openInlinePicker(btn, integrationId) {
     // Reuse the runInlinePicker helper (defined at module scope above)
     // so the GA4-property and GSC-site picker UX is identical whether
@@ -1258,7 +1263,7 @@
       const j = await r.json();
       if (j && j.error) throw new Error(j.error);
       btn.textContent = 'Synced ✓';
-      setTimeout(() => window.location.reload(), 1200);
+      setTimeout(() => window.location.reload(), 1500);
     } catch (err) {
       alert('Sync failed: ' + (err.message || err));
       btn.disabled = false;
@@ -1271,7 +1276,7 @@
     btn.disabled = true;
     try {
       await window.AMCP.authedFetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-      setTimeout(() => window.location.reload(), 800);
+      setTimeout(() => window.location.reload(), 1000);
     } catch (err) {
       alert('Could not disconnect: ' + (err.message || err));
       btn.disabled = false;
@@ -1298,6 +1303,10 @@
     setTimeout(() => { el.style.boxShadow = original; }, 1400);
   }
 
+  // TODO(phase-1.5): widen runInlinePicker to mount into a dedicated
+  // container so hub-triggered pickers don't clobber sibling action
+  // buttons. For Phase 1, hub pick_property/pick_site routes the user
+  // to the legacy card where the picker mounts cleanly.
   function handleHubAction(integrationId, action, btn) {
     const af = window.AMCP && window.AMCP.authedFetch;
     if (!af) return;
@@ -1307,12 +1316,12 @@
     // runInlinePicker call, the disconnect confirm + POST).
     const handlers = {
       'ga4|connect':       () => startGoogleOauth('/api/client/ga4/start-link', btn),
-      'ga4|pick_property': () => openInlinePicker(btn, 'ga4'),
+      'ga4|pick_property': () => scrollToLegacy('legacy-ga4-card'),
       'ga4|resync':        () => triggerResync('/api/client/ga4/resync', btn),
       'ga4|disconnect':    () => confirmDisconnect('/api/client/ga4/disconnect', 'Google Analytics', btn),
 
       'gsc|connect':       () => startGoogleOauth('/api/client/gsc/start-link', btn),
-      'gsc|pick_site':     () => openInlinePicker(btn, 'gsc'),
+      'gsc|pick_site':     () => scrollToLegacy('legacy-gsc-card'),
       'gsc|resync':        () => triggerResync('/api/client/gsc/resync', btn),
       'gsc|disconnect':    () => confirmDisconnect('/api/client/gsc/disconnect', 'Google Search Console', btn),
 
