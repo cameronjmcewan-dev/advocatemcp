@@ -1003,6 +1003,12 @@
         <div style="margin-top:16px;">${renderClicksTable(clicksPay)}</div>
       </details>`;
 
+    // Phase-2 wizard: when the tenant has 0–1 integrations connected, replace
+    // the bare "Connect Google Analytics →" State A with the multi-step wizard.
+    if (window.AMCP_TI_WIZARD && window.AMCP_TI_WIZARD.shouldRender(d.integrationsHub)) {
+      return window.AMCP_TI_WIZARD.renderState(d.integrationsHub);
+    }
+
     // State A — not connected
     if (!connected) {
       return `
@@ -1428,6 +1434,19 @@
     const d      = data || {};
     const impact = d.impact || { ga4_connected: false, daily: [], bleed_at: null };
 
+    // Mount the wizard if it took over the State A render.
+    if (window.AMCP_TI_WIZARD && window.AMCP_TI_WIZARD.shouldRender(d.integrationsHub)) {
+      // Provide the action map the wizard delegates to.
+      window.AMCP_TI_WIZARD_ACTIONS = {
+        startConnect: function (integrationId, btn) { return startGoogleOauthForId(integrationId, btn); },
+        openPicker:   function (integrationId, btn, mountTarget) { return openInlinePickerForId(integrationId, btn, mountTarget); },
+        dispatch:     function (integrationId, action, btn) { return dispatchHubAction(integrationId, action, btn); },
+      };
+      window.AMCP_TI_WIZARD.mount(d.integrationsHub, document.getElementById('page-content'));
+      document.addEventListener('ti-wizard-dismissed', function () { window.location.reload(); }, { once: true });
+      return; // skip legacy State A wiring
+    }
+
     // State A — wire Connect button
     var btn = document.getElementById('ga4-connect-btn');
     if (btn) {
@@ -1553,7 +1572,7 @@
     const range = (window.AdvocateChrome && window.AdvocateChrome.getRange)
       ? window.AdvocateChrome.getRange() : '30d';
     const rq = '?range=' + encodeURIComponent(range);
-    const [status, impact, clicks, metrics, conversions, gscResult, verifiedRevResult, ltvResult, authorityResult] = await Promise.allSettled([
+    const [status, impact, clicks, metrics, conversions, gscResult, verifiedRevResult, ltvResult, authorityResult, hubResult] = await Promise.allSettled([
       window.AMCP.authedFetch('/api/client/ga4/status').then(function (r) { return r.json(); }),
       window.AMCP.authedFetch('/api/client/traffic-impact' + rq).then(function (r) { return r.json(); }),
       window.AMCP.authedFetch('/api/client/clicks' + rq).then(function (r) { return r.json(); }),
@@ -1583,6 +1602,10 @@
         if (!r.ok) return null;
         return r.json();
       }),
+      // Phase 2 PR 3: integrations hub feeds the wizard's State A takeover.
+      window.AMCP.authedFetch('/api/client/integrations/status').then(function (r) {
+        return r.ok ? r.json() : null;
+      }).catch(function () { return null; }),
     ]);
     return {
       ga4Status:       status.status          === 'fulfilled' ? status.value          : { connected: false },
@@ -1594,6 +1617,7 @@
       verifiedRevenue: verifiedRevResult.status === 'fulfilled' ? verifiedRevResult.value : null,
       ltv:             ltvResult.status       === 'fulfilled' ? ltvResult.value       : null,
       authority:       authorityResult.status === 'fulfilled' ? authorityResult.value : null,
+      integrationsHub: hubResult.status       === 'fulfilled' ? hubResult.value       : null,
     };
   }
 
@@ -1740,6 +1764,91 @@
         };
       }()),
     };
+  }
+
+  // ── Phase 2 PR 3: wizard action handlers ─────────────────────────
+  //
+  // The wizard module (`AMCP_TI_WIZARD`) delegates button clicks back to
+  // these helpers via `window.AMCP_TI_WIZARD_ACTIONS`. They mirror the
+  // OAuth/picker/disconnect flows that settings.js already implements;
+  // we don't import settings.js's wire functions because they are
+  // tightly bound to settings-page DOM (status spans, card layout).
+
+  async function startGoogleOauthForId(integrationId, btn) {
+    // Maps integrationId → start-link path. Mirrors settings.js's startGoogleOauth.
+    const paths = {
+      ga4:        '/api/client/ga4/start-link',
+      gsc:        '/api/client/gsc/start-link',
+      hubspot:    '/api/client/crm/start-link?provider=hubspot',
+      salesforce: '/api/client/crm/start-link?provider=salesforce',
+    };
+    const path = paths[integrationId];
+    if (!path) {
+      // Authority + Stripe webhook don't OAuth-connect; route them to Settings.
+      window.location.href = '/Settings.html#legacy-' + integrationId.replace('_', '-') + '-card';
+      return;
+    }
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Opening Google…';
+    try {
+      const r = await window.AMCP.authedFetch(path, { method: 'POST' });
+      const j = await r.json();
+      if (j && j.url) { window.location.href = j.url; return; }
+      throw new Error((j && (j.customer_message || j.error_code)) || 'Could not start');
+    } catch (err) {
+      alert('Could not connect: ' + (err.message || err));
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  }
+
+  function openInlinePickerForId(integrationId, btn, mountTarget) {
+    // The runInlinePicker function lives in settings.js — we expose it on
+    // window in Step 6 below so this cross-module call works. Phase 2 PR 1
+    // added the mountTarget option so the picker renders into the wizard's
+    // .cc-wizard-step-body div without clobbering the wizard's nav buttons.
+    if (typeof window.runInlinePicker !== 'function') {
+      alert('Picker module not loaded — refresh and try again.');
+      return;
+    }
+    if (integrationId === 'ga4') {
+      window.runInlinePicker({
+        anchorBtn:    btn,
+        mountTarget:  mountTarget,
+        listPath:     '/api/client/ga4/properties',
+        listKey:      'properties',
+        selectPath:   '/api/client/ga4/select-property',
+        buildBody:    function (p) { return { property_id: p.propertyId, property_label: p.displayName || p.propertyId }; },
+        isValid:      function (p) { return !!p.propertyId; },
+        rowLabel:     function (p) { return p.displayName || p.propertyId || ''; },
+        rowSubLabel:  function (p) { return p.propertyId || ''; },
+        emptyMessage: 'No GA4 properties on this Google account. Create one in Analytics first.',
+        intro:        'Pick the GA4 property Advocate should pull traffic from. Selecting a property triggers a backfill — this can take 30 seconds.',
+      });
+    } else if (integrationId === 'gsc') {
+      window.runInlinePicker({
+        anchorBtn:    btn,
+        mountTarget:  mountTarget,
+        listPath:     '/api/client/gsc/sites',
+        listKey:      'sites',
+        selectPath:   '/api/client/gsc/select-site',
+        buildBody:    function (s) { return { site_url: s.siteUrl }; },
+        isValid:      function (s) { return !!s.siteUrl; },
+        rowLabel:     function (s) { return s.siteUrl || ''; },
+        rowSubLabel:  function (s) { return s.permissionLevel || ''; },
+        emptyMessage: 'No verified sites on this Google account. Add and verify a site in Search Console first.',
+        intro:        'Pick the site Advocate should pull data from. Selecting a site triggers an 18-month backfill — this can take 30 seconds.',
+      });
+    }
+  }
+
+  function dispatchHubAction(integrationId, action, btn) {
+    // Disconnect / resync / configure / generate / rotate / edit — Phase 2
+    // mid-wizard handling: the simplest correct behavior is to send users
+    // to the Settings page where the legacy editing surfaces live. The
+    // wizard is for happy-path setup; advanced edits happen elsewhere.
+    window.location.href = '/Settings.html#legacy-' + integrationId.replace('_', '-') + '-card';
   }
 
   // ── Public API ────────────────────────────────────────────────────
