@@ -1453,6 +1453,18 @@
       return; // skip legacy State A wiring
     }
 
+    // Phase 3: when the wizard isn't showing AND the tenant isn't fully
+    // set up, surface a "Resume setup →" link in the topbar so users can
+    // return to the focused setup page anytime.
+    const hub = d.integrationsHub;
+    if (hub && hub.completion && hub.completion.connected >= 2 && hub.recommended_next != null) {
+      const topbar = document.querySelector('.topbar');
+      if (topbar && !topbar.querySelector('.resume-setup-link')) {
+        topbar.insertAdjacentHTML('beforeend',
+          '<a href="/setup/traffic-impact" class="resume-setup-link" style="margin-left:auto;font-size:13.5px;color:var(--maroon);text-decoration:none">Resume setup →</a>');
+      }
+    }
+
     // State A — wire Connect button
     var btn = document.getElementById('ga4-connect-btn');
     if (btn) {

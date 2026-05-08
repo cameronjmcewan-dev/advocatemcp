@@ -1394,6 +1394,16 @@
         e.preventDefault();
         handleHubAction(id, action, btn);
       });
+
+      // Phase 3: surface a link to the dedicated /setup/traffic-impact
+      // page from the hub header. We don't modify connectorCard.js's
+      // renderHub for this — just inject after mount so the link rides
+      // alongside the existing card-head content.
+      const head = hub.querySelector('.card-head');
+      if (head && !head.querySelector('.setup-page-link')) {
+        head.insertAdjacentHTML('beforeend',
+          '<a href="/setup/traffic-impact" class="setup-page-link" style="margin-left:auto;font-size:13.5px;color:var(--maroon);text-decoration:none">Open setup page →</a>');
+      }
     }
 
     // Open DNS wizard — launches the existing legacy module in a modal.
