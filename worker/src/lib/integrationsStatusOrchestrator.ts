@@ -88,7 +88,7 @@ export async function fetchIntegrationsStatus(
       ai_events:        Number(eventsRow?.ai ?? 0),
     },
     authority: {
-      configured:       !!(authRow?.brand_keyword && authRow?.google_place_id),
+      configured:       !!(authRow?.brand_keyword || authRow?.google_place_id),
       brand_keyword:    authRow?.brand_keyword ?? null,
       google_place_id:  authRow?.google_place_id ?? null,
       last_synced_at:   authRow?.last_synced_at ?? null,

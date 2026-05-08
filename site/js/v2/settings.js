@@ -210,7 +210,9 @@
            Kit's brand-keyword + place-id form, the verified-revenue webhook
            generate/rotate block); Phase 1.5 inlines those into the hub. -->
       <div class="row single">
-        ${d.integrationsHub ? window.AMCP_CONNECTOR_CARD.renderHub(d.integrationsHub) : '<div class="card-dash" style="padding:24px;color:var(--muted)">Loading integrations…</div>'}
+        ${d.integrationsHub && window.AMCP_CONNECTOR_CARD
+          ? window.AMCP_CONNECTOR_CARD.renderHub(d.integrationsHub)
+          : '<div class="card-dash" style="padding:24px;color:var(--muted)">Loading integrations…</div>'}
       </div>
 
       <!-- Web traffic data (May 6 2026 PR 3). Manages the GA4 OAuth
