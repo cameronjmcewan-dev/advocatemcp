@@ -1774,6 +1774,25 @@
   // we don't import settings.js's wire functions because they are
   // tightly bound to settings-page DOM (status spans, card layout).
 
+  // Map from integration_id (returned by /api/client/integrations/status)
+  // to the DOM id of the legacy card on Settings.html. Used by the wizard
+  // to deep-link users to mid-flow editing surfaces. The mapping is not
+  // 1:1 with the integration_id — settings.js groups HubSpot+Salesforce
+  // into one CRM card, and the Stripe webhook is the "Revenue" card.
+  const LEGACY_CARD_IDS = {
+    ga4:            'legacy-ga4-card',
+    gsc:            'legacy-gsc-card',
+    hubspot:        'legacy-crm-card',
+    salesforce:     'legacy-crm-card',
+    stripe_webhook: 'legacy-revenue-webhook-card',
+    authority:      'legacy-authority-card',
+  };
+
+  function legacyCardUrl(integrationId) {
+    const id = LEGACY_CARD_IDS[integrationId];
+    return id ? '/Settings.html#' + id : '/Settings.html';
+  }
+
   async function startGoogleOauthForId(integrationId, btn) {
     // Maps integrationId → start-link path. Mirrors settings.js's startGoogleOauth.
     const paths = {
@@ -1785,7 +1804,7 @@
     const path = paths[integrationId];
     if (!path) {
       // Authority + Stripe webhook don't OAuth-connect; route them to Settings.
-      window.location.href = '/Settings.html#legacy-' + integrationId.replace('_', '-') + '-card';
+      window.location.href = legacyCardUrl(integrationId);
       return;
     }
     const original = btn.textContent;
@@ -1848,7 +1867,7 @@
     // mid-wizard handling: the simplest correct behavior is to send users
     // to the Settings page where the legacy editing surfaces live. The
     // wizard is for happy-path setup; advanced edits happen elsewhere.
-    window.location.href = '/Settings.html#legacy-' + integrationId.replace('_', '-') + '-card';
+    window.location.href = legacyCardUrl(integrationId);
   }
 
   // ── Public API ────────────────────────────────────────────────────
