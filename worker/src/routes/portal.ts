@@ -83,6 +83,7 @@ import { aggregateGeoRows } from "../lib/geoAggregator";
 import { aggregateConversionRows } from "../lib/conversionAggregator";
 import { classifyTrafficSource } from "../lib/aiTrafficClassifier";
 import { trafficImpactPayload } from "../lib/trafficImpactPayload";
+import { fetchIntegrationsStatus } from "../lib/integrationsStatusOrchestrator.js";
 
 // ── Public route dispatcher ────────────────────────────────────────────────
 // Returns a Response if this is a portal path, or null to fall through to
@@ -220,6 +221,8 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/gsc/sites"       && method === "GET")  return apiGSCSites(request, env);
   if (pathname === "/api/client/gsc/select-site" && method === "POST") return apiGSCSelectSite(request, env);
   if (pathname === "/api/client/gsc/resync"      && method === "POST") return apiGSCResync(request, env);
+  if (pathname === "/api/client/integrations/status" && method === "GET")     return apiIntegrationsStatus(request, env);
+  if (pathname === "/api/client/integrations/status" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/traffic-impact"                          && method === "GET")     return apiTrafficImpact(request, env);
   if (pathname === "/api/client/traffic-impact/geography"               && method === "GET")     return apiTrafficImpactGeography(request, env);
   if (pathname === "/api/client/traffic-impact/conversions"             && method === "GET")     return apiTrafficImpactConversions(request, env);
@@ -3575,6 +3578,32 @@ async function apiGA4StartLink(request: Request, env: Env): Promise<Response> {
   const url = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 
   return withCors(jsonOk({ url }), request, { credentials: true });
+}
+
+// ── GET /api/client/integrations/status ────────────────────────────────────
+//
+// Aggregator for the unified Traffic Impact integrations hub on Settings.
+// Returns the status of all 6 integrations (GA4, GSC, HubSpot, Salesforce,
+// Stripe webhook, Authority Kit) in one round-trip. Read-only; mutating
+// actions still go through the per-integration endpoints.
+
+async function apiIntegrationsStatus(request: Request, env: Env): Promise<Response> {
+  const guard = await requireVerifiedSession(request, env);
+  if (!guard.ok) return guard.resp;
+  const ctx = guard.ctx;
+
+  const businesses = ctx.role === "admin"
+    ? await getActiveBusinesses(env.DB)
+    : await getUserBusinesses(env.DB, ctx.user_id);
+  const reqUrl = new URL(request.url);
+  const slugParam = reqUrl.searchParams.get("slug");
+  const biz = (slugParam ? businesses.find(b => b.slug === slugParam) : null) ?? businesses[0] ?? null;
+  if (!biz) {
+    return withCors(jsonErr(404, "No business"), request, { credentials: true });
+  }
+
+  const status = await fetchIntegrationsStatus(env.DB, biz);
+  return withCors(jsonOk(status), request, { credentials: true });
 }
 
 // ── GET /api/client/ga4/status ─────────────────────────────────────────────
