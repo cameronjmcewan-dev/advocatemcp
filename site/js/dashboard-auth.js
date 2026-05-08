@@ -83,10 +83,19 @@
      * string so the worker resolves to the impersonated tenant instead
      * of falling back to businesses[0]. /api/client/all-metrics is
      * admin-scoped and never needs slug scoping; everything else does.
-     * Skipped if the caller already set ?slug= explicitly. */
+     * Skipped if the caller already set ?slug= explicitly.
+     *
+     * 401 refresh-and-retry: access tokens expire after 15 min. If a
+     * call hits 401 with error_code "no_session" (or generic 401), we
+     * silently refresh the in-memory token via /api/auth/refresh and
+     * replay the original request once. Body streams can only be read
+     * once, so we serialise the body up-front when retry might be
+     * needed (POST/PATCH/PUT/DELETE with a JSON body). Refresh fail →
+     * caller gets the original 401 to handle. */
     async authedFetch(path, opts) {
       const options = opts || {};
-      const headers = Object.assign(
+
+      const buildHeaders = () => Object.assign(
         {},
         options.headers || {},
         AMCP.token ? { Authorization: `Bearer ${AMCP.token}` } : {}
@@ -107,10 +116,23 @@
         } catch { /* URL parse failure → fall back to original path */ }
       }
 
-      const res = await fetch(`${API_BASE}${resolvedPath}`, Object.assign({}, options, {
+      const doFetch = () => fetch(`${API_BASE}${resolvedPath}`, Object.assign({}, options, {
         credentials: 'include',
-        headers,
+        headers: buildHeaders(),
       }));
+
+      let res = await doFetch();
+
+      // 401 → try one silent refresh + replay. Skip the auth endpoints
+      // themselves to avoid loops.
+      const isAuthEndpoint = typeof path === 'string'
+        && (path.startsWith('/api/auth/login') || path.startsWith('/api/auth/refresh') || path.startsWith('/api/auth/logout'));
+      if (res.status === 401 && !isAuthEndpoint) {
+        const refreshed = await AMCP.refresh();
+        if (refreshed) {
+          res = await doFetch();
+        }
+      }
 
       if (res.status === 403) {
         try {
