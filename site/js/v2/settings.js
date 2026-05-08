@@ -2114,4 +2114,9 @@
   }
 
   window.AMCP_SETTINGS = { demo: () => DEMO, fetch: fetchReal, render, afterMount };
+
+  // Phase 2 PR 3: expose runInlinePicker on window so traffic-impact.js can
+  // call it cross-module. The wizard's pickers reuse this helper rather than
+  // re-implementing OAuth + select-property/select-site logic.
+  window.runInlinePicker = runInlinePicker;
 })();
