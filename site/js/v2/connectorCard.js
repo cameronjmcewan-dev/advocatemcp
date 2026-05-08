@@ -45,12 +45,85 @@
   };
 
   /**
+   * Wizard-mode render: full-card layout for the Phase-2 stepper. Differs
+   * from the hub's accordion row in:
+   *   - larger heading, status pill on its own line
+   *   - bulleted value_props (not just first oneliner)
+   *   - <PrereqCoach> inlined above the action button
+   *   - vertical action stack (primary CTA on top, ghost actions below)
+   *   - dedicated <div class="cc-wizard-step-body"> the wizard stepper
+   *     uses as the picker mountTarget so picker rendering doesn't
+   *     clobber the wizard's own navigation buttons
+   */
+  function renderWizard(integration) {
+    const pill = STATUS_PILL[integration.status] || STATUS_PILL.not_connected;
+    const dot = pill.cls.indexOf('dot-chip') >= 0 ? '<span class="dot"></span>' : '';
+
+    const values = (integration.value_props || []).map(v =>
+      `<li>${escHtml(v)}</li>`
+    ).join('');
+
+    // Inline coaching for prereqs that have a coach_id
+    const coachHtml = (integration.external_prereqs || [])
+      .filter(p => p && p.coach_id)
+      .map(p => {
+        const coach = (window.AMCP_PREREQ_COACH && window.AMCP_PREREQ_COACH.render)
+          ? window.AMCP_PREREQ_COACH.render(p.coach_id)
+          : '';
+        return coach;
+      })
+      .join('');
+
+    // Same action labels + button styling rules as the hub render — kept inline
+    // here rather than DRY'd into a shared helper because the wizard layout
+    // stacks them vertically (primary CTA full-width, ghost actions below).
+    const actionLabels = {
+      connect:       'Connect →',
+      pick_property: 'Pick property →',
+      pick_site:     'Pick site →',
+      configure:     'Configure →',
+      generate:      'Generate webhook →',
+      rotate:        'Rotate secret',
+      resync:        'Resync now',
+      disconnect:    'Disconnect',
+      edit:          'Edit',
+      upgrade:       'Upgrade to Pro →',
+    };
+    const actionsHtml = (integration.actions || []).map((a) => {
+      const isPrimary = (a === 'connect' || a === 'configure' || a === 'generate' || a === 'upgrade');
+      const cls = isPrimary ? 'btn btn-primary' : 'btn btn-ghost btn-sm';
+      const href = a === 'upgrade' ? ' href="/Billing.html"' : '';
+      const tag = a === 'upgrade' ? 'a' : 'button';
+      const typeAttr = a === 'upgrade' ? '' : ' type="button"';
+      return `<${tag} class="${cls}" data-cc-action="${escHtml(a)}" data-cc-id="${escHtml(integration.id)}"${typeAttr}${href}>${escHtml(actionLabels[a] || a)}</${tag}>`;
+    }).join('');
+
+    const errorPill = integration.last_sync_error
+      ? `<div class="cc-wizard-error">${escHtml(String(integration.last_sync_error).slice(0, 200))}</div>`
+      : '';
+
+    return `
+      <div class="cc-wizard-card" data-cc-row="${escHtml(integration.id)}">
+        <div class="cc-wizard-name">${escHtml(integration.name)}</div>
+        <div class="cc-wizard-status">
+          <span class="${pill.cls}">${dot}${escHtml(pill.label)}</span>
+        </div>
+        ${values ? `<ul class="cc-wizard-values">${values}</ul>` : ''}
+        ${coachHtml ? `<div class="cc-wizard-coach">${coachHtml}</div>` : ''}
+        ${errorPill}
+        <div class="cc-wizard-step-body"></div>
+        <div class="cc-wizard-actions">${actionsHtml}</div>
+      </div>`;
+  }
+
+  /**
    * Renders one connector card row. Returns HTML string.
-   * Surface-specific layout (hub uses an accordion row; wizard/setup-page
-   * will use full-card layouts in later phases).
+   * Surface-specific layout — dispatches to renderWizard for the
+   * Phase-2 wizard surface; default is the hub's accordion row.
    */
   function render(integration, surface) {
     surface = surface || 'hub';
+    if (surface === 'wizard') return renderWizard(integration);
     const pill = STATUS_PILL[integration.status] || STATUS_PILL.not_connected;
     const dot = pill.cls.indexOf('dot-chip') >= 0 ? '<span class="dot"></span>' : '';
     const valueOneliner = (integration.value_props && integration.value_props[0]) || '';
