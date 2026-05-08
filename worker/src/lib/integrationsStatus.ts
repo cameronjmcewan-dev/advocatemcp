@@ -58,6 +58,145 @@ export interface IntegrationsStatusResponse {
   completion: { connected: number; available: number; pct: number };
 }
 
+function authorityView(facts: IntegrationsFacts): IntegrationView {
+  const base = {
+    id: "authority",
+    name: "Authority Kit",
+    category: "authority" as const,
+    plan_required: "pro" as const,
+    value_props: ["Track Reddit + Google Reviews mentions + sentiment"],
+    external_prereqs: [
+      { id: "brand_keyword", label: "A brand keyword to monitor" },
+      { id: "google_place_id", label: "Your Google Place ID", coach_id: "google_place_id" },
+    ],
+    last_sync_at: facts.authority.last_synced_at,
+    last_sync_error: facts.authority.last_sync_error,
+  };
+  if (!facts.authority.configured) {
+    return { ...base, status: "not_connected", config_summary: null, actions: ["configure"] };
+  }
+  const fullyConfigured = !!(facts.authority.brand_keyword && facts.authority.google_place_id);
+  if (!fullyConfigured) {
+    return { ...base, status: "connected_pending_config", config_summary: null, actions: ["edit", "disconnect"] };
+  }
+  const summary = `${facts.authority.brand_keyword} · ${facts.authority.google_place_id}`;
+  if (facts.authority.last_sync_error) {
+    return { ...base, status: "connected_error", config_summary: summary, actions: ["edit", "disconnect"] };
+  }
+  return { ...base, status: "connected_active", config_summary: summary, actions: ["edit", "disconnect"] };
+}
+
+function stripeWebhookView(facts: IntegrationsFacts): IntegrationView {
+  const base = {
+    id: "stripe_webhook",
+    name: "Verified revenue",
+    category: "revenue" as const,
+    plan_required: "pro" as const,
+    value_props: ["Attribute revenue dollars to AI-acquired customers"],
+    external_prereqs: [{ id: "stripe_account", label: "A Stripe account", coach_id: "stripe_webhook" }],
+    last_sync_at: null,
+    last_sync_error: null,
+  };
+  if (!facts.stripe_webhook.configured) {
+    return { ...base, status: "not_connected", config_summary: null, actions: ["generate"] };
+  }
+  const summary = facts.stripe_webhook.total_events > 0
+    ? `${facts.stripe_webhook.total_events} events received · ${facts.stripe_webhook.ai_events} attributed to AI`
+    : "Awaiting first event";
+  return { ...base, status: "connected_active", config_summary: summary, actions: ["rotate"] };
+}
+
+function salesforceView(facts: IntegrationsFacts): IntegrationView {
+  const base = {
+    id: "salesforce",
+    name: "Salesforce",
+    category: "crm" as const,
+    plan_required: "pro" as const,
+    value_props: ["Compare LTV of AI-acquired vs unknown-source customers"],
+    external_prereqs: [{ id: "salesforce_account", label: "A Salesforce account" }],
+    last_sync_at: facts.salesforce.last_used_at,
+    last_sync_error: facts.salesforce.last_error,
+  };
+  if (!facts.salesforce.connected) {
+    return { ...base, status: "not_connected", config_summary: null, actions: ["connect"] };
+  }
+  const summary = facts.salesforce.account_id ? `Account: ${facts.salesforce.account_id}` : "Connected";
+  if (facts.salesforce.last_error) {
+    return { ...base, status: "connected_error", config_summary: summary, actions: ["disconnect"] };
+  }
+  return { ...base, status: "connected_active", config_summary: summary, actions: ["disconnect"] };
+}
+
+function hubspotView(facts: IntegrationsFacts): IntegrationView {
+  const base = {
+    id: "hubspot",
+    name: "HubSpot",
+    category: "crm" as const,
+    plan_required: "pro" as const,
+    value_props: ["Compare LTV of AI-acquired vs unknown-source customers"],
+    external_prereqs: [{ id: "hubspot_account", label: "A HubSpot account" }],
+    last_sync_at: facts.hubspot.last_used_at,
+    last_sync_error: facts.hubspot.last_error,
+  };
+  if (!facts.hubspot.connected) {
+    return { ...base, status: "not_connected", config_summary: null, actions: ["connect"] };
+  }
+  const summary = facts.hubspot.account_id ? `Account: ${facts.hubspot.account_id}` : "Connected";
+  if (facts.hubspot.last_error) {
+    return { ...base, status: "connected_error", config_summary: summary, actions: ["disconnect"] };
+  }
+  return { ...base, status: "connected_active", config_summary: summary, actions: ["disconnect"] };
+}
+
+function gscView(facts: IntegrationsFacts): IntegrationView {
+  const base = {
+    id: "gsc",
+    name: "Google Search Console",
+    category: "search" as const,
+    plan_required: "pro" as const,
+    value_props: ["Detect when Google's AI Overview shows for your queries", "See cite-rate per query"],
+    external_prereqs: [{ id: "gsc_verified_site", label: "A site verified in Search Console", coach_id: "gsc_verification" }],
+    last_sync_at: facts.gsc.last_sync_at,
+    last_sync_error: facts.gsc.last_sync_error,
+  };
+  if (!facts.gsc.connected) {
+    return { ...base, status: "not_connected", config_summary: null, actions: ["connect"] };
+  }
+  if (!facts.gsc.site_url) {
+    return { ...base, status: "connected_pending_config", config_summary: null, actions: ["pick_site", "disconnect"] };
+  }
+  if (facts.gsc.last_sync_error) {
+    return { ...base, status: "connected_error", config_summary: facts.gsc.site_url, actions: ["resync", "disconnect"] };
+  }
+  return { ...base, status: "connected_active", config_summary: facts.gsc.site_url, actions: ["resync", "disconnect"] };
+}
+
+function ga4View(facts: IntegrationsFacts): IntegrationView {
+  const base = {
+    id: "ga4",
+    name: "Google Analytics",
+    category: "traffic" as const,
+    plan_required: "base" as const,
+    value_props: ["See AI vs human traffic split on the dashboard", "Track engagement quality + acquisition mix + geography"],
+    external_prereqs: [],
+    last_sync_at: facts.ga4.last_sync_at,
+    last_sync_error: facts.ga4.last_sync_error,
+  };
+  if (!facts.ga4.connected) {
+    return { ...base, status: "not_connected", config_summary: null, actions: ["connect"] };
+  }
+  if (!facts.ga4.property_id) {
+    return { ...base, status: "connected_pending_config", config_summary: null, actions: ["pick_property", "disconnect"] };
+  }
+  const summary = facts.ga4.property_label
+    ? `${facts.ga4.property_label} (${facts.ga4.property_id})`
+    : facts.ga4.property_id;
+  if (facts.ga4.last_sync_error) {
+    return { ...base, status: "connected_error", config_summary: summary, actions: ["resync", "disconnect"] };
+  }
+  return { ...base, status: "connected_active", config_summary: summary, actions: ["resync", "disconnect"] };
+}
+
 export function buildIntegrationsStatus(facts: IntegrationsFacts): IntegrationsStatusResponse {
   const isPro = facts.tenant.plan === "pro" || facts.tenant.plan === "enterprise";
 
@@ -67,87 +206,12 @@ export function buildIntegrationsStatus(facts: IntegrationsFacts): IntegrationsS
   }
 
   const integrations: IntegrationView[] = [
-    {
-      id: "ga4",
-      name: "Google Analytics",
-      category: "traffic",
-      plan_required: "base",
-      status: lockOrStatus("base", "not_connected"),
-      value_props: ["See AI vs human traffic split on the dashboard", "Track engagement quality + acquisition mix + geography"],
-      external_prereqs: [],
-      config_summary: null,
-      last_sync_at: null,
-      last_sync_error: null,
-      actions: ["connect"],
-    },
-    {
-      id: "gsc",
-      name: "Google Search Console",
-      category: "search",
-      plan_required: "pro",
-      status: lockOrStatus("pro", "not_connected"),
-      value_props: ["Detect when Google's AI Overview shows for your queries", "See cite-rate per query"],
-      external_prereqs: [{ id: "gsc_verified_site", label: "A site verified in Search Console", coach_id: "gsc_verification" }],
-      config_summary: null,
-      last_sync_at: null,
-      last_sync_error: null,
-      actions: ["connect"],
-    },
-    {
-      id: "hubspot",
-      name: "HubSpot",
-      category: "crm",
-      plan_required: "pro",
-      status: lockOrStatus("pro", "not_connected"),
-      value_props: ["Compare LTV of AI-acquired vs unknown-source customers"],
-      external_prereqs: [{ id: "hubspot_account", label: "A HubSpot account" }],
-      config_summary: null,
-      last_sync_at: null,
-      last_sync_error: null,
-      actions: ["connect"],
-    },
-    {
-      id: "salesforce",
-      name: "Salesforce",
-      category: "crm",
-      plan_required: "pro",
-      status: lockOrStatus("pro", "not_connected"),
-      value_props: ["Compare LTV of AI-acquired vs unknown-source customers"],
-      external_prereqs: [{ id: "salesforce_account", label: "A Salesforce account" }],
-      config_summary: null,
-      last_sync_at: null,
-      last_sync_error: null,
-      actions: ["connect"],
-    },
-    {
-      id: "stripe_webhook",
-      name: "Verified revenue",
-      category: "revenue",
-      plan_required: "pro",
-      status: lockOrStatus("pro", "not_connected"),
-      value_props: ["Attribute revenue dollars to AI-acquired customers"],
-      external_prereqs: [{ id: "stripe_account", label: "A Stripe account", coach_id: "stripe_webhook" }],
-      config_summary: null,
-      last_sync_at: null,
-      last_sync_error: null,
-      actions: ["generate"],
-    },
-    {
-      id: "authority",
-      name: "Authority Kit",
-      category: "authority",
-      plan_required: "pro",
-      status: lockOrStatus("pro", "not_connected"),
-      value_props: ["Track Reddit + Google Reviews mentions + sentiment"],
-      external_prereqs: [
-        { id: "brand_keyword", label: "A brand keyword to monitor" },
-        { id: "google_place_id", label: "Your Google Place ID", coach_id: "google_place_id" },
-      ],
-      config_summary: null,
-      last_sync_at: null,
-      last_sync_error: null,
-      actions: ["configure"],
-    },
+    ga4View(facts),
+    gscView(facts),
+    hubspotView(facts),
+    salesforceView(facts),
+    stripeWebhookView(facts),
+    authorityView(facts),
   ];
 
   return {
