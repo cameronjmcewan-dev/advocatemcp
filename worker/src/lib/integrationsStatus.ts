@@ -21,6 +21,18 @@ export type IntegrationCategory = "traffic" | "search" | "crm" | "revenue" | "au
 
 export type PlanRequired = "base" | "pro" | "enterprise";
 
+export type IntegrationAction =
+  | "connect"
+  | "pick_property"
+  | "pick_site"
+  | "configure"
+  | "generate"
+  | "rotate"
+  | "resync"
+  | "disconnect"
+  | "edit"
+  | "upgrade";
+
 export interface ExternalPrereq {
   id: string;
   label: string;
@@ -38,7 +50,7 @@ export interface IntegrationView {
   config_summary: string | null;
   last_sync_at: string | null;
   last_sync_error: string | null;
-  actions: string[];
+  actions: IntegrationAction[];
 }
 
 export interface IntegrationsFacts {

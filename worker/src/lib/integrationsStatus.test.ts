@@ -264,8 +264,10 @@ describe("buildIntegrationsStatus", () => {
     const r = buildIntegrationsStatus(emptyFacts("base"));
     const gsc = r.integrations.find(i => i.id === "gsc")!;
     expect(gsc.status).toBe("plan_locked");
+    expect(gsc.actions).toEqual(["upgrade"]);
     const stripe = r.integrations.find(i => i.id === "stripe_webhook")!;
     expect(stripe.status).toBe("plan_locked");
+    expect(stripe.actions).toEqual(["upgrade"]);
   });
 
   it("Base tenant: GA4 stays unlocked even when not connected", () => {
