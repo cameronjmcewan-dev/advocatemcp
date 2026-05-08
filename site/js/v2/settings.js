@@ -41,7 +41,7 @@
     const af = window.AMCP && window.AMCP.authedFetch;
     const slug = (window.AMCP_DATA && window.AMCP_DATA.slug) || '';
     const suffix = slug ? `?slug=${encodeURIComponent(slug)}` : '';
-    const [me, metrics, domain, activity, revenue, ga4Status, gscStatus, verifiedRevenue, crmHubspot, crmSalesforce, authorityStatus] = await Promise.all([
+    const [me, metrics, domain, activity, revenue, ga4Status, gscStatus, verifiedRevenue, crmHubspot, crmSalesforce, authorityStatus, integrationsHub] = await Promise.all([
       af('/api/client/me').then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/metrics').then(r => r.ok ? r.json() : null).catch(() => null),
       af('/api/client/domain-info' + suffix).then(r => r.ok ? r.json() : null).catch(() => null),
@@ -77,6 +77,11 @@
         if (r.status === 402) return null;
         return r.ok ? r.json() : null;
       }).catch(() => null),
+      // Unified integrations hub status (May 8 2026, Task 7). Powers the
+      // hub mounted above the legacy cards. Returns
+      // { tenant, integrations[], recommended_next, completion } or null
+      // on failure (degrade to "Loading…" placeholder).
+      af('/api/client/integrations/status').then(r => r.ok ? r.json() : null).catch(() => null),
     ]);
     return Object.assign({}, metrics || {}, {
       _me: me,
@@ -89,6 +94,7 @@
       crmHubspot:      crmHubspot       || null,
       crmSalesforce:   crmSalesforce    || null,
       authorityStatus: authorityStatus  || null,
+      integrationsHub: integrationsHub  || null,
     });
   }
 
@@ -198,30 +204,41 @@
         </div>
       </div>
 
+      <!-- Traffic Impact integrations hub (May 8 2026, Task 7). Layered
+           ABOVE the legacy per-integration cards. The legacy cards remain
+           below as the editing surface for complex inline forms (Authority
+           Kit's brand-keyword + place-id form, the verified-revenue webhook
+           generate/rotate block); Phase 1.5 inlines those into the hub. -->
+      <div class="row single">
+        ${d.integrationsHub && window.AMCP_CONNECTOR_CARD
+          ? window.AMCP_CONNECTOR_CARD.renderHub(d.integrationsHub)
+          : '<div class="card-dash" style="padding:24px;color:var(--muted)">Loading integrations…</div>'}
+      </div>
+
       <!-- Web traffic data (May 6 2026 PR 3). Manages the GA4 OAuth
            connection that powers /TrafficImpact.html. -->
-      <div class="row single">
+      <div class="row single" id="legacy-ga4-card">
         ${renderGa4Card(d.ga4Status || { connected: false })}
       </div>
 
       <!-- Google Search Console (May 6 2026 PR 5). Manages the GSC OAuth
            connection that powers the AI Overview section on /TrafficImpact.html.
            Pro-only — base tenants see an upgrade CTA. -->
-      <div class="row single">
+      <div class="row single" id="legacy-gsc-card">
         ${renderGscCard(d.gscStatus || { connected: false }, plan)}
       </div>
 
       <!-- CRM integration (May 6 2026 PR 4). Manages HubSpot + Salesforce OAuth
            connections that power the LTV section on /TrafficImpact.html.
            Pro-only — base tenants see an upgrade CTA. -->
-      <div class="row single">
+      <div class="row single" id="legacy-crm-card">
         ${renderCrmCard(d.crmHubspot || null, d.crmSalesforce || null, plan)}
       </div>
 
       <!-- Authority Kit (Phase 6 PR 3). Brand keyword + Google Place ID
            configuration for the off-site authority nightly cron.
            Pro-only — base tenants see an upgrade CTA. -->
-      <div class="row single" id="authority">
+      <div class="row single" id="legacy-authority-card">
         ${renderAuthorityCard(d.authorityStatus || null, plan)}
       </div>
 
@@ -270,7 +287,7 @@
            neither. The pill on the dashboard's revenue card and the
            amount it displays are driven by /api/client/revenue-summary
            which reads these values. -->
-      <div class="row single">
+      <div class="row single" id="legacy-revenue-webhook-card">
         <div class="card-dash">
           <div class="card-head">
             <div><h3>Revenue tracking <span class="chip maroon" style="margin-left:6px">Pro</span></h3>
@@ -1171,6 +1188,163 @@
     }
   }
 
+  /* ── Traffic Impact integrations hub helpers (Task 7, May 8 2026) ─────
+   *
+   * These extract the OAuth start, picker, resync, and disconnect flows
+   * from the existing wire*Card() functions so the hub's data-cc-action
+   * buttons can invoke them without duplicating logic. Each helper is
+   * thin — it only handles the per-button state transitions (disabled,
+   * label, alert on failure, reload on success). The actual API calls
+   * still go through window.AMCP.authedFetch.
+   *
+   * Hoisted to module scope so handleHubAction below (also module-scoped)
+   * can call them. */
+
+  // TODO(phase-1.5): hub helpers use alert() for errors while legacy
+  // wireGa4Card/wireGscCard use inline status-msg spans. Phase 1.5
+  // removes the legacy cards and we can normalise on a status-msg span
+  // inside the connector card row.
+  async function startGoogleOauth(path, btn) {
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Opening Google…';
+    try {
+      const r = await window.AMCP.authedFetch(path, { method: 'POST' });
+      const j = await r.json();
+      if (j && j.url) { window.location.href = j.url; return; }
+      throw new Error((j && (j.customer_message || j.error_code)) || 'Could not start');
+    } catch (err) {
+      alert('Could not connect: ' + (err.message || err));
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  }
+
+  // TODO(phase-1.5): wired in once runInlinePicker accepts a custom mount target.
+  function openInlinePicker(btn, integrationId) {
+    // Reuse the runInlinePicker helper (defined at module scope above)
+    // so the GA4-property and GSC-site picker UX is identical whether
+    // the user clicked the legacy "Choose property/site →" button or
+    // the new hub button. runInlinePicker reads the anchor's parent
+    // element to figure out where to mount the inline list.
+    if (integrationId === 'ga4') {
+      runInlinePicker({
+        anchorBtn:    btn,
+        listPath:     '/api/client/ga4/properties',
+        listKey:      'properties',
+        selectPath:   '/api/client/ga4/select-property',
+        buildBody:    (p) => ({ property_id: p.propertyId, property_label: p.displayName || p.propertyId }),
+        isValid:      (p) => !!p.propertyId,
+        rowLabel:     (p) => p.displayName || p.propertyId || '',
+        rowSubLabel:  (p) => p.propertyId || '',
+        emptyMessage: 'No GA4 properties on this Google account. Create one in Analytics first.',
+        intro:        'Pick the GA4 property Advocate should pull traffic from. Selecting a property triggers a backfill — this can take 30 seconds.',
+      });
+    } else if (integrationId === 'gsc') {
+      runInlinePicker({
+        anchorBtn:    btn,
+        listPath:     '/api/client/gsc/sites',
+        listKey:      'sites',
+        selectPath:   '/api/client/gsc/select-site',
+        buildBody:    (s) => ({ site_url: s.siteUrl }),
+        isValid:      (s) => !!s.siteUrl,
+        rowLabel:     (s) => s.siteUrl || '',
+        rowSubLabel:  (s) => s.permissionLevel || '',
+        emptyMessage: 'No verified sites on this Google account. Add and verify a site in Search Console first.',
+        intro:        'Pick the site Advocate should pull data from. Selecting a site triggers an 18-month backfill — this can take 30 seconds.',
+      });
+    }
+  }
+
+  async function triggerResync(path, btn) {
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Syncing…';
+    try {
+      const r = await window.AMCP.authedFetch(path, { method: 'POST' });
+      const j = await r.json();
+      if (j && j.error) throw new Error(j.error);
+      btn.textContent = 'Synced ✓';
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (err) {
+      alert('Sync failed: ' + (err.message || err));
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  }
+
+  async function confirmDisconnect(path, name, btn) {
+    if (!window.confirm(`Disconnect ${name}? Your imported data stays in your account; new syncs will stop until you reconnect.`)) return;
+    btn.disabled = true;
+    try {
+      await window.AMCP.authedFetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      setTimeout(() => window.location.reload(), 1000);
+    } catch (err) {
+      alert('Could not disconnect: ' + (err.message || err));
+      btn.disabled = false;
+    }
+  }
+
+  /**
+   * Scroll to + flash-highlight the legacy card for Authority / Revenue
+   * webhook so users can use the existing form. Phase 1.5 inlines those
+   * forms inside the hub; for Phase 1 we keep the legacy surfaces working
+   * and just route the hub buttons to them.
+   */
+  function scrollToLegacy(elementId) {
+    const el = document.getElementById(elementId);
+    if (!el) {
+      console.warn('[hub] legacy element not found:', elementId);
+      return;
+    }
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Brief outline pulse so the user notices where they landed.
+    const original = el.style.boxShadow;
+    el.style.transition = 'box-shadow 200ms';
+    el.style.boxShadow = '0 0 0 3px var(--maroon, #7d2550)';
+    setTimeout(() => { el.style.boxShadow = original; }, 1400);
+  }
+
+  // TODO(phase-1.5): widen runInlinePicker to mount into a dedicated
+  // container so hub-triggered pickers don't clobber sibling action
+  // buttons. For Phase 1, hub pick_property/pick_site routes the user
+  // to the legacy card where the picker mounts cleanly.
+  function handleHubAction(integrationId, action, btn) {
+    const af = window.AMCP && window.AMCP.authedFetch;
+    if (!af) return;
+
+    // Map (id, action) → existing flow. Each branch reuses the existing
+    // wire function's logic (e.g. apiGA4StartLink fetch + redirect, the
+    // runInlinePicker call, the disconnect confirm + POST).
+    const handlers = {
+      'ga4|connect':       () => startGoogleOauth('/api/client/ga4/start-link', btn),
+      'ga4|pick_property': () => scrollToLegacy('legacy-ga4-card'),
+      'ga4|resync':        () => triggerResync('/api/client/ga4/resync', btn),
+      'ga4|disconnect':    () => confirmDisconnect('/api/client/ga4/disconnect', 'Google Analytics', btn),
+
+      'gsc|connect':       () => startGoogleOauth('/api/client/gsc/start-link', btn),
+      'gsc|pick_site':     () => scrollToLegacy('legacy-gsc-card'),
+      'gsc|resync':        () => triggerResync('/api/client/gsc/resync', btn),
+      'gsc|disconnect':    () => confirmDisconnect('/api/client/gsc/disconnect', 'Google Search Console', btn),
+
+      'hubspot|connect':    () => startGoogleOauth('/api/client/crm/start-link?provider=hubspot', btn),
+      'hubspot|disconnect': () => confirmDisconnect('/api/client/crm/disconnect?provider=hubspot', 'HubSpot', btn),
+
+      'salesforce|connect':    () => startGoogleOauth('/api/client/crm/start-link?provider=salesforce', btn),
+      'salesforce|disconnect': () => confirmDisconnect('/api/client/crm/disconnect?provider=salesforce', 'Salesforce', btn),
+
+      'stripe_webhook|generate':    () => scrollToLegacy('legacy-revenue-webhook-card'),
+      'stripe_webhook|rotate':      () => scrollToLegacy('legacy-revenue-webhook-card'),
+
+      'authority|configure':  () => scrollToLegacy('legacy-authority-card'),
+      'authority|edit':       () => scrollToLegacy('legacy-authority-card'),
+      'authority|disconnect': () => confirmDisconnect('/api/client/authority/disconnect', 'Authority Kit', btn),
+    };
+
+    const handler = handlers[`${integrationId}|${action}`];
+    if (handler) handler();
+  }
+
   function afterMount(data) {
     const preview = !!window.__ADVOCATE_PREVIEW;
     const slug = (window.AMCP_DATA && window.AMCP_DATA.slug) || '';
@@ -1193,6 +1367,25 @@
 
     // Wire the Authority Kit card (Phase 6 PR 3). Same no-op safety.
     wireAuthorityCard();
+
+    // Hub action delegator — maps data-cc-action="connect"/"pick_property"/etc.
+    // to the existing wire functions so we don't duplicate the OAuth + select
+    // + disconnect logic. Each wire function still does its own heavy lifting;
+    // the hub is just the new mounting surface. Task 7, May 8 2026.
+    const hub = document.getElementById('cc-hub');
+    if (hub) {
+      hub.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-cc-action]');
+        if (!btn) return;
+        const action = btn.getAttribute('data-cc-action');
+        const id = btn.getAttribute('data-cc-id');
+        if (!action || !id) return;
+        // 'upgrade' is an <a href="/Billing.html"> — let it navigate normally
+        if (action === 'upgrade') return;
+        e.preventDefault();
+        handleHubAction(id, action, btn);
+      });
+    }
 
     // Open DNS wizard — launches the existing legacy module in a modal.
     // The wizard's own public API (window.AMCP_DNS_WIZARD.open) is

@@ -1,0 +1,219 @@
+/* ═════════════════════════════════════════════════════════════════
+   Advocate, Traffic Impact integrations hub
+   Visuals for connectorCard.js + prereqCoach.js. Rides on top of the
+   existing .card-dash / .chip / .btn primitives in styles.css +
+   dashboard.css — adds the row-accordion + coach-step affordances
+   the hub needs without restyling the wrapping card.
+   Phase 1: hub surface only. Wizard + setup-page surfaces will hook
+   into the same classes in later phases.
+   ═════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Recommended-next callout ──────────────────────────────────
+   Sits above the .cc-rows list, inside the .card-dash. Maroon-tinted
+   wash that mirrors the .radar-tip pattern, with a bold label + CTA.
+*/
+.cc-recommended {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  background: var(--maroon-wash);
+  border: 1px solid var(--maroon-tint);
+  border-radius: var(--r-md);
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+.cc-recommended-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--maroon);
+  font-weight: 600;
+}
+.cc-recommended strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* ── 2. Row list container ────────────────────────────────────────
+   Vertical stack of integration rows with hairline separators between
+   each row. No top/bottom border on the list itself — the wrapping
+   .card-dash already supplies its outer border.
+*/
+.cc-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── 3. Single row layout ─────────────────────────────────────────
+   Two columns: head (name + status + meta) on the left, action button
+   group on the right. Hairline border below each row except the last.
+*/
+.cc-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+.cc-row:last-child { border-bottom: 0; }
+
+@media (max-width: 720px) {
+  .cc-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+}
+
+/* ── 4. Row head (left side) ──────────────────────────────────────
+   Stacked name → value oneliner → meta (summary + last-sync).
+*/
+.cc-row-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.cc-row-name {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 14.5px;
+  color: var(--ink);
+}
+.cc-row-name strong { font-weight: 600; }
+.cc-row-value {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.cc-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+/* ── 5. Row meta inline elements ──────────────────────────────────
+   Both .cc-summary and .cc-meta sit inside .cc-row-meta. Same family
+   + size; .cc-summary leans on ink-2 so it reads slightly stronger
+   than the last-sync timestamp.
+*/
+.cc-summary {
+  color: var(--ink-2);
+}
+.cc-meta {
+  color: var(--muted);
+}
+
+/* ── 6. Row actions (right side) ──────────────────────────────────
+   Right-aligned button group. Existing .btn / .btn-sm / .btn-primary
+   / .btn-ghost classes do the visual lifting; this just controls
+   the cluster's flex behaviour.
+*/
+.cc-row-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+  .cc-row-actions {
+    justify-content: flex-start;
+  }
+}
+
+/* ── 7. Prerequisite coach card ───────────────────────────────────
+   Rendered by prereqCoach.js when an integration has external setup
+   steps before it can connect (Stripe webhook, GSC verification,
+   Google Place ID). Lives inside whichever surface is mounting it
+   — typically a .card-dash or as a sibling of a .cc-row.
+*/
+.prereq-coach {
+  margin-top: 12px;
+  padding: 14px 16px;
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  color: var(--ink-2);
+}
+.coach-title {
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 17px;
+  color: var(--ink);
+  margin-bottom: 10px;
+  line-height: 1.3;
+}
+
+/* ── 8. Numbered step list ────────────────────────────────────────
+   Ordered list with circled step numbers. Each .coach-step is a
+   horizontal row aligning the number bubble with the step text.
+*/
+.coach-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  counter-reset: coach-step;
+}
+.coach-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.coach-step-num {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--maroon-tint);
+  color: var(--maroon);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  display: inline-grid;
+  place-items: center;
+  margin-top: 1px;
+}
+.coach-step-text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── 9. Helper links row ──────────────────────────────────────────
+   Underlined maroon links, comma-separated visual rhythm via the
+   inline space the renderer emits between anchors.
+*/
+.coach-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 13px;
+}
+.coach-link {
+  color: var(--maroon);
+  text-decoration: none;
+  border-bottom: 1px solid var(--maroon-tint);
+  transition: border-color .15s ease, color .15s ease;
+}
+.coach-link:hover {
+  color: var(--maroon-2);
+  border-bottom-color: var(--maroon);
+}

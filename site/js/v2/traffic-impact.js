@@ -852,7 +852,7 @@
         '    <div style="font-size:13px;color:var(--ink-2);max-width:480px;line-height:1.5">',
         '      Connect your brand keyword and Google Place ID to start tracking public mentions and sentiment — runs nightly.',
         '    </div>',
-        '    <a href="/Settings.html#authority" class="btn btn-primary btn-sm">Configure →</a>',
+        '    <a href="/Settings.html#legacy-authority-card" class="btn btn-primary btn-sm">Configure →</a>',
         '  </div>',
         '</section>',
       ].join('');
