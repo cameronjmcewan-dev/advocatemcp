@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Set Up Traffic Impact — Advocate</title>
+  <link rel="icon" type="image/png" href="/assets/favicon.png" />
+  <link rel="stylesheet" href="/css/tokens.css" />
+  <link rel="stylesheet" href="/assets/styles.css" />
+  <link rel="stylesheet" href="/css/integrations-hub.css" />
+  <link rel="preconnect" href="https://api.fontshare.com" />
+  <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+</head>
+<body class="setup-page-body">
+  <header class="setup-page-header">
+    <a href="/Settings.html" class="setup-page-back" aria-label="Back to Settings">
+      <span class="setup-page-back-arrow">←</span>
+      <span>Back</span>
+    </a>
+    <div class="setup-page-title">Set up Traffic Impact</div>
+    <button type="button" class="btn btn-ghost btn-sm setup-page-signout" id="setup-page-signout">Sign out</button>
+  </header>
+
+  <main class="setup-page-main">
+    <aside class="setup-page-rail" id="setup-page-rail">
+      <div class="setup-page-rail-loading">Loading…</div>
+    </aside>
+    <section class="setup-page-content" id="setup-page-content">
+      <div class="setup-page-loading">Loading your integrations…</div>
+    </section>
+  </main>
+
+  <script src="/js/dashboard-auth.js"></script>
+  <script src="/js/v2/prereqCoach.js"></script>
+  <script src="/js/v2/connectorCard.js"></script>
+  <script src="/js/v2/settings.js"></script>
+  <script src="/js/v2/setupPage.js"></script>
+</body>
+</html>
