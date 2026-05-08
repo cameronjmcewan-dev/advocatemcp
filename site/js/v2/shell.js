@@ -162,12 +162,13 @@
       const previewAsSlug0 = previewUrl0.searchParams.get('as');
       const isPreviewAdmin = opts.previewPlan === 'admin' || !!previewAsSlug0;
       window.AMCP_DATA = Object.assign({
-        slug:      'preview-demo',
-        plan:      opts.previewPlan || 'base',
-        location:  'Austin, TX',
-        email:     'you@advocatemcp.com',
-        full_name: 'Preview User',
-        user_role: isPreviewAdmin ? 'admin' : 'owner',
+        slug:          'preview-demo',
+        business_name: 'Preview Business',
+        plan:          opts.previewPlan || 'base',
+        location:      'Austin, TX',
+        email:         'you@advocatemcp.com',
+        full_name:     'Preview User',
+        user_role:     isPreviewAdmin ? 'admin' : 'owner',
         // Synthesize a one-tenant access list so the preview sidebar
         // can render the business-switcher dropdown without a network call.
         accessible_businesses: [{ slug: 'preview-demo', name: 'Preview Business', domain: null, plan: opts.previewPlan || 'base' }],
@@ -213,6 +214,17 @@
       const isAdmin = !!(me && me.role === 'admin');
       const impersonating = isAdmin && asSlug ? asSlug : null;
 
+      // Pre-resolve the current tenant from accessible_businesses so the
+      // sidebar block + avatar plan badge can render the real business
+      // name + plan immediately at chrome.mount() time, instead of falling
+      // back to the literal "Your business" / "Free plan" placeholders
+      // until /api/client/metrics resolves later. /api/client/me already
+      // carries everything needed inside accessible_businesses[i] —
+      // {slug, name, plan, domain} — so no extra round-trip.
+      const _accessibleList = (me && Array.isArray(me.accessible_businesses)) ? me.accessible_businesses : [];
+      const _currentSlug = impersonating || (_accessibleList[0] && _accessibleList[0].slug) || null;
+      const _currentBiz = _accessibleList.find((b) => b.slug === _currentSlug) || _accessibleList[0] || null;
+
       window.AMCP_DATA = {
         email:                  (me && me.email) || null,
         user_role:              (me && me.role) || null,
@@ -220,10 +232,12 @@
         impersonating:          impersonating,
         domain:                 (me && me.domain) || null,
         is_hosted:              !!(me && me.is_hosted),
+        business_name:          (_currentBiz && _currentBiz.name) || null,
+        plan:                   (_currentBiz && _currentBiz.plan) || null,
         // Powers the sidebar business-switcher dropdown. Empty array if
         // the user is admin-without-tenants — dropdown gracefully shows
         // just "Add another business".
-        accessible_businesses:  (me && Array.isArray(me.accessible_businesses)) ? me.accessible_businesses : [],
+        accessible_businesses:  _accessibleList,
       };
 
       // DNS-first gate: customers who haven't verified their DNS yet
@@ -273,6 +287,16 @@
       }
       const m = (data && (data.metrics || data)) || {};
       Object.assign(window.AMCP_DATA, m);
+
+      // Repaint the sidebar's biz block now that fresh business_name +
+      // plan have merged in from /api/client/metrics. This handles the
+      // admin-impersonating-non-owned-tenant case (where accessible_
+      // businesses doesn't carry the impersonated tenant, so the
+      // synthesized values from boot are placeholders until metrics
+      // arrives with the real name + plan).
+      if (window.AdvocateChrome && typeof window.AdvocateChrome.refreshBiz === 'function') {
+        window.AdvocateChrome.refreshBiz(opts.activeId);
+      }
 
       // Derive is_hosted from the domain hostname so the legacy
       // AMCP_ONBOARDING state machine (and the v2 Get Started panel)

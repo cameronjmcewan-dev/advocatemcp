@@ -109,11 +109,31 @@
     const banner = document.getElementById('amcp-impersonation-banner');
     if (isAdmin && asSlug) {
       window.AMCP_DATA.impersonating = asSlug;
+      // Re-derive business_name + plan from accessible_businesses so the
+      // sidebar block + any other AMCP_DATA consumer reflects the
+      // impersonated tenant. Falls back to existing values if the slug
+      // isn't in the admin's own access list (admin-impersonating-
+      // non-owned tenant — those values land later via /api/client/metrics).
+      const list = (window.AMCP_DATA && Array.isArray(window.AMCP_DATA.accessible_businesses))
+        ? window.AMCP_DATA.accessible_businesses : [];
+      const match = list.find((b) => b.slug === asSlug);
+      if (match) {
+        window.AMCP_DATA.business_name = match.name || window.AMCP_DATA.business_name || null;
+        window.AMCP_DATA.plan          = match.plan || window.AMCP_DATA.plan || null;
+      }
       if (!banner && typeof window.AMCP_SHELL_MOUNT_BANNER === 'function') {
         window.AMCP_SHELL_MOUNT_BANNER(asSlug, window.AMCP_DATA.business_name);
       }
     } else {
       window.AMCP_DATA.impersonating = null;
+      // Restore business_name/plan to the operator's own first tenant
+      // so the sidebar reflects the un-impersonated identity.
+      const list = (window.AMCP_DATA && Array.isArray(window.AMCP_DATA.accessible_businesses))
+        ? window.AMCP_DATA.accessible_businesses : [];
+      if (list[0]) {
+        window.AMCP_DATA.business_name = list[0].name || null;
+        window.AMCP_DATA.plan          = list[0].plan || null;
+      }
       if (banner) {
         banner.remove();
         // Undo the padding-top shift shell.js added on mount.
@@ -131,6 +151,11 @@
           beta.style.top = '0px';
         }
       }
+    }
+    // Repaint the sidebar's biz block so it reflects the new identity
+    // immediately instead of waiting for a full reload.
+    if (window.AdvocateChrome && typeof window.AdvocateChrome.refreshBiz === 'function') {
+      window.AdvocateChrome.refreshBiz();
     }
   }
 

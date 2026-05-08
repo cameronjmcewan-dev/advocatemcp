@@ -95,9 +95,17 @@
     if (isAdmin && !impersonating) {
       return { name: 'Admin', location: 'All tenants', plan: 'Operator', letter: 'A' };
     }
-    const name     = d.business_name || d.name || 'Your business';
+    // Defensive fallback: shell.js synthesises business_name + plan into
+    // AMCP_DATA from accessible_businesses at boot, but if that ever
+    // skipped (or runs late), look up the current tenant ourselves so
+    // the sidebar block never shows the literal "Your business" /
+    // "Free plan" placeholders for a real owner session.
+    const list = Array.isArray(d.accessible_businesses) ? d.accessible_businesses : [];
+    const currentSlug = impersonating || (list[0] && list[0].slug) || null;
+    const match = list.find((b) => b.slug === currentSlug) || list[0] || null;
+    const name     = d.business_name || d.name || (match && match.name) || 'Your business';
     const location = d.location || '';
-    const planRaw  = (d.plan || '').toLowerCase();
+    const planRaw  = (d.plan || (match && match.plan) || '').toLowerCase();
     const plan     = planRaw === 'pro' ? 'Pro plan'
                     : planRaw === 'base' ? 'Base plan'
                     : planRaw === 'admin' ? 'Admin'
@@ -200,17 +208,22 @@
     const d = window.AMCP_DATA || {};
     const fullName = d.full_name || 'You';
     const email    = d.email     || '';
-    const planRaw  = (d.plan || '').toLowerCase();
-    const planLabel = planRaw === 'pro'  ? 'Pro plan'
-                    : planRaw === 'base' ? 'Base plan'
-                    : planRaw === 'admin' ? 'Admin'
-                    : 'Free plan';
     const initials = fullName.split(/\s+/).map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '·';
 
     // Identify the "current" tenant for the checkmark — admins use
     // ?as=<slug> impersonation; owners use their first business.
     const list = Array.isArray(d.accessible_businesses) ? d.accessible_businesses : [];
     const currentSlug = d.impersonating || (list[0] && list[0].slug) || null;
+    // Match the sidebar block's plan resolution: prefer top-level d.plan
+    // (set by shell.js synthesis or apiMetrics merge) and fall back to
+    // the matched accessible_business's plan so the avatar plan badge
+    // never says "Free plan" for a real Pro/Base tenant.
+    const planMatch = list.find((b) => b.slug === currentSlug) || list[0] || null;
+    const planRaw  = (d.plan || (planMatch && planMatch.plan) || '').toLowerCase();
+    const planLabel = planRaw === 'pro'  ? 'Pro plan'
+                    : planRaw === 'base' ? 'Base plan'
+                    : planRaw === 'admin' ? 'Admin'
+                    : 'Free plan';
 
     const accountItems = NAV_ACCOUNT.map((it) => {
       const cls = it.id === activeId ? ' bm-item-active' : '';
@@ -521,6 +534,35 @@
     injectSpeculationRules();
     loadCommandPaletteIfAdmin();
     loadRouter();
+  };
+
+  /* Re-renders just the .sb-biz-wrap (top-left business block + dropdown
+   * menu) after AMCP_DATA mutates — e.g. when SPA nav adds/removes
+   * ?as=<slug> impersonation, or when /api/client/metrics finishes
+   * merging fresh business_name + plan after the initial mount. The
+   * full sidebar is NOT re-rendered: keeping the nav <ul> intact
+   * preserves the active-pill class and any listeners attached to
+   * nav items, and avoids flashing the user. wireBizMenu() runs again
+   * so the new #biz-trigger / #biz-menu listeners are attached. */
+  window.AdvocateChrome.refreshBiz = function refreshBiz(activeId) {
+    const wrap = document.querySelector('.sb-biz-wrap');
+    if (!wrap) return;
+    const biz = currentBiz();
+    const bizSub = biz.location ? `${escHtml(biz.location)} · ${escHtml(biz.plan)}` : escHtml(biz.plan);
+    wrap.innerHTML = `
+      <button type="button" class="sb-biz" id="biz-trigger"
+              aria-expanded="false" aria-haspopup="menu" aria-controls="biz-menu"
+              title="Switch business">
+        <div class="sq">${escHtml(biz.letter)}</div>
+        <div class="info">
+          <strong>${escHtml(biz.name)}</strong>
+          <span>${bizSub}</span>
+        </div>
+        <span class="caret">⌄</span>
+      </button>
+      ${renderBizMenu(activeId)}
+    `;
+    wireBizMenu();
   };
 
   // ── Location selector (Apr 27 2026 Section 2) ───────────────────────
