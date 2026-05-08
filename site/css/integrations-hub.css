@@ -306,3 +306,106 @@
 .cc-wizard-actions .btn-ghost {
   align-self: flex-start;
 }
+
+/* ── 11. Traffic Impact wizard layout (Phase 2 PR 3) ───────────────
+   The wizard occupies the full main-content area on /TrafficImpact.html
+   when shouldRender returns true. Welcome and Done are bespoke cards;
+   step view delegates to .cc-wizard-card from PR 2.
+*/
+
+.ti-wizard {
+  max-width: 720px;
+  margin: 32px auto 64px;
+  padding: 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.ti-wizard-eyebrow {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--maroon, #7d2550);
+  margin-bottom: 8px;
+}
+
+.ti-wizard-done-eyebrow {
+  color: var(--sage, #4a7559);
+}
+
+.ti-wizard-title {
+  font-family: var(--serif, Georgia);
+  font-weight: 400;
+  font-size: 36px;
+  line-height: 1.1;
+  margin: 0 0 16px;
+  color: var(--ink, #141210);
+}
+
+.ti-wizard-subtitle {
+  color: var(--ink-2, #555);
+  font-size: 16px;
+  line-height: 1.55;
+  margin: 0 0 24px;
+  max-width: 580px;
+}
+
+.ti-wizard-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.ti-wizard-meta {
+  margin-top: 18px;
+  font-size: 13px;
+  color: var(--muted, #888);
+}
+
+.ti-wizard-welcome,
+.ti-wizard-done,
+.ti-wizard-error-card {
+  background: var(--paper, #fff);
+  border: 1px solid var(--line, rgba(0,0,0,.08));
+  border-radius: 16px;
+  padding: 40px;
+}
+
+.ti-wizard-stepper-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 4px;
+}
+
+.ti-wizard-step-meta {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted, #888);
+  letter-spacing: .04em;
+}
+
+.ti-wizard-step-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 4px;
+  margin-top: 8px;
+}
+
+.ti-wizard-error-card {
+  text-align: center;
+}
+
+.ti-wizard-error-card p {
+  color: var(--red, #b3261e);
+  margin-bottom: 14px;
+}
+
+.ti-wizard-actions .btn-primary {
+  padding: 12px 24px;
+  font-size: 15px;
+}
