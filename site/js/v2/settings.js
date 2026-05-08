@@ -561,14 +561,25 @@
       });
     }
 
-    // Property-picker stub — there's no full picker UI yet (handled by the
-    // OAuth callback which auto-selects the matching domain). For now,
-    // "Choose property" routes back through the OAuth flow which forces a
-    // re-consent and re-picks. Future PR can render a real list inline.
+    // Property-picker — fetches /api/client/ga4/properties, renders an
+    // inline list, then POSTs /api/client/ga4/select-property on
+    // selection (which runs an 18-month backfill server-side).
     const pickBtn = document.getElementById('btn-ga4-pick-property');
     if (pickBtn) {
       pickBtn.addEventListener('click', () => {
-        if (connectBtn) connectBtn.click();
+        runInlinePicker({
+          anchorBtn:    pickBtn,
+          listPath:     '/api/client/ga4/properties',
+          listKey:      'properties',
+          selectPath:   '/api/client/ga4/select-property',
+          // GA4 select-property requires BOTH property_id + property_label.
+          buildBody:    (p) => ({ property_id: p.propertyId, property_label: p.displayName || p.propertyId }),
+          isValid:      (p) => !!p.propertyId,
+          rowLabel:     (p) => p.displayName || p.propertyId || '',
+          rowSubLabel:  (p) => p.propertyId || '',
+          emptyMessage: 'No GA4 properties on this Google account. Create one in Analytics first.',
+          intro:        'Pick the GA4 property Advocate should pull traffic from. Selecting a property triggers a backfill — this can take 30 seconds.',
+        });
       });
     }
   }
@@ -734,13 +745,157 @@
       });
     }
 
-    // Site-picker stub — routes back through OAuth which re-selects the site.
+    // Site-picker — fetches /api/client/gsc/sites, renders an inline
+    // list, then POSTs /api/client/gsc/select-site on selection (which
+    // runs an 18-month backfill server-side).
     const pickSiteBtn = document.getElementById('btn-gsc-pick-site');
     if (pickSiteBtn) {
       pickSiteBtn.addEventListener('click', () => {
-        if (connectBtn) connectBtn.click();
+        runInlinePicker({
+          anchorBtn:    pickSiteBtn,
+          listPath:     '/api/client/gsc/sites',
+          listKey:      'sites',
+          selectPath:   '/api/client/gsc/select-site',
+          buildBody:    (s) => ({ site_url: s.siteUrl }),
+          isValid:      (s) => !!s.siteUrl,
+          rowLabel:     (s) => s.siteUrl || '',
+          rowSubLabel:  (s) => s.permissionLevel || '',
+          emptyMessage: 'No verified sites on this Google account. Add and verify a site in Search Console first.',
+          intro:        'Pick the site Advocate should pull data from. Selecting a site triggers an 18-month backfill — this can take 30 seconds.',
+        });
       });
     }
+  }
+
+  /* Generic inline picker for "Connected · pick X" states (GA4 properties,
+   * GSC sites). Replaces the button row with a list of selectable items
+   * fetched from listPath, then POSTs the chosen value to selectPath which
+   * runs a server-side backfill and persists the choice. Reloads the page
+   * on success so the card re-renders from the live status endpoint.
+   *
+   * Shape of opts:
+   *   anchorBtn    — the clicked "Choose X" button. Its parent .r row is
+   *                  replaced with the picker UI.
+   *   listPath     — GET endpoint that returns { [listKey]: [item, ...] }.
+   *   listKey      — top-level key in the list response holding the items.
+   *   selectPath   — POST endpoint that persists the selection.
+   *   buildBody    — fn(item) -> object sent as the JSON request body.
+   *                  Lets endpoints that need multiple fields (e.g. GA4's
+   *                  property_id + property_label) work without bespoke wiring.
+   *   isValid      — fn(item) -> boolean. Skips invalid rows on click.
+   *   rowLabel     — fn(item) -> primary display string.
+   *   rowSubLabel  — fn(item) -> secondary display string (mono, muted).
+   *   emptyMessage — text shown when the list is empty.
+   *   intro        — paragraph above the list explaining what selection does.
+   */
+  function runInlinePicker(opts) {
+    const af = window.AMCP && window.AMCP.authedFetch;
+    const anchor = opts.anchorBtn;
+    const container = anchor && anchor.parentElement;
+    if (!af || !container) return;
+
+    // Find an adjacent status-msg span to surface the loading state while
+    // the list endpoint is in flight. The pickers reuse the same gscStatus/
+    // ga4Status spans that live next to the buttons.
+    const initialMsg = container.querySelector('[id$="-status-msg"]');
+    const setInitial = (text, kind) => {
+      if (!initialMsg) return;
+      initialMsg.textContent = text || '';
+      initialMsg.style.color = kind === 'error' ? 'var(--red)' : kind === 'success' ? 'var(--sage)' : 'var(--muted)';
+    };
+
+    anchor.disabled = true;
+    setInitial('Loading…');
+
+    af(opts.listPath)
+      .then((r) => r.json().then((j) => ({ ok: r.ok, j })))
+      .then(({ ok, j }) => {
+        if (!ok) {
+          throw new Error((j && (j.customer_message || j.error_code)) || 'Could not load list');
+        }
+        const items = (j && j[opts.listKey]) || [];
+        if (items.length === 0) {
+          setInitial(opts.emptyMessage, 'error');
+          anchor.disabled = false;
+          return;
+        }
+
+        const rows = items.map((it, i) => {
+          const label = opts.rowLabel(it);
+          const sub   = opts.rowSubLabel ? opts.rowSubLabel(it) : '';
+          return `
+            <button type="button" class="btn btn-ghost btn-sm picker-row" data-pick-index="${i}"
+                    style="display:block;width:100%;text-align:left;margin-bottom:6px">
+              <span style="font-weight:500">${esc(label)}</span>
+              ${sub ? ` <span style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-left:6px">${esc(sub)}</span>` : ''}
+            </button>`;
+        }).join('');
+
+        container.innerHTML = `
+          <div style="display:flex;flex-direction:column;gap:0;max-width:520px">
+            <div style="font-size:12.5px;color:var(--muted);margin-bottom:10px;line-height:1.5">${esc(opts.intro)}</div>
+            ${rows}
+            <button type="button" class="btn btn-ghost btn-sm picker-cancel" style="margin-top:8px;align-self:flex-start">Cancel</button>
+            <span class="picker-msg" style="font-size:12.5px;color:var(--muted);margin-top:8px"></span>
+          </div>`;
+
+        const msgEl = container.querySelector('.picker-msg');
+        const setPickerMsg = (text, kind) => {
+          if (!msgEl) return;
+          msgEl.textContent = text || '';
+          msgEl.style.color = kind === 'error' ? 'var(--red)' : kind === 'success' ? 'var(--sage)' : 'var(--muted)';
+        };
+
+        container.querySelectorAll('.picker-row').forEach((rowBtn) => {
+          rowBtn.addEventListener('click', async () => {
+            const idx = Number(rowBtn.getAttribute('data-pick-index'));
+            const item = items[idx];
+            if (!item) return;
+            if (typeof opts.isValid === 'function' && !opts.isValid(item)) return;
+            // Disable every button in the picker while the backfill runs
+            container.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+            setPickerMsg('Backfilling — this can take up to 30 seconds. Don’t close this tab.');
+            try {
+              const body = opts.buildBody(item) || {};
+              // Impersonation fix: select-site/select-property read slug from
+              // the JSON body, not the query string. authedFetch adds ?slug=
+              // to the URL automatically but the workers ignore it on these
+              // endpoints. Mirror it into the body so admin ?as=<slug> flows
+              // resolve to the impersonated tenant.
+              try {
+                const asSlug = new URL(window.location.href).searchParams.get('as');
+                if (asSlug && !body.slug) body.slug = asSlug;
+              } catch (_) { /* URL parse error → no slug, server uses businesses[0] */ }
+              const r = await af(opts.selectPath, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+              });
+              const j = await r.json();
+              if (!r.ok || (j && j.error)) {
+                throw new Error((j && (j.customer_message || j.error_code || j.error)) || 'Selection failed');
+              }
+              const days = (j && j.backfill && j.backfill.days_upserted) || 0;
+              setPickerMsg(days > 0 ? `Selected — ${days} days backfilled.` : 'Selected.', 'success');
+              setTimeout(() => window.location.reload(), 1200);
+            } catch (err) {
+              setPickerMsg(String(err && err.message || err), 'error');
+              container.querySelectorAll('button').forEach((b) => { b.disabled = false; });
+            }
+          });
+        });
+
+        const cancelBtn = container.querySelector('.picker-cancel');
+        if (cancelBtn) {
+          cancelBtn.addEventListener('click', () => {
+            window.location.reload();
+          });
+        }
+      })
+      .catch((err) => {
+        setInitial(String(err && err.message || err), 'error');
+        anchor.disabled = false;
+      });
   }
 
   /* CRM connection card — PR 4 of the Traffic Impact feature.
