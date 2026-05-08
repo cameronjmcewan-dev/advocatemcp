@@ -21,37 +21,38 @@ export async function fetchIntegrationsStatus(
   biz: { slug: string; plan?: string },
 ): Promise<IntegrationsStatusResponse> {
   const slug = biz.slug;
-  const plan: PlanRequired = (biz.plan ?? "base") as PlanRequired;
+  const planRaw = biz.plan ?? "base";
+  const plan: PlanRequired = (planRaw === "pro" || planRaw === "enterprise") ? planRaw : "base";
 
   const [ga4Row, gscRow, hubRow, sfRow, revRow, authRow, eventsRow] = await Promise.all([
     db.prepare("SELECT property_id, property_label, last_sync_at, last_sync_error FROM ga4_connections WHERE slug = ? LIMIT 1")
       .bind(slug)
       .first<{ property_id: string | null; property_label: string | null; last_sync_at: string | null; last_sync_error: string | null }>()
-      .catch(() => null),
+      .catch((err) => { console.error('[integrationsStatus] ga4 query failed', err); return null; }),
     db.prepare("SELECT site_url, last_sync_at, last_sync_error FROM gsc_connections WHERE slug = ? LIMIT 1")
       .bind(slug)
       .first<{ site_url: string | null; last_sync_at: string | null; last_sync_error: string | null }>()
-      .catch(() => null),
+      .catch((err) => { console.error('[integrationsStatus] gsc query failed', err); return null; }),
     db.prepare("SELECT account_id, last_used_at, last_error FROM crm_connections WHERE slug = ? AND provider = 'hubspot' LIMIT 1")
       .bind(slug)
       .first<{ account_id: string | null; last_used_at: string | null; last_error: string | null }>()
-      .catch(() => null),
+      .catch((err) => { console.error('[integrationsStatus] hubspot query failed', err); return null; }),
     db.prepare("SELECT account_id, last_used_at, last_error FROM crm_connections WHERE slug = ? AND provider = 'salesforce' LIMIT 1")
       .bind(slug)
       .first<{ account_id: string | null; last_used_at: string | null; last_error: string | null }>()
-      .catch(() => null),
+      .catch((err) => { console.error('[integrationsStatus] salesforce query failed', err); return null; }),
     db.prepare("SELECT revenue_webhook_secret FROM businesses WHERE slug = ? LIMIT 1")
       .bind(slug)
       .first<{ revenue_webhook_secret: string | null }>()
-      .catch(() => null),
+      .catch((err) => { console.error('[integrationsStatus] webhook query failed', err); return null; }),
     db.prepare("SELECT brand_keyword, google_place_id, last_synced_at, last_sync_error FROM authority_config WHERE slug = ? LIMIT 1")
       .bind(slug)
       .first<{ brand_keyword: string | null; google_place_id: string | null; last_synced_at: string | null; last_sync_error: string | null }>()
-      .catch(() => null),
+      .catch((err) => { console.error('[integrationsStatus] authority query failed', err); return null; }),
     db.prepare("SELECT COUNT(*) AS total, SUM(CASE WHEN referrer_classification = 'ai' THEN 1 ELSE 0 END) AS ai FROM revenue_events WHERE business_slug = ?")
       .bind(slug)
       .first<{ total: number; ai: number }>()
-      .catch(() => ({ total: 0, ai: 0 })),
+      .catch((err) => { console.error('[integrationsStatus] events count query failed', err); return { total: 0, ai: 0 }; }),
   ]);
 
   const facts: IntegrationsFacts = {
