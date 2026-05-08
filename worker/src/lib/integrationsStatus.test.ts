@@ -97,6 +97,7 @@ describe("buildIntegrationsStatus", () => {
     const hs = result.integrations.find(i => i.id === "hubspot")!;
     expect(hs.status).toBe("connected_active");
     expect(hs.config_summary).toBe("Account: 12345678");
+    expect(hs.last_sync_at).toBe("2026-05-07T12:00:00Z");
     expect(hs.actions).toEqual(["disconnect"]);
   });
 
@@ -126,6 +127,7 @@ describe("buildIntegrationsStatus", () => {
     const sf = result.integrations.find(i => i.id === "salesforce")!;
     expect(sf.status).toBe("connected_active");
     expect(sf.config_summary).toBe("Account: 00D000000000001");
+    expect(sf.last_sync_at).toBe("2026-05-07T12:00:00Z");
     expect(sf.actions).toEqual(["disconnect"]);
   });
 
