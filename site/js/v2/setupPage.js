@@ -122,14 +122,12 @@
 
     rail.innerHTML = `
       <div class="setup-page-rail-inner">
-        <div class="setup-page-rail-header">
-          <div class="setup-page-rail-title">Progress</div>
-          <div class="setup-page-rail-progress">
-            <div class="setup-page-rail-progress-bar">
-              <div class="setup-page-rail-progress-fill" style="width: ${escHtml(completion.pct)}%"></div>
-            </div>
-            <div class="setup-page-rail-progress-meta">${escHtml(completion.connected)} of ${escHtml(completion.available)} · ${escHtml(completion.pct)}%</div>
+        <div class="setup-page-rail-title">Progress</div>
+        <div class="setup-page-rail-progress">
+          <div class="setup-page-rail-progress-bar">
+            <div class="setup-page-rail-progress-fill" style="width: ${escHtml(completion.pct)}%"></div>
           </div>
+          <div class="setup-page-rail-progress-meta">${escHtml(completion.connected)} of ${escHtml(completion.available)} · ${escHtml(completion.pct)}%</div>
         </div>
         <ul class="setup-rail-list">${itemsHtml}</ul>
         <div class="setup-page-rail-footer">

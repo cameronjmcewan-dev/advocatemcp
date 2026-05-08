@@ -1454,14 +1454,19 @@
     }
 
     // Phase 3: when the wizard isn't showing AND the tenant isn't fully
-    // set up, surface a "Resume setup →" link in the topbar so users can
-    // return to the focused setup page anytime.
+    // set up, surface a "Resume setup →" link in the topbar's right
+    // cluster so users can return to the focused setup page anytime.
+    // We mount inside .tb-right (not .topbar) because (a) the topbar's
+    // space-between flex distributes children awkwardly when a third
+    // child is appended at .topbar level, and (b) the link must be torn
+    // down on SPA nav — router.js handles cleanup; we only inject when
+    // the page is actively rendering.
     const hub = d.integrationsHub;
     if (hub && hub.completion && hub.completion.connected >= 2 && hub.recommended_next != null) {
-      const topbar = document.querySelector('.topbar');
-      if (topbar && !topbar.querySelector('.resume-setup-link')) {
-        topbar.insertAdjacentHTML('beforeend',
-          '<a href="/setup/traffic-impact" class="resume-setup-link" style="margin-left:auto;font-size:13.5px;color:var(--maroon);text-decoration:none">Resume setup →</a>');
+      const tbRight = document.querySelector('.topbar .tb-right');
+      if (tbRight && !tbRight.querySelector('.resume-setup-link')) {
+        tbRight.insertAdjacentHTML('afterbegin',
+          '<a href="/setup/traffic-impact" class="resume-setup-link" style="font-size:13.5px;color:var(--maroon);text-decoration:none;margin-right:8px;align-self:center">Resume setup →</a>');
       }
     }
 

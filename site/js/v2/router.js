@@ -271,6 +271,13 @@
       }
       delete root.dataset.pending;
     }
+
+    // Phase 3: clear stale entry-point links from prior page mounts.
+    // .resume-setup-link is added by traffic-impact.js inside .tb-right;
+    // it must be removed when navigating to any other page so it doesn't
+    // leak across the v2 SPA shell.
+    document.querySelectorAll('.resume-setup-link').forEach(el => el.remove());
+
     if (typeof mod.afterMount === 'function') {
       try { mod.afterMount(data); } catch (err) { console.error('afterMount failed', err); }
     }
