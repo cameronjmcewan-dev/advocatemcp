@@ -785,14 +785,20 @@
   }
 
   /* Generic inline picker for "Connected · pick X" states (GA4 properties,
-   * GSC sites). Replaces the button row with a list of selectable items
-   * fetched from listPath, then POSTs the chosen value to selectPath which
-   * runs a server-side backfill and persists the choice. Reloads the page
-   * on success so the card re-renders from the live status endpoint.
+   * GSC sites). Replaces a container's contents with a list of selectable
+   * items fetched from listPath, then POSTs the chosen value to selectPath
+   * which runs a server-side backfill and persists the choice. Reloads the
+   * page on success so the card re-renders from the live status endpoint.
    *
    * Shape of opts:
-   *   anchorBtn    — the clicked "Choose X" button. Its parent .r row is
-   *                  replaced with the picker UI.
+   *   anchorBtn    — the clicked "Choose X" button. Disabled while the
+   *                  list endpoint is in flight.
+   *   mountTarget  — (optional) DOM element the picker UI renders into.
+   *                  When omitted, defaults to anchorBtn.parentElement
+   *                  (legacy behavior — the picker replaces the button's
+   *                  parent row contents). When provided (e.g. the wizard's
+   *                  step-body div), the picker renders into mountTarget so
+   *                  it doesn't clobber sibling buttons next to anchorBtn.
    *   listPath     — GET endpoint that returns { [listKey]: [item, ...] }.
    *   listKey      — top-level key in the list response holding the items.
    *   selectPath   — POST endpoint that persists the selection.
@@ -808,7 +814,10 @@
   function runInlinePicker(opts) {
     const af = window.AMCP && window.AMCP.authedFetch;
     const anchor = opts.anchorBtn;
-    const container = anchor && anchor.parentElement;
+    // Phase 2 PR 1: opts.mountTarget overrides the default container so the
+    // wizard can render pickers into a dedicated step-body div without
+    // clobbering its own navigation buttons.
+    const container = opts.mountTarget || (anchor && anchor.parentElement);
     if (!af || !container) return;
 
     // Find an adjacent status-msg span to surface the loading state while
