@@ -185,7 +185,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
     setLoading(true);
     try {
       await window.AMCP.login(email, password);
-      window.location.href = '/dashboard.html';
+      window.location.href = '/app.html';
     } catch (err) {
       var code = (err && err.error_code) ? err.error_code : 'platform_error';
       showError(ERROR_MESSAGES[code] || ERROR_MESSAGES.platform_error);
@@ -196,7 +196,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 
   // If the refresh cookie is still valid, skip the login page entirely
   window.AMCP.refresh().then(function (ok) {
-    if (ok) window.location.href = '/dashboard.html';
+    if (ok) window.location.href = '/app.html';
   });
 })();
 </script>

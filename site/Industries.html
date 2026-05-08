@@ -331,16 +331,40 @@
     }/*EDITMODE-END*/
   });
 
-  // Tabs
-  document.getElementById('tabs').addEventListener('click', (e) => {
-    const btn = e.target.closest('.tab-btn');
-    if (!btn) return;
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
-    const tab = btn.dataset.tab;
-    document.querySelectorAll('.industry-panel').forEach(p => {
-      p.classList.toggle('active', p.id === 'panel-' + tab);
+  // Tabs — click + ArrowLeft/ArrowRight/Home/End keyboard navigation per
+  // WAI-ARIA tablist pattern. Enter/Space already work natively because
+  // each tab is a real <button>.
+  (function () {
+    const tabsEl = document.getElementById('tabs');
+    const tabs = Array.from(tabsEl.querySelectorAll('.tab-btn'));
+
+    function activate(btn) {
+      tabs.forEach(b => b.classList.toggle('active', b === btn));
+      const tab = btn.dataset.tab;
+      document.querySelectorAll('.industry-panel').forEach(p => {
+        p.classList.toggle('active', p.id === 'panel-' + tab);
+      });
+    }
+
+    tabsEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('.tab-btn');
+      if (btn) activate(btn);
     });
-  });
+
+    tabsEl.addEventListener('keydown', (e) => {
+      const idx = tabs.indexOf(document.activeElement);
+      if (idx < 0) return;
+      let next = -1;
+      if (e.key === 'ArrowRight')      next = (idx + 1) % tabs.length;
+      else if (e.key === 'ArrowLeft')  next = (idx - 1 + tabs.length) % tabs.length;
+      else if (e.key === 'Home')       next = 0;
+      else if (e.key === 'End')        next = tabs.length - 1;
+      if (next < 0) return;
+      e.preventDefault();
+      tabs[next].focus();
+      activate(tabs[next]);
+    });
+  })();
 </script>
 <script src="/js/marketing-auth.js" defer></script>
 </body>
