@@ -284,9 +284,11 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/team"          && method === "GET")  return handleListTeam(request, env);
   if (pathname === "/api/client/team/invite"   && method === "POST") return handleInviteTeam(request, env);
   const teamRoleMatch = pathname.match(/^\/api\/client\/team\/([a-zA-Z0-9_-]+)\/role$/);
-  if (teamRoleMatch && method === "PATCH")  return handleUpdateTeamRole(request, env, teamRoleMatch[1]);
+  if (teamRoleMatch && method === "PATCH")    return handleUpdateTeamRole(request, env, teamRoleMatch[1]);
+  if (teamRoleMatch && method === "OPTIONS")  return handleCorsPreflight(request, { credentials: true });
   const teamMemberMatch = pathname.match(/^\/api\/client\/team\/([a-zA-Z0-9_-]+)$/);
-  if (teamMemberMatch && method === "DELETE") return handleRemoveTeam(request, env, teamMemberMatch[1]);
+  if (teamMemberMatch && method === "DELETE")  return handleRemoveTeam(request, env, teamMemberMatch[1]);
+  if (teamMemberMatch && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   // Public team-accept consume endpoint. Hosted on customers.advocatemcp.com
   // because the magic-link email goes there; CORS allowed from same
   // origin (the team-accept.html page on customers.advocatemcp.com).
@@ -300,10 +302,12 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/client/locations"            && method === "GET")    return apiLocationsList(request, env);
   if (pathname === "/api/client/locations"            && method === "POST")   return apiLocationsAdd(request, env);
   const locUpdMatch = pathname.match(/^\/api\/client\/locations\/([a-zA-Z0-9_]+)$/);
-  if (locUpdMatch && method === "PATCH")   return apiLocationsUpdate(request, env, locUpdMatch[1]);
-  if (locUpdMatch && method === "DELETE")  return apiLocationsDelete(request, env, locUpdMatch[1]);
+  if (locUpdMatch && method === "PATCH")    return apiLocationsUpdate(request, env, locUpdMatch[1]);
+  if (locUpdMatch && method === "DELETE")   return apiLocationsDelete(request, env, locUpdMatch[1]);
+  if (locUpdMatch && method === "OPTIONS")  return handleCorsPreflight(request, { credentials: true });
   const locPromoteMatch = pathname.match(/^\/api\/client\/locations\/([a-zA-Z0-9_]+)\/promote$/);
-  if (locPromoteMatch && method === "POST") return apiLocationsPromote(request, env, locPromoteMatch[1]);
+  if (locPromoteMatch && method === "POST")    return apiLocationsPromote(request, env, locPromoteMatch[1]);
+  if (locPromoteMatch && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   if (pathname === "/api/client/radar"             && method === "GET")    return apiRadar(request, env);
   if (pathname === "/api/client/radar/share-of-voice" && method === "GET") return apiRadarShareOfVoice(request, env);
   const radarBasketDel = pathname.match(/^\/api\/client\/radar\/basket\/([^/]+)$/);
