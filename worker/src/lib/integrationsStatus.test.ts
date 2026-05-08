@@ -208,4 +208,69 @@ describe("buildIntegrationsStatus", () => {
     expect(a.last_sync_error).toBe("Reddit rate limited");
     expect(a.actions).toEqual(["edit", "disconnect"]);
   });
+
+  it("recommended_next is GA4 when nothing connected", () => {
+    const result = buildIntegrationsStatus(emptyFacts());
+    expect(result.recommended_next).toBe("ga4");
+  });
+
+  it("recommended_next moves to GSC after GA4 connected (Pro tenant)", () => {
+    const facts = emptyFacts("pro");
+    facts.ga4 = { connected: true, property_id: "properties/1", property_label: "X", last_sync_at: null, last_sync_error: null };
+    expect(buildIntegrationsStatus(facts).recommended_next).toBe("gsc");
+  });
+
+  it("recommended_next stops at GA4 for Base tenant once GA4 is connected", () => {
+    const facts = emptyFacts("base");
+    facts.ga4 = { connected: true, property_id: "properties/1", property_label: "X", last_sync_at: null, last_sync_error: null };
+    expect(buildIntegrationsStatus(facts).recommended_next).toBe(null);
+  });
+
+  it("recommended_next walks the full Pro chain in order: ga4 → gsc → hubspot → stripe_webhook → authority", () => {
+    const facts = emptyFacts("pro");
+    facts.ga4        = { connected: true, property_id: "properties/1", property_label: "X", last_sync_at: null, last_sync_error: null };
+    facts.gsc        = { connected: true, site_url: "https://x.com/", last_sync_at: null, last_sync_error: null };
+    expect(buildIntegrationsStatus(facts).recommended_next).toBe("hubspot");
+    facts.hubspot    = { connected: true, account_id: "1", last_used_at: null, last_error: null };
+    expect(buildIntegrationsStatus(facts).recommended_next).toBe("stripe_webhook");
+    facts.stripe_webhook = { configured: true, total_events: 0, ai_events: 0 };
+    expect(buildIntegrationsStatus(facts).recommended_next).toBe("authority");
+    facts.authority  = { configured: true, brand_keyword: "x", google_place_id: "y", last_synced_at: null, last_sync_error: null };
+    expect(buildIntegrationsStatus(facts).recommended_next).toBe(null);
+  });
+
+  it("completion is 0/6 with no connections (Pro)", () => {
+    const r = buildIntegrationsStatus(emptyFacts("pro"));
+    expect(r.completion).toEqual({ connected: 0, available: 6, pct: 0 });
+  });
+
+  it("completion is 0/1 for Base (only GA4 is available)", () => {
+    const r = buildIntegrationsStatus(emptyFacts("base"));
+    expect(r.completion).toEqual({ connected: 0, available: 1, pct: 0 });
+  });
+
+  it("completion counts connected_active + connected_pending_config + connected_error as connected", () => {
+    const facts = emptyFacts("pro");
+    facts.ga4 = { connected: true, property_id: "properties/1", property_label: "X", last_sync_at: null, last_sync_error: null };
+    facts.gsc = { connected: true, site_url: null, last_sync_at: null, last_sync_error: null };
+    facts.hubspot = { connected: true, account_id: "1", last_used_at: null, last_error: "stale token" };
+    const r = buildIntegrationsStatus(facts);
+    expect(r.completion.connected).toBe(3);
+    expect(r.completion.available).toBe(6);
+    expect(r.completion.pct).toBe(50);
+  });
+
+  it("Base tenant sees Pro integrations as plan_locked, not not_connected", () => {
+    const r = buildIntegrationsStatus(emptyFacts("base"));
+    const gsc = r.integrations.find(i => i.id === "gsc")!;
+    expect(gsc.status).toBe("plan_locked");
+    const stripe = r.integrations.find(i => i.id === "stripe_webhook")!;
+    expect(stripe.status).toBe("plan_locked");
+  });
+
+  it("Base tenant: GA4 stays unlocked even when not connected", () => {
+    const r = buildIntegrationsStatus(emptyFacts("base"));
+    const ga4 = r.integrations.find(i => i.id === "ga4")!;
+    expect(ga4.status).toBe("not_connected");
+  });
 });

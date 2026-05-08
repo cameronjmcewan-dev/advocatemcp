@@ -197,15 +197,15 @@ function authorityView(facts: IntegrationsFacts): IntegrationView {
   return { ...base, status: "connected_active", config_summary: summary, actions: ["edit", "disconnect"] };
 }
 
+const RECOMMENDED_ORDER = ["ga4", "gsc", "hubspot", "stripe_webhook", "authority"] as const;
+
 export function buildIntegrationsStatus(facts: IntegrationsFacts): IntegrationsStatusResponse {
   const isPro = facts.tenant.plan === "pro" || facts.tenant.plan === "enterprise";
 
-  function lockOrStatus(planRequired: PlanRequired, computed: IntegrationStatus): IntegrationStatus {
-    if (planRequired === "base") return computed;
-    return isPro ? computed : "plan_locked";
-  }
-
-  const integrations: IntegrationView[] = [
+  // Build raw views — each helper computes status assuming the integration
+  // is available. We override to "plan_locked" below for Pro-gated integrations
+  // when the tenant is on Base.
+  const raw: IntegrationView[] = [
     ga4View(facts),
     gscView(facts),
     hubspotView(facts),
@@ -214,10 +214,38 @@ export function buildIntegrationsStatus(facts: IntegrationsFacts): IntegrationsS
     authorityView(facts),
   ];
 
+  const integrations = raw.map((view): IntegrationView => {
+    if (view.plan_required !== "base" && !isPro) {
+      return { ...view, status: "plan_locked", actions: ["upgrade"] };
+    }
+    return view;
+  });
+
+  const isConnected = (s: IntegrationStatus) =>
+    s === "connected_active" || s === "connected_pending_config" || s === "connected_error";
+
+  const available = integrations.filter(i => i.status !== "plan_locked").length;
+  const connected = integrations.filter(i => isConnected(i.status)).length;
+  const pct = available === 0 ? 0 : Math.round((connected / available) * 100);
+
+  // recommended_next: walk RECOMMENDED_ORDER, return the first integration
+  // that is available to this tenant AND not yet connected. Skip Salesforce —
+  // we recommend HubSpot first; Salesforce is an alt for tenants on it already.
+  let recommended_next: string | null = null;
+  for (const id of RECOMMENDED_ORDER) {
+    const i = integrations.find(x => x.id === id);
+    if (!i) continue;
+    if (i.status === "plan_locked") continue;
+    if (!isConnected(i.status)) {
+      recommended_next = id;
+      break;
+    }
+  }
+
   return {
     tenant: facts.tenant,
     integrations,
-    recommended_next: null,
-    completion: { connected: 0, available: integrations.filter(i => i.status !== "plan_locked").length, pct: 0 },
+    recommended_next,
+    completion: { connected, available, pct },
   };
 }
