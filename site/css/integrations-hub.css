@@ -217,3 +217,92 @@
   color: var(--maroon-2);
   border-bottom-color: var(--maroon);
 }
+
+/* ── 10. Wizard-mode card (Phase 2 PR 2) ──────────────────────────
+   Full-card layout used by the Phase-2 wizard stepper. Differs from
+   the hub's .cc-row accordion in being a full card with a vertical
+   action stack and an inline prereq coach. The .cc-wizard-step-body
+   div is a mount target the wizard's picker uses (via runInlinePicker's
+   mountTarget option, PR 1). Empty by default; populated by the wizard
+   stepper or by runInlinePicker rendering into it.
+*/
+
+.cc-wizard-card {
+  border: 1px solid var(--line, rgba(0,0,0,.08));
+  border-radius: 12px;
+  padding: 28px;
+  max-width: 640px;
+  margin: 0 auto;
+  background: var(--paper, #fff);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cc-wizard-name {
+  font-family: var(--serif, Georgia);
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1.2;
+  color: var(--ink, #141210);
+}
+
+.cc-wizard-status {
+  margin-top: -6px;
+}
+
+.cc-wizard-values {
+  list-style: disc;
+  padding-left: 20px;
+  margin: 4px 0 0 0;
+  color: var(--ink-2, #555);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.cc-wizard-values li {
+  margin-bottom: 4px;
+}
+
+.cc-wizard-coach {
+  background: var(--paper-2, #faf7f2);
+  border: 1px solid var(--line, rgba(0,0,0,.08));
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.cc-wizard-coach .prereq-coach {
+  margin: 0;
+}
+
+.cc-wizard-error {
+  background: rgba(180, 40, 40, 0.08);
+  border: 1px solid rgba(180, 40, 40, 0.25);
+  color: var(--red, #b3261e);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.cc-wizard-step-body:empty {
+  display: none;
+}
+
+.cc-wizard-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+  margin-top: 4px;
+}
+
+.cc-wizard-actions .btn-primary {
+  width: 100%;
+  padding: 14px 18px;
+  font-size: 15px;
+}
+
+.cc-wizard-actions .btn-ghost {
+  align-self: flex-start;
+}
