@@ -158,7 +158,136 @@
     }).length;
   }
 
-  function mount() {} // Task 3 implements
+  /**
+   * Wires the wizard into the DOM. Idempotent — safe to call repeatedly
+   * but swaps innerHTML so prior listeners don't double-fire.
+   *
+   * The parent (traffic-impact.js) is responsible for re-calling
+   * traffic-impact's own render path when the wizard is dismissed. We
+   * just flip dismissedThisSession + dispatch a custom event the
+   * parent listens for, then traffic-impact decides what to render.
+   */
+  function mount(hub, root) {
+    if (!root) return;
+
+    // Initial render-then-wire.
+    root.innerHTML = renderState(hub);
+    wireListeners(hub);
+  }
+
+  function wireListeners(hub) {
+    const root = document.getElementById('ti-wizard-root');
+    if (!root) return;
+
+    // Welcome → start
+    const startBtn = root.querySelector('.ti-wizard-start');
+    if (startBtn) {
+      startBtn.addEventListener('click', () => {
+        stepIndex = 1;
+        root.outerHTML = renderState(hub);
+        wireListeners(hub);
+      });
+    }
+
+    // Skip-all (welcome or step)
+    const skipAllBtns = root.querySelectorAll('.ti-wizard-skip-all');
+    skipAllBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        dismissedThisSession = true;
+        notifyDismissed();
+      });
+    });
+
+    // Step nav: Back
+    const backBtn = root.querySelector('.ti-wizard-back');
+    if (backBtn) {
+      backBtn.addEventListener('click', () => {
+        stepIndex = Math.max(0, stepIndex - 1);
+        root.outerHTML = renderState(hub);
+        wireListeners(hub);
+      });
+    }
+
+    // Step nav: Skip this step (advances cursor in-memory only — server still recommends it next reload)
+    const skipStepBtn = root.querySelector('.ti-wizard-skip-step');
+    if (skipStepBtn) {
+      skipStepBtn.addEventListener('click', () => {
+        stepIndex = stepIndex + 1;
+        // Cap at total: if past end, show done.
+        // (Skip-step doesn't unlock done; we re-evaluate from hub.)
+        root.outerHTML = renderState(hub);
+        wireListeners(hub);
+      });
+    }
+
+    // Done → finish
+    const finishBtn = root.querySelector('.ti-wizard-finish');
+    if (finishBtn) {
+      finishBtn.addEventListener('click', () => {
+        dismissedThisSession = true;
+        notifyDismissed();
+      });
+    }
+
+    // Hub action buttons (data-cc-action) — delegated to the same handlers
+    // as the Settings hub. We re-fetch the action map at click time from
+    // window.AMCP_TI_WIZARD_ACTIONS (set by the parent), so the wizard
+    // module stays decoupled from the specific endpoint URLs.
+    root.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-cc-action]');
+      if (!btn) return;
+      // 'upgrade' is an <a> — let it navigate naturally
+      const action = btn.getAttribute('data-cc-action');
+      const id = btn.getAttribute('data-cc-id');
+      if (!action || !id || action === 'upgrade') return;
+      e.preventDefault();
+      handleAction(id, action, btn);
+    });
+  }
+
+  function handleAction(integrationId, action, btn) {
+    const af = window.AMCP && window.AMCP.authedFetch;
+    if (!af) return;
+
+    // Picker actions mount into the wizard's step-body so they don't
+    // clobber the wizard's navigation.
+    if (action === 'pick_property' || action === 'pick_site') {
+      const card = btn.closest('.cc-wizard-card');
+      const stepBody = card ? card.querySelector('.cc-wizard-step-body') : null;
+      if (!stepBody) return;
+      // Use the same runInlinePicker the Settings hub uses, with mountTarget
+      // set so the picker renders into stepBody instead of clobbering the
+      // wizard's action stack.
+      if (window.AMCP_TI_WIZARD_ACTIONS && typeof window.AMCP_TI_WIZARD_ACTIONS.openPicker === 'function') {
+        window.AMCP_TI_WIZARD_ACTIONS.openPicker(integrationId, btn, stepBody);
+        return;
+      }
+      // Fallback: alert + scroll-to legacy.
+      window.alert('Picker module not loaded — refresh and try again.');
+      return;
+    }
+
+    // OAuth start (connect): same flow as the hub. Redirects externally.
+    // On return, page boots fresh and wizard re-evaluates.
+    if (action === 'connect') {
+      if (window.AMCP_TI_WIZARD_ACTIONS && typeof window.AMCP_TI_WIZARD_ACTIONS.startConnect === 'function') {
+        window.AMCP_TI_WIZARD_ACTIONS.startConnect(integrationId, btn);
+        return;
+      }
+      return;
+    }
+
+    // Disconnect / resync / configure / generate / rotate / edit:
+    // delegate to the parent action map. Phase 2 doesn't expect users
+    // to disconnect mid-wizard, but the buttons exist for completeness.
+    if (window.AMCP_TI_WIZARD_ACTIONS && typeof window.AMCP_TI_WIZARD_ACTIONS.dispatch === 'function') {
+      window.AMCP_TI_WIZARD_ACTIONS.dispatch(integrationId, action, btn);
+    }
+  }
+
+  function notifyDismissed() {
+    document.dispatchEvent(new CustomEvent('ti-wizard-dismissed'));
+  }
 
   window.AMCP_TI_WIZARD = { shouldRender, renderState, mount };
 })();
