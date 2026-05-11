@@ -101,6 +101,12 @@ import {
   type AccessTokenError,
 } from "../lib/access-token";
 import { withCors, handleCorsPreflight } from "../lib/cors";
+import {
+  recordAuditEvent,
+  clientIpFromRequest,
+  hashClientIp,
+  requestIdFromRequest,
+} from "../lib/auditLog";
 
 // ── AuthContext — the unified shape produced by getSessionFromRequest ──────
 
@@ -346,6 +352,20 @@ export async function handleAuthLogin(request: Request, env: Env): Promise<Respo
         error: String(err),
       }));
     }
+    // SOC 2 CC7.2: audit-log every failed login. actor_id is the supplied
+    // email rather than a user.id because the user may not exist; the
+    // distinguishing reason ('no_such_user' vs 'bad_password') is NOT
+    // captured here — that would leak enumeration info via the audit
+    // log itself.
+    const ipHash = await hashClientIp(clientIpFromRequest(request));
+    await recordAuditEvent(env.DB, {
+      actorType: "user",
+      actorId: identifier,
+      eventType: "auth.login_failure",
+      targetType: "session",
+      ipHash,
+      requestId: requestIdFromRequest(request),
+    });
     return jsonErr(401, "invalid_credentials", request);
   }
 
@@ -404,6 +424,23 @@ export async function handleAuthLogin(request: Request, env: Env): Promise<Respo
     role: userRow.role,
   }));
 
+  // SOC 2 CC7.2: audit-log every successful login. Captures user id, role,
+  // tenant scope, and hashed client IP for forensic correlation.
+  const ipHash = await hashClientIp(clientIpFromRequest(request));
+  await recordAuditEvent(env.DB, {
+    actorType: "user",
+    actorId: userRow.id,
+    eventType: "auth.login_success",
+    targetType: "session",
+    targetId: sessionId,
+    metadata: {
+      role: userRow.role,
+      tenant_id: userRow.tenant_id,
+    },
+    ipHash,
+    requestId: requestIdFromRequest(request),
+  });
+
   const body = {
     access_token: accessToken,
     expires_in:   ACCESS_TOKEN_TTL_SECONDS,
@@ -447,6 +484,19 @@ export async function handleAuthLogout(request: Request, env: Env): Promise<Resp
     }
   }
   console.log(JSON.stringify({ auth: true, event: "logout" }));
+
+  // SOC 2 CC7.2: audit-log every logout regardless of whether the session
+  // existed. The contract from the handler comment ("never distinguishes
+  // session existed from session didn't exist") is preserved by NOT writing
+  // the session id into the audit row — only the request fingerprint.
+  await recordAuditEvent(env.DB, {
+    actorType: "user",
+    actorId: null,
+    eventType: "auth.logout",
+    targetType: "session",
+    ipHash: await hashClientIp(clientIpFromRequest(request)),
+    requestId: requestIdFromRequest(request),
+  });
 
   const resp = new Response(JSON.stringify({ ok: true }), {
     status: 200,
