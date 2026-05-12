@@ -39,6 +39,7 @@
     { id: 'admin-tenants',      href: '/admin/tenants.html',        g: '◉', label: 'Tenants' },
     { id: 'admin-queries',      href: '/admin/queries.html',        g: '◔', label: 'Queries' },
     { id: 'admin-experiments',  href: '/admin/experiments.html',    g: '⚗', label: 'Experiments' },
+    { id: 'admin-security',     href: '/admin/security.html',       g: '⊠', label: 'Security' },
   ];
 
   // ── Date-range helper (single source of truth) ──────────────────────
