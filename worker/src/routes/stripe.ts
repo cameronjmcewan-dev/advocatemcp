@@ -49,6 +49,7 @@ import {
   hashClientIp,
   requestIdFromRequest,
 } from "../lib/auditLog";
+import { pushBusinessStatusToServer } from "../lib/serverStatusSync";
 
 // ── CORS helper for the public wizard endpoint ───────────────────────────────
 // Only the marketing site + Cloudflare Pages preview deploys are trusted.
@@ -2257,6 +2258,29 @@ export async function handleSubscriptionDeleted(
     });
   }
 
+  // SOC 2 CC6.2/CC6.3: push the status to the Railway server so the
+  // server-side auth middleware fails closed for the cancelled tenant.
+  // Best-effort — failure here logs to Sentry but does not throw.
+  const syncResult = await pushBusinessStatusToServer(env, biz.slug, "cancelled");
+  if (!syncResult.ok) {
+    console.warn(JSON.stringify({
+      onboarding: true,
+      event: "stripe_subscription_deleted_server_sync_failed",
+      slug: biz.slug,
+      reason: syncResult.reason,
+      detail: syncResult.detail,
+    }));
+    Sentry.captureMessage(
+      `stripe_subscription_deleted_server_sync_failed: ${biz.slug}`,
+      {
+        level: "warning",
+        tags: { source: "stripe_webhook", op: "subscription_deleted", slug: biz.slug },
+        extra: { reason: syncResult.reason, detail: syncResult.detail },
+        fingerprint: ["stripe_subscription_deleted_server_sync_failed", biz.slug],
+      },
+    );
+  }
+
   await recordAuditEvent(env.DB, {
     actorType: "stripe",
     actorId: stripeEventId,
@@ -2268,6 +2292,8 @@ export async function handleSubscriptionDeleted(
       customer_id: customerId,
       previous_status: biz.business_status ?? null,
       new_status: "cancelled",
+      server_sync_ok: syncResult.ok,
+      server_sync_reason: syncResult.ok ? null : syncResult.reason,
     },
     requestId,
   });
@@ -2343,6 +2369,27 @@ export async function handleSubscriptionUpdated(
       });
     }
 
+    // Mirror to the Railway server (see handleSubscriptionDeleted for rationale).
+    const syncResult = await pushBusinessStatusToServer(env, biz.slug, newStatus);
+    if (!syncResult.ok) {
+      console.warn(JSON.stringify({
+        onboarding: true,
+        event: "stripe_subscription_updated_server_sync_failed",
+        slug: biz.slug,
+        reason: syncResult.reason,
+        detail: syncResult.detail,
+      }));
+      Sentry.captureMessage(
+        `stripe_subscription_updated_server_sync_failed: ${biz.slug}`,
+        {
+          level: "warning",
+          tags: { source: "stripe_webhook", op: "subscription_updated", slug: biz.slug },
+          extra: { reason: syncResult.reason, detail: syncResult.detail },
+          fingerprint: ["stripe_subscription_updated_server_sync_failed", biz.slug],
+        },
+      );
+    }
+
     await recordAuditEvent(env.DB, {
       actorType: "stripe",
       actorId: stripeEventId,
@@ -2355,6 +2402,8 @@ export async function handleSubscriptionUpdated(
         cancel_at_period_end: cancelAtPeriodEnd,
         previous_status: biz.business_status ?? null,
         new_status: newStatus,
+        server_sync_ok: syncResult.ok,
+        server_sync_reason: syncResult.ok ? null : syncResult.reason,
       },
       requestId,
     });

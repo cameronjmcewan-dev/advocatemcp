@@ -129,6 +129,13 @@ export interface BusinessRow {
   // Cache invalidation is composite: profile_hash + score_hash +
   // analytics_window_id + 7-day max staleness. NULL = cold-start.
   last_ai_recommendations_json?: string | null;
+  // Migration 038 (May 11 2026): SOC 2 CC6.2/CC6.3 lifecycle gate. See
+  // server/src/middleware/auth.ts BLOCKED_STATUSES and the matching
+  // worker/migrations/0026_business_status.sql. Optional+nullable because
+  // pre-migration test fixtures don't populate it; auth middleware treats
+  // null as 'active' (the column default).
+  business_status?: string | null;
+  status_changed_at?: string | null;
   // Migration 013 (Apr 15 2026): Pro plan tier added at the same time
   // as Competitor Radar polling. 'free' | 'base' | 'pro' | 'enterprise'.
   // Optional+nullable like the other late-added columns so test fixtures

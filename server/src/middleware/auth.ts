@@ -1,6 +1,18 @@
 import type { Request, Response, NextFunction } from "express";
 import { getDb, type BusinessRow } from "../db.js";
 
+// ── Business lifecycle gate (SOC 2 CC6.2/CC6.3) ─────────────────────────────
+//
+// Statuses that BLOCK authenticated access. Mirrors the vocabulary in
+// server/src/db/migrations/038_businesses_status.sql and the worker-side
+// migration 0026. Rows pre-dating the migration have business_status='active'
+// by default and pass through unaffected.
+const BLOCKED_STATUSES: ReadonlySet<string> = new Set(["cancelled", "suspended"]);
+
+function isBlockedStatus(status: string | null | undefined): boolean {
+  return typeof status === "string" && BLOCKED_STATUSES.has(status);
+}
+
 // ── requireApiKey ───────────────────────────────────────────────────────────
 // Accepts EITHER:
 //   X-API-Key: <SERVER_API_KEY>           (Worker / server-to-server calls)
@@ -25,14 +37,29 @@ export function requireApiKey(req: Request, res: Response, next: NextFunction): 
     return;
   }
 
-  // 1. Server-level key (used by Cloudflare Worker, CI, admin tools)
+  // 1. Server-level key (used by Cloudflare Worker, CI, admin tools).
+  // Bypass business_status check — admin operations may need to act on
+  // cancelled tenants (read history, run final exports, finalise billing).
   const serverKey = process.env.API_KEY;
   if (serverKey && key === serverKey) { next(); return; }
 
-  // 2. Any valid business api_key in the DB
+  // 2. Any valid business api_key in the DB — but only if not blocked.
   const db = getDb();
-  const row = db.prepare("SELECT id FROM businesses WHERE api_key = ? LIMIT 1").get(key);
-  if (row) { next(); return; }
+  const row = db
+    .prepare("SELECT id, business_status FROM businesses WHERE api_key = ? LIMIT 1")
+    .get(key) as { id: number; business_status: string | null } | undefined;
+  if (row) {
+    if (isBlockedStatus(row.business_status)) {
+      console.warn(`[auth] blocked status=${row.business_status} for key=${key.slice(0, 8)}… — ${req.method} ${req.path}`);
+      res.status(401).json({
+        error: "subscription_inactive",
+        message: "This API key is associated with an inactive subscription.",
+      });
+      return;
+    }
+    next();
+    return;
+  }
 
   console.warn(`[auth] invalid api_key ${key.slice(0, 8)}… — ${req.method} ${req.path}`);
   res.status(401).json({ error: "Invalid or missing api_key" });
@@ -77,6 +104,16 @@ export function requireSlugApiKey(
 
   if (!business) {
     res.status(401).json({ error: "Invalid API key for this business" });
+    return;
+  }
+
+  // SOC 2 CC6.2/CC6.3: block authenticated access for inactive subscriptions.
+  if (isBlockedStatus(business.business_status)) {
+    console.warn(`[auth] blocked status=${business.business_status} slug=${slug} — ${req.method} ${req.path}`);
+    res.status(401).json({
+      error: "subscription_inactive",
+      message: "This subscription is inactive.",
+    });
     return;
   }
 
@@ -159,10 +196,18 @@ export function requireSlugOrAdminKey(
   const apiKey = authHeader.slice(7).trim();
   const db = getDb();
   const row = db
-    .prepare("SELECT id FROM businesses WHERE slug = ? AND api_key = ?")
-    .get(slug, apiKey);
+    .prepare("SELECT id, business_status FROM businesses WHERE slug = ? AND api_key = ?")
+    .get(slug, apiKey) as { id: number; business_status: string | null } | undefined;
   if (!row) {
     res.status(401).json({ error: "Invalid api_key for this business" });
+    return;
+  }
+  if (isBlockedStatus(row.business_status)) {
+    console.warn(`[auth] blocked status=${row.business_status} slug=${slug} — ${req.method} ${req.path}`);
+    res.status(401).json({
+      error: "subscription_inactive",
+      message: "This subscription is inactive.",
+    });
     return;
   }
   next();

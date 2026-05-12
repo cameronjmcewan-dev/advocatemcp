@@ -381,6 +381,82 @@ agentRouter.post("/agents/:slug/rotate-key", (req: Request, res: Response) => {
   res.json({ ok: true, slug, new_api_key: newKey });
 });
 
+/**
+ * POST /agents/:slug/status
+ *
+ * Mirror of the lifecycle state managed by the Cloudflare Worker's
+ * Stripe webhook (worker/src/routes/stripe.ts handleSubscription{Deleted,
+ * Updated} + handleInvoicePaymentFailed). The Worker is the source of
+ * truth for status transitions because that's where Stripe events fire;
+ * this endpoint lets it push the new value to the server DB so the auth
+ * middleware (server/src/middleware/auth.ts) can fail-closed for blocked
+ * subscriptions.
+ *
+ * Body: { status: "active" | "cancelling" | "past_due" | "cancelled" | "suspended" }
+ * Auth: X-API-Key: <SERVER_API_KEY>  (server-only — tenants cannot self-suspend)
+ *
+ * The status vocabulary is closed; any other value is rejected so a
+ * future drift between worker/server doesn't silently land bad data.
+ * SOC 2 CC6.2 / CC6.3.
+ */
+const ALLOWED_BUSINESS_STATUSES: ReadonlySet<string> = new Set([
+  "active",
+  "cancelling",
+  "past_due",
+  "cancelled",
+  "suspended",
+]);
+
+agentRouter.post("/agents/:slug/status", (req: Request, res: Response) => {
+  const serverKey = process.env.API_KEY;
+  const provided =
+    req.headers["x-api-key"] ??
+    req.headers.authorization?.replace(/^Bearer\s+/, "");
+  if (!serverKey || provided !== serverKey) {
+    res.status(401).json({ error: "Server API key required" });
+    return;
+  }
+
+  const { slug } = req.params;
+  const status = (req.body as { status?: unknown })?.status;
+  if (typeof status !== "string" || !ALLOWED_BUSINESS_STATUSES.has(status)) {
+    res.status(400).json({
+      error: "invalid_status",
+      message: `status must be one of: ${[...ALLOWED_BUSINESS_STATUSES].join(", ")}`,
+    });
+    return;
+  }
+
+  const db = getDb();
+  const existing = db
+    .prepare("SELECT id, business_status FROM businesses WHERE slug = ?")
+    .get(slug) as { id: number; business_status: string | null } | undefined;
+  if (!existing) {
+    res.status(404).json({ error: `No business registered with slug: ${slug}` });
+    return;
+  }
+
+  const nowIso = new Date().toISOString();
+  db.prepare(
+    "UPDATE businesses SET business_status = ?, status_changed_at = ? WHERE slug = ?",
+  ).run(status, nowIso, slug);
+
+  console.log(JSON.stringify({
+    metric: "business_status_updated",
+    slug,
+    previous_status: existing.business_status ?? "active",
+    new_status: status,
+  }));
+
+  res.json({
+    ok: true,
+    slug,
+    previous_status: existing.business_status ?? "active",
+    new_status: status,
+    status_changed_at: nowIso,
+  });
+});
+
 /* Per-slug rate limit on POST /agents/:slug/profile/verify-rating.
  *
  * Each verify call costs us a real Places API charge ($0.005-$0.02
