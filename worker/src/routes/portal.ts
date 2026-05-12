@@ -41,6 +41,7 @@ import {
   handleTotpDisable,
 } from "./authTotp";
 import { withCors, handleCorsPreflight } from "../lib/cors";
+import { auditAdminImpersonation } from "../lib/tenantScope";
 import {
   handleBasicOnboard,
   handlePublicOnboard,
@@ -777,6 +778,9 @@ async function dashboard(request: Request, env: Env): Promise<Response> {
 
   const slug = new URL(request.url).searchParams.get("slug");
   const selected = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
+  // SOC 2 H1: dashboard HTML render path. Audit admin acting on a tenant
+  // outside their own user_business_access. No-op for non-admins / self.
+  if (selected) await auditAdminImpersonation(ctx, request, env, selected.slug);
   const analytics = selected ? await fetchAnalytics(selected, env) : null;
 
   // Phase B: hydrate the user's dashboards list for the active business.
@@ -978,6 +982,9 @@ async function apiMetrics(request: Request, env: Env): Promise<Response> {
   const slug = reqUrl.searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   // Forward the date-range filter to the server-side analytics endpoint.
   // The static-site Overview reads ?range= from its URL and passes it on
@@ -1316,6 +1323,9 @@ async function apiActivityDetail(request: Request, env: Env): Promise<Response> 
     : await getUserBusinesses(env.DB, ctx.user_id);
   const biz = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   // Forward the date-range filter to /analytics/:slug/activity. Same shape
   // as apiMetrics — start_date+end_date wins over range; both fall through
@@ -1357,6 +1367,9 @@ async function apiActivity(request: Request, env: Env): Promise<Response> {
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   const data = await fetchAnalytics(biz, env);
   return withCors(jsonOk(data?.recent_queries ?? []), request, { credentials: true });
@@ -1385,6 +1398,9 @@ async function apiClicks(request: Request, env: Env): Promise<Response> {
   const slug = url.searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   // Forward the global date-range filter to /analytics/:slug/clicks. Same
   // shape as apiMetrics + apiActivityDetail — start_date+end_date wins
@@ -1551,6 +1567,9 @@ async function apiRecommendations(request: Request, env: Env): Promise<Response>
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   const [analytics, profile] = await Promise.all([
     fetchAnalytics(biz, env),
@@ -1577,6 +1596,9 @@ async function apiGetProfile(request: Request, env: Env): Promise<Response> {
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   const profile = await fetchProfile(biz, env);
   if (!profile) return withCors(jsonErr(502, "Profile unavailable"), request, { credentials: true });
@@ -1613,6 +1635,9 @@ async function apiRevenueSummary(request: Request, env: Env): Promise<Response> 
   const slugQuery = new URL(request.url).searchParams.get("slug");
   const biz = (slugQuery ? businesses.find((b) => b.slug === slugQuery) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   // Source-of-truth fix (Apr 27 2026 audit):
   //
@@ -1706,6 +1731,9 @@ async function apiRevenueSetAov(request: Request, env: Env): Promise<Response> {
   const slugQuery = new URL(request.url).searchParams.get("slug");
   const biz = (slugQuery ? businesses.find((b) => b.slug === slugQuery) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   // Plan gate (audit fix Apr 27 2026) — revenue attribution is a Pro
   // feature per the pricing page. Base tenants who somehow hit this
@@ -1770,6 +1798,9 @@ async function apiRevenueWebhookSecret(request: Request, env: Env): Promise<Resp
   const slugQuery = new URL(request.url).searchParams.get("slug");
   const biz = (slugQuery ? businesses.find((b) => b.slug === slugQuery) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   // Plan gate — same as set-AOV. Don't generate a secret for a tenant
   // who can't actually use the verified-revenue feature.
@@ -1815,6 +1846,10 @@ async function resolveTenantSlug(request: Request, env: Env): Promise<{ slug: st
   const slugQuery = new URL(request.url).searchParams.get("slug");
   const biz = (slugQuery ? businesses.find((b) => b.slug === slugQuery) : null) ?? businesses[0] ?? null;
   if (!biz) return { error: withCors(jsonErr(404, "No business found for this account"), request, { credentials: true }) };
+  // SOC 2 H1: this helper resolves the tenant for a family of forwarder
+  // routes (apiLocationsList, etc.). Audit admin impersonation here once
+  // and every forwarded call inherits the audit row.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
   return { slug: biz.slug, api_key: biz.api_key };
 }
 
@@ -1910,6 +1945,9 @@ async function apiUpdateProfile(request: Request, env: Env): Promise<Response> {
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   let body: Record<string, unknown>;
   try {
@@ -1980,6 +2018,9 @@ async function apiRadar(request: Request, env: Env): Promise<Response> {
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
   try {
@@ -2030,6 +2071,9 @@ async function apiRadarShareOfVoice(request: Request, env: Env): Promise<Respons
   const slug = reqUrl.searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   // Forward `weeks` query param if present; default to 12 (matches the
   // chart's render assumption + the original frontend call signature).
@@ -2073,6 +2117,9 @@ async function apiRadarBasketAdd(request: Request, env: Env): Promise<Response> 
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   let body: Record<string, unknown>;
   try { body = await request.json() as Record<string, unknown>; }
@@ -2117,6 +2164,9 @@ async function apiRadarBasketDelete(request: Request, env: Env, basketId: string
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
   try {
@@ -2325,6 +2375,9 @@ async function apiDomainInfo(request: Request, env: Env): Promise<Response> {
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
   if (!biz.domain) {
     return withCors(jsonErr(400, "No domain registered for this business"), request, { credentials: true });
   }
@@ -2409,6 +2462,9 @@ async function apiRotateKey(request: Request, env: Env): Promise<Response> {
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
   let rotateRes: Response;
@@ -2458,6 +2514,9 @@ async function apiGetOnboarding(request: Request, env: Env): Promise<Response> {
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   const snap = await getOnboardingState(env.DB, biz.slug);
   if (!snap) return withCors(jsonErr(404, "Business not found"), request, { credentials: true });
@@ -2491,6 +2550,9 @@ async function apiPreviewVoice(request: Request, env: Env): Promise<Response> {
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   let query = "";
   try {
@@ -2579,6 +2641,9 @@ async function apiProfileScore(request: Request, env: Env): Promise<Response> {
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   if (!biz.api_key || biz.api_key === "pending") {
     return withCors(
@@ -2706,6 +2771,9 @@ async function apiAIRecommendations(request: Request, env: Env): Promise<Respons
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   // Plan pre-check. Reads businesses.plan from D1 directly (the row is
   // already loaded, but the access list type doesn't always carry the
@@ -2793,6 +2861,9 @@ async function apiVerifyRating(request: Request, env: Env): Promise<Response> {
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   if (!biz.api_key || biz.api_key === "pending") {
     return withCors(
@@ -2929,6 +3000,9 @@ async function apiMarkOnboardingStep(request: Request, env: Env): Promise<Respon
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   const isHosted = !!(biz.domain && biz.domain.endsWith(".hosted.advocatemcp.com"));
   const nowIso = new Date().toISOString();
@@ -4880,6 +4954,9 @@ async function apiTrafficImpactConversions(request: Request, env: Env): Promise<
   const slugParam = reqUrl.searchParams.get("slug");
   const biz       = (slugParam ? businesses.find(b => b.slug === slugParam) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   // Plan gate — Pro / Enterprise only. Mirror apiUpdateRevenueSettings.
   const planRow = await env.DB
@@ -4979,6 +5056,9 @@ async function apiTrafficImpactGSC(request: Request, env: Env): Promise<Response
   const slugParam = reqUrl.searchParams.get("slug");
   const biz = (slugParam ? businesses.find(b => b.slug === slugParam) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   // Pro plan gate.
   const planRow = await env.DB
@@ -5121,6 +5201,9 @@ async function apiTrafficImpactVerifiedRevenue(request: Request, env: Env): Prom
   const slugParam = reqUrl.searchParams.get("slug");
   const biz       = (slugParam ? businesses.find(b => b.slug === slugParam) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   // Pro plan gate — mirror apiTrafficImpactGSC.
   const planRow = await env.DB
@@ -5539,6 +5622,9 @@ async function apiTrafficImpactLtv(request: Request, env: Env): Promise<Response
   const slugParam = reqUrl.searchParams.get("slug");
   const biz = (slugParam ? businesses.find(b => b.slug === slugParam) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   // Pro plan gate — CRM LTV is a Pro feature per the data-depth roadmap.
   const planRow = await env.DB
@@ -5789,6 +5875,9 @@ async function apiAuthorityStatus(request: Request, env: Env): Promise<Response>
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   const planRow = await env.DB
     .prepare("SELECT plan FROM businesses WHERE slug = ?")
@@ -5870,6 +5959,9 @@ async function apiAuthorityConfigure(request: Request, env: Env): Promise<Respon
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   const planRow = await env.DB
     .prepare("SELECT plan FROM businesses WHERE slug = ?")
@@ -5957,6 +6049,9 @@ async function apiTrafficImpactAuthority(request: Request, env: Env): Promise<Re
   const slugParam = reqUrl.searchParams.get("slug");
   const biz = (slugParam ? businesses.find(b => b.slug === slugParam) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   // Pro plan gate — mirror apiTrafficImpactGSC.
   const planRow = await env.DB
@@ -6072,6 +6167,9 @@ async function apiAuthorityDisconnect(request: Request, env: Env): Promise<Respo
   const slug = new URL(request.url).searchParams.get("slug");
   const biz  = (slug ? businesses.find((b) => b.slug === slug) : null) ?? businesses[0] ?? null;
   if (!biz) return withCors(jsonErr(404, "No business found for this account"), request, { credentials: true });
+  // SOC 2 H1 (CC6.6 / CC7.2): audit admin acting on a tenant outside their
+  // own user_business_access. No-op for non-admins or admins on self.
+  await auditAdminImpersonation(ctx, request, env, biz.slug);
 
   const planRow = await env.DB
     .prepare("SELECT plan FROM businesses WHERE slug = ?")
