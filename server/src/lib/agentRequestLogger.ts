@@ -50,8 +50,37 @@ export async function withAgentRequestLog<T>(
   const db = getDb();
   const start = Date.now();
 
+  // Run the handler first. A DB-logging failure must never mask or replace
+  // the handler's own result / error — wrap each insertAgentRequest call in
+  // its own try/catch so a schema drift on the deployment target (e.g. a
+  // missing column on Railway's SQLite) can't turn successful tool calls
+  // into 500s for the MCP client.
+  let result: T;
   try {
-    const result = await handler();
+    result = await handler();
+  } catch (err) {
+    try {
+      const outcome: OutcomeSignal = "error";
+      const id = insertAgentRequest(db, {
+        agentId,
+        agentIdSource: source,
+        businessSlug: ctx.businessSlug ?? null,
+        toolCalled: ctx.toolName,
+        requestId: ctx.requestId ?? null,
+        latencyMs: Date.now() - start,
+        costCents: 0,
+        outcomeSignal: outcome,
+      });
+      if (ctx.onLogged) ctx.onLogged(id);
+    } catch (logErr) {
+      console.error(
+        "[agentRequestLogger] failed to write error-outcome row:",
+        logErr,
+      );
+    }
+    throw err;
+  }
+  try {
     const id = insertAgentRequest(db, {
       agentId,
       agentIdSource: source,
@@ -63,20 +92,11 @@ export async function withAgentRequestLog<T>(
       outcomeSignal: "none",
     });
     if (ctx.onLogged) ctx.onLogged(id);
-    return result;
-  } catch (err) {
-    const outcome: OutcomeSignal = "error";
-    const id = insertAgentRequest(db, {
-      agentId,
-      agentIdSource: source,
-      businessSlug: ctx.businessSlug ?? null,
-      toolCalled: ctx.toolName,
-      requestId: ctx.requestId ?? null,
-      latencyMs: Date.now() - start,
-      costCents: 0,
-      outcomeSignal: outcome,
-    });
-    if (ctx.onLogged) ctx.onLogged(id);
-    throw err;
+  } catch (logErr) {
+    console.error(
+      "[agentRequestLogger] failed to write success-outcome row:",
+      logErr,
+    );
   }
+  return result;
 }

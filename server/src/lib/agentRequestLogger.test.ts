@@ -124,4 +124,50 @@ describe("withAgentRequestLog", () => {
     );
     expect(captured).toMatch(/^ar_/);
   });
+
+  it("returns handler result even when success-path DB insert throws", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    db.exec("DROP TABLE agent_requests");
+    const req = fakeReq({ "x-agent-identity": "cursor" });
+    const result = await withAgentRequestLog(
+      {
+        toolName: "query_business_agent",
+        req,
+        requestId: "rid-rc3-a",
+        toolArgAgentId: undefined,
+        businessSlug: "the-bamboo-brace",
+      },
+      async () => ({ ok: true, payload: "claude response" }),
+    );
+    expect(result).toEqual({ ok: true, payload: "claude response" });
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining("failed to write success-outcome row"),
+      expect.any(Error),
+    );
+    consoleSpy.mockRestore();
+  });
+
+  it("rethrows original handler error when error-path DB insert also throws", async () => {
+    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    db.exec("DROP TABLE agent_requests");
+    const req = fakeReq({ "x-agent-identity": "cursor" });
+    await expect(
+      withAgentRequestLog(
+        {
+          toolName: "get_quote",
+          req,
+          requestId: "rid-rc3-b",
+          toolArgAgentId: undefined,
+        },
+        async () => {
+          throw new Error("handler boom");
+        },
+      ),
+    ).rejects.toThrow("handler boom");
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining("failed to write error-outcome row"),
+      expect.any(Error),
+    );
+    consoleSpy.mockRestore();
+  });
 });
