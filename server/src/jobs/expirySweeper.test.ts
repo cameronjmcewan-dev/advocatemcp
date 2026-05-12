@@ -1,7 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import Database from "better-sqlite3";
 import { applyMigrations } from "../db/migrations.js";
-import { sweepExpiredReservations, redactStalePii } from "./expirySweeper.js";
+import { sweepExpiredReservations, redactStalePii, startPiiSweepSchedule } from "./expirySweeper.js";
 
 function seed(db: Database.Database, rows: Array<{ id: string; status: string; expires_at: number; window_end?: number; contact?: string | null }>) {
   const stmt = db.prepare(`
@@ -133,5 +133,62 @@ describe("redactStalePii", () => {
     expect(n).toBe(0);
     const row = db.prepare("SELECT customer_contact_json FROM reservations WHERE id='r_rejected'").get() as { customer_contact_json: string };
     expect(row.customer_contact_json).toBe('{"name":"X"}');
+  });
+});
+
+// SOC 2 H5: schedule-registration tests for startPiiSweepSchedule.
+//
+// Validates the env-override path + the validity check. We do NOT exercise
+// the actual sweep work here — that's covered by the redactStalePii /
+// sweepExpiredReservations tests above. The purpose of these tests is to
+// catch regressions where startPiiSweepSchedule silently fails to wire the
+// schedule (e.g. typo'd default cron, broken env override path).
+
+vi.mock("node-cron", () => {
+  const schedule = vi.fn();
+  const validate = vi.fn((expr: string) =>
+    /^(\S+\s+){4}\S+$/.test(expr.trim()),
+  );
+  return { default: { schedule, validate }, schedule, validate };
+});
+
+describe("startPiiSweepSchedule", () => {
+  let cronMod: { schedule: ReturnType<typeof vi.fn>; validate: ReturnType<typeof vi.fn> };
+
+  beforeEach(async () => {
+    cronMod = (await import("node-cron")).default as unknown as {
+      schedule: ReturnType<typeof vi.fn>;
+      validate: ReturnType<typeof vi.fn>;
+    };
+    cronMod.schedule.mockReset();
+    cronMod.validate.mockClear();
+    delete process.env.PII_SWEEP_CRON;
+  });
+
+  afterEach(() => {
+    delete process.env.PII_SWEEP_CRON;
+  });
+
+  it("registers the default 6-hour cron when PII_SWEEP_CRON is unset", () => {
+    startPiiSweepSchedule();
+    expect(cronMod.validate).toHaveBeenCalledWith("0 */6 * * *");
+    expect(cronMod.schedule).toHaveBeenCalledTimes(1);
+    expect(cronMod.schedule.mock.calls[0][0]).toBe("0 */6 * * *");
+  });
+
+  it("honours PII_SWEEP_CRON env override", () => {
+    process.env.PII_SWEEP_CRON = "*/15 * * * *";
+    startPiiSweepSchedule();
+    expect(cronMod.schedule).toHaveBeenCalledTimes(1);
+    expect(cronMod.schedule.mock.calls[0][0]).toBe("*/15 * * * *");
+  });
+
+  it("does NOT register when the env override is structurally invalid", () => {
+    process.env.PII_SWEEP_CRON = "not-a-cron";
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    startPiiSweepSchedule();
+    expect(cronMod.schedule).not.toHaveBeenCalled();
+    expect(consoleWarn).toHaveBeenCalled();
+    consoleWarn.mockRestore();
   });
 });

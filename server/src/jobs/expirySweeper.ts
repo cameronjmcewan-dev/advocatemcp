@@ -1,4 +1,6 @@
 import type Database from "better-sqlite3";
+import cron from "node-cron";
+import { getDb } from "../db.js";
 
 /**
  * Synchronous sweep: flip status='held' → 'expired' for any reservation whose
@@ -67,4 +69,51 @@ export function redactStalePii(db: Database.Database): number {
        )
   `).run(sentinel, heldCutoff, expiredCutoff, confirmedCutoff);
   return res.changes;
+}
+
+/**
+ * SOC 2 H5 (CC9.2): scheduled PII sweep.
+ *
+ * Pre-2026-05-12 the reservation-table PII redaction depended on traffic
+ * volume — `redactStalePii` was called only on entry to `reserve_slot`. If
+ * reservation traffic dropped (off-season, new-tenant ramp, weekend lull),
+ * customer-contact PII could outlive its retention window for hours or days.
+ * The auditor finding was "the policy text says 24h/7d/90d, the code can't
+ * guarantee it" — true.
+ *
+ * The fix is a node-cron schedule that runs the sweep on a fixed cadence
+ * regardless of traffic. Default every 6 hours (matches the original
+ * follow-up note in docs/soc2-gap-assessment.md). The per-call invocation
+ * stays — both layers are belt-and-suspenders so a missed schedule doesn't
+ * widen the window.
+ *
+ * Override the cadence via env PII_SWEEP_CRON (any valid 5-field cron).
+ *
+ * Failure mode: a single sweep failure logs to console.error and the next
+ * scheduled run retries. We do NOT fall back to a per-call invocation if the
+ * schedule fails — `reserve_slot` already invokes `redactStalePii`
+ * unconditionally and that path is the existing safety net.
+ */
+const DEFAULT_PII_SWEEP_CRON = "0 */6 * * *";
+
+export function startPiiSweepSchedule(): void {
+  const schedule = process.env.PII_SWEEP_CRON ?? DEFAULT_PII_SWEEP_CRON;
+  if (!cron.validate(schedule)) {
+    console.warn(`[pii-sweep] invalid cron '${schedule}'; cron NOT scheduled.`);
+    return;
+  }
+  cron.schedule(schedule, () => {
+    try {
+      const redacted = redactStalePii(getDb());
+      const expired = sweepExpiredReservations(getDb());
+      console.log(JSON.stringify({
+        metric: "pii_sweep_run",
+        redacted_rows: redacted,
+        expired_rows: expired,
+      }));
+    } catch (err) {
+      console.error("[pii-sweep] sweep threw:", err);
+    }
+  });
+  console.log(`[pii-sweep] scheduled: ${schedule}`);
 }
