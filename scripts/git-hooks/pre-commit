@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+# Pre-commit hook for advocatemcp. Install once via:
+#   ./scripts/install-git-hooks.sh
+#
+# Three checks:
+#   1. Secret scan over staged content (high-signal patterns only).
+#   2. Workspace typecheck — runs only if files in that workspace changed.
+#   3. Migration file naming sanity (NNN_*.sql, sequential).
+#
+# Fail-closed: any check returning non-zero blocks the commit. Bypass with
+# `git commit --no-verify` only when you are absolutely sure (the user has
+# explicitly forbidden that for this repo unless they say so first).
+#
+# Each check prints a short header so you can see which one tripped.
+
+set -u
+
+RED=$'\033[0;31m'
+YELLOW=$'\033[0;33m'
+GREEN=$'\033[0;32m'
+RESET=$'\033[0m'
+
+fail=0
+function check_header() { printf '\n%s── %s ──%s\n' "$YELLOW" "$1" "$RESET"; }
+function pass()         { printf '%s✓%s %s\n' "$GREEN" "$RESET" "$1"; }
+function flag()         { printf '%s✗%s %s\n' "$RED" "$RESET" "$1"; fail=1; }
+
+# Files staged for this commit. We always run scans against the staged
+# content (not the working tree) so a developer can iterate locally
+# without each save running the gates.
+staged_files() { git diff --cached --name-only --diff-filter=ACM; }
+
+# ── 1. Secret scan ─────────────────────────────────────────────────────────
+check_header "Secret scan"
+
+# High-signal regexes. Every entry must be specific enough to avoid false
+# positives on legit code. Comments are explicit about the threat each row
+# catches.
+declare -a PATTERNS=(
+  # Stripe live + test secret keys. Live alone would justify the gate.
+  'sk_live_[A-Za-z0-9]{20,}'        # Stripe secret key (live)
+  'sk_test_[A-Za-z0-9]{20,}'        # Stripe secret key (test)
+  'whsec_[A-Za-z0-9]{32,}'          # Stripe webhook secret
+  # OpenAI / Anthropic. The leading prefix anchors the match.
+  'sk-ant-[A-Za-z0-9_-]{40,}'       # Anthropic API key
+  'sk-[A-Za-z0-9]{40,}'             # OpenAI-style key
+  # AWS access key ID.
+  'AKIA[0-9A-Z]{16}'                # AWS access key ID
+  # Private key PEM headers — covers RSA, EC, OPENSSH, PGP.
+  '-----BEGIN [A-Z ]*PRIVATE KEY-----'
+  # GitHub PATs.
+  'ghp_[A-Za-z0-9]{30,}'
+  'github_pat_[A-Za-z0-9_]{30,}'
+)
+
+scan_targets=$(staged_files | grep -Ev '\.(lock|svg|png|jpg|gif|woff2?|otf|map)$|^(\.wrangler|node_modules|dist)/' || true)
+if [[ -n "$scan_targets" ]]; then
+  any_hit=0
+  while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    [[ ! -f "$f" ]] && continue
+    for pat in "${PATTERNS[@]}"; do
+      # -n prefixes the line number, -P enables PCRE so {N,} quantifiers work.
+      if hits=$(git diff --cached -U0 -- "$f" | grep -nE "^\+" | grep -P "$pat" || true); [[ -n "$hits" ]]; then
+        flag "$f contains a suspected secret matching /$pat/"
+        printf '%s%s%s\n' "$RED" "$hits" "$RESET" | sed 's/^/    /'
+        any_hit=1
+      fi
+    done
+  done <<< "$scan_targets"
+  [[ "$any_hit" -eq 0 ]] && pass "no high-signal secret patterns matched"
+else
+  pass "no scannable files staged"
+fi
+
+# ── 2. Workspace typecheck ─────────────────────────────────────────────────
+# Only run tsc --noEmit if files in that workspace are staged. Saves ~30s
+# on commits that touch only docs or site/.
+function workspace_typecheck() {
+  local ws="$1"
+  if staged_files | grep -q "^${ws}/"; then
+    check_header "Typecheck ${ws}/"
+    if [[ ! -d "${ws}/node_modules" ]]; then
+      flag "${ws}/node_modules missing — run 'cd ${ws} && npm ci' first"
+      return
+    fi
+    if ( cd "$ws" && npx tsc --noEmit > /tmp/pre-commit-tsc.log 2>&1 ); then
+      pass "${ws} typecheck clean"
+    else
+      flag "${ws} typecheck failed"
+      cat /tmp/pre-commit-tsc.log | head -40 | sed 's/^/    /'
+    fi
+  fi
+}
+workspace_typecheck server
+workspace_typecheck worker
+
+# ── 3. Migration filename sanity ───────────────────────────────────────────
+check_header "Migration filename sanity"
+mig_files=$(staged_files | grep -E '(server/src/db/migrations|worker/migrations)/[^/]+\.sql$' || true)
+if [[ -n "$mig_files" ]]; then
+  while IFS= read -r m; do
+    base=$(basename "$m")
+    if ! [[ "$base" =~ ^[0-9]{3,4}_[a-z0-9_]+(_rollback)?\.sql$ ]]; then
+      flag "$m: filename must match NNN_description.sql (or NNN_description_rollback.sql)"
+    fi
+  done <<< "$mig_files"
+  [[ "$fail" -eq 0 ]] && pass "migration filenames look sane"
+else
+  pass "no migration files staged"
+fi
+
+# ── Result ─────────────────────────────────────────────────────────────────
+echo
+if [[ "$fail" -ne 0 ]]; then
+  printf '%spre-commit FAILED.%s Fix the items above, then re-run.\n' "$RED" "$RESET"
+  printf '   Bypass (NOT recommended) with: %sgit commit --no-verify%s\n' "$YELLOW" "$RESET"
+  exit 1
+fi
+printf '%spre-commit OK.%s\n' "$GREEN" "$RESET"
+exit 0

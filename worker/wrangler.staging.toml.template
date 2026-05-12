@@ -1,0 +1,76 @@
+# Staging wrangler config TEMPLATE — copy to wrangler.staging.toml and
+# fill in the marked TODO values after running the one-time setup
+# documented in .github/workflows/deploy-worker-staging.yml.
+#
+# The shape mirrors wrangler.toml. ONLY the values that must differ from
+# prod are included here; everything else inherits from the live config.
+# Anything you DON'T override here will use the prod value, which is
+# almost certainly wrong for staging (especially secrets — set them via
+# `wrangler --env staging secret put`, NOT in this file).
+#
+# Why a template, not the real file: we can't commit the real config
+# because it embeds account / KV / D1 IDs that should live with the
+# operator, not in the repo. Once you fill in the TODOs:
+#
+#   cp wrangler.staging.toml.template wrangler.staging.toml
+#   # edit wrangler.staging.toml — replace every TODO_*
+#   # (then commit wrangler.staging.toml — it's not secret, just env-specific)
+
+name               = "advocatemcp-worker-staging"
+main               = "src/index.ts"
+compatibility_date = "2026-04-07"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = true
+
+# ── KV Namespaces (CREATE STAGING-SPECIFIC) ─────────────────────────────────
+# Run: wrangler kv namespace create BUSINESS_MAP_STAGING
+# Then paste the returned id below.
+[[kv_namespaces]]
+binding = "BUSINESS_MAP"
+id      = "TODO_STAGING_BUSINESS_MAP_KV_ID"
+
+[[kv_namespaces]]
+binding = "TENANT_DATA"
+id      = "TODO_STAGING_TENANT_DATA_KV_ID"
+
+# ── D1 Database (CREATE STAGING-SPECIFIC) ───────────────────────────────────
+# Run: wrangler d1 create advocatemcp-auth-staging
+# Apply every migration in worker/migrations/ to the new DB.
+[[d1_databases]]
+binding       = "DB"
+database_name = "advocatemcp-auth-staging"
+database_id   = "TODO_STAGING_D1_DATABASE_ID"
+
+# ── Durable Objects ─────────────────────────────────────────────────────────
+# DO class definition is shared with prod (same source code). Cloudflare
+# scopes DO state by script, so the staging worker gets its own DO
+# instances automatically — no new class needed.
+[[durable_objects.bindings]]
+name       = "MCP_RATE_LIMITER"
+class_name = "McpRateLimiterDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["McpRateLimiterDO"]
+
+# ── Routes (STAGING HOSTNAME) ───────────────────────────────────────────────
+# Map a staging-only hostname to this worker. Recommended:
+# staging-customers.advocatemcp.com (already an HTTPS hostname on the zone).
+# Apex / wildcard routes from the prod config are NOT mirrored — staging
+# is a single-entrypoint testbed.
+[[routes]]
+pattern  = "staging-customers.advocatemcp.com/*"
+zone_name = "advocatemcp.com"
+
+# ── Vars (non-secret, staging values) ───────────────────────────────────────
+# Anything that's a non-secret env var. Secrets go in via:
+#   wrangler --env staging secret put STRIPE_SECRET_KEY
+#   wrangler --env staging secret put STRIPE_WEBHOOK_SECRET
+#   ... (full list mirrors prod — see docs/secrets-runbook.md)
+[vars]
+# IMPORTANT: staging MUST point at a staging Railway / non-prod API base
+# so a test checkout doesn't bill a real card and trigger a real Stripe
+# webhook against prod state.
+API_BASE_URL = "https://staging-api.advocatemcp.com"
