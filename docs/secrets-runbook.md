@@ -177,6 +177,64 @@ Mode-specific (test price IDs ≠ live price IDs). Mixing modes causes 400s.
 3. Smoke test: trigger an activation email or a `POST /admin/digest/send-now`
    dry run (if the smoke endpoint exists; otherwise wait for next cron).
 
+### TOKEN_SIGNING_KEY rotation (SOC 2 M4)
+
+`TOKEN_SIGNING_KEY` signs every attribution token (`/r/:token` redirects)
+AND every a2a continuation/handoff token. The two purposes are
+domain-separated by an HMAC prefix (see `AGENTS.md` "HMAC domain
+separation"), so a single rotation covers both. **Quarterly cadence**
+recommended — short enough that a slow-leak compromise has bounded
+blast, long enough that the in-flight-token breakage is rare.
+
+#### What rotating breaks
+
+- **Attribution tokens** signed with the old key 401 on `/r/:token`. TTL
+  is 90 days, so up to 90 days of in-flight tokens are invalidated. Most
+  expire within the first week.
+- **a2a continuation tokens** (from `initiate_handoff` agent-mode) 401
+  on `/a2a/continue/:token`. TTL is 1 hour, so the blast radius is
+  small.
+- **Confirmation tokens** (from `reserve_slot`) 401 on `/a2a/confirm`.
+  TTL is 15 minutes.
+
+Net effect: a rotation invalidates roughly the last 90 days of public
+tracked URLs and any in-flight reservation/handoff. Customer-visible.
+Schedule rotations during low-traffic windows (Sunday morning US/Pacific
+historically). Communicate to affected agent integrators if any.
+
+#### Procedure
+
+1. Generate a new key: `openssl rand -hex 48` (matches the worker's
+   existing key length).
+2. Worker side:
+   ```bash
+   cd worker
+   npx wrangler secret put TOKEN_SIGNING_KEY
+   # Paste the new value.
+   ```
+3. Railway side: set `TOKEN_SIGNING_KEY` to the same value via Railway
+   dashboard / CLI. **Must match the worker exactly** — both sides sign
+   and verify, and they must agree.
+4. Smoke test:
+   ```bash
+   # New tracked URL — should redirect successfully.
+   curl -i https://api.advocatemcp.com/agents/<slug>/profile  # generates a fresh tracked-URL
+   curl -i "https://customers.advocatemcp.com/r/<token>"      # follow the link
+   # Reservation confirm round-trip.
+   curl -X POST -H "Authorization: Bearer <slug-key>" \
+     -H "Content-Type: application/json" \
+     -d '{"slug":"<slug>", "window_start":"...", "customer_contact":"...","idempotency_key":"smoke"}' \
+     https://api.advocatemcp.com/mcp/reserve_slot
+   ```
+5. Record rotation in the log below. Note the old-key 90-day expiry so
+   future "why is this tracked URL 401-ing?" tickets have an answer.
+
+#### Rotation log
+
+| Date | Operator | Reason | Notes |
+|------|----------|--------|-------|
+| _no rotations yet_ | — | — | First quarterly rotation due 2026-08-12 if no earlier event forces one. |
+
 ---
 
 ## When a secret leaks (incident procedure)
