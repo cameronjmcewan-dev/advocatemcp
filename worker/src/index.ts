@@ -26,6 +26,7 @@ import { verifyToken, base64urlToBytes } from "./lib/tracked-url";
 import { buildSignedClickBody } from "./lib/clickBody";
 import { getTenant } from "./routes/onboard";
 import { proxyToOrigin, WORKER_HOSTNAMES } from "./lib/proxy";
+import { wrapStreamForSentry } from "./lib/streamWithErrorCapture";
 import { appendQuery } from "./lib/appendQuery";
 import { mcpRateLimiter } from "./lib/mcpRateLimit";
 import { checkMcpRateLimit, McpRateLimiterDO } from "./lib/mcpRateLimitDO";
@@ -724,10 +725,17 @@ export default Sentry.withSentry(
           status: resp.status, latency_ms: Date.now() - startedAt,
           remaining: decision.remaining, source: rateLimitSource,
         }));
-        return new Response(resp.body, {
-          status: resp.status,
-          headers: resp.headers,
-        });
+        return new Response(
+          wrapStreamForSentry(resp.body, {
+            tag: "mcp_proxy",
+            originHost: new URL(target).hostname,
+            path: url.pathname,
+          }),
+          {
+            status: resp.status,
+            headers: resp.headers,
+          },
+        );
       } catch (err) {
         console.log(JSON.stringify({
           metric: "mcp_proxy_error", path: url.pathname, method: request.method,
@@ -761,10 +769,17 @@ export default Sentry.withSentry(
           },
           body: request.method !== "GET" && request.method !== "HEAD" ? request.body : undefined,
         });
-        return new Response(resp.body, {
-          status: resp.status,
-          headers: resp.headers,
-        });
+        return new Response(
+          wrapStreamForSentry(resp.body, {
+            tag: "api_passthrough",
+            originHost: new URL(target).hostname,
+            path: url.pathname,
+          }),
+          {
+            status: resp.status,
+            headers: resp.headers,
+          },
+        );
       } catch (err) {
         console.log(JSON.stringify({
           metric: "api_proxy_error", path: url.pathname, error: String(err).slice(0, 200),
@@ -815,10 +830,17 @@ export default Sentry.withSentry(
             },
             body: request.body,
           });
-          return new Response(resp.body, {
-            status: resp.status,
-            headers: resp.headers,
-          });
+          return new Response(
+            wrapStreamForSentry(resp.body, {
+              tag: "platform_agent_query",
+              originHost: new URL(target).hostname,
+              path: `/agents/${slugFromPath}/query`,
+            }),
+            {
+              status: resp.status,
+              headers: resp.headers,
+            },
+          );
         } catch (err) {
           console.log(JSON.stringify({
             metric: "platform_agent_proxy_error",
