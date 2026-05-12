@@ -60,8 +60,9 @@ if [[ -n "$scan_targets" ]]; then
     [[ -z "$f" ]] && continue
     [[ ! -f "$f" ]] && continue
     for pat in "${PATTERNS[@]}"; do
+      # -e disambiguates patterns that start with `-` (e.g. -----BEGIN...).
       # -n prefixes the line number, -P enables PCRE so {N,} quantifiers work.
-      if hits=$(git diff --cached -U0 -- "$f" | grep -nE "^\+" | grep -P "$pat" || true); [[ -n "$hits" ]]; then
+      if hits=$(git diff --cached -U0 -- "$f" | grep -nE "^\+" | grep -P -e "$pat" || true); [[ -n "$hits" ]]; then
         flag "$f contains a suspected secret matching /$pat/"
         printf '%s%s%s\n' "$RED" "$hits" "$RESET" | sed 's/^/    /'
         any_hit=1
