@@ -637,6 +637,30 @@ export async function updateUserPassword(
     .run();
 }
 
+/**
+ * SOC 2 H6 (CC6.1): nuke every refresh-token row for a user. Called from
+ * password-change paths (activate flow, admin reset) so a credential
+ * compromise cannot persist via stolen refresh cookies.
+ *
+ * NOT called from the silent-rehash path on login — that's a hash format
+ * upgrade, not a credential change, and forcing the user to log in again
+ * after every login would be hostile.
+ *
+ * Returns the count of rows deleted so callers can include it in audit
+ * metadata. CASCADE on the FK isn't relied on — explicit DELETE is more
+ * obvious to a reader and survives schema changes.
+ */
+export async function deleteAllSessionsForUser(
+  db: D1Database,
+  userId: string,
+): Promise<number> {
+  const res = await db
+    .prepare("DELETE FROM sessions WHERE user_id = ?")
+    .bind(userId)
+    .run();
+  return res.meta?.changes ?? 0;
+}
+
 export async function grantAccess(
   db: D1Database,
   userId: string,

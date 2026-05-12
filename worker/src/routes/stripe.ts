@@ -43,6 +43,13 @@ import {
 } from "../portalDb";
 import { generateSalt, hashPassword, generateSessionToken, hashToken, refreshCookieHeader } from "../auth";
 import { getSessionFromRequest } from "./authApi";
+import {
+  recordAuditEvent,
+  clientIpFromRequest,
+  hashClientIp,
+  requestIdFromRequest,
+} from "../lib/auditLog";
+import { pushBusinessStatusToServer } from "../lib/serverStatusSync";
 
 // ── CORS helper for the public wizard endpoint ───────────────────────────────
 // Only the marketing site + Cloudflare Pages preview deploys are trusted.
@@ -1179,14 +1186,45 @@ export async function handleStripeWebhook(
   }
 
   const eventType = event.type as string;
+  const stripeEventId = (event.id as string | undefined) ?? null;
+  const requestId = requestIdFromRequest(request);
 
   console.log(JSON.stringify({
     onboarding: true,
     event: "stripe_webhook_received",
     type: eventType,
+    stripe_event_id: stripeEventId,
   }));
 
-  // We only care about checkout.session.completed
+  // Subscription lifecycle events — added 2026-05-11 to close the SOC 2 CC6.2
+  // gap where cancelled subscriptions kept their API key indefinitely. Each
+  // handler is best-effort: returns 200 even on failure so Stripe doesn't
+  // retry a misconfigured handler in a tight loop. Failures are logged +
+  // captured to Sentry inside the handler.
+  //
+  // Server-side enforcement (the Railway MCP auth middleware checking
+  // business_status before honouring an api_key) is a separate follow-up.
+  // Until that lands, this code path records cancellation state and the
+  // audit trail but does NOT yet revoke active MCP access at the API layer.
+  if (eventType === "customer.subscription.deleted") {
+    const sub = (event.data as Record<string, unknown>)?.object as Record<string, unknown>;
+    if (sub) await handleSubscriptionDeleted(env, sub, stripeEventId, requestId);
+    return new Response("OK", { status: 200 });
+  }
+  if (eventType === "customer.subscription.updated") {
+    const sub = (event.data as Record<string, unknown>)?.object as Record<string, unknown>;
+    if (sub) await handleSubscriptionUpdated(env, sub, stripeEventId, requestId);
+    return new Response("OK", { status: 200 });
+  }
+  if (eventType === "invoice.payment_failed") {
+    const invoice = (event.data as Record<string, unknown>)?.object as Record<string, unknown>;
+    if (invoice) await handleInvoicePaymentFailed(env, invoice, stripeEventId, requestId);
+    return new Response("OK", { status: 200 });
+  }
+
+  // Other events we don't yet act on (subscription.created fires alongside
+  // checkout.session.completed and is redundant; invoice.paid is informational).
+  // Logged at the top, no further action.
   if (eventType !== "checkout.session.completed") {
     return new Response("OK", { status: 200 });
   }
@@ -1467,6 +1505,21 @@ export async function handleStripeWebhook(
           slug: tenant.slug,
           api_key_length: regResult.api_key.length,
         }));
+        // SOC 2 CC7.2: every API key issuance leaves an audit trail.
+        await recordAuditEvent(env.DB, {
+          actorType: "stripe",
+          actorId: stripeEventId,
+          eventType: "tenant.api_key_issued",
+          targetType: "business",
+          targetId: tenant.slug,
+          metadata: {
+            source: "stripe_checkout_completed",
+            api_key_length: regResult.api_key.length,
+            api_key_prefix: regResult.api_key.slice(0, 8),
+            beta: betaInfo.is_beta,
+          },
+          requestId,
+        });
       } else {
         railwayResult = "failed";
         console.warn(JSON.stringify({
@@ -2087,4 +2140,349 @@ export async function handleBillingPortal(
     }),
     request,
   );
+}
+
+// ── Subscription lifecycle handlers (SOC 2 CC6.2 / CC7.2) ────────────────────
+//
+// These three handlers run from handleStripeWebhook after signature
+// verification. They are intentionally narrow:
+//
+//   1. Resolve the business row from the Stripe subscription / customer ID.
+//   2. Update business_status + status_changed_at on the D1 row.
+//   3. Write one audit_events row capturing the transition.
+//   4. Best-effort Sentry breadcrumb on miss so unmatched events surface.
+//
+// They DO NOT (yet) revoke API access at the Railway server side — that
+// requires a server-side change to the auth middleware to consult
+// business_status. Tracked in docs/soc2-gap-assessment.md as item C2.
+//
+// All three are best-effort: a thrown exception inside the handler is caught
+// in handleStripeWebhook's dispatch (returns 200 to Stripe regardless) so
+// Stripe does not retry against a permanently-failing handler.
+
+interface BusinessLookupRow {
+  id: string;
+  slug: string;
+  business_status?: string | null;
+}
+
+async function findBusinessBySubscriptionId(
+  db: D1Database,
+  subscriptionId: string,
+): Promise<BusinessLookupRow | null> {
+  return db
+    .prepare(
+      "SELECT id, slug, business_status FROM businesses WHERE stripe_subscription_id = ? LIMIT 1",
+    )
+    .bind(subscriptionId)
+    .first<BusinessLookupRow>() ?? null;
+}
+
+async function findBusinessByCustomerId(
+  db: D1Database,
+  customerId: string,
+): Promise<BusinessLookupRow | null> {
+  return db
+    .prepare(
+      "SELECT id, slug, business_status FROM businesses WHERE stripe_customer_id = ? LIMIT 1",
+    )
+    .bind(customerId)
+    .first<BusinessLookupRow>() ?? null;
+}
+
+async function updateBusinessStatus(
+  db: D1Database,
+  slug: string,
+  newStatus: string,
+): Promise<void> {
+  await db
+    .prepare(
+      "UPDATE businesses SET business_status = ?, status_changed_at = ? WHERE slug = ?",
+    )
+    .bind(newStatus, new Date().toISOString(), slug)
+    .run();
+}
+
+export async function handleSubscriptionDeleted(
+  env: Env,
+  subscription: Record<string, unknown>,
+  stripeEventId: string | null,
+  requestId: string | null,
+): Promise<void> {
+  const subscriptionId = typeof subscription.id === "string" ? subscription.id : null;
+  const customerId = typeof subscription.customer === "string" ? subscription.customer : null;
+  if (!subscriptionId) {
+    console.warn(JSON.stringify({
+      onboarding: true,
+      event: "stripe_subscription_deleted_no_id",
+      stripe_event_id: stripeEventId,
+    }));
+    return;
+  }
+
+  const biz = await findBusinessBySubscriptionId(env.DB, subscriptionId);
+  if (!biz) {
+    console.warn(JSON.stringify({
+      onboarding: true,
+      event: "stripe_subscription_deleted_no_match",
+      subscription_id: subscriptionId,
+      customer_id: customerId,
+      stripe_event_id: stripeEventId,
+    }));
+    // Still record an audit event — auditor evidence that the event was
+    // received even when we could not match it to a business row.
+    await recordAuditEvent(env.DB, {
+      actorType: "stripe",
+      actorId: stripeEventId,
+      eventType: "stripe.subscription_deleted_unmatched",
+      targetType: "stripe_subscription",
+      targetId: subscriptionId,
+      metadata: { customer_id: customerId },
+      requestId,
+    });
+    return;
+  }
+
+  try {
+    await updateBusinessStatus(env.DB, biz.slug, "cancelled");
+  } catch (err) {
+    console.error(JSON.stringify({
+      onboarding: true,
+      event: "stripe_subscription_deleted_d1_failed",
+      slug: biz.slug,
+      error: String(err),
+    }));
+    Sentry.captureException(err, {
+      tags: { source: "stripe_webhook", op: "subscription_deleted", slug: biz.slug },
+      fingerprint: ["stripe_subscription_deleted_d1_failed", biz.slug],
+    });
+  }
+
+  // SOC 2 CC6.2/CC6.3: push the status to the Railway server so the
+  // server-side auth middleware fails closed for the cancelled tenant.
+  // Best-effort — failure here logs to Sentry but does not throw.
+  const syncResult = await pushBusinessStatusToServer(env, biz.slug, "cancelled");
+  if (!syncResult.ok) {
+    console.warn(JSON.stringify({
+      onboarding: true,
+      event: "stripe_subscription_deleted_server_sync_failed",
+      slug: biz.slug,
+      reason: syncResult.reason,
+      detail: syncResult.detail,
+    }));
+    Sentry.captureMessage(
+      `stripe_subscription_deleted_server_sync_failed: ${biz.slug}`,
+      {
+        level: "warning",
+        tags: { source: "stripe_webhook", op: "subscription_deleted", slug: biz.slug },
+        extra: { reason: syncResult.reason, detail: syncResult.detail },
+        fingerprint: ["stripe_subscription_deleted_server_sync_failed", biz.slug],
+      },
+    );
+  }
+
+  await recordAuditEvent(env.DB, {
+    actorType: "stripe",
+    actorId: stripeEventId,
+    eventType: "stripe.subscription_deleted",
+    targetType: "business",
+    targetId: biz.slug,
+    metadata: {
+      subscription_id: subscriptionId,
+      customer_id: customerId,
+      previous_status: biz.business_status ?? null,
+      new_status: "cancelled",
+      server_sync_ok: syncResult.ok,
+      server_sync_reason: syncResult.ok ? null : syncResult.reason,
+    },
+    requestId,
+  });
+
+  console.log(JSON.stringify({
+    onboarding: true,
+    event: "stripe_subscription_deleted_processed",
+    slug: biz.slug,
+    subscription_id: subscriptionId,
+    stripe_event_id: stripeEventId,
+  }));
+}
+
+export async function handleSubscriptionUpdated(
+  env: Env,
+  subscription: Record<string, unknown>,
+  stripeEventId: string | null,
+  requestId: string | null,
+): Promise<void> {
+  const subscriptionId = typeof subscription.id === "string" ? subscription.id : null;
+  if (!subscriptionId) return;
+
+  const stripeStatus = typeof subscription.status === "string" ? subscription.status : null;
+  const cancelAtPeriodEnd = subscription.cancel_at_period_end === true;
+
+  const biz = await findBusinessBySubscriptionId(env.DB, subscriptionId);
+  if (!biz) {
+    // Common case for subscription.updated fired before checkout.session.completed
+    // wrote stripe_subscription_id to D1. Record the unmatched event but don't
+    // alarm.
+    await recordAuditEvent(env.DB, {
+      actorType: "stripe",
+      actorId: stripeEventId,
+      eventType: "stripe.subscription_updated_unmatched",
+      targetType: "stripe_subscription",
+      targetId: subscriptionId,
+      metadata: { stripe_status: stripeStatus, cancel_at_period_end: cancelAtPeriodEnd },
+      requestId,
+    });
+    return;
+  }
+
+  // Map Stripe status → our business_status.
+  //   active / trialing      → 'active'
+  //   past_due / unpaid      → 'past_due'
+  //   canceled / incomplete_expired → 'cancelled'
+  //   anything else          → no change
+  // cancel_at_period_end=true on an otherwise active sub → 'cancelling'.
+  let newStatus: string | null = null;
+  if (cancelAtPeriodEnd && (stripeStatus === "active" || stripeStatus === "trialing")) {
+    newStatus = "cancelling";
+  } else if (stripeStatus === "active" || stripeStatus === "trialing") {
+    newStatus = "active";
+  } else if (stripeStatus === "past_due" || stripeStatus === "unpaid") {
+    newStatus = "past_due";
+  } else if (stripeStatus === "canceled" || stripeStatus === "incomplete_expired") {
+    newStatus = "cancelled";
+  }
+
+  if (newStatus && newStatus !== biz.business_status) {
+    try {
+      await updateBusinessStatus(env.DB, biz.slug, newStatus);
+    } catch (err) {
+      console.error(JSON.stringify({
+        onboarding: true,
+        event: "stripe_subscription_updated_d1_failed",
+        slug: biz.slug,
+        error: String(err),
+      }));
+      Sentry.captureException(err, {
+        tags: { source: "stripe_webhook", op: "subscription_updated", slug: biz.slug },
+        fingerprint: ["stripe_subscription_updated_d1_failed", biz.slug],
+      });
+    }
+
+    // Mirror to the Railway server (see handleSubscriptionDeleted for rationale).
+    const syncResult = await pushBusinessStatusToServer(env, biz.slug, newStatus);
+    if (!syncResult.ok) {
+      console.warn(JSON.stringify({
+        onboarding: true,
+        event: "stripe_subscription_updated_server_sync_failed",
+        slug: biz.slug,
+        reason: syncResult.reason,
+        detail: syncResult.detail,
+      }));
+      Sentry.captureMessage(
+        `stripe_subscription_updated_server_sync_failed: ${biz.slug}`,
+        {
+          level: "warning",
+          tags: { source: "stripe_webhook", op: "subscription_updated", slug: biz.slug },
+          extra: { reason: syncResult.reason, detail: syncResult.detail },
+          fingerprint: ["stripe_subscription_updated_server_sync_failed", biz.slug],
+        },
+      );
+    }
+
+    await recordAuditEvent(env.DB, {
+      actorType: "stripe",
+      actorId: stripeEventId,
+      eventType: "stripe.subscription_updated",
+      targetType: "business",
+      targetId: biz.slug,
+      metadata: {
+        subscription_id: subscriptionId,
+        stripe_status: stripeStatus,
+        cancel_at_period_end: cancelAtPeriodEnd,
+        previous_status: biz.business_status ?? null,
+        new_status: newStatus,
+        server_sync_ok: syncResult.ok,
+        server_sync_reason: syncResult.ok ? null : syncResult.reason,
+      },
+      requestId,
+    });
+  }
+
+  console.log(JSON.stringify({
+    onboarding: true,
+    event: "stripe_subscription_updated_processed",
+    slug: biz.slug,
+    subscription_id: subscriptionId,
+    stripe_status: stripeStatus,
+    new_business_status: newStatus,
+    stripe_event_id: stripeEventId,
+  }));
+}
+
+export async function handleInvoicePaymentFailed(
+  env: Env,
+  invoice: Record<string, unknown>,
+  stripeEventId: string | null,
+  requestId: string | null,
+): Promise<void> {
+  const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : null;
+  const customerId = typeof invoice.customer === "string" ? invoice.customer : null;
+  const attemptCount = typeof invoice.attempt_count === "number" ? invoice.attempt_count : null;
+
+  let biz: BusinessLookupRow | null = null;
+  if (subscriptionId) {
+    biz = await findBusinessBySubscriptionId(env.DB, subscriptionId);
+  }
+  if (!biz && customerId) {
+    biz = await findBusinessByCustomerId(env.DB, customerId);
+  }
+
+  // Always audit-record the failure, matched or not. Stripe's dunning will
+  // retry; we do not auto-suspend here — that's what subscription.updated
+  // (with status='past_due') handles. This handler is observational +
+  // operator-alerting.
+  await recordAuditEvent(env.DB, {
+    actorType: "stripe",
+    actorId: stripeEventId,
+    eventType: biz
+      ? "stripe.invoice_payment_failed"
+      : "stripe.invoice_payment_failed_unmatched",
+    targetType: biz ? "business" : "stripe_customer",
+    targetId: biz?.slug ?? customerId ?? subscriptionId,
+    metadata: {
+      subscription_id: subscriptionId,
+      customer_id: customerId,
+      attempt_count: attemptCount,
+    },
+    requestId,
+  });
+
+  if (biz && attemptCount !== null && attemptCount >= 2) {
+    // Repeated payment failures: alert ops so a manual outreach can happen
+    // before Stripe gives up and cancels.
+    Sentry.captureMessage(
+      `stripe_invoice_payment_failed_repeat: ${biz.slug}`,
+      {
+        level: "warning",
+        tags: {
+          source: "stripe_webhook",
+          op: "invoice_payment_failed",
+          slug: biz.slug,
+        },
+        extra: { attempt_count: attemptCount, subscription_id: subscriptionId },
+        fingerprint: ["stripe_invoice_payment_failed_repeat", biz.slug],
+      },
+    );
+  }
+
+  console.log(JSON.stringify({
+    onboarding: true,
+    event: "stripe_invoice_payment_failed_processed",
+    slug: biz?.slug ?? null,
+    subscription_id: subscriptionId,
+    customer_id: customerId,
+    attempt_count: attemptCount,
+    stripe_event_id: stripeEventId,
+  }));
 }

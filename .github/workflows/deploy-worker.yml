@@ -54,6 +54,16 @@ jobs:
 
       - run: npm ci
 
+      - name: npm audit (advisory)
+        # SOC 2 CC7.1: surface known CVEs in worker deps. Advisory while
+        # the existing backlog drains; flip to a hard gate once clean.
+        continue-on-error: true
+        run: |
+          set +e
+          npm audit --omit=dev --audit-level=high
+          echo "── npm audit advisory exit: $? ──"
+          exit 0
+
       - name: Type-check
         run: npx tsc --noEmit
 

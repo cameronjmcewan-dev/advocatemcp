@@ -1,0 +1,124 @@
+name: Deploy worker to STAGING (PR previews)
+
+# SOC 2 CC8.1: gives PRs a staging-bound deploy of the worker so routing
+# and rendering regressions are caught before merge. The existing
+# deploy-worker.yml runs only typecheck + dry-run on PRs; this workflow
+# adds an actual deploy to a separate Cloudflare Workers environment.
+#
+# ────────────────────────────────────────────────────────────────────
+# One-time setup required before this workflow does anything useful:
+#
+#   1. Create a staging D1 in the Cloudflare dashboard:
+#        wrangler d1 create advocatemcp-auth-staging
+#      Apply every migration in worker/migrations/ to it.
+#
+#   2. Create staging KV namespaces:
+#        wrangler kv namespace create BUSINESS_MAP_STAGING
+#        wrangler kv namespace create TENANT_DATA_STAGING
+#
+#   3. Update worker/wrangler.staging.toml with the IDs from steps 1 + 2.
+#
+#   4. Set secrets in the staging environment:
+#        wrangler --env staging secret put STRIPE_SECRET_KEY
+#        wrangler --env staging secret put STRIPE_WEBHOOK_SECRET
+#        ... (mirror every secret from prod, using TEST mode values for
+#        Stripe so checkout flow doesn't bill real cards)
+#
+#   5. Pick a staging hostname — recommend staging-customers.advocatemcp.com.
+#      Add it as a route in worker/wrangler.staging.toml.
+#
+# Until those five steps are done, this workflow's "deploy" step will
+# fail on the first invocation with a clear "wrangler.staging.toml not
+# found" or "binding ID missing" error. That's intentional — better than
+# silently no-op'ing.
+#
+# Required repo secrets (same as deploy-worker.yml; no separate token
+# needed because Workers permissions are account-scoped):
+#   CLOUDFLARE_API_TOKEN
+#   CLOUDFLARE_ACCOUNT_ID
+# ────────────────────────────────────────────────────────────────────
+
+on:
+  pull_request:
+    paths:
+      - "worker/**"
+      - ".github/workflows/deploy-worker-staging.yml"
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+# Only one staging deploy per PR at a time. A second push during deploy
+# cancels the in-flight run rather than deploying stale code over fresh.
+concurrency:
+  group: deploy-worker-staging-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  staging-deploy:
+    # Gate on the wrangler.staging.toml file existing so PRs that touch
+    # only test files don't fail the staging step before the staging env
+    # is wired up. Once setup is complete this gate becomes a no-op.
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write   # to post the preview URL comment
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check staging config exists
+        id: precheck
+        run: |
+          if [[ ! -f wrangler.staging.toml ]]; then
+            echo "::warning::worker/wrangler.staging.toml not found; skipping staging deploy. See header of .github/workflows/deploy-worker-staging.yml for one-time setup."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v6
+        if: steps.precheck.outputs.skip != 'true'
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: worker/package-lock.json
+
+      - run: npm ci
+        if: steps.precheck.outputs.skip != 'true'
+
+      - name: Type-check
+        if: steps.precheck.outputs.skip != 'true'
+        run: npx tsc --noEmit
+
+      - name: Deploy to staging worker
+        if: steps.precheck.outputs.skip != 'true'
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: worker
+          command: deploy --config wrangler.staging.toml
+
+      - name: Comment preview URL on PR
+        if: steps.precheck.outputs.skip != 'true' && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = 'https://staging-customers.advocatemcp.com';
+            const body = [
+              '🛡 **Staging worker deployed**',
+              '',
+              `Preview: ${url}`,
+              '',
+              'This is a SHARED staging environment — concurrent PRs deploy over each other.',
+              'Run end-to-end smoke tests here before approving the PR; final acceptance still requires production verification post-merge.',
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });

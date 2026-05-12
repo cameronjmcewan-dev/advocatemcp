@@ -21,6 +21,7 @@ import { buildToken } from "../lib/tracked-url.js";
 import { resolveAgentId } from "../lib/agentIdentity.js";
 import { verifyGoogleRating } from "../lib/googlePlaces.js";
 import { invalidateBotCache } from "../lib/botCacheInvalidation.js";
+import { hashApiKey } from "../lib/apiKeyHash.js";
 import { checkLimit } from "../middleware/costRateLimit.js";
 import {
   reserve as budgetReserve,
@@ -377,8 +378,97 @@ agentRouter.post("/agents/:slug/rotate-key", (req: Request, res: Response) => {
   }
 
   const newKey = crypto.randomUUID();
-  db.prepare("UPDATE businesses SET api_key = ? WHERE slug = ?").run(newKey, slug);
+  // SOC 2 CC6.1: write all three columns atomically so the rotated key is
+  // searchable via the new prefix-lookup path immediately. If hashApiKey
+  // throws (shouldn't — input is a controlled UUID) we still want the
+  // plaintext write to land for the dual-read fallback, so the catch is
+  // narrow: log + return the new key, leave hash columns NULL.
+  try {
+    const { hash, prefix } = hashApiKey(newKey);
+    db.prepare(
+      "UPDATE businesses SET api_key = ?, api_key_hash = ?, api_key_prefix = ? WHERE slug = ?",
+    ).run(newKey, hash, prefix, slug);
+  } catch (err) {
+    console.error(`[rotate-key] api_key_hash_failed slug=${slug}`, err);
+    db.prepare("UPDATE businesses SET api_key = ? WHERE slug = ?").run(newKey, slug);
+  }
   res.json({ ok: true, slug, new_api_key: newKey });
+});
+
+/**
+ * POST /agents/:slug/status
+ *
+ * Mirror of the lifecycle state managed by the Cloudflare Worker's
+ * Stripe webhook (worker/src/routes/stripe.ts handleSubscription{Deleted,
+ * Updated} + handleInvoicePaymentFailed). The Worker is the source of
+ * truth for status transitions because that's where Stripe events fire;
+ * this endpoint lets it push the new value to the server DB so the auth
+ * middleware (server/src/middleware/auth.ts) can fail-closed for blocked
+ * subscriptions.
+ *
+ * Body: { status: "active" | "cancelling" | "past_due" | "cancelled" | "suspended" }
+ * Auth: X-API-Key: <SERVER_API_KEY>  (server-only — tenants cannot self-suspend)
+ *
+ * The status vocabulary is closed; any other value is rejected so a
+ * future drift between worker/server doesn't silently land bad data.
+ * SOC 2 CC6.2 / CC6.3.
+ */
+const ALLOWED_BUSINESS_STATUSES: ReadonlySet<string> = new Set([
+  "active",
+  "cancelling",
+  "past_due",
+  "cancelled",
+  "suspended",
+]);
+
+agentRouter.post("/agents/:slug/status", (req: Request, res: Response) => {
+  const serverKey = process.env.API_KEY;
+  const provided =
+    req.headers["x-api-key"] ??
+    req.headers.authorization?.replace(/^Bearer\s+/, "");
+  if (!serverKey || provided !== serverKey) {
+    res.status(401).json({ error: "Server API key required" });
+    return;
+  }
+
+  const { slug } = req.params;
+  const status = (req.body as { status?: unknown })?.status;
+  if (typeof status !== "string" || !ALLOWED_BUSINESS_STATUSES.has(status)) {
+    res.status(400).json({
+      error: "invalid_status",
+      message: `status must be one of: ${[...ALLOWED_BUSINESS_STATUSES].join(", ")}`,
+    });
+    return;
+  }
+
+  const db = getDb();
+  const existing = db
+    .prepare("SELECT id, business_status FROM businesses WHERE slug = ?")
+    .get(slug) as { id: number; business_status: string | null } | undefined;
+  if (!existing) {
+    res.status(404).json({ error: `No business registered with slug: ${slug}` });
+    return;
+  }
+
+  const nowIso = new Date().toISOString();
+  db.prepare(
+    "UPDATE businesses SET business_status = ?, status_changed_at = ? WHERE slug = ?",
+  ).run(status, nowIso, slug);
+
+  console.log(JSON.stringify({
+    metric: "business_status_updated",
+    slug,
+    previous_status: existing.business_status ?? "active",
+    new_status: status,
+  }));
+
+  res.json({
+    ok: true,
+    slug,
+    previous_status: existing.business_status ?? "active",
+    new_status: status,
+    status_changed_at: nowIso,
+  });
 });
 
 /* Per-slug rate limit on POST /agents/:slug/profile/verify-rating.

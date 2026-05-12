@@ -9,6 +9,7 @@ import { createTestApp } from "./testApp.js";
 import { getDb } from "./db.js";
 import { startReputationRollupSchedule } from "./jobs/reputationRollup.js";
 import { startFaqBackfillSchedule } from "./jobs/faqBackfill.js";
+import { startPiiSweepSchedule } from "./jobs/expirySweeper.js";
 import { startSyntheticPagesBuilderSchedule } from "./jobs/syntheticPagesBuilder.js";
 import { startComparisonPagesBuilderSchedule } from "./jobs/comparisonPagesBuilder.js";
 import { pollAll } from "./jobs/competitorRadar.js";
@@ -150,6 +151,11 @@ startMonthlyPerformanceReviewSchedule();
 // faqs_json so existing tenants get the multi-entry FAQPage schema
 // without re-onboarding.
 startFaqBackfillSchedule();
+
+// SOC 2 H5 (CC9.2): scheduled PII redaction sweep on the reservations
+// table. Default every 6 hours. The per-call sweep on entry to reserve_slot
+// is preserved as a belt-and-suspenders safety net.
+startPiiSweepSchedule();
 
 // Synthetic landing pages builder (Apr 28 2026 — Phase 3 grey-hat).
 // Daily 02:00 UTC. Gated on FEATURE_SYNTHETIC_PAGES + ANTHROPIC_API_KEY.

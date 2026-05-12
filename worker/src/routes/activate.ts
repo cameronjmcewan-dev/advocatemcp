@@ -38,12 +38,19 @@ import {
 } from "./domains";
 import { withCors } from "../lib/cors";
 import {
+  recordAuditEvent,
+  clientIpFromRequest,
+  hashClientIp,
+  requestIdFromRequest,
+} from "../lib/auditLog";
+import {
   getActivationRecord,
   updateActivationStatus,
   setActivationToken,
   getUserByEmail,
   createUser,
   updateUserPassword,
+  deleteAllSessionsForUser,
   getBusinessBySlug,
   grantAccess,
 } from "../portalDb";
@@ -972,6 +979,41 @@ export async function handleActivateHosted(
     const passwordHash = await hashPassword(password, salt);
     if (existingUser) {
       await updateUserPassword(env.DB, existingUser.id, passwordHash, salt);
+      // SOC 2 H6 (CC6.1): re-using activation to set a new password
+      // invalidates any existing refresh-token sessions. A user clicking
+      // a fresh activation link is implicitly saying "this is the
+      // current credential" — older sessions tied to a previous
+      // password (or to an attacker holding a stale cookie) must die.
+      let revoked = 0;
+      try {
+        revoked = await deleteAllSessionsForUser(env.DB, existingUser.id);
+        console.log(JSON.stringify({
+          auth: true,
+          event: "password_change_sessions_revoked",
+          source: "activate",
+          user_id: existingUser.id,
+          sessions_revoked: revoked,
+        }));
+      } catch (err) {
+        console.warn(JSON.stringify({
+          auth: true,
+          event: "password_change_revoke_failed",
+          source: "activate",
+          user_id: existingUser.id,
+          error: String(err),
+        }));
+      }
+      // SOC 2 CC7.2: every credential change leaves an audit trail.
+      await recordAuditEvent(env.DB, {
+        actorType: "user",
+        actorId: existingUser.id,
+        eventType: "auth.password_changed",
+        targetType: "user",
+        targetId: existingUser.id,
+        metadata: { source: "activate", sessions_revoked: revoked },
+        ipHash: await hashClientIp(clientIpFromRequest(request)),
+        requestId: requestIdFromRequest(request),
+      });
       user = { ...existingUser, password_hash: passwordHash, salt } as typeof user;
     } else {
       const fullName = (typeof body.first_name === "string" && body.first_name.trim())

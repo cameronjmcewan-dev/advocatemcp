@@ -19,13 +19,19 @@
      * Sets AMCP.token on success.
      * Throws the raw error response body on failure, callers inspect
      * err.error_code for: invalid_credentials | rate_limited |
-     * platform_error | invalid_body */
-    async login(email, password) {
+     * platform_error | invalid_body | totp_required
+     *
+     * SOC 2 CC6.1/CC6.6: if the user has TOTP enrolled, the first call
+     * returns 401 totp_required. The caller re-invokes with the same
+     * email + password plus a 6-digit `code` argument. */
+    async login(email, password, code) {
+      const body = { email: email, password: password };
+      if (typeof code === 'string' && code) body.code = code;
       const res = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) throw data;

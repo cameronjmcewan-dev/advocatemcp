@@ -127,6 +127,15 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
              autocomplete="current-password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;" required />
     </div>
 
+    <!-- SOC 2 CC6.1/CC6.6: hidden by default, revealed when the server
+         responds with totp_required on the first sign-in attempt. -->
+    <div class="fg" id="totp-row" style="margin-bottom:20px;display:none">
+      <label class="fl" for="totp-code">6-digit code from your authenticator app</label>
+      <input class="fi" id="totp-code" name="code" type="text" inputmode="numeric"
+             autocomplete="one-time-code" maxlength="6" pattern="\d{6}"
+             placeholder="123456" />
+    </div>
+
     <button type="submit" class="btn-submit" id="submit-btn">
       Sign in
     </button>
@@ -150,6 +159,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
     rate_limited:        'Too many sign-in attempts. Please wait a few minutes and try again.',
     platform_error:      'Something went wrong on our end. Please try again shortly.',
     invalid_body:        'Please enter a valid email and password.',
+    totp_required:       'Enter the 6-digit code from your authenticator app.',
   };
 
   function showError(msg) {
@@ -170,12 +180,21 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
     btn.textContent = loading ? 'Signing in…' : 'Sign in';
   }
 
+  function revealTotp() {
+    var row = document.getElementById('totp-row');
+    row.style.display = '';
+    var input = document.getElementById('totp-code');
+    input.required = true;
+    try { input.focus(); } catch (_) {}
+  }
+
   document.getElementById('login-form').addEventListener('submit', async function (e) {
     e.preventDefault();
     clearError();
 
     var email    = document.getElementById('email').value.trim();
     var password = document.getElementById('password').value;
+    var totpCode = document.getElementById('totp-code').value.trim();
 
     if (!email || !password) {
       showError(ERROR_MESSAGES.invalid_body);
@@ -184,10 +203,15 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 
     setLoading(true);
     try {
-      await window.AMCP.login(email, password);
+      await window.AMCP.login(email, password, totpCode || undefined);
       window.location.href = '/app.html';
     } catch (err) {
       var code = (err && err.error_code) ? err.error_code : 'platform_error';
+      if (code === 'totp_required') {
+        // First-factor (email + password) accepted. Reveal the code
+        // field and prompt the user to supply the 6-digit code.
+        revealTotp();
+      }
       showError(ERROR_MESSAGES[code] || ERROR_MESSAGES.platform_error);
     } finally {
       setLoading(false);
