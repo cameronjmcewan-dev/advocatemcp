@@ -35,6 +35,11 @@ import {
   handleAuthRefresh,
   handleAuthPreflight,
 } from "./authApi";
+import {
+  handleTotpEnrollStart,
+  handleTotpEnrollConfirm,
+  handleTotpDisable,
+} from "./authTotp";
 import { withCors, handleCorsPreflight } from "../lib/cors";
 import {
   handleBasicOnboard,
@@ -398,6 +403,15 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   if (pathname === "/api/auth/logout"  && method === "POST")    return handleAuthLogout(request, env);
   if (pathname === "/api/auth/refresh" && method === "OPTIONS") return handleAuthPreflight(request);
   if (pathname === "/api/auth/refresh" && method === "POST")    return handleAuthRefresh(request, env);
+
+  // SOC 2 CC6.1/CC6.6 — TOTP enrollment + disable. Authenticated; the
+  // handlers call getSessionFromRequest internally to resolve the user.
+  if (pathname === "/api/auth/totp/enroll-start"   && method === "OPTIONS") return handleAuthPreflight(request);
+  if (pathname === "/api/auth/totp/enroll-start"   && method === "POST")    return handleTotpEnrollStart(request, env);
+  if (pathname === "/api/auth/totp/enroll-confirm" && method === "OPTIONS") return handleAuthPreflight(request);
+  if (pathname === "/api/auth/totp/enroll-confirm" && method === "POST")    return handleTotpEnrollConfirm(request, env);
+  if (pathname === "/api/auth/totp/disable"        && method === "OPTIONS") return handleAuthPreflight(request);
+  if (pathname === "/api/auth/totp/disable"        && method === "POST")    return handleTotpDisable(request, env);
 
   // ── Phase C CORS preflight for the existing /api/client/* endpoints ────
   // credentials: true is required because the dashboard frontend at

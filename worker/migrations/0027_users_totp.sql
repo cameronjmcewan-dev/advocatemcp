@@ -1,0 +1,42 @@
+-- Migration 0027 — TOTP enrollment columns on users
+--
+-- SOC 2 CC6.1/CC6.6: enables RFC 6238 TOTP as a second factor on admin
+-- (and any opted-in tenant) logins. The Worker is the auth layer for the
+-- customer portal + admin dashboard, so the columns live in the auth D1.
+--
+-- Columns:
+--   totp_secret      — base32-encoded shared secret. NULL = TOTP not enrolled.
+--                       Stored as the canonical base32 string (not raw bytes)
+--                       so the value can be regenerated as a QR URI from the
+--                       row at any point without an additional encoding step.
+--   totp_enabled_at  — ISO timestamp set when the first verification succeeds
+--                       (i.e. enrollment confirmed). NULL during enrollment-
+--                       started-but-not-confirmed window.
+--
+-- Lifecycle:
+--   1. /api/auth/totp/enroll-start: generates a fresh secret, returns it +
+--      the otpauth:// URI. Writes the secret with totp_enabled_at = NULL.
+--   2. /api/auth/totp/enroll-confirm: caller supplies a current 6-digit code
+--      proving they can derive it from the same secret. On success, sets
+--      totp_enabled_at = now(). On failure, the secret stays but enrolled_at
+--      remains NULL — the next enroll-start overwrites the secret.
+--   3. /api/auth/login: when a user has totp_secret IS NOT NULL AND
+--      totp_enabled_at IS NOT NULL, the login handler requires `code` in
+--      the body and verifies via lib/totp.ts.
+--   4. /api/auth/totp/disable: caller supplies current password + current
+--      code. On success, NULLs both columns.
+--
+-- The secret is NOT a high-entropy bearer credential by itself — possession
+-- alone does not authenticate; the holder must also derive the current
+-- 6-digit code. But it functions like one for an attacker who exfiltrates
+-- the DB, so it MUST be protected like a password. The auth D1 column is
+-- TEXT plaintext; encrypted-at-rest is provided by Cloudflare D1 (vendor
+-- control). A future hardening pass could wrap the secret in an
+-- application-layer envelope encryption scheme (KMS-style), tracked as a
+-- follow-up.
+--
+-- Apply with:
+--   cd worker && npx wrangler d1 execute advocatemcp-auth --remote --file=migrations/0027_users_totp.sql
+
+ALTER TABLE users ADD COLUMN totp_secret      TEXT;
+ALTER TABLE users ADD COLUMN totp_enabled_at  TEXT;

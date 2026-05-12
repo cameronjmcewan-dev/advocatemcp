@@ -107,6 +107,7 @@ import {
   hashClientIp,
   requestIdFromRequest,
 } from "../lib/auditLog";
+import { verifyTotpCode } from "../lib/totp";
 
 // ── AuthContext — the unified shape produced by getSessionFromRequest ──────
 
@@ -259,6 +260,10 @@ interface UserRowWithTenant {
   full_name: string | null;
   role: string;
   tenant_id: string | null;
+  // SOC 2 CC6.1/CC6.6: nullable until TOTP is enrolled. totp_enabled_at
+  // gates whether login requires a code in the request body.
+  totp_secret: string | null;
+  totp_enabled_at: string | null;
 }
 
 async function getUserByEmailWithTenant(
@@ -267,7 +272,8 @@ async function getUserByEmailWithTenant(
 ): Promise<UserRowWithTenant | null> {
   const row = await db
     .prepare(
-      `SELECT id, email, password_hash, salt, full_name, role, tenant_id
+      `SELECT id, email, password_hash, salt, full_name, role, tenant_id,
+              totp_secret, totp_enabled_at
        FROM users WHERE email = ? LIMIT 1`,
     )
     .bind(email.toLowerCase().trim())
@@ -298,10 +304,14 @@ export async function handleAuthLogin(request: Request, env: Env): Promise<Respo
   // Parse JSON body
   let email = "";
   let password = "";
+  let totpCode = "";
   try {
     const body = await request.json() as Record<string, unknown>;
     email    = typeof body.email    === "string" ? body.email    : "";
     password = typeof body.password === "string" ? body.password : "";
+    // SOC 2 CC6.1/CC6.6: optional second factor. Required if the user
+    // has totp_enabled_at IS NOT NULL — see the check below.
+    totpCode = typeof body.code     === "string" ? body.code     : "";
   } catch {
     return jsonErr(400, "invalid_body", request);
   }
@@ -383,6 +393,53 @@ export async function handleAuthLogin(request: Request, env: Env): Promise<Respo
       console.warn(JSON.stringify({
         auth: true, event: "pbkdf2_rehash_failed", user_id: userRow.id, error: String(err),
       }));
+    }
+  }
+
+  // SOC 2 CC6.1/CC6.6: TOTP second factor. If the user has confirmed an
+  // enrolled secret, require a valid 6-digit code in the request body.
+  // Pending-enrollment users (totp_secret set, totp_enabled_at NULL) do
+  // NOT need a code — the enrollment isn't confirmed yet.
+  if (userRow.totp_enabled_at && userRow.totp_secret) {
+    if (!totpCode) {
+      // Distinct status so the frontend can prompt for a code rather
+      // than re-prompting for the password. 401 keeps the response
+      // class consistent with other auth failures.
+      const ipHash = await hashClientIp(clientIpFromRequest(request));
+      await recordAuditEvent(env.DB, {
+        actorType: "user",
+        actorId: userRow.id,
+        eventType: "auth.login_totp_required",
+        targetType: "session",
+        ipHash,
+        requestId: requestIdFromRequest(request),
+      });
+      return jsonErr(401, "totp_required", request);
+    }
+    const codeOk = await verifyTotpCode(userRow.totp_secret, totpCode);
+    if (!codeOk) {
+      try {
+        await recordLoginAttempt(env.DB, identifier);
+      } catch (err) {
+        console.warn(JSON.stringify({
+          auth: true,
+          event: "login_attempt_log_warning_totp",
+          error: String(err),
+        }));
+      }
+      const ipHash = await hashClientIp(clientIpFromRequest(request));
+      await recordAuditEvent(env.DB, {
+        actorType: "user",
+        actorId: userRow.id,
+        eventType: "auth.login_totp_failed",
+        targetType: "session",
+        ipHash,
+        requestId: requestIdFromRequest(request),
+      });
+      // Generic invalid_credentials to avoid revealing that the password
+      // was the correct half of the pair — an attacker who guessed the
+      // password should not learn that they did.
+      return jsonErr(401, "invalid_credentials", request);
     }
   }
 
