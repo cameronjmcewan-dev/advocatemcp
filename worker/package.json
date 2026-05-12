@@ -19,7 +19,7 @@
     "wrangler": "^3.80.0"
   },
   "dependencies": {
-    "@sentry/cloudflare": "^10.51.0"
+    "@sentry/cloudflare": "^10.52.0"
   },
   "overrides": {
     "undici": "^6.21.2",
