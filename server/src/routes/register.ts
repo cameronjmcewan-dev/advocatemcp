@@ -12,6 +12,7 @@ import { OnboardingPayloadSchema } from "../schemas/business.js";
 import { getApiBaseUrl } from "../lib/baseUrl.js";
 import { generateLeadingFaqs } from "../agent/faqGenerator.js";
 import type { BusinessRow } from "../db.js";
+import { hashApiKey } from "../lib/apiKeyHash.js";
 
 export const registerRouter = Router();
 
@@ -175,6 +176,23 @@ registerRouter.post("/register", requireServerKeyOnly, (req: Request, res: Respo
       message: "could not allocate unique slug; retry",
     });
     return;
+  }
+
+  // SOC 2 CC6.1: populate api_key_hash + api_key_prefix alongside the
+  // plaintext api_key column. The plaintext column is retained during the
+  // dual-read transition (see migration 039 header for the strategy);
+  // populating the hash on every new row means we never widen the set of
+  // legacy plaintext-only rows.
+  try {
+    const { hash, prefix } = hashApiKey(apiKey);
+    db.prepare(
+      "UPDATE businesses SET api_key_hash = ?, api_key_prefix = ? WHERE slug = ?",
+    ).run(hash, prefix, insertedSlug);
+  } catch (err) {
+    // Hashing failure should not abort registration. The auth middleware's
+    // legacy fallback path will still validate the plaintext column. Log
+    // loudly so the operator sees the hash backfill never landed.
+    console.error(`[register] api_key_hash_backfill_failed slug=${insertedSlug}`, err);
   }
 
   // Fire-and-forget FAQ generation (Phase 1 grey-hat optimization, Apr 28

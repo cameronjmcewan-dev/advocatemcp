@@ -21,6 +21,7 @@ import { buildToken } from "../lib/tracked-url.js";
 import { resolveAgentId } from "../lib/agentIdentity.js";
 import { verifyGoogleRating } from "../lib/googlePlaces.js";
 import { invalidateBotCache } from "../lib/botCacheInvalidation.js";
+import { hashApiKey } from "../lib/apiKeyHash.js";
 import { checkLimit } from "../middleware/costRateLimit.js";
 import {
   reserve as budgetReserve,
@@ -377,7 +378,20 @@ agentRouter.post("/agents/:slug/rotate-key", (req: Request, res: Response) => {
   }
 
   const newKey = crypto.randomUUID();
-  db.prepare("UPDATE businesses SET api_key = ? WHERE slug = ?").run(newKey, slug);
+  // SOC 2 CC6.1: write all three columns atomically so the rotated key is
+  // searchable via the new prefix-lookup path immediately. If hashApiKey
+  // throws (shouldn't — input is a controlled UUID) we still want the
+  // plaintext write to land for the dual-read fallback, so the catch is
+  // narrow: log + return the new key, leave hash columns NULL.
+  try {
+    const { hash, prefix } = hashApiKey(newKey);
+    db.prepare(
+      "UPDATE businesses SET api_key = ?, api_key_hash = ?, api_key_prefix = ? WHERE slug = ?",
+    ).run(newKey, hash, prefix, slug);
+  } catch (err) {
+    console.error(`[rotate-key] api_key_hash_failed slug=${slug}`, err);
+    db.prepare("UPDATE businesses SET api_key = ? WHERE slug = ?").run(newKey, slug);
+  }
   res.json({ ok: true, slug, new_api_key: newKey });
 });
 

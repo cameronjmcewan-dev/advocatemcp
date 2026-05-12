@@ -1,5 +1,10 @@
 import type { Request, Response, NextFunction } from "express";
 import { getDb, type BusinessRow } from "../db.js";
+import {
+  hashApiKey,
+  verifyApiKeyHash,
+  apiKeyPrefix,
+} from "../lib/apiKeyHash.js";
 
 // ── Business lifecycle gate (SOC 2 CC6.2/CC6.3) ─────────────────────────────
 //
@@ -11,6 +16,70 @@ const BLOCKED_STATUSES: ReadonlySet<string> = new Set(["cancelled", "suspended"]
 
 function isBlockedStatus(status: string | null | undefined): boolean {
   return typeof status === "string" && BLOCKED_STATUSES.has(status);
+}
+
+// ── API key lookup (SOC 2 CC6.1) ────────────────────────────────────────────
+//
+// resolveBusinessByApiKey implements the dual-read strategy described in
+// server/src/db/migrations/039_businesses_api_key_hash.sql:
+//
+//   1. Prefix lookup → constant-time verify against api_key_hash.
+//   2. If the prefix doesn't match any row (or hash doesn't verify), fall
+//      back to the legacy plaintext column lookup.
+//   3. On legacy-match success, opportunistically backfill the hash + prefix
+//      columns so the next request hits the fast path.
+//
+// The fast path is index-bounded (idx_businesses_api_key_prefix) followed by
+// one PBKDF2 verify against a single row. The slow path is one SELECT on the
+// plaintext column. Both paths are constant-time with respect to whether a
+// match exists (no early return reveals which column matched).
+//
+// Returns the matched BusinessRow on success and null on failure. The caller
+// is responsible for any status / authorization checks beyond key match.
+
+interface ResolveResult {
+  row: BusinessRow;
+  matched_via: "hash" | "plaintext_legacy";
+}
+
+function resolveBusinessByApiKey(rawKey: string): ResolveResult | null {
+  if (typeof rawKey !== "string" || rawKey.length === 0) return null;
+  const db = getDb();
+  const prefix = apiKeyPrefix(rawKey);
+
+  // Fast path: prefix lookup → constant-time verify. Multiple rows could
+  // theoretically share the same 8-char prefix (UUID v4 hex has ~32 bits of
+  // entropy in the first 8 chars, so collisions are unlikely but not
+  // impossible). Iterate all matches and timing-safe-verify each.
+  const candidates = db
+    .prepare("SELECT * FROM businesses WHERE api_key_prefix = ?")
+    .all(prefix) as BusinessRow[];
+  for (const row of candidates) {
+    if (verifyApiKeyHash(rawKey, row.api_key_hash ?? null)) {
+      return { row, matched_via: "hash" };
+    }
+  }
+
+  // Legacy fallback: plaintext column. Rows pre-dating migration 039 have
+  // api_key_hash IS NULL and won't show up via the prefix path. WHERE
+  // api_key_hash IS NULL filters out rows that already migrated, so we
+  // don't accept the same key via two paths during the transition.
+  const legacy = db
+    .prepare("SELECT * FROM businesses WHERE api_key = ? AND api_key_hash IS NULL LIMIT 1")
+    .get(rawKey) as BusinessRow | undefined;
+  if (!legacy) return null;
+
+  // Opportunistic backfill — best effort. Failure leaves the row in legacy
+  // mode; next request will retry.
+  try {
+    const { hash, prefix: newPrefix } = hashApiKey(rawKey);
+    db.prepare(
+      "UPDATE businesses SET api_key_hash = ?, api_key_prefix = ? WHERE id = ?",
+    ).run(hash, newPrefix, legacy.id);
+  } catch (err) {
+    console.warn(`[auth] backfill_api_key_hash_failed id=${legacy.id}`, err);
+  }
+  return { row: legacy, matched_via: "plaintext_legacy" };
 }
 
 // ── requireApiKey ───────────────────────────────────────────────────────────
@@ -44,13 +113,11 @@ export function requireApiKey(req: Request, res: Response, next: NextFunction): 
   if (serverKey && key === serverKey) { next(); return; }
 
   // 2. Any valid business api_key in the DB — but only if not blocked.
-  const db = getDb();
-  const row = db
-    .prepare("SELECT id, business_status FROM businesses WHERE api_key = ? LIMIT 1")
-    .get(key) as { id: number; business_status: string | null } | undefined;
-  if (row) {
-    if (isBlockedStatus(row.business_status)) {
-      console.warn(`[auth] blocked status=${row.business_status} for key=${key.slice(0, 8)}… — ${req.method} ${req.path}`);
+  // Uses the SOC 2 CC6.1 dual-read path (hash fast path + plaintext legacy).
+  const match = resolveBusinessByApiKey(key);
+  if (match) {
+    if (isBlockedStatus(match.row.business_status)) {
+      console.warn(`[auth] blocked status=${match.row.business_status} for key=${key.slice(0, 8)}… — ${req.method} ${req.path}`);
       res.status(401).json({
         error: "subscription_inactive",
         message: "This API key is associated with an inactive subscription.",
@@ -97,19 +164,19 @@ export function requireSlugApiKey(
 
   const apiKey = authHeader.slice(7).trim();
 
-  const db = getDb();
-  const business = db
-    .prepare("SELECT * FROM businesses WHERE slug = ? AND api_key = ?")
-    .get(slug, apiKey) as BusinessRow | undefined;
-
-  if (!business) {
+  // SOC 2 CC6.1: resolve via the dual-read hash path, then require the
+  // matched row's slug equals the URL slug. (Order matters — checking
+  // hash first and slug second avoids leaking, via timing, whether the
+  // slug exists when the key is wrong.)
+  const match = resolveBusinessByApiKey(apiKey);
+  if (!match || match.row.slug !== slug) {
     res.status(401).json({ error: "Invalid API key for this business" });
     return;
   }
 
   // SOC 2 CC6.2/CC6.3: block authenticated access for inactive subscriptions.
-  if (isBlockedStatus(business.business_status)) {
-    console.warn(`[auth] blocked status=${business.business_status} slug=${slug} — ${req.method} ${req.path}`);
+  if (isBlockedStatus(match.row.business_status)) {
+    console.warn(`[auth] blocked status=${match.row.business_status} slug=${slug} — ${req.method} ${req.path}`);
     res.status(401).json({
       error: "subscription_inactive",
       message: "This subscription is inactive.",
@@ -117,7 +184,7 @@ export function requireSlugApiKey(
     return;
   }
 
-  req.business = business;
+  req.business = match.row;
   next();
 }
 
@@ -194,16 +261,13 @@ export function requireSlugOrAdminKey(
     return;
   }
   const apiKey = authHeader.slice(7).trim();
-  const db = getDb();
-  const row = db
-    .prepare("SELECT id, business_status FROM businesses WHERE slug = ? AND api_key = ?")
-    .get(slug, apiKey) as { id: number; business_status: string | null } | undefined;
-  if (!row) {
+  const match = resolveBusinessByApiKey(apiKey);
+  if (!match || match.row.slug !== slug) {
     res.status(401).json({ error: "Invalid api_key for this business" });
     return;
   }
-  if (isBlockedStatus(row.business_status)) {
-    console.warn(`[auth] blocked status=${row.business_status} slug=${slug} — ${req.method} ${req.path}`);
+  if (isBlockedStatus(match.row.business_status)) {
+    console.warn(`[auth] blocked status=${match.row.business_status} slug=${slug} — ${req.method} ${req.path}`);
     res.status(401).json({
       error: "subscription_inactive",
       message: "This subscription is inactive.",

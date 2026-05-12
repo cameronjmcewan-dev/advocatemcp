@@ -136,6 +136,14 @@ export interface BusinessRow {
   // null as 'active' (the column default).
   business_status?: string | null;
   status_changed_at?: string | null;
+  // Migration 039 (May 11 2026): SOC 2 CC6.1 — PBKDF2-SHA256 hash of the
+  // API key plus an indexed lookup prefix. Both optional+nullable during
+  // the dual-read transition; legacy rows have NULL here and validate via
+  // the plaintext api_key column. See server/src/lib/apiKeyHash.ts for
+  // the encoded format and server/src/middleware/auth.ts for the lookup
+  // strategy + opportunistic backfill.
+  api_key_hash?: string | null;
+  api_key_prefix?: string | null;
   // Migration 013 (Apr 15 2026): Pro plan tier added at the same time
   // as Competitor Radar polling. 'free' | 'base' | 'pro' | 'enterprise'.
   // Optional+nullable like the other late-added columns so test fixtures
