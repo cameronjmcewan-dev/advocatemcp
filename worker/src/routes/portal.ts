@@ -7,7 +7,7 @@ import {
   getSessionToken, sessionCookieHeader, clearSessionCookieHeader,
 } from "../auth";
 import {
-  getUserByEmail, createUser, updateUserPassword, createSession, getSessionByToken,
+  getUserByEmail, createUser, updateUserPassword, deleteAllSessionsForUser, createSession, getSessionByToken,
   deleteSession, getUserBusinesses, getAllBusinesses, getActiveBusinesses, getBusinessBySlug, createBusiness,
   grantAccess, checkRateLimit, recordLoginAttempt, updateBusinessApiKey,
   getOnboardingState, markOnboardingStep, touchFirstDashboardIfNull,
@@ -42,6 +42,12 @@ import {
 } from "./authTotp";
 import { withCors, handleCorsPreflight } from "../lib/cors";
 import { auditAdminImpersonation } from "../lib/tenantScope";
+import {
+  recordAuditEvent,
+  clientIpFromRequest,
+  hashClientIp,
+  requestIdFromRequest,
+} from "../lib/auditLog";
 import {
   handleBasicOnboard,
   handlePublicOnboard,
@@ -3154,6 +3160,45 @@ async function adminCreateClient(request: Request, env: Env): Promise<Response> 
       user = await createUser(env.DB, email!, passwordHash, salt, full_name, userRole);
     } else {
       await updateUserPassword(env.DB, user.id, passwordHash, salt);
+      // SOC 2 H6 (CC6.1): admin reset of an existing user's password
+      // revokes every existing refresh-token session for that user.
+      // Operators only reset passwords in response to suspected
+      // compromise, support requests, or onboarding edge cases — in
+      // all of which old sessions must die.
+      let revoked = 0;
+      try {
+        revoked = await deleteAllSessionsForUser(env.DB, user.id);
+        console.log(JSON.stringify({
+          auth: true,
+          event: "password_change_sessions_revoked",
+          source: "admin_create_client",
+          user_id: user.id,
+          sessions_revoked: revoked,
+        }));
+      } catch (err) {
+        console.warn(JSON.stringify({
+          auth: true,
+          event: "password_change_revoke_failed",
+          source: "admin_create_client",
+          user_id: user.id,
+          error: String(err),
+        }));
+      }
+      // SOC 2 CC7.2: every credential change leaves an audit trail.
+      // actor_type=system because the endpoint authenticates via the
+      // shared ADMIN_SECRET (Authorization: Bearer ADMIN_SECRET), not
+      // a per-user session. target_id is the user whose password was
+      // reset. The IP hash + Ray ID identify the operator's request.
+      await recordAuditEvent(env.DB, {
+        actorType: "system",
+        actorId: "admin_secret",
+        eventType: "auth.password_changed_by_admin",
+        targetType: "user",
+        targetId: user.id,
+        metadata: { source: "admin_create_client", sessions_revoked: revoked },
+        ipHash: await hashClientIp(clientIpFromRequest(request)),
+        requestId: requestIdFromRequest(request),
+      });
     }
 
     let biz: Awaited<ReturnType<typeof getBusinessBySlug>> = null;
