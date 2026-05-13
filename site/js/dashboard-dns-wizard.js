@@ -74,46 +74,54 @@
     catch (_) { /* no-op */ }
   }
 
-  /* Detect hosted tenants so callers (or stray paths) can't pop up the
-   * Namecheap-style provider picker for a tenant whose subdomain we
-   * already manage end-to-end. Defense-in-depth alongside the gates
-   * already present in get-started.js / dashboard-onboarding.js /
-   * settings.js — those should prevent the wizard from being invoked
-   * for hosted tenants at all, but if any future surface forgets the
-   * check the wizard itself short-circuits to a friendly note. */
-  function _isHostedTenant() {
-    var d = window.AMCP_DATA || {};
-    if (typeof d.is_hosted === 'boolean') return d.is_hosted;
-    var host = '';
-    if (typeof d.domain === 'string') host = d.domain;
-    else if (d.domain && typeof d.domain.hostname === 'string') host = d.domain.hostname;
-    return /\.hosted\.advocatemcp\.com$/i.test(host);
-  }
-
   /* ── Public API ─────────────────────────────────────────────────────────── */
+  /* Opens the drawer with a brief loading state, then consults the
+   * canonical /api/client/domain-info probe to decide which branch to
+   * render. Previously this used AMCP_DATA.is_hosted — a brittle local
+   * heuristic computed from a D1 column suffix that could disagree with
+   * the Connection card's live status (the card uses the same probe
+   * called here). Reading the same signal keeps the two views coherent
+   * and removes a class of bugs where the wizard told a tenant "no DNS
+   * setup needed" while the card next to it said "Inactive". */
   function open(initialProvider) {
     _stopPolling();
-    if (_isHostedTenant()) {
-      _openHostedNotice();
-      return;
-    }
-    var saved = initialProvider || getSavedProvider();
-    if (saved) {
-      _provider = saved;
-      _stage    = STAGE_INSTRUCTIONS;
-    } else {
-      _provider = null;
-      _stage    = STAGE_PICKER;
-    }
-    _openDrawer();
+    _openLoadingDrawer();
+    _resolveCanonicalState().then(function (state) {
+      var host = state && (typeof state.domain === 'string'
+        ? state.domain
+        : ((state.domain && state.domain.hostname) || ''));
+      if (state && state.is_hosted && state.all_green && host) {
+        _renderHostedNotice(host);
+        return;
+      }
+      var saved = initialProvider || getSavedProvider();
+      if (saved) {
+        _provider = saved;
+        _stage    = STAGE_INSTRUCTIONS;
+      } else {
+        _provider = null;
+        _stage    = STAGE_PICKER;
+      }
+      _swapDrawerBody(_bodyForStage());
+      _bindStageHandlers();
+    });
   }
 
-  /* Render a "you're all set" panel for hosted tenants instead of the
-   * Namecheap CNAME wizard. Same drawer chrome, different body. */
-  function _openHostedNotice() {
-    var d = window.AMCP_DATA || {};
-    var host = (d.domain && d.domain.hostname) || (typeof d.domain === 'string' ? d.domain : '');
-    var displayHost = host || 'your subdomain';
+  /* Render the "you're all set" panel into the already-open drawer.
+   * Caller (open()) is responsible for confirming the tenant is on the
+   * hosted tier AND has a verified-green domain probe before invoking
+   * this. If displayHost is missing we refuse to render and fall through
+   * to the actionable wizard rather than claim "no setup needed" with
+   * a placeholder — historically this is exactly how the
+   * "your subdomain" literal leaked into bold tags. */
+  function _renderHostedNotice(displayHost) {
+    if (!displayHost) {
+      _provider = null;
+      _stage    = STAGE_PICKER;
+      _swapDrawerBody(_bodyForStage());
+      _bindStageHandlers();
+      return;
+    }
     var body = (
       '<div class="amcp-dns-step">' +
         '<div class="amcp-dns-step-title">No DNS setup needed</div>' +
@@ -131,11 +139,39 @@
         '</div>' +
       '</div>'
     );
+    _swapDrawerBody(body);
+    var btn = document.getElementById('amcp-dns-close');
+    if (btn) btn.addEventListener('click', close);
+  }
+
+  function _openLoadingDrawer() {
+    var body = (
+      '<div class="amcp-dns-step">' +
+        '<div class="amcp-dns-step-copy" style="color:var(--muted)">Loading DNS setup…</div>' +
+      '</div>'
+    );
     if (window.AMCP_UI && typeof window.AMCP_UI.openDrawer === 'function') {
       window.AMCP_UI.openDrawer('DNS setup', body);
-      var btn = document.getElementById('amcp-dns-close');
-      if (btn) btn.addEventListener('click', close);
     }
+  }
+
+  function _swapDrawerBody(body) {
+    var drawerBody = document.getElementById('amcp-drawer-body');
+    if (drawerBody) drawerBody.innerHTML = body;
+  }
+
+  function _resolveCanonicalState() {
+    // Same /api/client/domain-info signal the Connection card reads,
+    // so wizard copy and card status can't disagree. Returns null on
+    // any failure; caller falls through to the actionable wizard.
+    var slug = currentSlug();
+    if (!window.AMCP || typeof window.AMCP.authedFetch !== 'function') {
+      return Promise.resolve(null);
+    }
+    var path = '/api/client/domain-info' + (slug ? '?slug=' + encodeURIComponent(slug) : '');
+    return window.AMCP.authedFetch(path)
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; });
   }
 
   function close() {
