@@ -33,6 +33,8 @@
  * deployments, additional SaaS zones) here and both the runtime proxy check
  * and activation-time discovery pick them up together.
  */
+import { wrapStreamForSentry } from "./streamWithErrorCapture";
+
 export const WORKER_HOSTNAMES: ReadonlySet<string> = new Set([
   "customers.advocatemcp.com",
   "advocatecameron.workers.dev",
@@ -113,8 +115,15 @@ export async function proxyToOrigin(
   const responseHeaders = new Headers(originResponse.headers);
   responseHeaders.set("Cache-Control", "no-store");
 
-  return new Response(originResponse.body, {
-    status: originResponse.status,
-    headers: responseHeaders,
-  });
+  return new Response(
+    wrapStreamForSentry(originResponse.body, {
+      tag: "proxyToOrigin",
+      originHost: origin.hostname,
+      path: requestUrl.pathname,
+    }),
+    {
+      status: originResponse.status,
+      headers: responseHeaders,
+    },
+  );
 }
