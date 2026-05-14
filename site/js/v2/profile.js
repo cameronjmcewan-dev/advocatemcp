@@ -62,6 +62,104 @@
     },
   };
 
+  /* ── Deep-link focus handling ────────────────────────────────────────────
+   *
+   * AI Insights recommendations rendered by site/js/v2/aiInsights.js drop
+   * the server-side rec.action_url straight into <a href="…">. The server
+   * prompt (server/src/routes/aiRecommendations.ts) tells Claude to emit
+   * URLs like "/BusinessProfile?focus=pricing" — so we read ?focus= here
+   * and scroll to the matching form section after render. Without this
+   * handler the user lands at the top of the page every time, which
+   * silently breaks the entire AI-Insights → fix-it flow.
+   *
+   * Forgiving alias map: accepts the canonical form id ("form-ratings"),
+   * the section short-name ("ratings"), the profile field key Claude may
+   * emit ("ratings_json"), and a few common synonyms. Unknown keys no-op
+   * (page stays at top — same as today, no JS error). Adding a new
+   * section? Add a row here. Keep keys lowercase. */
+  const FOCUS_MAP = {
+    // form-basics — name, description, services, location
+    'basics':              'form-basics',
+    'form-basics':         'form-basics',
+    'name':                'form-basics',
+    'description':         'form-basics',
+    'services':            'form-basics',
+    'top_services':        'form-basics',
+    'location':            'form-basics',
+    // form-positioning — differentiators, certifications/credentials, guarantee
+    'positioning':         'form-positioning',
+    'form-positioning':    'form-positioning',
+    'differentiator':      'form-positioning',
+    'differentiators':     'form-positioning',
+    'differentiators_text':'form-positioning',
+    'certifications':      'form-positioning',
+    'credentials':         'form-positioning',
+    'credentials_json':    'form-positioning',
+    'guarantee':           'form-positioning',
+    'guarantee_text':      'form-positioning',
+    // form-ratings
+    'ratings':             'form-ratings',
+    'form-ratings':        'form-ratings',
+    'ratings_json':        'form-ratings',
+    'star_rating':         'form-ratings',
+    'review_count':        'form-ratings',
+    'reviews':             'form-ratings',
+    // form-quotes
+    'quotes':              'form-quotes',
+    'form-quotes':         'form-quotes',
+    'customer_quotes':     'form-quotes',
+    'customer_quotes_json':'form-quotes',
+    'testimonials':        'form-quotes',
+    // form-ops — hours, pricing, routing
+    'ops':                 'form-ops',
+    'form-ops':            'form-ops',
+    'hours':               'form-ops',
+    'hours_json':          'form-ops',
+    'pricing':             'form-ops',
+    'pricing_json':        'form-ops',
+    'pricing_json_v2':     'form-ops',
+    'pricing_tier':        'form-ops',
+    'routing':             'form-ops',
+  };
+
+  function resolveFocusTarget(rawKey) {
+    if (!rawKey) return null;
+    const norm = String(rawKey).trim().toLowerCase();
+    if (FOCUS_MAP[norm]) return FOCUS_MAP[norm];
+    // Fallback: accept the literal element id if it exists (e.g. "form-foo")
+    if (/^form-[a-z0-9-]+$/.test(norm) && document.getElementById(norm)) return norm;
+    return null;
+  }
+
+  function applyFocusFromUrl() {
+    const params = new URLSearchParams(location.search);
+    // Accept ?focus= AND a fragment (#form-ratings) as a fallback so links
+    // someone happens to write with a real anchor also work.
+    const key = params.get('focus') || (location.hash || '').replace(/^#/, '');
+    const targetId = resolveFocusTarget(key);
+    if (!targetId) return;
+    const el = document.getElementById(targetId);
+    if (!el) return;
+    // Forms render synchronously into the slot innerHTML; by the time
+    // wireForm() runs they're in the DOM. requestAnimationFrame defers
+    // one frame so any layout / web-font shift finishes before we scroll.
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // Brief highlight so the user's eye lands on the right form when
+      // the scroll completes. Inline styles, reverted after 1.2s.
+      const prevShadow     = el.style.boxShadow;
+      const prevTransition = el.style.transition;
+      el.style.transition = 'box-shadow 0.4s ease-in-out';
+      el.style.boxShadow  = '0 0 0 2px var(--accent, #7d2550)';
+      setTimeout(() => {
+        el.style.boxShadow = prevShadow;
+        // Drop the transition override after revert so subsequent style
+        // changes (e.g. focus rings) don't get unexpectedly animated.
+        setTimeout(() => { el.style.transition = prevTransition; }, 500);
+      }, 1200);
+    });
+  }
+
   async function fetchReal() {
     const af = window.AMCP && window.AMCP.authedFetch;
     const slug = (window.AMCP_DATA && window.AMCP_DATA.slug)
@@ -696,6 +794,12 @@
     wireForm('form-ratings',    () => collectRatings(),    preview, slug);
     wireForm('form-quotes',     () => collectQuotes(),     preview, slug);
     wireForm('form-ops',        () => collectOps(),        preview, slug);
+
+    // After all forms are in the DOM and wired, honour ?focus=<key> in
+    // the URL — used by AI Insights links (aiInsights.js → rec.action_url)
+    // to deep-link to the form section the recommendation wants the
+    // tenant to edit. Without this call the user lands at scrollY=0.
+    applyFocusFromUrl();
 
     // "+ Add another quote" — extends the quotes list one entry at a time
     // so the form grows with the tenant's testimonial pile rather than
