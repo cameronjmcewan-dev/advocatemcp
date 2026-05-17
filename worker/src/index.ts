@@ -25,6 +25,7 @@ import { runAuthoritySyncBatch } from "./cron/authoritySync";
 import { verifyToken, base64urlToBytes } from "./lib/tracked-url";
 import { buildSignedClickBody } from "./lib/clickBody";
 import { getTenant } from "./routes/onboard";
+import { tenantToProfileObject } from "./lib/tenantProfile";
 import { proxyToOrigin, WORKER_HOSTNAMES } from "./lib/proxy";
 import { wrapStreamForSentry } from "./lib/streamWithErrorCapture";
 import { appendQuery } from "./lib/appendQuery";
@@ -1041,22 +1042,22 @@ export default Sentry.withSentry(
     // ── 2b. AI discovery file ─────────────────────────────────────────────
     if (url.pathname === "/.well-known/ai-agent.json") {
       const slug = await env.BUSINESS_MAP.get(domain);
-      // Fetch rich profile via publicApiBase — the Cloudflare-fronted host
-      // (api.advocatemcp.com) exposes /agents/{slug}/profile WITHOUT the
-      // API_KEY gate that direct Railway access requires. apiBase (direct
-      // to Railway) returns 401 for unauthenticated callers, which is why
-      // ai-agent.json was missing business_name / business_category /
-      // description / services until now. Best-effort, short timeout.
-      let profile: Record<string, unknown> | null = null;
-      if (slug) {
-        try {
-          const pr = await Promise.race([
-            fetch(`${publicApiBase(env)}/agents/${slug}/profile`),
-            new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 2000)),
-          ]) as Response;
-          if (pr.ok) profile = await pr.json() as Record<string, unknown>;
-        } catch { /* best-effort */ }
-      }
+      // Read profile directly from TENANT_DATA KV instead of fetching
+      // ${publicApiBase}/agents/{slug}/profile.
+      //
+      // Why KV-direct (not HTTP):
+      //   /.well-known/ai-agent.json is served by this same Worker bound to
+      //   api.advocatemcp.com. When the Worker fetches its own bound
+      //   hostname, Cloudflare's same-zone loop-prevention bypasses the
+      //   Worker — the request hits Railway directly, no API key attached,
+      //   server returns 401. Result: profile silently stays null and
+      //   ai-agent.json ships without business_name / category / services.
+      //
+      // KV read is also 1–5ms vs ~150ms HTTP, with no auth round-trip.
+      // tenantToProfileObject() flattens the rich TenantRecord shape to
+      // the same { name, category, services, ... } object the renderer
+      // already consumed.
+      const profile = tenantToProfileObject(await getTenant(env, domain));
       ctx.waitUntil(
         Promise.resolve(
           logEvent({ ...baseEvent, slug, status: 200, referralUrl: null, taggedReferralUrl: null, latencyMs: Date.now() - startMs, error: null })
@@ -1069,22 +1070,13 @@ export default Sentry.withSentry(
     // Emerging convention from llmstxt.org — a per-site markdown discovery
     // file AI tools increasingly look for alongside robots.txt and sitemap.
     // Universally accessible (no UA gating). Per-tenant: same resolution
-    // chain as ai-agent.json (BUSINESS_MAP → profile fetch via the
-    // public CF-fronted host so the API_KEY gate doesn't 401 us). For
+    // chain as ai-agent.json (BUSINESS_MAP for slug → TENANT_DATA for the
+    // rich profile, KV-direct to dodge same-zone Worker recursion). For
     // tenants with no profile (unknown hostnames), serves a platform-
     // level pointer at the central registry.
     if (url.pathname === "/llms.txt") {
       const slug = await env.BUSINESS_MAP.get(domain);
-      let profile: Record<string, unknown> | null = null;
-      if (slug) {
-        try {
-          const pr = await Promise.race([
-            fetch(`${publicApiBase(env)}/agents/${slug}/profile`),
-            new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 2000)),
-          ]) as Response;
-          if (pr.ok) profile = await pr.json() as Record<string, unknown>;
-        } catch { /* best-effort */ }
-      }
+      const profile = tenantToProfileObject(await getTenant(env, domain));
       ctx.waitUntil(
         Promise.resolve(
           logEvent({ ...baseEvent, slug, status: 200, referralUrl: null, taggedReferralUrl: null, latencyMs: Date.now() - startMs, error: null })
