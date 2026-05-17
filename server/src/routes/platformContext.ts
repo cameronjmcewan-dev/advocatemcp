@@ -39,9 +39,9 @@ const PLATFORM_TO_BOT: Record<string, string> = {
 };
 
 // Synthetic query text used when the platform-context URL is hit. The
-// renderer's `<aside data-ai-instruction>` and FAQPage schema do most of
-// the heavy lifting; the body answer is supplemental. Phrased to match
-// the most-common AI prompt class for this category of query.
+// renderer's FAQPage + ProfessionalService JSON-LD do the heavy lifting;
+// the body answer is supplemental. Phrased to match the most-common AI
+// prompt class for this category of query.
 function syntheticQueryFor(business: BusinessRow): string {
   return `What does ${business.name} do, and is it a good fit for my needs?`;
 }

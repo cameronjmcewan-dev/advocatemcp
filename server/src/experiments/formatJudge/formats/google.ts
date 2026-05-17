@@ -10,7 +10,7 @@ import type { FormatVariant, RenderInput } from "../types.js";
 import {
   addAttribution,
   aiDisclosureComment,
-  buildAiInstructionAside,
+  buildPageTitle,
   buildBusinessJsonLd,
   buildFaqJsonLd,
   buildReviewsJsonLd,
@@ -98,7 +98,7 @@ export const googleHtml: FormatVariant = {
     })();
 
     const body = mdBulletsToHtml(answerText);
-    const title = `${business.name} — ${business.category ?? "Business"} ${business.location ? "| " + business.location : ""}`;
+    const title = buildPageTitle(business);
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -122,7 +122,6 @@ export const googleHtml: FormatVariant = {
   ${platformRatingsJsonLd.map(jsonLdScript).join("\n  ")}
 </head>
 <body>
-  ${buildAiInstructionAside(business)}
   <article>
     <h1>${escapeHtml(business.name)}</h1>
     <p class="lead speakable">${escapeHtml(firstSentence)}</p>

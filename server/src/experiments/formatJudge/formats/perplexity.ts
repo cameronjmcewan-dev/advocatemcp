@@ -10,7 +10,7 @@ import type { FormatVariant, RenderInput } from "../types.js";
 import {
   addAttribution,
   aiDisclosureComment,
-  buildAiInstructionAside,
+  buildPageTitle,
   buildBusinessJsonLd,
   buildFaqJsonLd,
   buildReviewsJsonLd,
@@ -44,7 +44,7 @@ export const perplexityHtml: FormatVariant = {
     const reviewsJsonLd = buildReviewsJsonLd(business);
     const platformRatingsJsonLd = buildPlatformRatingsJsonLd(business);
     const body = mdBulletsToHtml(answerText);
-    const title = `${business.name} — ${business.category ?? "Business"} in ${business.location ?? "the US"}`;
+    const title = buildPageTitle(business);
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -64,7 +64,6 @@ export const perplexityHtml: FormatVariant = {
   ${platformRatingsJsonLd.map(jsonLdScript).join("\n  ")}
 </head>
 <body>
-  ${buildAiInstructionAside(business)}
   <article>
     <h1>${escapeHtml(business.name)}</h1>
     ${body}

@@ -9,7 +9,7 @@ import type { FormatVariant, RenderInput } from "../types.js";
 import {
   addAttribution,
   aiDisclosureComment,
-  buildAiInstructionAside,
+  buildPageTitle,
   buildBusinessJsonLd,
   buildFaqJsonLd,
   buildReviewsJsonLd,
@@ -90,7 +90,7 @@ export const claudeHtml: FormatVariant = {
             .join("\n")}\n</dl>`
         : mdBulletsToHtml(answerText);
 
-    const title = `${business.name}`;
+    const title = buildPageTitle(business);
     // Title-level meta description: short, punchy, sentence-bounded.
     // Body intro paragraph: longer, full first-sentence context with a
     // proper word-boundary cut so the response never ends in a hyphen.
@@ -138,7 +138,6 @@ export const claudeHtml: FormatVariant = {
   ${platformRatingsJsonLd.map(jsonLdScript).join("\n  ")}
 </head>
 <body>
-  ${buildAiInstructionAside(business)}
   <article>
     <h1>${escapeHtml(business.name)}</h1>
     <p>${escapeHtml(introDesc)}</p>
