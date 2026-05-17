@@ -687,6 +687,67 @@ export function mdBulletsToHtml(s: string): string {
  *
  * Returns "" when no allowlisted fields are populated — caller-friendly.
  */
+/**
+ * Normalized per-page `<title>` builder, shared across every per-bot
+ * renderer (Claude / OpenAI / Google / Perplexity).
+ *
+ * Why a shared helper
+ * -------------------
+ * Before this lived in one place, each renderer hand-built its own
+ * title string with a slightly different template:
+ *
+ *   - claude.ts       : `${name}`                                       (no category, no location)
+ *   - openai.ts       : `${name} — ${category ?? "Business"}`           ("Business" fallback)
+ *   - google.ts       : `${name} — ${category ?? "Business"} ${location ? "| " + location : ""}`
+ *   - perplexity.ts   : `${name} — ${category ?? "Business"} in ${location ?? "the US"}`
+ *
+ * Three failure modes the inconsistency caused:
+ *   1. **"Business" / "the US" fillers** — when a tenant has no category
+ *      or no location, those fallbacks emit visible noise that AI
+ *      extractors clip into the snippet ("X — Business" reads like a
+ *      stub, "in the US" reads like a placeholder).
+ *   2. **Inconsistent ranking signal** — search engines treat the
+ *      `<title>` element as a high-weight keyword surface. Different
+ *      shapes per bot family meant some pages had location keywords,
+ *      others didn't, with no principled reason.
+ *   3. **Hand-edit drift** — any future title tweak had to be
+ *      reapplied four times.
+ *
+ * The normalized template
+ * -----------------------
+ *   `${name}${category ? " — " + category : ""}${location ? " | " + location : ""}`
+ *
+ *   - Always leads with the business name (canonical entity anchor).
+ *   - Appends category only when one exists, separated by an em dash.
+ *   - Appends location only when one exists, separated by a pipe.
+ *   - No "Business" or "the US" fallbacks — every visible character is
+ *     real data from the tenant's profile.
+ *
+ * Examples:
+ *   { name: "Advocate", category: "ai-marketing-saas", location: "Austin, TX" }
+ *     → "Advocate — ai-marketing-saas | Austin, TX"
+ *   { name: "Advocate", category: "ai-marketing-saas", location: null }
+ *     → "Advocate — ai-marketing-saas"
+ *   { name: "Advocate", category: null, location: "Austin, TX" }
+ *     → "Advocate | Austin, TX"
+ *   { name: "Advocate", category: null, location: null }
+ *     → "Advocate"
+ */
+export function buildPageTitle(business: {
+  name: string;
+  category?: string | null;
+  location?: string | null;
+}): string {
+  const parts = [business.name];
+  if (business.category && business.category.trim().length > 0) {
+    parts.push(`— ${business.category.trim()}`);
+  }
+  if (business.location && business.location.trim().length > 0) {
+    parts.push(`| ${business.location.trim()}`);
+  }
+  return parts.join(" ");
+}
+
 export function buildAiInstructionAside(business: {
   name: string;
   category?: string | null;
