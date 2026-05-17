@@ -1041,12 +1041,17 @@ export default Sentry.withSentry(
     // ── 2b. AI discovery file ─────────────────────────────────────────────
     if (url.pathname === "/.well-known/ai-agent.json") {
       const slug = await env.BUSINESS_MAP.get(domain);
-      // Fetch rich profile from backend if slug is known (best-effort, short timeout)
+      // Fetch rich profile via publicApiBase — the Cloudflare-fronted host
+      // (api.advocatemcp.com) exposes /agents/{slug}/profile WITHOUT the
+      // API_KEY gate that direct Railway access requires. apiBase (direct
+      // to Railway) returns 401 for unauthenticated callers, which is why
+      // ai-agent.json was missing business_name / business_category /
+      // description / services until now. Best-effort, short timeout.
       let profile: Record<string, unknown> | null = null;
       if (slug) {
         try {
           const pr = await Promise.race([
-            fetch(`${apiBase(env)}/agents/${slug}/profile`),
+            fetch(`${publicApiBase(env)}/agents/${slug}/profile`),
             new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 2000)),
           ]) as Response;
           if (pr.ok) profile = await pr.json() as Record<string, unknown>;
@@ -1064,16 +1069,17 @@ export default Sentry.withSentry(
     // Emerging convention from llmstxt.org — a per-site markdown discovery
     // file AI tools increasingly look for alongside robots.txt and sitemap.
     // Universally accessible (no UA gating). Per-tenant: same resolution
-    // chain as ai-agent.json (BUSINESS_MAP → profile fetch). For tenants
-    // with no profile (unknown hostnames), serves a platform-level
-    // pointer at the central registry.
+    // chain as ai-agent.json (BUSINESS_MAP → profile fetch via the
+    // public CF-fronted host so the API_KEY gate doesn't 401 us). For
+    // tenants with no profile (unknown hostnames), serves a platform-
+    // level pointer at the central registry.
     if (url.pathname === "/llms.txt") {
       const slug = await env.BUSINESS_MAP.get(domain);
       let profile: Record<string, unknown> | null = null;
       if (slug) {
         try {
           const pr = await Promise.race([
-            fetch(`${apiBase(env)}/agents/${slug}/profile`),
+            fetch(`${publicApiBase(env)}/agents/${slug}/profile`),
             new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 2000)),
           ]) as Response;
           if (pr.ok) profile = await pr.json() as Record<string, unknown>;
