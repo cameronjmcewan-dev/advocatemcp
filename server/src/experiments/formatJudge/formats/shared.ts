@@ -460,6 +460,135 @@ export function buildWebsiteJsonLd(business: BusinessRow): Record<string, unknow
   };
 }
 
+/**
+ * Speakable schema (Schema.org SpeakableSpecification).
+ *
+ * Voice-first AI extractors (Alexa, Google Assistant, ChatGPT voice mode,
+ * Perplexity audio cards) prefer explicit cssSelector hints over guessing
+ * which DOM nodes to read aloud. The default selectors point at the H1
+ * and the lead paragraph — every per-bot renderer's <article> structure
+ * is `<h1>` + body content, so the same selectors work uniformly.
+ *
+ * Was previously inlined in claude.ts (and a slightly-different shape in
+ * google.ts pointing at `.lead`). Centralising eliminates the drift and
+ * lets OpenAI + Perplexity inherit the same voice-AI signal.
+ */
+export function buildSpeakableJsonLd(
+  business: { name: string },
+  referralUrl: string,
+): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@type":    "WebPage",
+    "name":     business.name,
+    "url":      referralUrl,
+    "speakable": {
+      "@type":       "SpeakableSpecification",
+      "cssSelector": ["article > h1", "article > p:first-of-type"],
+    },
+  };
+}
+
+/**
+ * BreadcrumbList schema. AI search engines use breadcrumbs to model the
+ * page's place in a site hierarchy and to anchor citation chains
+ * ("according to the Plumbing > Acme page at acme.com..."). Was Google-
+ * only before this; lifting to every renderer.
+ *
+ * When the business has a category, emits a two-step list:
+ *   1. {category} → referralUrl
+ *   2. {name}     → referralUrl
+ * Without a category, emits just the single business entry. Position
+ * numbers are auto-incremented so callers don't need to know how many
+ * entries land.
+ */
+export function buildBreadcrumbJsonLd(
+  business: { name: string; category?: string | null },
+  referralUrl: string,
+): Record<string, unknown> {
+  const items: Record<string, unknown>[] = [];
+  if (business.category && business.category.trim().length > 0) {
+    items.push({
+      "@type":   "ListItem",
+      "position": items.length + 1,
+      "name":    business.category.trim(),
+      "item":    referralUrl,
+    });
+  }
+  items.push({
+    "@type":   "ListItem",
+    "position": items.length + 1,
+    "name":    business.name,
+    "item":    referralUrl,
+  });
+  return {
+    "@context":        "https://schema.org",
+    "@type":           "BreadcrumbList",
+    "itemListElement": items,
+  };
+}
+
+/**
+ * `article:published_time` + `article:modified_time` Open Graph meta
+ * tags. Anchor the citation in time — without these, AI tools have no
+ * recency signal and downweight content as "could be years old."
+ *
+ * Was Claude-only before; lifting to every renderer because freshness
+ * is a universal citation factor. If only one ISO is supplied, both
+ * tags emit the same value (the modified timestamp doubles as
+ * publication timestamp on a freshly-rendered response).
+ */
+export function articleFreshnessMetaTags(
+  modifiedIso: string,
+  publishedIso?: string,
+): string {
+  const published = publishedIso ?? modifiedIso;
+  return [
+    `<meta property="article:published_time" content="${escapeHtml(published)}">`,
+    `<meta property="article:modified_time" content="${escapeHtml(modifiedIso)}">`,
+  ].join("\n  ");
+}
+
+/**
+ * Google Scholar / academic-style `citation_*` meta tags.
+ *
+ * A subset of AI extractors (research-tuned models, Google Scholar
+ * itself, some Perplexity index pipelines) parse `citation_*` metas
+ * alongside JSON-LD. Adding them is near-zero cost (a handful of bytes)
+ * and provides redundant citation hooks: if the JSON-LD path fails,
+ * the meta-tag path still succeeds.
+ *
+ * Emits seven fields:
+ *   - citation_title              — same as <title>'s name segment
+ *   - citation_author             — business name (treated as the
+ *                                   authoritative voice on its own page)
+ *   - citation_publisher          — "AdvocateMCP" (the platform serving
+ *                                   the structured surface)
+ *   - citation_publication_date   — YYYY-MM-DD slice of the freshness ISO
+ *   - citation_online_date        — same as publication_date for live
+ *                                   web content
+ *   - citation_fulltext_world_readable — empty value flag indicating the
+ *                                   page itself contains the full
+ *                                   citable content (no paywall)
+ *   - citation_public_url         — canonical/referral URL
+ */
+export function citationMetaTags(
+  business: { name: string },
+  referralUrl: string,
+  modifiedIso: string,
+): string {
+  const dateYmd = modifiedIso.slice(0, 10);
+  return [
+    `<meta name="citation_title" content="${escapeHtml(business.name)}">`,
+    `<meta name="citation_author" content="${escapeHtml(business.name)}">`,
+    `<meta name="citation_publisher" content="AdvocateMCP">`,
+    `<meta name="citation_publication_date" content="${escapeHtml(dateYmd)}">`,
+    `<meta name="citation_online_date" content="${escapeHtml(dateYmd)}">`,
+    `<meta name="citation_fulltext_world_readable" content="">`,
+    `<meta name="citation_public_url" content="${escapeHtml(referralUrl)}">`,
+  ].join("\n  ");
+}
+
 /** AI-disclosure pattern — iteration history.
  *
  *  V1: <meta name="ai-generated" content="true"> in <head>.
