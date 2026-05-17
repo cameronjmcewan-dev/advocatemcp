@@ -10,9 +10,10 @@
  * fields before this fix.
  */
 
-import { describe, it, expect } from "vitest";
-import { tenantToProfileObject } from "./tenantProfile";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { tenantToProfileObject, readProfileForDomain } from "./tenantProfile";
 import type { TenantRecord } from "../routes/onboard";
+import type { Env } from "../types";
 
 function tenantFixture(overrides: Partial<TenantRecord> = {}): TenantRecord {
   return {
@@ -209,5 +210,177 @@ describe("tenantToProfileObject", () => {
     expect(out.services).toEqual(["Widget A"]);
     expect(out.referral_url).toBe("https://acme.example");
     expect(out.availability).toBe("Mon-Fri");
+  });
+});
+
+// ── readProfileForDomain ───────────────────────────────────────────────────
+//
+// Two-tier source: TENANT_DATA KV first (fast, no auth), Railway-direct
+// HTTP fallback (with X-API-Key). The fallback exists because:
+//   - The platform's own advocatemcp.com tenant predates the onboarding
+//     flow that writes TENANT_DATA, so its profile lives only in Railway.
+//   - A subset of older customer tenants may have stale or sparse KV
+//     records and still need the canonical profile from D1.
+//
+// These tests lock in the source-selection contract and prove the
+// fallback uses apiBase (raw Railway), not publicApiBase (Cloudflare-
+// fronted, bound to the Worker, would trigger loop-prevention bypass).
+
+function makeEnv(overrides: Partial<Env> = {}): Env {
+  return {
+    API_BASE_URL: "https://railway.internal.example",
+    PUBLIC_API_BASE_URL: "https://api.public.example",
+    API_KEY: "test-api-key",
+    TENANT_DATA: {
+      get: vi.fn().mockResolvedValue(null),
+    },
+    ...overrides,
+  } as unknown as Env;
+}
+
+function mockFetchOk(body: unknown): void {
+  vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+    new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
+}
+
+function mockFetchStatus(status: number): void {
+  vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+    new Response("", { status }),
+  );
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("readProfileForDomain", () => {
+  it("returns the KV-derived profile when TENANT_DATA has a useful record", async () => {
+    const tenant = tenantFixture({
+      name:     "Acme Co",
+      city:     "Austin",
+      state:    "TX",
+      services: ["Widget A"],
+      profile:  { description: "We make widgets.", category: "widgets" },
+    });
+    const env = makeEnv({
+      TENANT_DATA: {
+        get: vi.fn().mockResolvedValue(JSON.stringify(tenant)),
+      } as unknown as KVNamespace,
+    });
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    const profile = await readProfileForDomain(env, "acme.example", "acme");
+    expect(profile).not.toBeNull();
+    expect(profile!.name).toBe("Acme Co");
+    expect(profile!.description).toBe("We make widgets.");
+    expect(profile!.location).toBe("Austin, TX");
+
+    // KV was enough — no HTTP fallback should have fired.
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("falls back to Railway HTTP when TENANT_DATA is missing", async () => {
+    const env = makeEnv(); // TENANT_DATA.get returns null
+    mockFetchOk({
+      name: "Platform Tenant",
+      category: "ai-marketing-saas",
+      location: "Austin, TX",
+      description: "Source-of-truth profile from D1.",
+    });
+
+    const profile = await readProfileForDomain(env, "advocatemcp.com", "advocate");
+    expect(profile).not.toBeNull();
+    expect(profile!.name).toBe("Platform Tenant");
+    expect(profile!.description).toBe("Source-of-truth profile from D1.");
+  });
+
+  it("falls back to Railway HTTP when TENANT_DATA has a sparse record (no name, no description)", async () => {
+    // Edge case: the onboarding flow wrote a record but the wizard wasn't
+    // completed, so name/description are empty. We treat this as "no
+    // useful profile" and reach for Railway instead of rendering a
+    // half-empty discovery file.
+    const sparseTenant = tenantFixture({ name: "", profile: {} });
+    const env = makeEnv({
+      TENANT_DATA: {
+        get: vi.fn().mockResolvedValue(JSON.stringify(sparseTenant)),
+      } as unknown as KVNamespace,
+    });
+    mockFetchOk({ name: "Hydrated From D1" });
+
+    const profile = await readProfileForDomain(env, "sparse.example", "sparse");
+    expect(profile!.name).toBe("Hydrated From D1");
+  });
+
+  it("attaches X-API-Key to the Railway-direct fetch", async () => {
+    const env = makeEnv({ API_KEY: "secret-key-123" });
+    mockFetchOk({ name: "Whatever" });
+
+    await readProfileForDomain(env, "advocatemcp.com", "advocate");
+
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
+    const init = fetchCall![1] as RequestInit;
+    expect((init.headers as Record<string, string>)["X-API-Key"]).toBe("secret-key-123");
+  });
+
+  it("uses apiBase (raw Railway), NEVER publicApiBase, for the fallback URL", async () => {
+    // Regression catcher for PR #225's failure mode. publicApiBase
+    // (api.advocatemcp.com) is bound to this Worker, so a fetch would
+    // trigger Cloudflare's loop-prevention and bypass the X-API-Key
+    // proxy entirely. Using apiBase (raw Railway hostname) makes the
+    // request go straight to Railway where our manually-attached
+    // X-API-Key actually authenticates.
+    const env = makeEnv({
+      API_BASE_URL:        "https://advocate-production-2887.up.railway.app",
+      PUBLIC_API_BASE_URL: "https://api.advocatemcp.com",
+    });
+    mockFetchOk({ name: "Advocate" });
+
+    await readProfileForDomain(env, "advocatemcp.com", "advocate");
+
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
+    const url = String(fetchCall![0]);
+    expect(url).toBe("https://advocate-production-2887.up.railway.app/agents/advocate/profile");
+    // Belt and braces: explicit assertion against the public host.
+    expect(url).not.toContain("api.advocatemcp.com");
+  });
+
+  it("returns null when both KV and Railway fail", async () => {
+    const env = makeEnv();
+    mockFetchStatus(401); // canonical Railway-direct-without-auth failure
+
+    const profile = await readProfileForDomain(env, "unknown.example", "ghost");
+    expect(profile).toBeNull();
+  });
+
+  it("returns null when slug is null and KV is empty (no URL to construct)", async () => {
+    const env = makeEnv();
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    const profile = await readProfileForDomain(env, "unmapped.example", null);
+    expect(profile).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("swallows fetch network errors and returns whatever KV had", async () => {
+    const env = makeEnv();
+    vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("ECONNRESET"));
+
+    const profile = await readProfileForDomain(env, "flaky.example", "flaky");
+    expect(profile).toBeNull(); // KV was null, fetch threw, result is null
+  });
+
+  it("does not include X-API-Key header when API_KEY env var is unset", async () => {
+    const env = makeEnv({ API_KEY: undefined });
+    mockFetchOk({ name: "No Auth Today" });
+
+    await readProfileForDomain(env, "advocatemcp.com", "advocate");
+
+    const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
+    const init = fetchCall![1] as RequestInit;
+    expect(init.headers).toEqual({});
   });
 });
