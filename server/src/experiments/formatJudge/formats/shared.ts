@@ -811,17 +811,28 @@ export function platformAlternateLinks(referralUrl: string): string {
  * Cross-entity Schema.org `mentions` + `sameAs` graph for the business
  * Organization JSON-LD. Phase 4 of the grey-hat AI optimization layer.
  *
- * Builds a structured graph from the business's existing public surfaces:
- *   - All `synthetic_pages` rows for the business (status='live')
- *   - All `comparison_pages` rows for the business (status='live')
- *   - The business's own profile + FAQ pages
+ * Source rows (DB):
+ *   - `synthetic_pages` (programmatic SEO templates: best-X-in-Y, etc.)
+ *   - `comparison_pages` (contextual head-to-head pages: /compare/a-vs-b)
  *
- * AI search engines parse `mentions[]` to discover related URLs from the
- * same entity, lifting citation rates on adjacent pages. The graph also
- * doubles as a sitemap signal for traditional crawlers.
+ * Output rules
+ * ------------
+ *   - `mentions[]` contains **comparison pages only**. Synthetic /
+ *     programmatic-SEO entries are deliberately omitted: AI search
+ *     engines (Perplexity, ChatGPT, Claude) treat long lists of
+ *     template-generated "best X in Y" URLs as low-signal spam and
+ *     downweight the host overall when they appear in structured
+ *     graphs. Comparison pages are contextual, hand-shaped content and
+ *     stay in — they actively lift citation rates.
+ *   - `sameAs[]` contains **every page we host on the customer's own
+ *     domain**, synthetic AND comparison. Schema.org sameAs is an
+ *     entity-equivalence claim ("these URLs all represent the same
+ *     organization"), independent of citation signal. Pages on
+ *     advocatemcp.com are NEVER added to sameAs because that would
+ *     conflate our platform identity with the customer's.
  *
  * No external scraping — every URL emitted is one we generated and host.
- * Empty arrays when the business hasn't accumulated synthetic /
+ * Empty arrays when the business has accumulated neither synthetic nor
  * comparison pages yet.
  */
 export interface MentionsGraph {
@@ -837,11 +848,12 @@ export function buildMentionsGraph(
   const mentions: MentionsGraph["mentions"] = [];
   const sameAs:   string[] = [];
 
+  // Programmatic SEO entries: NOT added to mentions[] (anti-pattern for
+  // AI citation), but customer-hosted variants still count as
+  // entity-equivalence and feed sameAs[].
   for (const p of syntheticPages) {
-    const url = `https://${p.host}${p.path}`;
-    mentions.push({ "@type": "WebPage", url, name: p.title });
     if (p.host !== "advocatemcp.com" && customerHost && p.host === customerHost) {
-      sameAs.push(url);
+      sameAs.push(`https://${p.host}${p.path}`);
     }
   }
   for (const p of comparisonPages) {
