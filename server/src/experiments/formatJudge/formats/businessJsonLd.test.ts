@@ -115,6 +115,55 @@ describe("buildBusinessJsonLd — aggregateRating gate (fix-2)", () => {
     expect(ld.aggregateRating).toBeDefined();
     expect((ld.aggregateRating as { reviewCount: number }).reviewCount).toBe(3);
   });
+
+  it("OMITS aggregateRating when platform-union aggregate is below threshold (ratings_json path)", () => {
+    // Regression catcher for the gap PR #223 left open: the
+    // MIN_AGGREGATE_RATING_REVIEWS threshold was only applied to the
+    // legacy star_rating/review_count path. The platform-union path
+    // (computePlatformAggregate from ratings_json) ignored it, so a
+    // tenant with a single self-reported review in ratings_json still
+    // produced "5.0 stars (1 review)" in production.
+    const ld = buildBusinessJsonLd(
+      bizFixture({
+        ratings_json: JSON.stringify({
+          self: { rating: 5, count: 1 },
+        }),
+      }),
+      { type: "ProfessionalService", includeRating: true },
+    );
+    expect(ld.aggregateRating).toBeUndefined();
+  });
+
+  it("emits aggregateRating when platform-union aggregate meets threshold", () => {
+    const ld = buildBusinessJsonLd(
+      bizFixture({
+        ratings_json: JSON.stringify({
+          google: { rating: 4.6, count: 3 },
+        }),
+      }),
+      { type: "ProfessionalService", includeRating: true },
+    );
+    expect(ld.aggregateRating).toBeDefined();
+    expect((ld.aggregateRating as { reviewCount: number }).reviewCount).toBe(3);
+  });
+
+  it("emits aggregateRating when union across multiple platforms meets threshold", () => {
+    // Multi-platform path: 1 + 1 + 1 = 3 → meets threshold. The whole
+    // point of the platform-union is that signal from several sources
+    // combines into a meaningful sample.
+    const ld = buildBusinessJsonLd(
+      bizFixture({
+        ratings_json: JSON.stringify({
+          google:     { rating: 5, count: 1 },
+          yelp:       { rating: 4, count: 1 },
+          trustpilot: { rating: 5, count: 1 },
+        }),
+      }),
+      { type: "ProfessionalService", includeRating: true },
+    );
+    expect(ld.aggregateRating).toBeDefined();
+    expect((ld.aggregateRating as { reviewCount: number }).reviewCount).toBe(3);
+  });
 });
 
 describe("buildBusinessJsonLd — list-separator splitting (fix-3)", () => {
