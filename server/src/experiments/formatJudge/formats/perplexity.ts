@@ -10,12 +10,16 @@ import type { FormatVariant, RenderInput } from "../types.js";
 import {
   addAttribution,
   aiDisclosureComment,
-  buildPageTitle,
+  articleFreshnessMetaTags,
+  buildBreadcrumbJsonLd,
   buildBusinessJsonLd,
   buildFaqJsonLd,
-  buildReviewsJsonLd,
+  buildPageTitle,
   buildPlatformRatingsJsonLd,
+  buildReviewsJsonLd,
+  buildSpeakableJsonLd,
   buildWebsiteJsonLd,
+  citationMetaTags,
   escapeHtml,
   jsonLdScript,
   mdBulletsToHtml,
@@ -45,6 +49,7 @@ export const perplexityHtml: FormatVariant = {
     const platformRatingsJsonLd = buildPlatformRatingsJsonLd(business);
     const body = mdBulletsToHtml(answerText);
     const title = buildPageTitle(business);
+    const nowIso = new Date().toISOString();
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -55,11 +60,15 @@ export const perplexityHtml: FormatVariant = {
   <meta property="og:title" content="${escapeHtml(business.name)}">
   <meta property="og:description" content="${escapeHtml((business.description ?? "").slice(0, 200))}">
   <link rel="canonical" href="${escapeHtml(referralUrl)}">
+  ${articleFreshnessMetaTags(nowIso)}
+  ${citationMetaTags(business, referralUrl, nowIso)}
   <meta name="advocatemcp-variant" content="perplexity">
   ${platformAlternateLinks(referralUrl)}
   ${jsonLdScript(bizJsonLd)}
   ${jsonLdScript(faqJsonLd)}
   ${websiteJsonLd ? jsonLdScript(websiteJsonLd) : ""}
+  ${jsonLdScript(buildSpeakableJsonLd(business, referralUrl))}
+  ${jsonLdScript(buildBreadcrumbJsonLd(business, referralUrl))}
   ${reviewsJsonLd.map(jsonLdScript).join("\n  ")}
   ${platformRatingsJsonLd.map(jsonLdScript).join("\n  ")}
 </head>

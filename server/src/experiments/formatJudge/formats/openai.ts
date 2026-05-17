@@ -9,12 +9,16 @@ import type { FormatVariant, RenderInput } from "../types.js";
 import {
   addAttribution,
   aiDisclosureComment,
-  buildPageTitle,
+  articleFreshnessMetaTags,
+  buildBreadcrumbJsonLd,
   buildBusinessJsonLd,
   buildFaqJsonLd,
-  buildReviewsJsonLd,
+  buildPageTitle,
   buildPlatformRatingsJsonLd,
+  buildReviewsJsonLd,
+  buildSpeakableJsonLd,
   buildWebsiteJsonLd,
+  citationMetaTags,
   escapeHtml,
   jsonLdScript,
   mdBoldToHtml,
@@ -65,6 +69,7 @@ export const openaiHtml: FormatVariant = {
 
     const title = buildPageTitle(business);
     const desc = (business.description ?? "").slice(0, 200);
+    const nowIso = new Date().toISOString();
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -80,11 +85,15 @@ export const openaiHtml: FormatVariant = {
   <meta name="twitter:title" content="${escapeHtml(business.name)}">
   <meta name="twitter:description" content="${escapeHtml(desc)}">
   <link rel="canonical" href="${escapeHtml(referralUrl)}">
+  ${articleFreshnessMetaTags(nowIso)}
+  ${citationMetaTags(business, referralUrl, nowIso)}
   <meta name="advocatemcp-variant" content="openai">
   ${platformAlternateLinks(referralUrl)}
   ${jsonLdScript(bizJsonLd)}
   ${jsonLdScript(faqJsonLd)}
   ${websiteJsonLd ? jsonLdScript(websiteJsonLd) : ""}
+  ${jsonLdScript(buildSpeakableJsonLd(business, referralUrl))}
+  ${jsonLdScript(buildBreadcrumbJsonLd(business, referralUrl))}
   ${reviewsJsonLd.map(jsonLdScript).join("\n  ")}
   ${platformRatingsJsonLd.map(jsonLdScript).join("\n  ")}
 </head>
