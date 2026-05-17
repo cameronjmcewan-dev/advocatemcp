@@ -151,6 +151,18 @@ function apiBase(env: Env): string {
   return env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
 }
 
+/**
+ * Public-facing base URL embedded in `/.well-known/ai-agent.json` and any
+ * other surface AI bots consume. Distinct from `apiBase` (the Worker's
+ * INTERNAL fetch target) because AI assistants will quote / link these URLs
+ * verbatim in their answers — they must be the branded customer-facing host,
+ * never the raw Railway hostname. The fallback string is the production
+ * default; in dev/test, set `PUBLIC_API_BASE_URL` on the Env.
+ */
+function publicApiBase(env: Env): string {
+  return env.PUBLIC_API_BASE_URL ?? "https://api.advocatemcp.com";
+}
+
 function jsonError(status: number, message: string, detail?: unknown): Response {
   return new Response(
     JSON.stringify({ error: message, detail: detail ?? null }, null, 2),
@@ -170,7 +182,9 @@ export function buildWellKnownResponse(
   env: Env,
   profile: Record<string, unknown> | null = null
 ): Response {
-  const base = apiBase(env);
+  // Public-facing manifest: bots will quote these URLs in their answers,
+  // so use the branded host (publicApiBase), not the raw Railway hostname.
+  const base = publicApiBase(env);
   const body: Record<string, unknown> = {
     spec_version: "1.0",
     spec_name: "ai-agent-discovery",
