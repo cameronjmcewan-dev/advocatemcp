@@ -236,10 +236,13 @@ export function buildLlmsTxtResponse(
 
   let body: string;
 
-  if (!slug || !profile) {
-    // Generic platform-level fallback for unknown hostnames or missing
-    // profile data. Points AI clients at the central registry rather than
-    // serving an empty document.
+  if (!slug) {
+    // Generic platform-level fallback for unknown hostnames. Points AI
+    // clients at the central registry rather than serving an empty
+    // document. We deliberately do NOT take this path when slug is known
+    // but profile fetch failed — the slug alone is enough to render
+    // per-tenant content with working agent endpoints, and AI clients
+    // can discover structured details by following the links we emit.
     body = [
       "# AdvocateMCP",
       "",
@@ -264,18 +267,22 @@ export function buildLlmsTxtResponse(
       "",
     ].join("\n");
   } else {
-    const name        = asPrintableString(profile.name) ?? slug;
-    const description = asPrintableString(profile.description);
-    const location    = asPrintableString(profile.location);
-    const category    = asPrintableString(profile.category);
-    const phone       = asPrintableString(profile.phone) ?? asPrintableString(profile.telephone);
-    const email       = asPrintableString(profile.email);
-    const referralUrl = asPrintableString(profile.referral_url) ?? asPrintableString(profile.website);
-    const availability = asPrintableString(profile.availability) ?? asPrintableString(profile.hours);
-    const serviceArea  = asPrintableString(profile.service_area)
-                       ?? asPrintableString(profile.service_radius_miles)
-                       ?? asPrintableString(profile.service_area_keywords);
-    const services     = asPrintableList(profile.services).slice(0, 25);
+    // Per-tenant render. `profile` MAY be null if the backend fetch
+    // failed; in that case we fall back to slug-only content (still
+    // useful — title + agent endpoints + ai-agent.json link).
+    const p = profile ?? {};
+    const name        = asPrintableString(p.name) ?? slug;
+    const description = asPrintableString(p.description);
+    const location    = asPrintableString(p.location);
+    const category    = asPrintableString(p.category);
+    const phone       = asPrintableString(p.phone) ?? asPrintableString(p.telephone);
+    const email       = asPrintableString(p.email);
+    const referralUrl = asPrintableString(p.referral_url) ?? asPrintableString(p.website);
+    const availability = asPrintableString(p.availability) ?? asPrintableString(p.hours);
+    const serviceArea  = asPrintableString(p.service_area)
+                       ?? asPrintableString(p.service_radius_miles)
+                       ?? asPrintableString(p.service_area_keywords);
+    const services     = asPrintableList(p.services).slice(0, 25);
 
     const lines: string[] = [];
     lines.push(`# ${name}`);

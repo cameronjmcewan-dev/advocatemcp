@@ -36,12 +36,29 @@ describe("buildLlmsTxtResponse — universal markdown discovery", () => {
     expect(body).toContain("https://api.example.com/.well-known/mcp.json");
   });
 
-  it("emits the same platform fallback when profile is null even with a slug", async () => {
+  it("renders per-tenant content when slug is known but profile fetch failed", async () => {
+    // Resilience case: backend profile fetch returns 401/timeout/etc and
+    // the worker passes `null` for profile. We still know the slug from
+    // BUSINESS_MAP, so render per-tenant content with the slug as the
+    // display name and the slug-scoped agent endpoint as the discovery
+    // link. Falling back to the generic platform document here would lose
+    // the tenant attribution that AI clients need.
     const res = buildLlmsTxtResponse("acme", env, null);
     const body = await bodyOf(res);
-    expect(body).toContain("# AdvocateMCP");
-    // Slug-less, profile-less requests should NOT name the tenant.
-    expect(body).not.toContain("acme");
+
+    // Per-tenant header, not the platform fallback.
+    expect(body).toContain("# acme");
+    expect(body).not.toContain("# AdvocateMCP");
+
+    // Agent endpoint URL includes the slug (so AI clients can discover
+    // tailored answers without needing the profile fetch).
+    expect(body).toContain("https://api.example.com/agents/acme/query");
+    expect(body).toContain("/.well-known/ai-agent.json");
+
+    // No sections that depend on profile fields should render.
+    expect(body).not.toContain("## Services");
+    expect(body).not.toContain("## About");
+    expect(body).not.toContain("## Details");
   });
 
   it("generates a per-tenant markdown body from profile fields", async () => {
