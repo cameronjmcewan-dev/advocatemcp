@@ -9,7 +9,7 @@ import type { FormatVariant, RenderInput } from "../types.js";
 import {
   addAttribution,
   aiDisclosureComment,
-  buildAiInstructionAside,
+  buildPageTitle,
   buildBusinessJsonLd,
   buildFaqJsonLd,
   buildReviewsJsonLd,
@@ -63,7 +63,7 @@ export const openaiHtml: FormatVariant = {
       .map((p) => `<p>${mdBoldToHtml(escapeHtml(p))}</p>`)
       .join("\n  ");
 
-    const title = `${business.name} — ${business.category ?? "Business"}`;
+    const title = buildPageTitle(business);
     const desc = (business.description ?? "").slice(0, 200);
 
     return `<!DOCTYPE html>
@@ -89,7 +89,6 @@ export const openaiHtml: FormatVariant = {
   ${platformRatingsJsonLd.map(jsonLdScript).join("\n  ")}
 </head>
 <body>
-  ${buildAiInstructionAside(business)}
   <article>
     <h1>${escapeHtml(business.name)}</h1>
     ${proseBody}
