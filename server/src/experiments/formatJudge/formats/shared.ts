@@ -118,8 +118,14 @@ export function buildBusinessJsonLd(
     //   weighted_value = SUM(rating × count) / SUM(count)
     //   total_count    = SUM(count)
     // If no platform data, fall back to legacy star_rating + review_count.
+    // Apply MIN_AGGREGATE_RATING_REVIEWS to BOTH the platform-union
+    // path here AND the legacy column path below. The previous PR
+    // (#223) only gated the legacy path; advocate's "5.0 stars
+    // (1 review)" still leaked because the ratings_json single-source
+    // aggregate went through this code unchecked. A thin sample is a
+    // thin sample regardless of which column it came from.
     const aggregate = computePlatformAggregate(business);
-    if (aggregate) {
+    if (aggregate && aggregate.count >= MIN_AGGREGATE_RATING_REVIEWS) {
       const ratingsForVerified = parseRatingsJson(business);
       // Use the most-recent verified_at across platforms — gives the
       // crawler a single dateModified to anchor on. Self-reported
