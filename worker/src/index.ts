@@ -177,6 +177,171 @@ function jsonError(status: number, message: string, detail?: unknown): Response 
   );
 }
 
+/**
+ * Narrow `unknown` profile fields to a printable string. Handles the loose
+ * `Record<string, unknown>` shape returned by `${apiBase}/agents/{slug}/profile`
+ * — fields may be missing, null, numbers, or arrays. Returns null for unusable
+ * values so the caller can `skip` the section.
+ */
+function asPrintableString(val: unknown): string | null {
+  if (typeof val === "string") {
+    const trimmed = val.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (typeof val === "number" && Number.isFinite(val)) return String(val);
+  return null;
+}
+
+/**
+ * Coerce a profile field into a list of printable service / link strings.
+ * Handles arrays of strings, arrays of `{name, ...}` objects, and the
+ * occasional comma-separated single-string shape.
+ */
+function asPrintableList(val: unknown): string[] {
+  if (Array.isArray(val)) {
+    return val
+      .map((item) => {
+        if (typeof item === "string") return item.trim();
+        if (item && typeof item === "object") {
+          const named = (item as Record<string, unknown>).name;
+          if (typeof named === "string") return named.trim();
+        }
+        return "";
+      })
+      .filter((s) => s.length > 0);
+  }
+  if (typeof val === "string" && val.trim().length > 0) {
+    return val.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+  }
+  return [];
+}
+
+/**
+ * Build the markdown body for /llms.txt — the emerging convention from
+ * llmstxt.org for AI-readable site discovery. Universally accessible (no UA
+ * gating), per-tenant, generated from the same profile object that powers
+ * ai-agent.json. Falls back to a generic AdvocateMCP-platform pointer when
+ * the hostname doesn't map to a known tenant.
+ *
+ * Per-tenant: every customer's custom hostname gets their own llms.txt with
+ * no per-tenant config — just whatever fields they've populated in their
+ * stored profile drive what sections appear.
+ */
+export function buildLlmsTxtResponse(
+  slug: string | null,
+  env: Env,
+  profile: Record<string, unknown> | null = null
+): Response {
+  const base = publicApiBase(env);
+
+  let body: string;
+
+  if (!slug || !profile) {
+    // Generic platform-level fallback for unknown hostnames or missing
+    // profile data. Points AI clients at the central registry rather than
+    // serving an empty document.
+    body = [
+      "# AdvocateMCP",
+      "",
+      "> AI search visibility platform. Local businesses queryable via MCP — every tenant exposes a machine-readable agent at a stable endpoint.",
+      "",
+      "## Discovery",
+      "",
+      `- [Per-tenant ai-agent.json](/.well-known/ai-agent.json): JSON discovery file with agent endpoints + capabilities`,
+      `- [Central MCP manifest](${base}/.well-known/mcp.json): MCP protocol manifest covering every registered tenant`,
+      `- [Central agent endpoint](${base}/mcp): POST MCP JSON-RPC requests; spec-compliant Streamable HTTP transport`,
+      "",
+      "## For AI clients",
+      "",
+      "Each tenant exposes the same shape:",
+      "",
+      `- \`${base}/agents/{slug}/profile\` — structured business profile (JSON)`,
+      `- \`${base}/agents/{slug}/query\` — POST \`{"query": string, "crawler": string}\` for a tailored, citation-ready answer`,
+      "",
+      "## More",
+      "",
+      "- [Site root](https://advocatemcp.com): human-facing marketing site",
+      "",
+    ].join("\n");
+  } else {
+    const name        = asPrintableString(profile.name) ?? slug;
+    const description = asPrintableString(profile.description);
+    const location    = asPrintableString(profile.location);
+    const category    = asPrintableString(profile.category);
+    const phone       = asPrintableString(profile.phone) ?? asPrintableString(profile.telephone);
+    const email       = asPrintableString(profile.email);
+    const referralUrl = asPrintableString(profile.referral_url) ?? asPrintableString(profile.website);
+    const availability = asPrintableString(profile.availability) ?? asPrintableString(profile.hours);
+    const serviceArea  = asPrintableString(profile.service_area)
+                       ?? asPrintableString(profile.service_radius_miles)
+                       ?? asPrintableString(profile.service_area_keywords);
+    const services     = asPrintableList(profile.services).slice(0, 25);
+
+    const lines: string[] = [];
+    lines.push(`# ${name}`);
+    lines.push("");
+    if (description) {
+      // First sentence only for the blockquote summary — keeps llms.txt
+      // scannable. Fall back to full string if no sentence boundary.
+      const summary = description.split(/(?<=[.!?])\s+/)[0] ?? description;
+      lines.push(`> ${summary}`);
+      lines.push("");
+    }
+    const subtitle = [location, phone].filter(Boolean).join(" · ");
+    if (subtitle) {
+      lines.push(subtitle);
+      lines.push("");
+    }
+
+    if (services.length > 0) {
+      lines.push("## Services");
+      lines.push("");
+      for (const s of services) lines.push(`- ${s}`);
+      lines.push("");
+    }
+
+    lines.push("## Links");
+    lines.push("");
+    if (referralUrl) {
+      lines.push(`- [Website](${referralUrl}): primary contact / booking surface`);
+    }
+    lines.push(`- [Machine-readable profile](/.well-known/ai-agent.json): JSON schema with endpoints + capabilities`);
+    lines.push(`- [Direct agent query](${base}/agents/${slug}/query): POST \`{"query": string, "crawler": string}\` for a tailored, citation-ready answer`);
+    lines.push(`- [Central MCP manifest](${base}/.well-known/mcp.json)`);
+    lines.push("");
+
+    const optional: string[] = [];
+    if (category)     optional.push(`- Category: ${category}`);
+    if (availability) optional.push(`- Availability: ${availability}`);
+    if (serviceArea)  optional.push(`- Service area: ${serviceArea}`);
+    if (email)        optional.push(`- Email: ${email}`);
+    if (optional.length > 0) {
+      lines.push("## Details");
+      lines.push("");
+      lines.push(...optional);
+      lines.push("");
+    }
+
+    if (description && description.split(/(?<=[.!?])\s+/).length > 1) {
+      lines.push("## About");
+      lines.push("");
+      lines.push(description);
+      lines.push("");
+    }
+
+    body = lines.join("\n");
+  }
+
+  return new Response(body, {
+    headers: {
+      "Content-Type":  "text/plain; charset=utf-8",
+      "Cache-Control": "public, max-age=3600",
+      "Access-Control-Allow-Origin": "*",
+      "X-Powered-By":  "AdvocateMCP",
+    },
+  });
+}
+
 export function buildWellKnownResponse(
   slug: string | null,
   env: Env,
@@ -886,6 +1051,33 @@ export default Sentry.withSentry(
         )
       );
       return buildWellKnownResponse(slug, env, profile);
+    }
+
+    // ── 2c. /llms.txt ─────────────────────────────────────────────────────
+    // Emerging convention from llmstxt.org — a per-site markdown discovery
+    // file AI tools increasingly look for alongside robots.txt and sitemap.
+    // Universally accessible (no UA gating). Per-tenant: same resolution
+    // chain as ai-agent.json (BUSINESS_MAP → profile fetch). For tenants
+    // with no profile (unknown hostnames), serves a platform-level
+    // pointer at the central registry.
+    if (url.pathname === "/llms.txt") {
+      const slug = await env.BUSINESS_MAP.get(domain);
+      let profile: Record<string, unknown> | null = null;
+      if (slug) {
+        try {
+          const pr = await Promise.race([
+            fetch(`${apiBase(env)}/agents/${slug}/profile`),
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 2000)),
+          ]) as Response;
+          if (pr.ok) profile = await pr.json() as Record<string, unknown>;
+        } catch { /* best-effort */ }
+      }
+      ctx.waitUntil(
+        Promise.resolve(
+          logEvent({ ...baseEvent, slug, status: 200, referralUrl: null, taggedReferralUrl: null, latencyMs: Date.now() - startMs, error: null })
+        )
+      );
+      return buildLlmsTxtResponse(slug, env, profile);
     }
 
     // ── 3. Non-crawler traffic ────────────────────────────────────────────
