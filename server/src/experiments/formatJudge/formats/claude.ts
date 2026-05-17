@@ -9,12 +9,16 @@ import type { FormatVariant, RenderInput } from "../types.js";
 import {
   addAttribution,
   aiDisclosureComment,
-  buildPageTitle,
+  articleFreshnessMetaTags,
+  buildBreadcrumbJsonLd,
   buildBusinessJsonLd,
   buildFaqJsonLd,
-  buildReviewsJsonLd,
+  buildPageTitle,
   buildPlatformRatingsJsonLd,
+  buildReviewsJsonLd,
+  buildSpeakableJsonLd,
   buildWebsiteJsonLd,
+  citationMetaTags,
   escapeHtml,
   jsonLdScript,
   mdBoldToHtml,
@@ -98,24 +102,8 @@ export const claudeHtml: FormatVariant = {
     const introDesc = truncateAtWord(fullDesc, 320);
     const metaDesc  = truncateAtWord(fullDesc, 155);
 
-    // Speakable schema — Claude (and any voice-first AI) prefers
-    // explicit cssSelector hints for which parts of the page can be
-    // read aloud. Pointing at h1 + the intro paragraph gives a 2-3
-    // sentence verbal answer that sounds natural.
-    const speakableJsonLd = jsonLdScript({
-      "@context": "https://schema.org",
-      "@type":    "WebPage",
-      "name":     business.name,
-      "speakable": {
-        "@type": "SpeakableSpecification",
-        "cssSelector": ["article > h1", "article > p:first-of-type"],
-      },
-      "url": referralUrl,
-    });
-
-    // Publishing metadata — datePublished anchors the citation in
-    // time. dateModified signals freshness. Without these Claude has
-    // no signal that the content is current vs years-old archive.
+    // Freshness anchor for AI extractors — datePublished + dateModified.
+    // Re-stamped on every render so the citation always looks current.
     const nowIso = new Date().toISOString();
 
     return `<!DOCTYPE html>
@@ -126,14 +114,15 @@ export const claudeHtml: FormatVariant = {
   <title>${escapeHtml(title)}</title>
   <meta name="description" content="${escapeHtml(metaDesc)}">
   <link rel="canonical" href="${escapeHtml(referralUrl)}">
-  <meta property="article:published_time" content="${nowIso}">
-  <meta property="article:modified_time" content="${nowIso}">
+  ${articleFreshnessMetaTags(nowIso)}
+  ${citationMetaTags(business, referralUrl, nowIso)}
   <meta name="advocatemcp-variant" content="claude">
   ${platformAlternateLinks(referralUrl)}
   ${jsonLdScript(bizJsonLd)}
   ${jsonLdScript(faqJsonLd)}
   ${websiteJsonLd ? jsonLdScript(websiteJsonLd) : ""}
-  ${speakableJsonLd}
+  ${jsonLdScript(buildSpeakableJsonLd(business, referralUrl))}
+  ${jsonLdScript(buildBreadcrumbJsonLd(business, referralUrl))}
   ${reviewsJsonLd.map(jsonLdScript).join("\n  ")}
   ${platformRatingsJsonLd.map(jsonLdScript).join("\n  ")}
 </head>

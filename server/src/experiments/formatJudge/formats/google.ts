@@ -10,12 +10,16 @@ import type { FormatVariant, RenderInput } from "../types.js";
 import {
   addAttribution,
   aiDisclosureComment,
-  buildPageTitle,
+  articleFreshnessMetaTags,
+  buildBreadcrumbJsonLd,
   buildBusinessJsonLd,
   buildFaqJsonLd,
-  buildReviewsJsonLd,
+  buildPageTitle,
   buildPlatformRatingsJsonLd,
+  buildReviewsJsonLd,
+  buildSpeakableJsonLd,
   buildWebsiteJsonLd,
+  citationMetaTags,
   escapeHtml,
   jsonLdScript,
   mdBulletsToHtml,
@@ -43,38 +47,19 @@ export const googleHtml: FormatVariant = {
     const websiteJsonLd = buildWebsiteJsonLd(business);
     const reviewsJsonLd = buildReviewsJsonLd(business);
     const platformRatingsJsonLd = buildPlatformRatingsJsonLd(business);
-    const speakable = {
-      "@context": "https://schema.org",
-      "@type": "WebPage",
-      speakable: {
-        "@type": "SpeakableSpecification",
-        cssSelector: [".lead", ".best-for"],
-      },
-    };
+    // Speakable + WebSite + Breadcrumb — voice/AI/navigation signal trio.
+    // Hand-built inline shapes replaced with the shared helpers so every
+    // renderer emits the same shapes; google.ts had pre-existing slightly-
+    // divergent versions (e.g. `.lead`/`.best-for` selectors, `Business`
+    // filler in breadcrumb step 1) that drifted from claude.ts.
+    const speakable = buildSpeakableJsonLd(business, referralUrl);
     const website = {
       "@context": "https://schema.org",
       "@type": "WebSite",
       url: referralUrl,
       name: business.name,
     };
-    const breadcrumb = {
-      "@context": "https://schema.org",
-      "@type": "BreadcrumbList",
-      itemListElement: [
-        {
-          "@type": "ListItem",
-          position: 1,
-          name: business.category ?? "Business",
-          item: referralUrl,
-        },
-        {
-          "@type": "ListItem",
-          position: 2,
-          name: business.name,
-          item: referralUrl,
-        },
-      ],
-    };
+    const breadcrumb = buildBreadcrumbJsonLd(business, referralUrl);
 
     // Extract the first sentence (under 160 chars) for the lead+description.
     // Don't truncate with ellipsis — judges flagged "lead paragraph
@@ -99,6 +84,7 @@ export const googleHtml: FormatVariant = {
 
     const body = mdBulletsToHtml(answerText);
     const title = buildPageTitle(business);
+    const nowIso = new Date().toISOString();
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -110,6 +96,8 @@ export const googleHtml: FormatVariant = {
   <link rel="canonical" href="${escapeHtml(referralUrl)}">
   <meta property="og:title" content="${escapeHtml(business.name)}">
   <meta property="og:description" content="${escapeHtml(firstSentence)}">
+  ${articleFreshnessMetaTags(nowIso)}
+  ${citationMetaTags(business, referralUrl, nowIso)}
   <meta name="advocatemcp-variant" content="google">
   ${platformAlternateLinks(referralUrl)}
   ${jsonLdScript(bizJsonLd)}
