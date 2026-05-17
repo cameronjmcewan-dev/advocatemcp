@@ -38,6 +38,34 @@ export function splitLocation(loc: string | null | undefined): {
  *    array from top_services), foundingDate (when years_in_business is
  *    set), slogan (from differentiators_text). Each addition was a
  *    deduction the judges called out in earlier runs. */
+
+/**
+ * Separator characters customer-supplied list fields are split on. We
+ * historically only handled `,` and `;`, which broke any tenant whose
+ * top_services / service_area_keywords were typed with bullet-style
+ * separators (` · ` mid-dot, `•` bullet, `|` pipe). Those tenants'
+ * knowsAbout / makesOffer / areaServed entries collapsed to a single
+ * unreadable string. Expanding the set here splits every common
+ * separator into proper array entries — measurable JSON-LD quality
+ * lift for any tenant who used a non-comma separator in onboarding.
+ */
+const LIST_SEPARATOR_RE = /[,;·•|]\s*/;
+
+/**
+ * Minimum review_count required to emit aggregateRating. A `5.0 stars
+ * (1 review)` AggregateRating is the canonical thin-trust-signal red
+ * flag — AI assistants weight these entries downward and Google's
+ * Rich Results guidelines have at times required ≥ 3 to surface a
+ * rating snippet at all. Holding fire until there's enough signal
+ * protects the tenant from emitting a self-discrediting field; once
+ * a tenant has a meaningful sample, the field appears automatically.
+ *
+ * 3 is the conservative middle ground — high enough to look like a
+ * real sample, low enough that tenants who import a few reviews from
+ * one source still show up.
+ */
+const MIN_AGGREGATE_RATING_REVIEWS = 3;
+
 export function buildBusinessJsonLd(
   business: BusinessRow,
   opts: {
@@ -110,13 +138,18 @@ export function buildBusinessJsonLd(
         worstRating: 1,
         ...(mostRecentVerifiedAt ? { dateModified: mostRecentVerifiedAt } : {}),
       };
-    } else if (business.star_rating != null && business.review_count != null && business.review_count > 0) {
+    } else if (business.star_rating != null && business.review_count != null && business.review_count >= MIN_AGGREGATE_RATING_REVIEWS) {
       // Only emit aggregateRating when BOTH star_rating + review_count are
-      // populated AND review_count > 0. Schema.org AggregateRating is
-      // supposed to be aggregated FROM reviews — emitting it with
-      // reviewCount=1 (or null defaulted to 1) when no reviews exist is
-      // misleading and risks Google flagging the markup. Apr 29 2026
-      // tightening — was previously falling back to `?? 1`.
+      // populated AND review_count meets the minimum-sample threshold
+      // (MIN_AGGREGATE_RATING_REVIEWS). Schema.org AggregateRating is
+      // supposed to be aggregated FROM reviews; emitting it for a single-
+      // review sample is the canonical thin-trust red flag (Google may
+      // suppress the rich result, AI assistants weight it downward).
+      //
+      // Apr 29 2026 tightening — was `?? 1` (always emit if star_rating
+      // set). Tightened to `> 0` (at least one review). Now tightened
+      // again to `>= MIN_AGGREGATE_RATING_REVIEWS` so the optic stays
+      // believable for tenants who've only imported a handful of reviews.
       ld.aggregateRating = {
         "@type": "AggregateRating",
         ratingValue: business.star_rating,
@@ -133,7 +166,7 @@ export function buildBusinessJsonLd(
   if (opts.includeKnowsAbout) {
     const knowsAboutSet = new Set<string>();
     if (business.top_services) {
-      business.top_services.split(/[,;]\s*/).map((s) => s.trim()).filter(Boolean).forEach((s) => knowsAboutSet.add(s));
+      business.top_services.split(LIST_SEPARATOR_RE).map((s) => s.trim()).filter(Boolean).forEach((s) => knowsAboutSet.add(s));
     }
     if (business.category) knowsAboutSet.add(business.category);
     if (business.differentiator) {
@@ -149,7 +182,7 @@ export function buildBusinessJsonLd(
   // visibly increase entity richness and citation odds.
   if (opts.includeServiceArray && business.top_services) {
     ld.makesOffer = business.top_services
-      .split(/[,;]\s*/)
+      .split(LIST_SEPARATOR_RE)
       .map((s) => s.trim())
       .filter(Boolean)
       .map((s) => ({
@@ -180,7 +213,7 @@ export function buildBusinessJsonLd(
   // can match.
   if (business.service_area_keywords) {
     ld.areaServed = business.service_area_keywords
-      .split(/[,;]\s*/)
+      .split(LIST_SEPARATOR_RE)
       .map((s) => s.trim())
       .filter(Boolean);
   } else if (business.service_radius_miles && loc.city) {
