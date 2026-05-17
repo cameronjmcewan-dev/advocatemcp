@@ -9,8 +9,16 @@ export interface Env {
   TENANT_DATA: KVNamespace;
   /** Secret forwarded to the backend as X-API-Key */
   API_KEY?: string;
-  /** Railway backend base URL */
+  /** Railway backend base URL — used by the Worker for INTERNAL fetches. */
   API_BASE_URL?: string;
+  /**
+   * Public-facing base URL for endpoints exposed in `/.well-known/ai-agent.json`
+   * and any other discovery surface AI bots consume. Branded customer-facing
+   * host (e.g. `https://api.advocatemcp.com`), not the raw Railway hostname.
+   * Defaults to `https://api.advocatemcp.com` when unset so a missing config
+   * still produces a professional manifest.
+   */
+  PUBLIC_API_BASE_URL?: string;
 
   /** HMAC-SHA256 signing key for attribution tokens — must match Railway TOKEN_SIGNING_KEY */
   TOKEN_SIGNING_KEY?: string;

@@ -58,7 +58,18 @@ new_sqlite_classes = ["McpRateLimiterDO"]
 
 # ── Environment Variables ───────────────────────────────────────────────────
 [vars]
+# Internal Worker → Railway fetches go direct to the Railway hostname.
+# Cookie-bearing and cache-sensitive backend calls keep their existing
+# transport — there's no value in proxying Cloudflare → Cloudflare for the
+# Worker's internal use.
 API_BASE_URL = "https://advocate-production-2887.up.railway.app"
+
+# Public-facing base URL exposed in /.well-known/ai-agent.json and any
+# other AI-bot-discoverable surface. AI assistants embed these URLs in
+# their answers, so they must be the branded customer-facing host — never
+# the raw Railway hostname. api.advocatemcp.com is the Cloudflare zone
+# fronting Railway with the same paths exposed.
+PUBLIC_API_BASE_URL = "https://api.advocatemcp.com"
 
 # ── Secrets ─────────────────────────────────────────────────────────────────
 # Set with wrangler secret put <NAME>
