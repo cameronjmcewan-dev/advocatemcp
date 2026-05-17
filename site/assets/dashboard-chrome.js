@@ -414,18 +414,33 @@
       if (a) setOpen(false);
     });
 
-    // Sign out: POST to logout, then hard-redirect to /login.html. Use a
-    // hard redirect (not the SPA router) so any in-memory session state
-    // is dropped and the next visit boots clean.
+    // Sign out: delegate to AMCP.logout() (defined in dashboard-auth.js),
+    // which posts to ${API_BASE}/api/auth/logout — an ABSOLUTE URL
+    // pointing at customers.advocatemcp.com (the Worker host).
+    //
+    // The inline fetch we used to do here was a relative URL
+    // ('/api/auth/logout'). On pages served from advocatemcp.com
+    // (Cloudflare Pages — /app.html and friends), the browser resolved
+    // it to advocatemcp.com/api/auth/logout, which Pages doesn't route
+    // to the Worker. The request 405'd, the Set-Cookie clearing both
+    // amcp_session and amcp_refresh never landed, and the auto-refresh
+    // on /login.html silently re-authenticated the user against the
+    // still-valid refresh cookie — sign-out appeared to do nothing.
+    // AMCP.logout() also clears the in-memory access token and runs
+    // the same redirect, so the behavioural contract is preserved.
     const signOutBtn = document.getElementById('biz-menu-signout');
     if (signOutBtn) {
       signOutBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         signOutBtn.disabled = true;
-        try {
-          await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-        } catch { /* ignore — we redirect either way */ }
-        window.location.replace('/login.html');
+        if (window.AMCP && typeof window.AMCP.logout === 'function') {
+          await window.AMCP.logout();
+        } else {
+          // Defensive fallback — should never fire because
+          // dashboard-auth.js loads before dashboard-chrome.js on every
+          // page that includes the dashboard chrome.
+          window.location.replace('/login.html');
+        }
       });
     }
   }
