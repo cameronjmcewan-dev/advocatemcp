@@ -25,7 +25,7 @@ import { runAuthoritySyncBatch } from "./cron/authoritySync";
 import { verifyToken, base64urlToBytes } from "./lib/tracked-url";
 import { buildSignedClickBody } from "./lib/clickBody";
 import { getTenant } from "./routes/onboard";
-import { tenantToProfileObject } from "./lib/tenantProfile";
+import { readProfileForDomain } from "./lib/tenantProfile";
 import { proxyToOrigin, WORKER_HOSTNAMES } from "./lib/proxy";
 import { wrapStreamForSentry } from "./lib/streamWithErrorCapture";
 import { appendQuery } from "./lib/appendQuery";
@@ -1042,22 +1042,16 @@ export default Sentry.withSentry(
     // ── 2b. AI discovery file ─────────────────────────────────────────────
     if (url.pathname === "/.well-known/ai-agent.json") {
       const slug = await env.BUSINESS_MAP.get(domain);
-      // Read profile directly from TENANT_DATA KV instead of fetching
-      // ${publicApiBase}/agents/{slug}/profile.
-      //
-      // Why KV-direct (not HTTP):
-      //   /.well-known/ai-agent.json is served by this same Worker bound to
-      //   api.advocatemcp.com. When the Worker fetches its own bound
-      //   hostname, Cloudflare's same-zone loop-prevention bypasses the
-      //   Worker — the request hits Railway directly, no API key attached,
-      //   server returns 401. Result: profile silently stays null and
-      //   ai-agent.json ships without business_name / category / services.
-      //
-      // KV read is also 1–5ms vs ~150ms HTTP, with no auth round-trip.
-      // tenantToProfileObject() flattens the rich TenantRecord shape to
-      // the same { name, category, services, ... } object the renderer
-      // already consumed.
-      const profile = tenantToProfileObject(await getTenant(env, domain));
+      // Two-tier profile source (see readProfileForDomain for rationale):
+      //   1. TENANT_DATA KV — fast path for onboarded customer tenants.
+      //   2. Railway-direct HTTP with X-API-Key — covers the platform's
+      //      own advocatemcp.com tenant (pre-onboarding-flow record lives
+      //      only in D1) plus any tenant whose KV record is sparse.
+      // We do NOT use publicApiBase on the fallback because that hostname
+      // is bound to this Worker — fetching it triggers Cloudflare's
+      // same-zone loop-prevention and bypasses the API-key proxy
+      // (exactly the silent 401 chain PR #225 shipped).
+      const profile = await readProfileForDomain(env, domain, slug);
       ctx.waitUntil(
         Promise.resolve(
           logEvent({ ...baseEvent, slug, status: 200, referralUrl: null, taggedReferralUrl: null, latencyMs: Date.now() - startMs, error: null })
@@ -1069,14 +1063,13 @@ export default Sentry.withSentry(
     // ── 2c. /llms.txt ─────────────────────────────────────────────────────
     // Emerging convention from llmstxt.org — a per-site markdown discovery
     // file AI tools increasingly look for alongside robots.txt and sitemap.
-    // Universally accessible (no UA gating). Per-tenant: same resolution
-    // chain as ai-agent.json (BUSINESS_MAP for slug → TENANT_DATA for the
-    // rich profile, KV-direct to dodge same-zone Worker recursion). For
-    // tenants with no profile (unknown hostnames), serves a platform-
-    // level pointer at the central registry.
+    // Universally accessible (no UA gating). Same two-tier profile source
+    // as ai-agent.json: TENANT_DATA → Railway-direct-with-X-API-Key. For
+    // unknown hostnames (no slug, no profile), serves a platform-level
+    // pointer at the central registry.
     if (url.pathname === "/llms.txt") {
       const slug = await env.BUSINESS_MAP.get(domain);
-      const profile = tenantToProfileObject(await getTenant(env, domain));
+      const profile = await readProfileForDomain(env, domain, slug);
       ctx.waitUntil(
         Promise.resolve(
           logEvent({ ...baseEvent, slug, status: 200, referralUrl: null, taggedReferralUrl: null, latencyMs: Date.now() - startMs, error: null })

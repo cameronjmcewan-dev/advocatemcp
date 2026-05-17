@@ -40,7 +40,17 @@
  * undefined `foo` is equivalent to "skip this section."
  */
 
-import type { TenantRecord } from "../routes/onboard";
+import type { Env } from "../types";
+import { getTenant, type TenantRecord } from "../routes/onboard";
+
+/**
+ * Mirror of `apiBase()` in `worker/src/index.ts`. Duplicated rather than
+ * exported from there to keep this module dependency-free of the entry
+ * point (avoids a circular import: index.ts already imports from here).
+ */
+function apiBase(env: Env): string {
+  return env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
+}
 
 export function tenantToProfileObject(
   tenant: TenantRecord | null,
@@ -91,4 +101,69 @@ export function tenantToProfileObject(
   if (referral) out.referral_url = referral;
 
   return out;
+}
+
+/**
+ * Read the profile object that powers /.well-known/ai-agent.json and
+ * /llms.txt for `domain`, with a two-tier source strategy:
+ *
+ *   1. TENANT_DATA KV — onboarded customer tenants land here in ~1–5ms with
+ *      no network round-trip and no auth. This is the dominant path going
+ *      forward; every new customer's record is written here at signup.
+ *
+ *   2. Railway-direct HTTP fallback — covers tenants whose `TENANT_DATA`
+ *      record is missing or has no profile fields. The platform's own
+ *      `advocatemcp.com` tenant is in this bucket: it was wired into
+ *      `BUSINESS_MAP` before the onboarding flow existed, so its slug
+ *      resolves but the rich profile lives only in Railway D1.
+ *
+ * Why apiBase (NOT publicApiBase) on the fallback
+ * ----------------------------------------------
+ * `publicApiBase` (`api.advocatemcp.com`) is a hostname bound to THIS
+ * Worker. When a Worker fetches its own bound hostname, Cloudflare's
+ * same-zone loop-prevention bypasses the Worker entirely — the request
+ * goes straight to Railway with no `X-API-Key` proxy in the middle, and
+ * the server returns 401. That's exactly the silent failure PR #225
+ * shipped. Using `apiBase` (raw Railway hostname) avoids the
+ * loop-prevention entirely, and we attach the API key ourselves.
+ *
+ * Why fall back to KV result on HTTP failure
+ * ------------------------------------------
+ * If the KV record exists but is sparse (e.g. only `name` set), the
+ * KV-derived object still beats null for the renderer — at minimum the
+ * tenant gets a per-tenant H1 instead of slug-only fallback. We don't
+ * want a transient Railway hiccup to delete data we already have.
+ */
+export async function readProfileForDomain(
+  env: Env,
+  domain: string,
+  slug: string | null,
+): Promise<Record<string, unknown> | null> {
+  const fromKv = tenantToProfileObject(await getTenant(env, domain));
+
+  // KV has enough to render — short-circuit. `name || description` is the
+  // minimum signal a useful profile has; anything less and the renderer
+  // would just fall back to the slug anyway.
+  if (fromKv && (fromKv.name || fromKv.description)) {
+    return fromKv;
+  }
+
+  // No slug → no HTTP URL we can build; return whatever KV had (likely null).
+  if (!slug) return fromKv;
+
+  try {
+    const res = await Promise.race([
+      fetch(`${apiBase(env)}/agents/${slug}/profile`, {
+        headers: env.API_KEY ? { "X-API-Key": env.API_KEY } : {},
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("timeout")), 2000),
+      ),
+    ]) as Response;
+    if (res.ok) {
+      return (await res.json()) as Record<string, unknown>;
+    }
+  } catch { /* best-effort — fall through to KV result */ }
+
+  return fromKv;
 }
