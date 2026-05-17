@@ -84,6 +84,7 @@ import {
   generateSessionToken,
   hashToken,
   getSessionToken,
+  clearSessionCookieHeader,
   refreshCookieHeader,
   clearRefreshCookieHeader,
   getRefreshToken,
@@ -427,10 +428,21 @@ export async function handleAuthLogin(request: Request, env: Env): Promise<Respo
 
 // ── POST /api/auth/logout ─────────────────────────────────────────────────
 //
-// Idempotent. Best-effort delete of the session row matching the refresh
-// cookie. Always returns 200 with the cookie-clearing Set-Cookie header.
-// Never distinguishes "session existed" from "session didn't exist" —
-// would leak information about whether the client had a valid session.
+// Idempotent. Best-effort delete of BOTH session rows: the one keyed by
+// the Phase C refresh cookie (amcp_refresh) and the one keyed by the
+// legacy session cookie (amcp_session). Both cookies are cleared in the
+// response. Always returns 200. Never distinguishes "session existed"
+// from "session didn't exist" — would leak information about whether
+// the client had a valid session.
+//
+// Pre-fix this handler only cleared amcp_refresh and only deleted the
+// refresh-keyed row, leaving the legacy session cookie + D1 row intact.
+// getSessionFromRequest's cookie branch would then re-authenticate the
+// user silently on the next request — sign-out appeared to do nothing.
+// The legacy /auth/logout handler at portal.ts:764 was fixed for the
+// same bug (see comment block there); the Phase C migration originally
+// missed it. authApi.logout.test.ts pins both cookies and both D1
+// deletes so this regression can't return silently.
 
 export async function handleAuthLogout(request: Request, env: Env): Promise<Response> {
   const refreshRaw = getRefreshToken(request);
@@ -442,19 +454,36 @@ export async function handleAuthLogout(request: Request, env: Env): Promise<Resp
       console.warn(JSON.stringify({
         auth: true,
         event: "logout_delete_warning",
+        cookie: "amcp_refresh",
+        error: String(err),
+      }));
+    }
+  }
+  const sessionRaw = getSessionToken(request);
+  if (sessionRaw) {
+    try {
+      await deleteSession(env.DB, sessionRaw);
+    } catch (err) {
+      // Best-effort — ignore errors. A failed legacy-session delete must
+      // not block the logout response or leave the user unable to sign
+      // out. The Set-Cookie header below still clears the cookie.
+      console.warn(JSON.stringify({
+        auth: true,
+        event: "logout_delete_warning",
+        cookie: "amcp_session",
         error: String(err),
       }));
     }
   }
   console.log(JSON.stringify({ auth: true, event: "logout" }));
 
-  const resp = new Response(JSON.stringify({ ok: true }), {
-    status: 200,
-    headers: {
-      "Content-Type": "application/json",
-      "Set-Cookie":   clearRefreshCookieHeader(),
-    },
-  });
+  // Two Set-Cookie headers via Headers.append — a plain object literal
+  // can only carry one Set-Cookie value, and we must clear both cookies
+  // for sign-out to be observable across the legacy and Phase C paths.
+  const headers = new Headers({ "Content-Type": "application/json" });
+  headers.append("Set-Cookie", clearRefreshCookieHeader());
+  headers.append("Set-Cookie", clearSessionCookieHeader());
+  const resp = new Response(JSON.stringify({ ok: true }), { status: 200, headers });
   return withCors(resp, request, { credentials: true });
 }
 

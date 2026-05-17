@@ -1,22 +1,19 @@
 /**
- * Characterization tests for POST /api/auth/logout (the Phase C
- * handleAuthLogout endpoint at authApi.ts:445).
+ * Tests POST /api/auth/logout (the Phase C handleAuthLogout endpoint at
+ * authApi.ts:445) clears BOTH the legacy amcp_session cookie and the
+ * Phase C amcp_refresh cookie.
  *
- * Current behavior captured in this file (as of this commit):
- *   - Returns 200 with {ok:true}.
- *   - Clears the Phase C refresh cookie (amcp_refresh).
- *   - DOES NOT clear the legacy session cookie (amcp_session). This is a
- *     regression: the legacy /auth/logout handler at portal.ts:764 was
- *     fixed to clear BOTH cookies (see portal.legacyLogout.test.ts and
- *     the comment block at portal.ts:755-762), but the Phase C migration
- *     to /api/auth/logout did not carry forward that fix. The legacy
- *     amcp_session cookie + its D1 session row survive, so any path that
- *     hits getSessionFromRequest's cookie branch re-authenticates the
- *     user silently after they "signed out".
+ * Pre-fix: the handler only cleared amcp_refresh, leaving amcp_session
+ * intact in the browser AND the D1 session row for amcp_session
+ * undeleted. Any subsequent request that walked
+ * getSessionFromRequest's cookie branch would silently re-authenticate
+ * the user — sign-out appeared to do nothing. The legacy /auth/logout
+ * handler at portal.ts:764 was fixed for the same bug shape; see the
+ * comment block there + portal.legacyLogout.test.ts for the mirror.
  *
- * The third test below explicitly LOCKS IN the regression. When the fix
- * lands, that test's assertion flips from `toBeUndefined` to
- * `toBeDefined` (plus the matching attribute checks).
+ * Post-fix: both cookies are cleared via two Set-Cookie headers
+ * (Headers.append — a plain object literal can only carry one
+ * Set-Cookie value) AND both D1 session rows are best-effort deleted.
  */
 
 import { describe, it, expect } from "vitest";
@@ -58,7 +55,7 @@ function getSetCookies(res: Response): string[] {
   return single ? [single] : [];
 }
 
-describe("POST /api/auth/logout — current cookie-clearing behavior", () => {
+describe("POST /api/auth/logout — cookie clearing", () => {
   it("returns 200 with ok:true", async () => {
     const env = mockEnv();
     const res = await handlePortal(makeLogoutRequest(), env);
@@ -82,17 +79,52 @@ describe("POST /api/auth/logout — current cookie-clearing behavior", () => {
     expect(refreshClear!).toMatch(/Domain=\.advocatemcp\.com/);
   });
 
-  it("[Phase C regression] does NOT clear amcp_session cookie", async () => {
-    // This test LOCKS IN the current bug. The Phase C handleAuthLogout
-    // only emits a single Set-Cookie header (for amcp_refresh) and
-    // leaves the legacy amcp_session cookie intact in the browser. When
-    // the fix lands, this expectation flips to `toBeDefined` (with
-    // matching Path=/, Domain=.advocatemcp.com, Max-Age=0 attributes,
-    // mirroring the legacy portal.legacyLogout.test.ts pattern).
+  it("clears amcp_session cookie with matching Path + Domain", async () => {
+    // The session cookie was set with Path=/ + Domain=.advocatemcp.com —
+    // the clear-cookie header MUST match those attributes or the browser
+    // will keep the original cookie. This is the regression that broke
+    // sign-out pre-fix: the Phase C handler only cleared amcp_refresh.
     const env = mockEnv();
     const res = await handlePortal(makeLogoutRequest(), env);
     const setCookies = getSetCookies(res!);
     const sessionClear = setCookies.find((c) => /^amcp_session=/.test(c));
-    expect(sessionClear).toBeUndefined();
+    expect(sessionClear).toBeDefined();
+    expect(sessionClear!).toMatch(/Max-Age=0/);
+    expect(sessionClear!).toMatch(/Path=\//);
+    expect(sessionClear!).toMatch(/Domain=\.advocatemcp\.com/);
+  });
+
+  it("attempts to delete both D1 session rows (legacy + refresh)", async () => {
+    // Best-effort delete: both refresh-keyed and session-keyed rows are
+    // queried on logout. We don't assert success (D1 may be empty or
+    // the request may have no cookie); we assert the handler issued
+    // both DELETE statements via the prepare() spy.
+    const calls: string[] = [];
+    const DB = {
+      prepare(sql: string) {
+        return {
+          bind(..._args: unknown[]) {
+            return {
+              async first() { return null; },
+              async run() {
+                if (/delete\s+from\s+sessions/i.test(sql)) calls.push(sql);
+                return { meta: {} };
+              },
+            };
+          },
+          async run() { return { meta: {} }; },
+          async first() { return null; },
+        };
+      },
+    };
+    const env = {
+      DB: DB as unknown as D1Database,
+      BUSINESS_MAP: {} as unknown as KVNamespace,
+      TENANT_DATA:  {} as unknown as KVNamespace,
+    } as unknown as Env;
+    await handlePortal(makeLogoutRequest(), env);
+    // Two DELETE FROM sessions calls: one for the refresh-token hash,
+    // one for the session-token hash. Both via deleteSession(env.DB, raw).
+    expect(calls.length).toBe(2);
   });
 });
