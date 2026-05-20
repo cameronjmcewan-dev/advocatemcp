@@ -42,7 +42,8 @@
     { path: /^\/CompetitorRadar(\.html)?\/?$/,     script: '/js/v2/radar.js',        module: 'AMCP_RADAR',          activeId: 'radar',          crumb: 'Dashboard · Competitor Radar', title: 'Competitor Radar' },
     { path: /^\/A2APipeline(\.html)?\/?$/,         script: '/js/v2/a2a-pipeline.js', module: 'AMCP_A2A',            activeId: 'a2a',            crumb: 'Dashboard · AI bookings',     title: 'AI-attributed bookings' },
     { path: /^\/ActivityFeed(\.html)?\/?$/,        script: '/js/v2/activity.js',     module: 'AMCP_ACTIVITY',       activeId: 'activity',       crumb: 'Dashboard · Activity',         title: 'Activity feed' },
-    { path: /^\/BusinessProfile(\.html)?\/?$/,     script: '/js/v2/profile.js',      module: 'AMCP_PROFILE',        activeId: 'profile',        crumb: 'Account · Business profile',   title: 'Business profile' },
+    { path: /^\/BusinessProfile(\.html)?\/?$/,     script: '/js/v2/profile.js',      module: 'AMCP_PROFILE',        activeId: 'profile',        crumb: 'Dashboard · Business profile', title: 'Business profile' },
+    { path: /^\/TeamAccess(\.html)?\/?$/,          script: '/js/v2/team.js',         module: 'AMCP_TEAM_ACCESS',    activeId: 'team-access',    crumb: 'Account · Team & Access',      title: 'Team & Access' },
     { path: /^\/Settings(\.html)?\/?$/,            script: '/js/v2/settings.js',     module: 'AMCP_SETTINGS',       activeId: 'settings',       crumb: 'Account · Settings',           title: 'Settings & API' },
     { path: /^\/Billing(\.html)?\/?$/,             script: '/js/v2/billing.js',      module: 'AMCP_BILLING',        activeId: 'billing',        crumb: 'Account · Billing',            title: 'Billing' },
     { path: /^\/admin\/?$/,                        script: '/js/v2/admin.js',        module: 'AMCP_ADMIN',          activeId: 'admin-overview', crumb: 'Internal · Mission Control',   title: 'Mission Control' },
@@ -282,8 +283,17 @@
       try { mod.afterMount(data); } catch (err) { console.error('afterMount failed', err); }
     }
 
-    // Scroll restore / reset on navigation.
-    window.scrollTo({ top: 0, behavior: 'instant' });
+    // Scroll restore / reset on navigation. Business Profile deep
+    // links (e.g. /BusinessProfile.html?focus=ratings clicked from an
+    // AI Insights card) want profile.js's focusProfileSection to scroll
+    // the matching form into view via rAF, so a synchronous scrollTo(0)
+    // here would flash the page back to top and either fight the
+    // smooth scroll or erase the user's intended target. Skip the
+    // reset on profile-focus navs and let afterMount own scroll.
+    const hasProfileFocus = route.activeId === 'profile' && (u.hash || u.searchParams.has('focus'));
+    if (!hasProfileFocus) {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
 
     // Re-apply speculation rules so the new route prerenders siblings.
     if (window.AdvocateChrome && typeof window.AdvocateChrome._reapplySpeculationRules === 'function') {

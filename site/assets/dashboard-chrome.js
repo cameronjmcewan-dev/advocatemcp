@@ -13,14 +13,23 @@
   // legacy dashboard.html, and we need the new UI on a distinct path.
   const NAV_MAIN = [
     { id: 'overview',    href: '/app.html',              g: '◈', label: 'Overview' },
+    // Business profile sits directly under Overview because tenants
+    // edit it frequently in the early days (tone, verified ratings,
+    // pricing tier) and burying it in the avatar dropdown made it feel
+    // like a one-time setup screen rather than an ongoing surface.
+    { id: 'profile',     href: '/BusinessProfile.html',  g: '◉', label: 'Business profile' },
     { id: 'mentions',    href: '/Mentions.html',         g: '✦', label: 'Mentions' },
     { id: 'traffic-impact', href: '/TrafficImpact.html',  g: '→', label: 'Traffic impact' },
     { id: 'radar',       href: '/CompetitorRadar.html',  g: '△', label: 'Competitor Radar' },
     { id: 'a2a',         href: '/A2APipeline.html',      g: '⇄', label: 'AI bookings' },
     { id: 'activity',    href: '/ActivityFeed.html',     g: '☰', label: 'Activity feed' },
   ];
+  // Avatar-dropdown account section. Business profile moved out to the
+  // main sidebar; the slot is now occupied by Team & Access, a
+  // dedicated surface for inviting/managing teammates that previously
+  // lived as a card inside Settings & API.
   const NAV_ACCOUNT = [
-    { id: 'profile',     href: '/BusinessProfile.html',  g: '⚙', label: 'Business profile' },
+    { id: 'team-access', href: '/TeamAccess.html',       g: '◐', label: 'Team & Access' },
     { id: 'settings',    href: '/Settings.html',         g: '⌸', label: 'Settings & API' },
     { id: 'billing',     href: '/Billing.html',          g: '◑', label: 'Billing' },
   ];
