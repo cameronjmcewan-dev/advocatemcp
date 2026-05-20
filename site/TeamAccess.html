@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#fbf9f5" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#141210" media="(prefers-color-scheme: dark)">
 <meta name="robots" content="noindex, nofollow">
-<title>Business profile, Advocate</title>
+<title>Team & Access, Advocate</title>
 <link rel="icon" type="image/png" sizes="32x32"  href="/favicon-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
@@ -30,19 +30,16 @@
 <script src="/js/dashboard-auth.js"></script>
 <script src="/js/v2/shell.js"></script>
 <script src="/js/v2/router.js"></script>
-<!-- AI Insights panel (Pro/Enterprise) — loaded BEFORE profile.js so
-     window.AMCP_AI_INSIGHTS is defined when renderScoreResult runs. -->
-<script src="/js/v2/aiInsights.js"></script>
-<script src="/js/v2/profile.js"></script>
+<script src="/js/v2/team.js"></script>
 <script>
 window.AMCP_SHELL.boot({
-  activeId:   'profile',
-  crumb:      'Dashboard · Business profile',
-  title:      'Business profile',
-  demo:       window.AMCP_PROFILE.demo,
-  fetchReal:  window.AMCP_PROFILE.fetch,
-  render:     window.AMCP_PROFILE.render,
-  afterMount: window.AMCP_PROFILE.afterMount,
+  activeId:   'team-access',
+  crumb:      'Account · Team & Access',
+  title:      'Team & Access',
+  demo:       window.AMCP_TEAM_ACCESS.demo,
+  fetchReal:  window.AMCP_TEAM_ACCESS.fetch,
+  render:     window.AMCP_TEAM_ACCESS.render,
+  afterMount: window.AMCP_TEAM_ACCESS.afterMount,
 });
 </script>
 </body>

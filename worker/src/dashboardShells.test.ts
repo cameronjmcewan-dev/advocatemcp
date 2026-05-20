@@ -66,10 +66,7 @@ const DASHBOARD_SHELLS = [
   "A2APipeline.html",
   "ActivityFeed.html",
   // NAV_ACCOUNT
-  // NOTE: TeamAccess.html exists in production deploys but is untracked
-  // in this repo (`git ls-files site/TeamAccess.html` errors). Flagged
-  // separately to the maintainer; cannot be enforced here until that
-  // file lands in version control.
+  "TeamAccess.html",
   "Settings.html",
   "Billing.html",
   // NAV_ADMIN (rendered when user_role === 'admin')
