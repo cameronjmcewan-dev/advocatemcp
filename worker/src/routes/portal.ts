@@ -59,6 +59,7 @@ import {
   handleTeamAccept,
   handleTeamAcceptPreflight,
 } from "./team";
+import { handleClientSwitchDomain } from "./clientSwitchDomain";
 import { signMagicToken, verifyMagicToken } from "../lib/magicToken";
 import {
   handleAdminInsightsProxy,
@@ -286,6 +287,13 @@ export async function handlePortal(request: Request, env: Env): Promise<Response
   // setting their password from the magic link.
   if (pathname === "/api/client/team"          && method === "GET")  return handleListTeam(request, env);
   if (pathname === "/api/client/team/invite"   && method === "POST") return handleInviteTeam(request, env);
+
+  // Tenant self-serve "switch from hosted subdomain to a custom domain"
+  // flow. Owner-only, authenticated. Triggered from the DNS Wizard's
+  // hosted-notice panel ("Use your own domain →" button). See
+  // clientSwitchDomain.ts for the full edge-case ladder.
+  if (pathname === "/api/client/tenant/switch-domain" && method === "POST")    return handleClientSwitchDomain(request, env);
+  if (pathname === "/api/client/tenant/switch-domain" && method === "OPTIONS") return handleCorsPreflight(request, { credentials: true });
   const teamRoleMatch = pathname.match(/^\/api\/client\/team\/([a-zA-Z0-9_-]+)\/role$/);
   if (teamRoleMatch && method === "PATCH")    return handleUpdateTeamRole(request, env, teamRoleMatch[1]);
   if (teamRoleMatch && method === "OPTIONS")  return handleCorsPreflight(request, { credentials: true });

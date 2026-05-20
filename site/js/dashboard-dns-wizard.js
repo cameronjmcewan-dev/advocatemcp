@@ -31,9 +31,27 @@
   var STAGE_PICKER       = 'picker';
   var STAGE_INSTRUCTIONS = 'instructions';
   var STAGE_VERIFY       = 'verify';
+  // ── Hosted → custom domain self-serve flow (added May 2026) ──
+  // Reached from `_renderHostedNotice`'s "Use your own domain →" button.
+  // Walks the tenant through: type domain → backend registers CF custom
+  // hostname → render the CNAME they need at their registrar. Verification
+  // is delegated to the existing /api/client/domain-info polling shown
+  // on the Connection card; we don't repeat that surface here so the
+  // wizard stays focused.
+  var STAGE_SWITCH_INPUT        = 'switch_input';
+  var STAGE_SWITCH_PENDING      = 'switch_pending';
+  var STAGE_SWITCH_INSTRUCTIONS = 'switch_instructions';
 
   var _stage    = STAGE_PICKER;
   var _provider = null;   // one of 'godaddy' | 'namecheap' | 'cloudflare'
+
+  // Holds the response payload from POST /api/client/tenant/switch-domain
+  // so STAGE_SWITCH_INSTRUCTIONS can render the CNAME table without
+  // re-fetching. Cleared on `close()`.
+  var _switchResult = null;
+  // Inline error string surfaced inside STAGE_SWITCH_INPUT after a
+  // failed submit (e.g. 409 domain_taken). Cleared on next transition.
+  var _switchError = '';
 
   var LOCAL_STORAGE_KEY = 'amcp-dns-provider';
   var POLL_INTERVAL_MS  = 10000;
@@ -122,6 +140,19 @@
       _bindStageHandlers();
       return;
     }
+    // Pre-encode a support mailto so the fallback escape works for
+    // tenants who can't (or won't) self-serve. Subject names the host
+    // they're currently on so support can find the tenant fast.
+    var supportSubject = encodeURIComponent(
+      'Switch ' + displayHost + ' to a custom domain'
+    );
+    var supportBody = encodeURIComponent(
+      "Hi,\n\nI'd like to switch my Advocate dashboard from " +
+      displayHost + " to my own domain. Can you help me set up the CNAME?\n\nThanks,\n"
+    );
+    var supportMailto =
+      'mailto:max@advocate-mcp.com?subject=' + supportSubject + '&body=' + supportBody;
+
     var body = (
       '<div class="amcp-dns-step">' +
         '<div class="amcp-dns-step-title">No DNS setup needed</div>' +
@@ -130,18 +161,28 @@
           'and routed automatically through our Cloudflare edge. There’s nothing for ' +
           'you to configure at a domain registrar — bots already reach your agent.' +
         '</div>' +
-        '<div class="amcp-dns-step-copy" style="font-size:13px;color:var(--muted)">' +
-          'Want to use your own domain (e.g. <code>advocate.com</code>) instead? ' +
-          'Reach out to support and we’ll move you to the custom-domain tier.' +
+        '<div class="amcp-dns-step-copy" style="margin-bottom:18px">' +
+          'Want to use your own domain instead (e.g. <code>acme.com</code>)? ' +
+          'You can switch yourself in about 30 seconds. We register the custom hostname ' +
+          'with our edge network, then show you the CNAME to paste at your registrar.' +
         '</div>' +
-        '<div style="margin-top:24px;display:flex;justify-content:flex-end">' +
-          '<button id="amcp-dns-close" class="amcp-welcome-btn amcp-welcome-btn-primary" type="button">Got it</button>' +
+        '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:24px">' +
+          '<button id="amcp-dns-switch-start" class="amcp-welcome-btn amcp-welcome-btn-primary" type="button">Use your own domain →</button>' +
+          '<button id="amcp-dns-close" class="amcp-welcome-btn" type="button" style="background:transparent">Got it</button>' +
+          '<a href="' + supportMailto + '" style="margin-left:auto;font-size:13px;color:var(--muted);text-decoration:underline">Email support instead</a>' +
         '</div>' +
       '</div>'
     );
     _swapDrawerBody(body);
-    var btn = document.getElementById('amcp-dns-close');
-    if (btn) btn.addEventListener('click', close);
+    var closeBtn = document.getElementById('amcp-dns-close');
+    if (closeBtn) closeBtn.addEventListener('click', close);
+    var switchBtn = document.getElementById('amcp-dns-switch-start');
+    if (switchBtn) {
+      switchBtn.addEventListener('click', function () {
+        _switchError = '';
+        _transition(STAGE_SWITCH_INPUT);
+      });
+    }
   }
 
   function _openLoadingDrawer() {
@@ -176,6 +217,8 @@
 
   function close() {
     _stopPolling();
+    _switchResult = null;
+    _switchError  = '';
     if (window.AMCP_UI && typeof window.AMCP_UI.closeDrawer === 'function') {
       window.AMCP_UI.closeDrawer();
     }
@@ -192,16 +235,22 @@
   }
 
   function _bodyForStage() {
-    if (_stage === STAGE_PICKER)       return _renderPicker();
-    if (_stage === STAGE_INSTRUCTIONS) return _renderInstructions();
-    if (_stage === STAGE_VERIFY)       return _renderVerify();
+    if (_stage === STAGE_PICKER)              return _renderPicker();
+    if (_stage === STAGE_INSTRUCTIONS)        return _renderInstructions();
+    if (_stage === STAGE_VERIFY)              return _renderVerify();
+    if (_stage === STAGE_SWITCH_INPUT)        return _renderSwitchInput();
+    if (_stage === STAGE_SWITCH_PENDING)      return _renderSwitchPending();
+    if (_stage === STAGE_SWITCH_INSTRUCTIONS) return _renderSwitchInstructions();
     return '';
   }
 
   function _bindStageHandlers() {
-    if (_stage === STAGE_PICKER)       _bindPicker();
-    if (_stage === STAGE_INSTRUCTIONS) _bindInstructions();
-    if (_stage === STAGE_VERIFY)       _bindVerify();
+    if (_stage === STAGE_PICKER)              _bindPicker();
+    if (_stage === STAGE_INSTRUCTIONS)        _bindInstructions();
+    if (_stage === STAGE_VERIFY)              _bindVerify();
+    if (_stage === STAGE_SWITCH_INPUT)        _bindSwitchInput();
+    if (_stage === STAGE_SWITCH_INSTRUCTIONS) _bindSwitchInstructions();
+    // STAGE_SWITCH_PENDING has no user-actionable handlers.
   }
 
   function _transition(nextStage) {
@@ -595,6 +644,217 @@
         if (typeof window.AMCP_ONBOARDING.refreshChecklist === 'function') {
           window.AMCP_ONBOARDING.refreshChecklist();
         }
+      });
+    }
+  }
+
+  /* ── Hosted → custom domain self-serve stages (May 2026) ────────────────── */
+
+  function _renderSwitchInput() {
+    // Pre-fill the input with a sensible guess if the tenant has a
+    // website field on file. Otherwise leave empty so the placeholder
+    // does the teaching.
+    var seed = '';
+    var d = window.AMCP_DATA || {};
+    if (d.website && typeof d.website === 'string') {
+      try {
+        seed = new URL(d.website).hostname.replace(/^www\./, '');
+        if (seed.endsWith('.advocatemcp.com')) seed = '';
+      } catch (_) { /* ignore */ }
+    }
+    var errorBlock = _switchError ? (
+      '<div role="alert" style="margin:12px 0;padding:10px 14px;border:1px solid rgba(176,30,60,0.35);border-radius:8px;background:rgba(176,30,60,0.06);color:var(--maroon);font-size:13.5px;line-height:1.5">' +
+        escHtml(_switchError) +
+      '</div>'
+    ) : '';
+    return (
+      '<div class="amcp-dns-step">' +
+        '<div class="amcp-dns-step-title">Switch to your own domain</div>' +
+        '<div class="amcp-dns-step-copy" style="margin-bottom:14px">' +
+          'Enter the domain you want bots to crawl (e.g. <code>acme.com</code>). ' +
+          'We\'ll register it with our edge network, then show you the CNAME to paste at your registrar.' +
+        '</div>' +
+        errorBlock +
+        '<form id="amcp-dns-switch-form" novalidate>' +
+          '<label style="display:block;font-size:12px;letter-spacing:0.02em;text-transform:uppercase;color:var(--muted);margin-bottom:6px" for="amcp-dns-switch-input">Your custom domain</label>' +
+          '<input id="amcp-dns-switch-input" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url" placeholder="acme.com" value="' + escHtml(seed) + '" style="width:100%;padding:11px 13px;border-radius:8px;border:1px solid var(--line);background:var(--paper-2);color:var(--ink);font:inherit;font-size:14px" />' +
+          '<small style="display:block;margin-top:8px;font-size:12px;color:var(--muted);line-height:1.5">' +
+            'Use the apex (acme.com), not www. We register both acme.com and www.acme.com automatically. ' +
+            'Cannot be an advocatemcp.com hostname.' +
+          '</small>' +
+          '<div style="margin-top:24px;display:flex;gap:12px;justify-content:flex-end">' +
+            '<button id="amcp-dns-switch-cancel" type="button" class="amcp-welcome-btn" style="background:transparent">Cancel</button>' +
+            '<button id="amcp-dns-switch-submit" type="submit" class="amcp-welcome-btn amcp-welcome-btn-primary">Continue</button>' +
+          '</div>' +
+        '</form>' +
+      '</div>'
+    );
+  }
+
+  function _bindSwitchInput() {
+    var form = document.getElementById('amcp-dns-switch-form');
+    var input = document.getElementById('amcp-dns-switch-input');
+    var cancel = document.getElementById('amcp-dns-switch-cancel');
+    if (input) {
+      // Focus immediately so the user can type without an extra click.
+      // setTimeout punts past the drawer animation that owns scroll
+      // focus on first paint.
+      setTimeout(function () { try { input.focus(); input.select(); } catch (_) {} }, 50);
+    }
+    if (cancel) {
+      cancel.addEventListener('click', function () {
+        _switchError = '';
+        // Drop back to the hosted-notice panel rather than the picker —
+        // the picker is for custom-domain tenants doing legacy CNAME
+        // setup, not for hosted tenants who already see the notice.
+        _renderHostedNotice(currentDomain() || 'your subdomain');
+      });
+    }
+    if (form) {
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        _submitSwitchDomain();
+      });
+    }
+  }
+
+  function _submitSwitchDomain() {
+    var input = document.getElementById('amcp-dns-switch-input');
+    var submit = document.getElementById('amcp-dns-switch-submit');
+    if (!input) return;
+    var newDomain = (input.value || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    if (!newDomain || newDomain.indexOf('.') === -1) {
+      _switchError = 'Enter a real domain — at least one dot, e.g. acme.com.';
+      _transition(STAGE_SWITCH_INPUT);
+      return;
+    }
+    if (newDomain.endsWith('.advocatemcp.com') || newDomain === 'advocatemcp.com') {
+      _switchError = 'You can\'t claim an advocatemcp.com hostname. Use your own domain.';
+      _transition(STAGE_SWITCH_INPUT);
+      return;
+    }
+    var slug = currentSlug();
+    if (!slug) {
+      _switchError = 'We couldn\'t determine which business to switch. Refresh and try again.';
+      _transition(STAGE_SWITCH_INPUT);
+      return;
+    }
+    if (submit) {
+      submit.disabled = true;
+      submit.textContent = 'Registering…';
+    }
+    _switchError = '';
+    _transition(STAGE_SWITCH_PENDING);
+
+    if (!window.AMCP || typeof window.AMCP.authedFetch !== 'function') {
+      _switchError = 'Could not authenticate. Refresh and try again.';
+      _transition(STAGE_SWITCH_INPUT);
+      return;
+    }
+
+    window.AMCP.authedFetch('/api/client/tenant/switch-domain', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ slug: slug, new_domain: newDomain }),
+    })
+      .then(function (res) {
+        return res.json().then(function (body) { return { status: res.status, body: body }; });
+      })
+      .then(function (result) {
+        if (result.status === 200 && result.body && result.body.ok) {
+          _switchResult = result.body;
+          _transition(STAGE_SWITCH_INSTRUCTIONS);
+          return;
+        }
+        // Backend-supplied message wins; fall back to status-code hint.
+        var msg = (result.body && result.body.message) || (
+          result.status === 401 ? 'Sign in required.' :
+          result.status === 403 ? 'Only the business owner can switch the domain.' :
+          result.status === 404 ? 'Business not found.' :
+          result.status === 409 ? 'That domain is already claimed by another tenant.' :
+          result.status === 502 ? 'Cloudflare registration failed. Try again in a minute.' :
+          'Could not register the domain. Try again or email support.'
+        );
+        _switchError = msg;
+        _transition(STAGE_SWITCH_INPUT);
+      })
+      .catch(function (err) {
+        _switchError = 'Network error: ' + (err && err.message ? err.message : 'try again');
+        _transition(STAGE_SWITCH_INPUT);
+      });
+  }
+
+  function _renderSwitchPending() {
+    return (
+      '<div class="amcp-dns-step" style="text-align:center;padding:48px 0">' +
+        '<div style="display:inline-block;width:24px;height:24px;border:2px solid var(--line);border-top-color:var(--maroon);border-radius:50%;animation:amcp-dns-spin 0.9s linear infinite;margin-bottom:16px"></div>' +
+        '<div class="amcp-dns-step-copy" style="color:var(--muted)">' +
+          'Registering with our edge network… takes about 10 seconds.' +
+        '</div>' +
+        '<style>@keyframes amcp-dns-spin { to { transform: rotate(360deg); } }</style>' +
+      '</div>'
+    );
+  }
+
+  function _renderSwitchInstructions() {
+    if (!_switchResult) {
+      // Defensive: if we hit this stage without a payload (e.g. stale
+      // state after a refresh), drop back to the input form.
+      return _renderSwitchInput();
+    }
+    var newDomain = _switchResult.new_domain || 'your domain';
+    var records = (_switchResult.dns && _switchResult.dns.records) || [];
+    var recordRows = records.map(function (r) {
+      return (
+        '<tr>' +
+          '<td style="padding:8px 10px;border-bottom:1px solid var(--line);font-family:var(--mono, monospace);font-size:12.5px;white-space:nowrap">' + escHtml(r.type) + '</td>' +
+          '<td style="padding:8px 10px;border-bottom:1px solid var(--line);font-family:var(--mono, monospace);font-size:12.5px;word-break:break-all">' + escHtml(r.host) + '</td>' +
+          '<td style="padding:8px 10px;border-bottom:1px solid var(--line);font-family:var(--mono, monospace);font-size:12.5px;word-break:break-all">' + escHtml(r.value) + '</td>' +
+        '</tr>' +
+        '<tr><td colspan="3" style="padding:0 10px 10px;font-size:12px;color:var(--muted);line-height:1.5">' + escHtml(r.purpose) + '</td></tr>'
+      );
+    }).join('');
+    var summary = (_switchResult.dns && _switchResult.dns.summary) || (
+      'Add the records below at your DNS host (the same place where you bought ' + newDomain + ').'
+    );
+    return (
+      '<div class="amcp-dns-step">' +
+        '<div class="amcp-dns-step-title">Add this at your DNS host</div>' +
+        '<div class="amcp-dns-step-copy" style="margin-bottom:14px">' + escHtml(summary) + '</div>' +
+        '<div style="margin-bottom:18px;padding:12px 14px;border-radius:8px;background:rgba(125,37,80,0.06);border:1px solid var(--maroon-tint);font-size:13px;line-height:1.55">' +
+          '<strong style="color:var(--maroon)">Registered:</strong> ' +
+          '<code>' + escHtml(newDomain) + '</code> is now claimed for your tenant. Add the record(s) below at your registrar and DNS propagation usually finishes within an hour.' +
+        '</div>' +
+        '<div style="overflow-x:auto;border:1px solid var(--line);border-radius:8px;margin-bottom:18px">' +
+          '<table style="width:100%;border-collapse:collapse">' +
+            '<thead><tr style="background:var(--paper-2)">' +
+              '<th style="text-align:left;padding:8px 10px;font-size:12px;letter-spacing:0.04em;text-transform:uppercase;color:var(--muted);font-weight:600">Type</th>' +
+              '<th style="text-align:left;padding:8px 10px;font-size:12px;letter-spacing:0.04em;text-transform:uppercase;color:var(--muted);font-weight:600">Host</th>' +
+              '<th style="text-align:left;padding:8px 10px;font-size:12px;letter-spacing:0.04em;text-transform:uppercase;color:var(--muted);font-weight:600">Value</th>' +
+            '</tr></thead>' +
+            '<tbody>' + recordRows + '</tbody>' +
+          '</table>' +
+        '</div>' +
+        '<div class="amcp-dns-step-copy" style="font-size:13px;color:var(--muted);line-height:1.55;margin-bottom:18px">' +
+          'After you add the record, your Connection card on the dashboard will switch to verified within a few minutes. ' +
+          'No need to come back here — DNS propagation handles itself.' +
+        '</div>' +
+        '<div style="display:flex;gap:12px;justify-content:flex-end;align-items:center;flex-wrap:wrap">' +
+          '<button id="amcp-dns-switch-done" type="button" class="amcp-welcome-btn amcp-welcome-btn-primary">Done</button>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function _bindSwitchInstructions() {
+    var doneBtn = document.getElementById('amcp-dns-switch-done');
+    if (doneBtn) {
+      doneBtn.addEventListener('click', function () {
+        // Reload the page so /api/client/me re-runs with the new
+        // domain — the sidebar's biz-block + Connection card refresh
+        // to reflect the new custom-domain state. Without this the
+        // user would see stale "hosted" copy until they navigated.
+        try { window.location.reload(); } catch (_) { close(); }
       });
     }
   }
