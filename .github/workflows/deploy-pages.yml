@@ -48,21 +48,39 @@ jobs:
       - uses: actions/checkout@v6
 
       # Compute a single-line commit message. The previous
-       # `head_commit.message` substitution broke when commit bodies had
-      # newlines — wrangler saw the body lines as positional args and
-      # rejected the whole deploy. Pin to subject + SHA, which always
-      # round-trips cleanly through YAML, shell, and wrangler.
+      # `head_commit.message` substitution broke when commit bodies had
+      # newlines, parens, or quotes: GitHub Actions interpolates
+      # `${{ ... }}` into the shell script BEFORE bash parses it, so
+      # any commit message with characters bash treats as syntax
+      # (newlines splitting statements, unescaped parens, embedded `"`)
+      # turns the generated script into a parse error. May 2026's
+      # forgot-password PR (#240) hit this and required a manual
+      # workflow_dispatch to recover.
+      #
+      # Fix per GitHub's security-hardening guide: pass the
+      # interpolated value through `env:` so it lands as a plain
+      # environment variable string inside the runner shell, never as
+      # bash source. Bash's own quoting (`"$HEAD_MSG"`) then handles
+      # whatever the message contains. References:
+      #   https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions#using-an-intermediate-environment-variable
+      #
+      # Pinned to subject + SHA in the final deploy-message output
+      # because wrangler treats body lines as positional args and
+      # rejects the whole deploy when they contain shell metacharacters.
       - name: Compute deploy message
         id: msg
+        env:
+          HEAD_MSG: ${{ github.event.head_commit.message }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          if [ -n "${{ github.event.head_commit.message }}" ]; then
-            subject=$(echo "${{ github.event.head_commit.message }}" | head -1)
+          if [ -n "$HEAD_MSG" ]; then
+            subject=$(printf '%s\n' "$HEAD_MSG" | head -1)
           else
-            subject="${{ github.event.pull_request.title }}"
+            subject="$PR_TITLE"
           fi
           # Strip any double quotes to be extra safe; truncate to 100
           # chars so the Cloudflare UI displays the whole thing.
-          clean=$(echo "$subject" | tr -d '"' | cut -c1-100)
+          clean=$(printf '%s\n' "$subject" | tr -d '"' | cut -c1-100)
           echo "msg=$clean (${{ github.sha }})" >> "$GITHUB_OUTPUT"
 
       - name: Deploy to Cloudflare Pages
