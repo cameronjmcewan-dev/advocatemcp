@@ -257,6 +257,46 @@
       </a>`;
     }).join('');
 
+    // Per-tier business cap. Mirrors worker/src/lib/tierLimits.ts (the
+    // server enforces the cap on POST /api/client/businesses/add, so a
+    // stale or tampered client value can't bypass it). Admins skip the
+    // gate, their own business count isn't billing-relevant. Locked
+    // with the operator 2026-05-09: base 1 / pro 3 / enterprise
+    // unlimited. The frontend mirrors the cap so the UI can surface an
+    // Upgrade CTA BEFORE the user submits the wizard, instead of
+    // letting them fill out a whole onboarding form just to hit a 402.
+    const TIER_LIMITS = { base: 1, pro: 3, enterprise: Infinity };
+    const TIER_ORDER  = ['base', 'pro', 'enterprise'];
+    let effectiveTier = 'base';
+    for (const b of list) {
+      const t = String(b && b.plan || '').toLowerCase();
+      if (TIER_ORDER.indexOf(t) > TIER_ORDER.indexOf(effectiveTier)) effectiveTier = t;
+    }
+    const tierCap   = TIER_LIMITS[effectiveTier];
+    const isAdmin   = (d.user_role === 'admin');
+    const canAdd    = isAdmin || list.length < tierCap;
+    const tierLabel = effectiveTier === 'pro'        ? 'Pro'
+                    : effectiveTier === 'enterprise' ? 'Enterprise'
+                    : 'Base';
+    const capLabel  = tierCap === Infinity ? '∞' : String(tierCap);
+
+    // Two CTAs: under cap → wizard in add-mode (no payment). At cap →
+    // upgrade prompt → Billing. The wizard's ?mode=add query gates the
+    // skip-Step-9 + alt-submit logic in onboarding.html.
+    const addCta = canAdd
+      ? `<a href="/onboarding.html?mode=add" class="bm-add-biz" data-add-mode="free">
+          <div class="bm-add-biz-icon">+</div>
+          <span>Add another business</span>
+          ${!isAdmin && tierCap !== Infinity ? `<span class="bm-add-biz-meta" style="margin-left:auto;font-size:11px;color:var(--muted);font-weight:400">${escHtml(list.length)}/${escHtml(capLabel)}</span>` : ''}
+        </a>`
+      : `<a href="/Billing.html" class="bm-add-biz bm-add-biz-locked" data-add-mode="upgrade">
+          <div class="bm-add-biz-icon" aria-hidden="true">↑</div>
+          <div style="display:flex;flex-direction:column;gap:2px">
+            <span>Upgrade to add another business</span>
+            <span style="font-size:11px;color:var(--muted);font-weight:400">${escHtml(tierLabel)} plan: ${escHtml(list.length)} / ${escHtml(capLabel)} used</span>
+          </div>
+        </a>`;
+
     return `
       <div class="biz-menu" id="biz-menu" role="menu" aria-labelledby="biz-trigger">
         <div class="bm-account">
@@ -272,10 +312,7 @@
         <div class="bm-divider"></div>
         <div class="bm-section-label">Switch business</div>
         <div class="bm-biz-list">${bizRows}</div>
-        <a href="/onboarding.html" class="bm-add-biz">
-          <div class="bm-add-biz-icon">+</div>
-          <span>Add another business</span>
-        </a>
+        ${addCta}
         <div class="bm-divider"></div>
         <button type="button" class="bm-item" id="biz-menu-signout">
           <span class="bm-item-icon"><span class="g">↪</span></span>
