@@ -134,9 +134,88 @@
     return 'low';
   }
 
+  var FOCUS_ALIASES = {
+    basics: 'basics',
+    contact: 'basics',
+    details: 'basics',
+    profile: 'basics',
+    description: 'basics',
+    category: 'basics',
+    phone: 'basics',
+    website: 'basics',
+    location: 'basics',
+    services: 'positioning',
+    positioning: 'positioning',
+    differentiator: 'positioning',
+    'differentiators-text': 'positioning',
+    'top-services': 'positioning',
+    availability: 'positioning',
+    'service-area': 'positioning',
+    'service-areas': 'positioning',
+    'service-area-keywords': 'positioning',
+    'service-radius-miles': 'positioning',
+    ratings: 'ratings',
+    reviews: 'ratings',
+    review: 'ratings',
+    'ratings-json': 'ratings',
+    quotes: 'quotes',
+    testimonials: 'quotes',
+    testimonial: 'quotes',
+    'customer-quotes': 'quotes',
+    'customer-quotes-json': 'quotes',
+    credentials: 'credentials',
+    licenses: 'credentials',
+    license: 'credentials',
+    certifications: 'credentials',
+    certification: 'credentials',
+    'credentials-json': 'credentials',
+    ops: 'ops',
+    operations: 'ops',
+    pricing: 'ops',
+    'pricing-json-v2': 'ops',
+    'pricing-ranges': 'ops',
+  };
+
+  function focusFromValue(raw) {
+    if (!raw) return '';
+    var key = String(raw).trim()
+      .replace(/^#/, '')
+      .replace(/^form-/, '')
+      .replace(/[ _]+/g, '-')
+      .toLowerCase();
+    return FOCUS_ALIASES[key] || '';
+  }
+
+  function businessProfileHref(focus, sourceUrl) {
+    if (!focus) return '';
+    var params = new URLSearchParams();
+    try {
+      var asSlug = sourceUrl && sourceUrl.searchParams && sourceUrl.searchParams.get('as');
+      if (asSlug) params.set('as', asSlug);
+    } catch (_) { /* ignore malformed cached URLs */ }
+    params.set('focus', focus);
+    return '/BusinessProfile.html?' + params.toString();
+  }
+
+  function normalizeActionUrl(raw, relatedField) {
+    var relatedFocus = focusFromValue(relatedField);
+    if (!raw) return relatedFocus ? businessProfileHref(relatedFocus) : '';
+    if (raw === '#settings') return businessProfileHref('basics');
+    try {
+      var url = new URL(raw, window.location.origin);
+      var isProfile = /^\/BusinessProfile(\.html)?\/?$/.test(url.pathname);
+      if (!isProfile) return relatedFocus ? businessProfileHref(relatedFocus) : '';
+      var focus = focusFromValue(url.searchParams.get('focus')) || focusFromValue(url.hash) || relatedFocus || 'basics';
+      return businessProfileHref(focus, url);
+    } catch (_) {
+      return relatedFocus ? businessProfileHref(relatedFocus) : '';
+    }
+  }
+
   function renderRecCard(rec) {
-    var actionLink = rec.action_url
-      ? '<a class="ai-rec-action" href="' + esc(rec.action_url) + '">' + esc(rec.action_label || 'Open →') + '</a>'
+    var actionUrl = normalizeActionUrl(rec.action_url, rec.related_field);
+    var actionLink = actionUrl
+      ? '<a class="ai-rec-action" href="' + esc(actionUrl) + '">' + esc(rec.action_label || 'Open →') + '</a>'
       : '';
     var deltaChip = rec.expected_score_delta != null
       ? '<span class="ai-rec-delta">+' + Number(rec.expected_score_delta).toFixed(1) + '</span>'
