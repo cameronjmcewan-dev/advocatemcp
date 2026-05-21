@@ -405,6 +405,14 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
   <a href="/" class="topbar-back">← Back to home</a>
 </div>
 
+<!-- Add-mode banner: shown only when ?mode=add is on the URL. The
+     #add-mode-banner element starts hidden and is unhidden by the
+     init script at bottom of page so public visitors never see it
+     even momentarily. -->
+<div id="add-mode-banner" style="display:none;max-width:720px;margin:24px auto 8px;padding:0 24px;font-size:13.5px;line-height:1.55;text-align:center;color:var(--muted);">
+  <strong style="color:var(--accent);font-weight:600">Adding another business</strong> — included with your current plan, no payment required. The new business inherits your existing plan and skips the account-creation step.
+</div>
+
 <!-- Progress bar (hidden on success) -->
 <div class="progress" id="progress-bar">
   <div class="progress-steps">
@@ -1196,11 +1204,45 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
   </div>
 </div>
 
+<!-- Loaded so the add-business flow (?mode=add) can call authed APIs
+     using the same Bearer-token mechanism as the dashboard. Public
+     signup visitors never invoke AMCP methods, so the inclusion is
+     side-effect free for them — the script only defines window.AMCP
+     and does not auto-trigger any network calls. -->
+<script src="/js/dashboard-auth.js"></script>
 <script>
 // ── Constants ──────────────────────────────────────────────────────────────
 const TOTAL_STEPS = 10;
 const CREDENTIALS_STEP = 4;
+// Step 8 is the plan selection (Base / Pro / Enterprise). Skipped in
+// add-business mode because the new business inherits the user's
+// effective tier server-side — picking a plan here would be either
+// ignored or, worse, create the impression that adding triggers a
+// subscription change.
+const PLAN_STEP = 8;
+// Step 9 is the account-creation step (email/password/full name). It is
+// skipped when the wizard is opened in add-business mode (?mode=add)
+// because the user is already logged in — no new credentials needed.
+const ACCOUNT_STEP = 9;
+// Steps the add-mode wizard hides entirely. Order matters for the
+// renumbering helper below — must be ascending.
+const ADD_MODE_HIDDEN_STEPS = [PLAN_STEP, ACCOUNT_STEP];
 const DRAFT_KEY = 'advocate_onboarding_draft';
+
+// Add-business mode flips the wizard from "create account + pay + provision"
+// to "create another tenant under the existing logged-in user." Triggered
+// by the avatar-dropdown CTA in dashboard-chrome.js when the user is
+// under their tier's business cap. Submit posts to a different endpoint
+// (POST /api/client/businesses/add) and skips the Stripe checkout
+// redirect — the new tenant is provisioned immediately and the browser
+// is redirected to /app.html?as=<new_slug>.
+const ADD_MODE = (() => {
+  try { return new URLSearchParams(window.location.search).get('mode') === 'add'; }
+  catch { return false; }
+})();
+// Use a separate draft key in add-mode so the in-progress new-business
+// draft doesn't clobber a half-finished signup draft (or vice versa).
+const EFFECTIVE_DRAFT_KEY = ADD_MODE ? DRAFT_KEY + ':add' : DRAFT_KEY;
 
 // Industries where the Credentials step is shown. Must match biz-industry <option> values.
 const CREDENTIAL_RELEVANT_INDUSTRIES = [
@@ -1301,6 +1343,11 @@ function goNext(fromStep) {
   saveDraft();
   let next = fromStep + 1;
   if (next === CREDENTIALS_STEP && !showsCredentialsStep()) next = CREDENTIALS_STEP + 1;
+  // Add-mode: skip the plan + account steps entirely. Loop in case
+  // hidden steps are adjacent (8 → 9 → 10).
+  if (ADD_MODE) {
+    while (ADD_MODE_HIDDEN_STEPS.indexOf(next) !== -1) next++;
+  }
   goToStep(next);
 }
 
@@ -1308,6 +1355,9 @@ function goBack(fromStep) {
   saveDraft();
   let prev = fromStep - 1;
   if (prev === CREDENTIALS_STEP && !showsCredentialsStep()) prev = CREDENTIALS_STEP - 1;
+  if (ADD_MODE) {
+    while (ADD_MODE_HIDDEN_STEPS.indexOf(prev) !== -1) prev--;
+  }
   goToStep(prev);
 }
 
@@ -1553,7 +1603,9 @@ function validateStep(step) {
     ok = !setError('f-response-time', !v('biz-response').trim()) && ok;
   }
 
-  if (step === 9) {
+  if (step === 9 && !ADD_MODE) {
+    // Skip account-creation validation in add-mode — the user is already
+    // logged in, no new email/password collected.
     const email = v('acct-email').trim();
     ok = !setError('f-email', !email || !isValidEmail(email)) && ok;
     ok = !setError('f-fullname', !v('acct-name').trim()) && ok;
@@ -1601,6 +1653,47 @@ document.addEventListener('DOMContentLoaded', () => {
     if (el) el.addEventListener('change', syncPublishBtnState);
   });
   syncPublishBtnState();
+
+  if (ADD_MODE) {
+    // Surface the "no payment required" banner.
+    const banner = document.getElementById('add-mode-banner');
+    if (banner) banner.style.display = 'block';
+
+    // Hide the progress pip + step card for every add-mode-hidden step
+    // so the user never sees a step they can't reach. The goNext /
+    // goBack functions already skip these in navigation; this keeps the
+    // visual chrome consistent.
+    ADD_MODE_HIDDEN_STEPS.forEach((stepNum) => {
+      const pip  = document.getElementById('ps-'   + stepNum);
+      const card = document.getElementById('step-' + stepNum);
+      if (pip)  pip.style.display  = 'none';
+      if (card) card.style.display = 'none';
+    });
+
+    // Hide the "Selected plan" review row — in add-mode the new
+    // business inherits the user's tier server-side, so showing
+    // "Selected plan: Base — $149/mo" (the wizard default that the
+    // user never had a chance to change) would be misleading.
+    const rvPlan = document.getElementById('rv-plan');
+    if (rvPlan && rvPlan.closest) {
+      const rvRow = rvPlan.closest('.rv');
+      if (rvRow) rvRow.style.display = 'none';
+    }
+
+    // Renumber the "Step N of 10" eyebrows so the visible flow reads
+    // as a contiguous "Step N of M" — purely cosmetic, but a "Step 7
+    // of 10" eyebrow on what's actually the last visible step is
+    // confusing.
+    const visibleTotal = TOTAL_STEPS - ADD_MODE_HIDDEN_STEPS.length;
+    document.querySelectorAll('.step-eyebrow').forEach((el) => {
+      const m = el.textContent.match(/^Step (\d+) of 10$/);
+      if (!m) return;
+      const n = parseInt(m[1], 10);
+      if (ADD_MODE_HIDDEN_STEPS.indexOf(n) !== -1) return;  // hidden anyway
+      const offset = ADD_MODE_HIDDEN_STEPS.filter((h) => h < n).length;
+      el.textContent = 'Step ' + (n - offset) + ' of ' + visibleTotal;
+    });
+  }
 });
 
 // ── Draft Save/Resume ───────────────────────────────────────────────────────
@@ -1633,18 +1726,18 @@ function saveDraft() {
                  'biz-customer','biz-lead-dest','biz-response','biz-radius',
                  'acct-email','acct-name'];
     ids.forEach(id => { draft.fields[id] = v(id); });
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    localStorage.setItem(EFFECTIVE_DRAFT_KEY, JSON.stringify(draft));
   } catch { /* localStorage may be unavailable */ }
 }
 
 function loadDraft() {
   try {
-    const raw = localStorage.getItem(DRAFT_KEY);
+    const raw = localStorage.getItem(EFFECTIVE_DRAFT_KEY);
     if (!raw) return false;
     const draft = JSON.parse(raw);
     // Check if draft is less than 7 days old
     if (Date.now() - draft.savedAt > 7 * 24 * 60 * 60 * 1000) {
-      localStorage.removeItem(DRAFT_KEY);
+      localStorage.removeItem(EFFECTIVE_DRAFT_KEY);
       return false;
     }
     // Restore field values
@@ -1731,7 +1824,7 @@ function loadDraft() {
 }
 
 function clearDraft() {
-  try { localStorage.removeItem(DRAFT_KEY); } catch {}
+  try { localStorage.removeItem(EFFECTIVE_DRAFT_KEY); } catch {}
 }
 
 // ── Data collection helpers ─────────────────────────────────────────────────
@@ -2061,14 +2154,32 @@ function buildOnboardPayload() {
   if (ratings_json) profile.ratings_json = ratings_json;
   if (differentiators_text) profile.differentiators_text = differentiators_text.slice(0, 1500);
 
-  const outer = {
-    slug: slugify(name),
-    name,
-    email: acct_email,
-    password: acct_password,
-    plan: state.plan,
-    profile,
-  };
+  // user_full_name is the personal name from Step 9 (#acct-name) — distinct
+  // from `name` (the business name from Step 1 #biz-name). Pre-fix the
+  // backend used `name` for BOTH the business record AND users.full_name,
+  // so every signed-up customer's user.full_name ended up as their
+  // business name. Sending the personal name here lets the worker store
+  // them correctly in their respective columns.
+  const acct_full_name = v('acct-name').trim();
+  // Add-mode: omit account fields entirely. The /api/client/businesses/add
+  // endpoint authenticates the caller via session cookie + bearer token —
+  // it doesn't need email/password and would reject `plan` (plan is
+  // inherited from the user's existing tier server-side).
+  const outer = ADD_MODE
+    ? {
+        slug: slugify(name),
+        name,
+        profile,
+      }
+    : {
+        slug: slugify(name),
+        name,
+        user_full_name: acct_full_name,
+        email: acct_email,
+        password: acct_password,
+        plan: state.plan,
+        profile,
+      };
   if (outer_referral_url && /^https?:\/\//.test(outer_referral_url)) {
     outer.referral_url = outer_referral_url;
   }
@@ -2076,15 +2187,22 @@ function buildOnboardPayload() {
 }
 
 // ── Submission ──────────────────────────────────────────────────────────────
-// Endpoint: POST https://customers.advocatemcp.com/api/onboard/public
+// Public signup endpoint: POST https://customers.advocatemcp.com/api/onboard/public
 // On success: redirects the browser to Stripe Checkout (data.checkoutUrl).
-// On validation_error: parses the ';'-joined error string, maps each field
-// back to its owning step via FIELD_TO_STEP, navigates to the earliest
-// offending step, and shows the errors inline in the error banner.
+//
+// Add-business endpoint (ADD_MODE): POST /api/client/businesses/add via
+// AMCP.authedFetch. On success, the new tenant is provisioned
+// immediately under the existing user — no Stripe touch — and the
+// browser is redirected to /app.html?as=<new_slug>.
+//
+// Validation errors (400 + error="validation_error") are parsed the
+// same way in both modes; FIELD_TO_STEP routes the user back to the
+// offending step.
 //
 // NOTE: timezone is collected client-side but NOT sent to backend — schema
 // does not yet have a timezone field. See plan out-of-scope item #2.
-const ONBOARD_ENDPOINT = 'https://customers.advocatemcp.com/api/onboard/public';
+const ONBOARD_ENDPOINT      = 'https://customers.advocatemcp.com/api/onboard/public';
+const ADD_BUSINESS_ENDPOINT = '/api/client/businesses/add';
 
 async function submitProfile() {
   const truthBox = document.getElementById('confirm-truth');
@@ -2109,21 +2227,55 @@ async function submitProfile() {
   const payload = buildOnboardPayload();
 
   try {
-    const res = await fetch(ONBOARD_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    let res, data;
+    if (ADD_MODE) {
+      // Authed POST. authedFetch attaches Bearer + handles 401 refresh.
+      if (!window.AMCP || typeof window.AMCP.authedFetch !== 'function') {
+        showSubmitError('Authentication module did not load — refresh the page and try again.');
+        btn.classList.remove('loading'); btn.disabled = false;
+        return;
+      }
+      res = await window.AMCP.authedFetch(ADD_BUSINESS_ENDPOINT, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+      });
+      try { data = await res.json(); } catch {}
 
-    let data = null;
-    try { data = await res.json(); } catch {}
+      if (res.ok && data && data.ok) {
+        clearDraft();
+        // Land directly on the new tenant's overview, impersonation-style
+        // (?as=<slug>) so the same admin/owner session can switch between
+        // their businesses without re-auth.
+        window.location.href = data.redirect || ('/app.html?as=' + encodeURIComponent(data.slug || ''));
+        return;
+      }
 
-    if (res.ok && data && data.checkoutUrl) {
-      clearDraft();
-      // Hand the browser off to Stripe Checkout. complete.html picks up the
-      // session_id on return and polls /api/onboard/session/:id.
-      window.location.href = data.checkoutUrl;
-      return;
+      if (res.status === 402 && data && data.error === 'tier_limit') {
+        showSubmitError(data.message || 'You\'ve reached your tier\'s business limit. Upgrade to add more.');
+        btn.classList.remove('loading'); btn.disabled = false;
+        return;
+      }
+
+      if (res.status === 409 && data && data.error) {
+        showSubmitError(data.error);
+        btn.classList.remove('loading'); btn.disabled = false;
+        return;
+      }
+    } else {
+      // Public signup: bare fetch + Stripe Checkout redirect.
+      res = await fetch(ONBOARD_ENDPOINT, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+      });
+      try { data = await res.json(); } catch {}
+
+      if (res.ok && data && data.checkoutUrl) {
+        clearDraft();
+        window.location.href = data.checkoutUrl;
+        return;
+      }
     }
 
     // Validation error from Worker: { error: "validation_error", message: "field: reason; field2: reason" }
