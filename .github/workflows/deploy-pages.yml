@@ -45,7 +45,7 @@ jobs:
       deployments: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.0.2
 
       # Compute a single-line commit message. The previous
       # `head_commit.message` substitution broke when commit bodies had
