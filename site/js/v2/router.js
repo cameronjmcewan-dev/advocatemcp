@@ -36,7 +36,20 @@
   // module = window.AMCP_XXX global name; activeId matches sidebar
   // NAV items; crumb + title drive the topbar.
   const ROUTES = [
-    { path: /^\/app(\.html)?\/?$/,                script: '/js/v2/overview.js',     module: 'AMCP_OVERVIEW',       activeId: 'overview',       crumb: 'Dashboard · Overview',         title: null /* dynamic via function */, titleFn: (d) => `Welcome back${window.AMCP_DATA && window.AMCP_DATA.full_name ? ', ' + window.AMCP_DATA.full_name.split(' ')[0] : ''}.` },
+    { path: /^\/app(\.html)?\/?$/,                script: '/js/v2/overview.js',     module: 'AMCP_OVERVIEW',       activeId: 'overview',       crumb: 'Dashboard · Overview',         title: null /* dynamic via function */, titleFn: (d) => {
+      // Legacy public-onboard rows have user.full_name === business_name
+      // (signup form bug, fixed forward). Treat that case as "no name
+      // on file" so the headline doesn't read as a greeting TO the
+      // business itself ("Welcome back, Acme."). See app.html for the
+      // pickFirstName helper that drives the direct-load /app titleFn —
+      // duplicated inline here because router.js can't call into
+      // app.html's inline-script scope.
+      const ad = window.AMCP_DATA;
+      const fn = ad && ad.full_name;
+      const bn = ad && ad.business_name;
+      const first = (fn && fn !== bn) ? fn.split(' ')[0] : '';
+      return 'Welcome back' + (first ? ', ' + first : '') + '.';
+    } },
     { path: /^\/Mentions(\.html)?\/?$/,            script: '/js/v2/mentions.js',     module: 'AMCP_MENTIONS',       activeId: 'mentions',       crumb: 'Dashboard · Mentions',         title: 'Mentions' },
     { path: /^\/TrafficImpact(\.html)?\/?$/,       script: '/js/v2/traffic-impact.js', module: 'AMCP_TRAFFIC_IMPACT', activeId: 'traffic-impact', crumb: 'Dashboard · Traffic impact',   title: 'Traffic impact' },
     { path: /^\/CompetitorRadar(\.html)?\/?$/,     script: '/js/v2/radar.js',        module: 'AMCP_RADAR',          activeId: 'radar',          crumb: 'Dashboard · Competitor Radar', title: 'Competitor Radar' },

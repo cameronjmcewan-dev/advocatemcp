@@ -100,14 +100,30 @@
 // also pick it up. Without that, clicking a sidebar Dashboards pill
 // would re-render the legacy Overview because the router calls
 // AMCP_OVERVIEW.render directly, bypassing this boot script.
+
+// Pre-May-2026 the public marketing-wizard signup form stored each
+// tenant's BUSINESS name as their users.full_name (form-field reuse
+// bug, fixed forward). Legacy rows still have full_name === business_name,
+// so the naive "Welcome back, {first}" pattern reads back as a greeting
+// to the business itself: "Welcome back, Acme." instead of "Welcome
+// back, Michael." Treat that case as "no personal name on file" and
+// render a clean "Welcome back." until the affected user fixes their
+// name via Settings. Same logic mirrored in router.js's titleFn for
+// SPA navigations into /app.
+function pickFirstName() {
+  var d = window.AMCP_DATA;
+  if (!d || !d.full_name) return '';
+  if (d.business_name && d.full_name === d.business_name) return '';
+  return d.full_name.split(' ')[0];
+}
+
 window.AMCP_SHELL.boot({
   activeId: 'overview',
   crumb:    'Dashboard · Overview',
-  title:    d => `Welcome back${
-    window.AMCP_DATA && window.AMCP_DATA.full_name
-      ? ', ' + window.AMCP_DATA.full_name.split(' ')[0]
-      : ''
-  }.`,
+  title:    d => {
+    var first = pickFirstName();
+    return 'Welcome back' + (first ? ', ' + first : '') + '.';
+  },
   showDateRange: true,  // make the topbar date-range button visible
   demo:       window.AMCP_OVERVIEW.demo,
   fetchReal:  window.AMCP_OVERVIEW.fetch,
