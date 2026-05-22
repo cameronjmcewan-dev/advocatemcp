@@ -88,6 +88,24 @@
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
+  // ── Chart-mount gate ──────────────────────────────────────────────
+  // Single source of truth for "does this payload have data we can
+  // chart?". Used by render() to gate the State B vs State C branch,
+  // AND by afterMount() to decide whether to call `echarts.init` on the
+  // mounted chart containers. PR #244/#248 history: the two sides used
+  // to drift apart (render emitted containers for any daily.length > 0
+  // while afterMount required >= 7), which silently blacked out charts
+  // for newly-reconnected tenants. Both consumers MUST go through this
+  // helper so a future edit can't reintroduce the desync.
+  // Static-grep contract enforced by
+  // worker/src/trafficImpactGateContract.test.ts.
+  function hasChartableData(impact) {
+    return !!(impact
+      && impact.ga4_connected
+      && Array.isArray(impact.daily)
+      && impact.daily.length >= 1);
+  }
+
   // ── Click-source resolver (ported from clicks.js) ─────────────────
 
   function refBucketName(ref, ua) {
@@ -1099,7 +1117,13 @@
     const errorBanner = renderGa4ErrorBanner(ga4St, propLabel);
 
     const MIN_DAILY_FOR_INSIGHT = 7;
-    if (daily.length === 0) {
+    // State B early-return: connectivity is already confirmed above
+    // (the `!connected` branch returned earlier), so `hasChartableData`
+    // here functionally checks "is impact.daily a non-empty array?".
+    // Using the shared helper instead of the bare `daily.length === 0`
+    // expression keeps render() and afterMount() pinned to the same
+    // predicate — see the hasChartableData declaration for context.
+    if (!hasChartableData(impact)) {
       // Zero-data State B has two flavors:
       //   - errored: show only the error banner + clicks section.
       //     The error message is its own troubleshoot copy — the
@@ -1708,7 +1732,7 @@
     // container element isn't present (`if (!el) return null`), so
     // there's no risk of mounting against an absent DOM — even if a
     // future render-side change re-introduces a State B variant.
-    if (impact.ga4_connected && impact.daily && impact.daily.length >= 1) {
+    if (hasChartableData(impact)) {
       pollEcharts(function () {
         bootMaroonTheme();
         var instTotal      = mountChartTotal(impact.daily, impact.bleed_at);
