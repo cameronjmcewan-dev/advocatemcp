@@ -2175,7 +2175,7 @@
         isValid:      function (s) { return !!s.siteUrl; },
         rowLabel:     function (s) { return s.siteUrl || ''; },
         rowSubLabel:  function (s) { return s.permissionLevel || ''; },
-        emptyMessage: 'No verified sites on this Google account. Add and verify a site in Search Console first.',
+        emptyMessage: 'No verified sites visible on this Google account yet. Two common causes: (a) you connected a different Google account than the one you verified the site under — disconnect and reconnect with the right account; (b) you verified the site within the last few hours — Google Search Console takes up to 24 hours to surface newly-verified properties via its API. Come back later if so.',
         intro:        'Pick the site Advocate should pull data from. Selecting a site triggers an 18-month backfill — this can take 30 seconds.',
       });
     }
