@@ -977,6 +977,53 @@
     ].join('');
   }
 
+  // ── GA4 sync-state banner (error variant) ────────────────────────
+  //
+  // Renders an error-aware banner inside the State B / State C panels
+  // when `ga4Status.last_sync_error` is non-null. Without this, a
+  // tenant whose cron sync has been silently failing (revoked OAuth,
+  // expired refresh token, dropped GA4 property permission, etc.) just
+  // sees the calm "X days of data so far" copy from PR #244 — which
+  // reads as "still loading" even though the underlying sync has been
+  // stalled for days. The user has no way to know anything's wrong.
+  //
+  // This banner surfaces the error and provides a [Retry now] button
+  // wired to POST /api/client/ga4/resync (same endpoint the Settings
+  // page uses; see site/js/v2/settings.js:544). Truncates the error
+  // message to 200 chars to keep the layout calm even when GA4 returns
+  // a verbose JSON-shaped 403.
+  //
+  // Returns '' when there is no error — caller can prepend the result
+  // unconditionally.
+  function renderGa4ErrorBanner(ga4St, propLabel) {
+    const err = ga4St && ga4St.last_sync_error;
+    if (!err) return '';
+    const errMsg = String(err).slice(0, 200);
+    const propName = esc(propLabel || ga4St.property_label || 'your property');
+    const lastSyncCopy = ga4St.last_sync_at
+      ? `Last successful sync: ${timeAgo(ga4St.last_sync_at)}. `
+      : '';
+    return `
+      <section class="card-dash" style="padding:14px 18px;margin:16px auto;max-width:1100px;background:rgba(220,38,38,0.06);border:1px solid rgba(220,38,38,0.4);">
+        <div style="display:flex;align-items:flex-start;gap:12px;font-size:13.5px;line-height:1.55;color:var(--ink-2);flex-wrap:wrap">
+          <div style="width:10px;height:10px;border-radius:50%;background:#dc2626;flex-shrink:0;margin-top:5px" aria-hidden="true"></div>
+          <div style="flex:1;min-width:280px">
+            <div style="font-weight:600;color:var(--ink);margin-bottom:4px">
+              Connected &middot; sync attention needed &middot; ${propName}
+            </div>
+            <div style="margin-bottom:6px">
+              ${lastSyncCopy}Last sync attempt failed: <code style="font-size:12px;background:rgba(0,0,0,0.05);padding:1px 6px;border-radius:4px">${esc(errMsg)}</code>
+            </div>
+            <div style="font-size:12.5px;color:var(--muted)">
+              We'll automatically retry in the next 15&ndash;30 minutes. You can also retry now.
+            </div>
+          </div>
+          <button id="ti-ga4-retry" type="button" class="btn btn-ghost btn-sm" style="flex-shrink:0">Retry now</button>
+        </div>
+        <div id="ti-ga4-retry-msg" role="status" aria-live="polite" style="margin-top:8px;margin-left:22px;font-size:12.5px;color:var(--muted);min-height:1em"></div>
+      </section>`;
+  }
+
   // ── Render ────────────────────────────────────────────────────────
 
   function render(data) {
@@ -1044,8 +1091,28 @@
     // MIN_DAILY_FOR_INSIGHT stays at 7 because that's the threshold
     // below which we tell the user the trend lines are indicative
     // rather than significant; nothing's hidden, just labelled.
+    // Error-aware banner — fires whenever the GA4 cron has stamped
+    // `last_sync_error`, regardless of daily.length. Mutually
+    // exclusive with the sparse-data banner below; takes priority so
+    // a stuck tenant sees the actionable error + retry button instead
+    // of the calm "still gathering data" copy.
+    const errorBanner = renderGa4ErrorBanner(ga4St, propLabel);
+
     const MIN_DAILY_FOR_INSIGHT = 7;
     if (daily.length === 0) {
+      // Zero-data State B has two flavors:
+      //   - errored: show only the error banner + clicks section.
+      //     The error message is its own troubleshoot copy — the
+      //     generic "make sure gtag.js is installed" line below is
+      //     irrelevant when the actual failure is e.g. a revoked
+      //     OAuth token.
+      //   - clean: existing "waiting for first day of GA4 data" copy.
+      if (errorBanner) {
+        return `
+          ${errorBanner}
+          <style>@keyframes pulse { 0%, 100% { opacity:1; } 50% { opacity:0.4; } }</style>
+          ${clicksSection}`;
+      }
       const body = 'Waiting for your first day of GA4 data. Google finalizes daily traffic stats within 24-48 hours after the day ends, and our nightly sync picks them up automatically.';
       const troubleshoot = `<p style="margin:0; color:var(--muted); font-size:13px;">No traffic in your GA4 property yet? Make sure the GA4 measurement code (gtag.js with your G-XXXXX ID) is installed on your site. Visit <a href="https://analytics.google.com" target="_blank" rel="noopener" style="color:var(--maroon)">analytics.google.com</a> &rarr; your property &rarr; Admin &rarr; Data Streams to verify.</p>`;
       return `
@@ -1088,11 +1155,24 @@
         </div>` : '';
 
     // Sparse-data calibration banner — shown only while the tenant has
-    // fewer than MIN_DAILY_FOR_INSIGHT days of GA4 history. Tells them
-    // the charts ARE real but the trend math isn't yet statistically
-    // confident. Replaces the previous "hide everything until day 7"
-    // behaviour that read as a broken dashboard.
-    const sparseBanner = daily.length < MIN_DAILY_FOR_INSIGHT
+    // fewer than MIN_DAILY_FOR_INSIGHT days of GA4 history AND there
+    // is no active sync error. Tells them the charts ARE real but the
+    // trend math isn't yet statistically confident. Replaces the
+    // previous "hide everything until day 7" behaviour that read as a
+    // broken dashboard.
+    //
+    // When the error banner is rendered, this is suppressed (the user
+    // needs to act on the error first; sparse-data copy would be
+    // visual noise on top of an actionable problem).
+    //
+    // When the tenant is healthy-but-sparse, we append a calm
+    // "Last sync N min/h ago" footer so they can see the cron is
+    // actually advancing — the previous design left them guessing
+    // whether anything was happening between renders.
+    const lastSyncFooter = ga4St.last_sync_at
+      ? `<div style="margin-top:6px;font-size:12.5px;color:var(--muted);padding-left:26px">Last sync: ${esc(timeAgo(ga4St.last_sync_at))}. Next automatic sync within 23h.</div>`
+      : '';
+    const sparseBanner = (!errorBanner && daily.length < MIN_DAILY_FOR_INSIGHT)
       ? `
       <section class="card-dash" style="padding:14px 18px;margin:16px auto;max-width:1100px;background:rgba(232,168,56,0.06);border:1px solid rgba(232,168,56,0.35);">
         <div style="display:flex;align-items:center;gap:10px;font-size:13.5px;line-height:1.55;color:var(--ink-2)">
@@ -1105,10 +1185,12 @@
             you have a full week of history.
           </span>
         </div>
+        ${lastSyncFooter}
       </section>`
       : '';
 
     return `
+      ${errorBanner}
       ${sparseBanner}
       ${renderRevenueBanner(conv, verified, rangeLabel)}
 
@@ -1523,6 +1605,41 @@
           btn.disabled = false;
           btn.textContent = 'Connect Google Analytics →';
           alert('Could not connect: ' + (err.message || err));
+        }
+      });
+    }
+
+    // GA4 sync-error banner — wire [Retry now] when the error variant
+    // is rendered (only present when `data.ga4Status.last_sync_error`
+    // is non-null). Calls the same /api/client/ga4/resync endpoint the
+    // Settings page uses; mirrors that page's UX (disable → relabel →
+    // surface row/day counts on success → full reload after 1.5s).
+    // Full reload ensures the entire payload re-loads with the cleared
+    // error + fresh last_sync_at, so the banner flips to either the
+    // sparse-data variant (transient failure fixed) or shows an
+    // updated error message (permanent failure surfaced more visibly).
+    var retryBtn = document.getElementById('ti-ga4-retry');
+    if (retryBtn) {
+      var msgEl = document.getElementById('ti-ga4-retry-msg');
+      var setMsg = function (txt) { if (msgEl) msgEl.textContent = txt || ''; };
+      retryBtn.addEventListener('click', async function (e) {
+        e.preventDefault();
+        retryBtn.disabled = true;
+        var origLabel = retryBtn.textContent;
+        retryBtn.textContent = 'Syncing…';
+        setMsg('Pulling latest GA4 data…');
+        try {
+          var r = await window.AMCP.authedFetch('/api/client/ga4/resync', { method: 'POST' });
+          var j = await r.json();
+          if (j && j.error) throw new Error(j.error);
+          var rows = j && j.rows_received || 0;
+          var days = j && j.days_upserted || 0;
+          setMsg('Synced — ' + rows + ' rows across ' + days + ' days. Refreshing…');
+          setTimeout(function () { window.location.reload(); }, 1500);
+        } catch (err) {
+          retryBtn.disabled = false;
+          retryBtn.textContent = origLabel;
+          setMsg('Retry failed: ' + String(err && err.message || err));
         }
       });
     }
