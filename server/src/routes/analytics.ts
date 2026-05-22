@@ -1,9 +1,24 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
-// AMC-004: GET /analytics (no slug param) is admin-only — gated with
-// requireServerKeyOnly so a leaked tenant Bearer can't dump the global
-// crawler feed. /analytics/:slug stays on requireSlugApiKey (slug-bound).
-import { requireSlugApiKey, requireServerKeyOnly } from "../middleware/auth.js";
+// AMC-004 + AMC-005: GET /analytics (no slug param) is admin-only —
+// gated with requireServerKeyOnly so a leaked tenant Bearer can't dump
+// the global crawler feed. /analytics/:slug* routes use
+// requireSlugOrAdminKey so they accept EITHER the tenant's Bearer
+// (direct customer API access, slug-bound) OR the platform's server
+// X-API-Key (worker proxy, which IS the authoritative authorization
+// boundary for dashboard requests).
+//
+// AMC-005 background: worker PR #243 swapped the per-business
+// `Authorization: Bearer biz.api_key` pattern over to the global
+// `X-API-Key: env.API_KEY` to unbreak tenants with `api_key="pending"`
+// (hosted-flow signups). That broke the admin Tenants table because
+// /analytics/:slug previously only accepted Bearer — every row's
+// mentions + 30d clicks silently fell back to "—". Switching these
+// three routes to the Or-admin variant lets both auth paths coexist.
+// Slug isolation is unaffected: the slug is still in the URL and
+// requireSlugOrAdminKey still validates per-slug when the caller
+// presents a Bearer.
+import { requireSlugOrAdminKey, requireServerKeyOnly } from "../middleware/auth.js";
 import { getDb, type QueryRow } from "../db.js";
 import { findByRequestId, setOutcome } from "../repos/agentRequests.js";
 import { parseDateRange, sqlBounds, type DateRange } from "../lib/dateRange.js";
@@ -34,7 +49,7 @@ function parseRangeOr400(req: Request, res: Response): DateRange | null {
  */
 analyticsRouter.get(
   "/analytics/:slug",
-  requireSlugApiKey,
+  requireSlugOrAdminKey,
   (req: Request, res: Response) => {
     const { slug } = req.params;
     const db = getDb();
@@ -340,7 +355,7 @@ analyticsRouter.post(
  */
 analyticsRouter.get(
   "/analytics/:slug/clicks",
-  requireSlugApiKey,
+  requireSlugOrAdminKey,
   (req: Request, res: Response) => {
     const { slug } = req.params;
     const db = getDb();
@@ -377,7 +392,7 @@ analyticsRouter.get(
  */
 analyticsRouter.get(
   "/analytics/:slug/activity",
-  requireSlugApiKey,
+  requireSlugOrAdminKey,
   (req: Request, res: Response) => {
     const { slug } = req.params;
     const db = getDb();
