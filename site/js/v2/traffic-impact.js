@@ -1027,28 +1027,32 @@
         ${clicksSection}`;
     }
 
-    // State B — connected, no data yet OR too sparse to be meaningful.
-    // KPIs comparing pre- vs post-Advocate trends need at least a few days
-    // each side of bleed_at, and the AI-share % is misleading on <1 week
-    // of data. Below the threshold we show a progress card instead of
-    // charts with one datapoint.
+    // State B — connected but ZERO days of data. This is the true
+    // "waiting for first GA4 sync" case (just-connected GA4 with no
+    // historical data yet, or stale cron). Show a single placeholder
+    // panel with troubleshooting copy.
+    //
+    // Previously this branch ALSO fired for any `daily.length < 7`
+    // (i.e. sparse-but-real data) which hid every chart for the first
+    // week of a tenant's lifetime — even though pre/post comparisons
+    // ARE statistically valid with whatever days we have, just less
+    // confident. Tenants read the "Day 6 of 7" copy as "the dashboard
+    // is broken." Now: any tenant with one or more days of data falls
+    // through to State C, which renders the charts plus a sparse-data
+    // calibration banner when `daily.length < MIN_DAILY_FOR_INSIGHT`.
+    //
+    // MIN_DAILY_FOR_INSIGHT stays at 7 because that's the threshold
+    // below which we tell the user the trend lines are indicative
+    // rather than significant; nothing's hidden, just labelled.
     const MIN_DAILY_FOR_INSIGHT = 7;
-    if (daily.length < MIN_DAILY_FOR_INSIGHT) {
-      const headline = daily.length === 0
-        ? 'Connected to Google Analytics'
-        : 'Connected &middot; gathering data';
-      const dayWord = daily.length === 1 ? 'day' : 'days';
-      const body = daily.length === 0
-        ? 'Waiting for your first day of GA4 data. Google finalizes daily traffic stats within 24-48 hours after the day ends, and our nightly sync picks them up automatically.'
-        : `${daily.length} ${dayWord} of data so far. Your dashboard fills in around day ${MIN_DAILY_FOR_INSIGHT} — once we have enough history to compare pre-Advocate and post-Advocate trends.`;
-      const troubleshoot = daily.length === 0
-        ? `<p style="margin:0; color:var(--muted); font-size:13px;">No traffic in your GA4 property yet? Make sure the GA4 measurement code (gtag.js with your G-XXXXX ID) is installed on your site. Visit <a href="https://analytics.google.com" target="_blank" rel="noopener" style="color:var(--maroon)">analytics.google.com</a> &rarr; your property &rarr; Admin &rarr; Data Streams to verify.</p>`
-        : '';
+    if (daily.length === 0) {
+      const body = 'Waiting for your first day of GA4 data. Google finalizes daily traffic stats within 24-48 hours after the day ends, and our nightly sync picks them up automatically.';
+      const troubleshoot = `<p style="margin:0; color:var(--muted); font-size:13px;">No traffic in your GA4 property yet? Make sure the GA4 measurement code (gtag.js with your G-XXXXX ID) is installed on your site. Visit <a href="https://analytics.google.com" target="_blank" rel="noopener" style="color:var(--maroon)">analytics.google.com</a> &rarr; your property &rarr; Admin &rarr; Data Streams to verify.</p>`;
       return `
         <section class="card-dash" style="padding:32px; max-width:720px; margin:24px auto; border:1px solid var(--line);">
           <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
             <div style="width:10px; height:10px; border-radius:50%; background:var(--maroon); animation:pulse 2s infinite;"></div>
-            <strong style="font-size:14px;">${headline} &middot; ${esc(propLabel || 'Your property')}</strong>
+            <strong style="font-size:14px;">Connected to Google Analytics &middot; ${esc(propLabel || 'Your property')}</strong>
           </div>
           <p style="margin:0 0 16px; color:var(--ink-2); line-height:1.5;">${body}</p>
           ${troubleshoot}
@@ -1083,7 +1087,29 @@
           <div class="d">vs ${formatPct(convHumanCount, humanTotalSessions)} Human</div>
         </div>` : '';
 
+    // Sparse-data calibration banner — shown only while the tenant has
+    // fewer than MIN_DAILY_FOR_INSIGHT days of GA4 history. Tells them
+    // the charts ARE real but the trend math isn't yet statistically
+    // confident. Replaces the previous "hide everything until day 7"
+    // behaviour that read as a broken dashboard.
+    const sparseBanner = daily.length < MIN_DAILY_FOR_INSIGHT
+      ? `
+      <section class="card-dash" style="padding:14px 18px;margin:16px auto;max-width:1100px;background:rgba(232,168,56,0.06);border:1px solid rgba(232,168,56,0.35);">
+        <div style="display:flex;align-items:center;gap:10px;font-size:13.5px;line-height:1.55;color:var(--ink-2)">
+          <span style="font-size:16px;line-height:1" aria-hidden="true">⏳</span>
+          <span>
+            <strong>${daily.length} ${daily.length === 1 ? 'day' : 'days'} of data so far.</strong>
+            Trend comparisons (pre- vs post-Advocate, AI share) get more
+            confident around day ${MIN_DAILY_FOR_INSIGHT}. The charts below
+            show your real data, but treat trend lines as indicative until
+            you have a full week of history.
+          </span>
+        </div>
+      </section>`
+      : '';
+
     return `
+      ${sparseBanner}
       ${renderRevenueBanner(conv, verified, rangeLabel)}
 
       <div class="plain-banner">
