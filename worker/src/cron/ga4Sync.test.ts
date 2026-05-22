@@ -49,7 +49,10 @@ vi.mock("../lib/aiTrafficClassifier", () => ({
  * `dbResponses` maps SQL substrings to the row array that `.all()` returns.
  * If no key matches, `.all()` returns [].
  */
-function makeDb(dbResponses: Record<string, Array<Record<string, unknown>>> = {}) {
+function makeDb(
+  dbResponses: Record<string, Array<Record<string, unknown>>> = {},
+  firstResponses: Record<string, Record<string, unknown> | null> = {},
+) {
   const dbCalls: Array<{ sql: string; args: unknown[] }> = [];
 
   const db = {
@@ -79,7 +82,12 @@ function makeDb(dbResponses: Record<string, Array<Record<string, unknown>>> = {}
         },
         async first<T>() {
           dbCalls.push({ sql, args: stmt._args });
-          return null as T | null;
+          // Lookup by SQL substring match — same dispatch model as all().
+          // Lets new tests inject `{ c: N }` rowcount responses for the
+          // cron's adaptive-lookback rowcount check without rewriting
+          // the rest of the harness.
+          const key = Object.keys(firstResponses).find((k) => sql.includes(k));
+          return (key ? firstResponses[key] : null) as T | null;
         },
       };
       return stmt;
@@ -96,9 +104,10 @@ const TEST_KEY = "0".repeat(64); // 64-char hex = 32 bytes for AES-256
 function makeEnv(overrides: Record<string, unknown> = {}) {
   const { db, dbCalls } = makeDb(
     (overrides._dbResponses as Record<string, Array<Record<string, unknown>>>) ?? {},
+    (overrides._firstResponses as Record<string, Record<string, unknown> | null>) ?? {},
   );
-  // Remove internal helper key before spreading
-  const { _dbResponses: _, ...rest } = overrides;
+  // Remove internal helper keys before spreading
+  const { _dbResponses: _dbResponses, _firstResponses: _firstResponses, ...rest } = overrides;
   return {
     env: {
       GA4_TOKEN_ENCRYPTION_KEY: TEST_KEY,
@@ -366,14 +375,23 @@ describe("runGA4SyncBatch", () => {
     expect(selectCall?.sql).toMatch(/status\s*!=\s*'disconnected'/);
   });
 
-  // Bonus: tenants with last_sync_at IS NULL are excluded (handled by OAuth backfill)
-  it("10. WHERE clause requires last_sync_at IS NOT NULL", async () => {
+  // Self-heal: tenants with last_sync_at IS NULL are INCLUDED so the
+  // cron can backfill any tenant whose inline OAuth-time backfill
+  // silently failed. Inverted from the original test (which pinned
+  // the IS NOT NULL filter as a load-shedding decision). The new
+  // contract: select picks up BOTH NULL last_sync_at and stale
+  // last_sync_at. Combined with the adaptive lookback window in
+  // syncOneTenant (test below), this means a tenant who never got a
+  // successful backfill recovers on the next cron tick.
+  it("10. WHERE clause picks up NULL last_sync_at AND stale last_sync_at (self-heal)", async () => {
     const { env, dbCalls } = makeEnv({
       _dbResponses: { "ga4_connections": [] },
     });
     await runGA4SyncBatch(env as never);
     const selectCall = dbCalls.find((c) => c.sql.includes("ga4_connections"));
-    expect(selectCall?.sql).toContain("last_sync_at IS NOT NULL");
+    // SQL should branch on either NULL OR stale, not require IS NOT NULL.
+    expect(selectCall?.sql).toMatch(/last_sync_at\s+IS\s+NULL\s+OR\s+last_sync_at\s*<\s*\?/);
+    expect(selectCall?.sql).not.toMatch(/last_sync_at\s+IS\s+NOT\s+NULL/);
   });
 
   // Bonus: status is set to 'error' and last_sync_error is the message (truncated to 500)
@@ -402,5 +420,88 @@ describe("runGA4SyncBatch", () => {
     expect(errMsg).toContain("401 expired");
     // Message must be capped at 500 chars
     expect(errMsg.length).toBeLessThanOrEqual(500);
+  });
+
+  // ── Adaptive lookback window (self-heal backfill, May 2026) ────────────
+  //
+  // Two adaptive-lookback tests + one inverse test that locks in the
+  // normal incremental sync path. The contract: when traffic_daily has
+  // fewer than MIN_HEALTHY_ROWS (30) rows for a slug, the cron treats
+  // it as "needs backfill" and pulls 540 days (matches the inline
+  // OAuth-time backfill in portal.ts). Otherwise it does the cheap
+  // 2-day incremental sync.
+
+  it("13. adaptive lookback: rowcount < 30 triggers 540-day backfill window", async () => {
+    const enc = await encryptToken("rt", TEST_KEY);
+    const row = { slug: "new-tenant", refresh_token_enc: enc, property_id: "properties/1" };
+
+    const { env } = makeEnv({
+      _dbResponses:   { "ga4_connections": [row] },
+      _firstResponses: { "COUNT(*) AS c FROM traffic_daily": { c: 6 } },
+    });
+
+    await runGA4SyncBatch(env as never);
+
+    expect(mockFetchDailyTraffic).toHaveBeenCalledTimes(1);
+    const callArgs = mockFetchDailyTraffic.mock.calls[0]![0] as {
+      startDate: string; endDate: string;
+    };
+    const start = new Date(callArgs.startDate);
+    const end   = new Date(callArgs.endDate);
+    const spanDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    // 540 ± 1 day to absorb DST / timezone edge.
+    expect(spanDays).toBeGreaterThanOrEqual(539);
+    expect(spanDays).toBeLessThanOrEqual(541);
+  });
+
+  it("14. adaptive lookback: rowcount >= 30 stays on the 2-day incremental window", async () => {
+    const enc = await encryptToken("rt", TEST_KEY);
+    const row = { slug: "healthy-tenant", refresh_token_enc: enc, property_id: "properties/2" };
+
+    const { env } = makeEnv({
+      _dbResponses:   { "ga4_connections": [row] },
+      _firstResponses: { "COUNT(*) AS c FROM traffic_daily": { c: 200 } },
+    });
+
+    await runGA4SyncBatch(env as never);
+
+    expect(mockFetchDailyTraffic).toHaveBeenCalledTimes(1);
+    const callArgs = mockFetchDailyTraffic.mock.calls[0]![0] as {
+      startDate: string; endDate: string;
+    };
+    const start = new Date(callArgs.startDate);
+    const end   = new Date(callArgs.endDate);
+    const spanDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    // Incremental sync = yesterday + day-before-yesterday = 1-day span.
+    // (start = day-before-yesterday, end = yesterday → diff = 1 day)
+    expect(spanDays).toBe(1);
+  });
+
+  it("15. adaptive lookback: rowcount of 0 (truly empty) still triggers backfill window", async () => {
+    // Edge case: brand-new tenant whose inline OAuth-backfill never
+    // ran. last_sync_at is NULL (we test the SELECT picks them up in
+    // test 10) AND traffic_daily has zero rows. Self-heal must still
+    // fire the wide window — without it the tenant gets stuck at "1
+    // day of data" forever.
+    const enc = await encryptToken("rt", TEST_KEY);
+    const row = { slug: "zero-rows", refresh_token_enc: enc, property_id: "properties/3" };
+
+    const { env } = makeEnv({
+      _dbResponses:   { "ga4_connections": [row] },
+      _firstResponses: { "COUNT(*) AS c FROM traffic_daily": { c: 0 } },
+    });
+
+    await runGA4SyncBatch(env as never);
+
+    expect(mockFetchDailyTraffic).toHaveBeenCalledTimes(1);
+    const callArgs = mockFetchDailyTraffic.mock.calls[0]![0] as {
+      startDate: string; endDate: string;
+    };
+    const spanDays = Math.round(
+      (new Date(callArgs.endDate).getTime() - new Date(callArgs.startDate).getTime())
+      / (1000 * 60 * 60 * 24),
+    );
+    expect(spanDays).toBeGreaterThanOrEqual(539);
+    expect(spanDays).toBeLessThanOrEqual(541);
   });
 });
