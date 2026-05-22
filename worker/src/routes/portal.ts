@@ -3543,20 +3543,36 @@ async function apiGA4StartLink(request: Request, env: Env): Promise<Response> {
   if (!guard.ok) return guard.resp;
   const ctx = guard.ctx;
 
+  // Slug resolution mirrors every other GA4 endpoint (apiGA4Status,
+  // apiGA4Resync, apiGA4SelectProperty): take ?slug=<slug> when
+  // provided, fall back to the caller's primary business. The legacy
+  // strict-require here broke the Settings page's Connect button —
+  // both wireGa4Card (settings.js:533) and startGoogleOauth
+  // (settings.js:1221) POST to /api/client/ga4/start-link without a
+  // slug param, so the endpoint 400'd and the frontend surfaced a
+  // generic "Could not start" alert that read as a platform outage
+  // when the actual problem was just this mismatched contract.
   const reqUrl = new URL(request.url);
   const querySlug = reqUrl.searchParams.get("slug");
-  if (!querySlug) {
-    return withCors(jsonErr(400, "slug query param required"), request, { credentials: true });
-  }
 
-  // Same ownership check as handleGA4StartProtected.
+  // Same ownership check as handleGA4StartProtected — resolves the
+  // business via the user's access list and (when admin) every active
+  // business. Defaulting to `businesses[0]` for non-slug callers is the
+  // canonical pattern.
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
     : await getUserBusinesses(env.DB, ctx.user_id);
-  const owns = businesses.some(b => b.slug === querySlug);
-  if (!owns) {
+  const biz = (querySlug ? businesses.find(b => b.slug === querySlug) : null) ?? businesses[0] ?? null;
+  if (!biz) {
+    return withCors(jsonErr(404, "no business found for this account"), request, { credentials: true });
+  }
+  if (querySlug && biz.slug !== querySlug) {
+    // Slug was explicitly provided but doesn't belong to caller's
+    // accessible set. Surface 403 so the frontend doesn't silently
+    // OAuth-link the wrong tenant.
     return withCors(jsonErr(403, "no access to this business"), request, { credentials: true });
   }
+  const slug = biz.slug;
 
   if (!env.TOKEN_SIGNING_KEY || !env.GA4_OAUTH_CLIENT_ID || !env.GA4_OAUTH_REDIRECT_URI) {
     return withCors(jsonErr(503, "GA4 integration not configured"), request, { credentials: true });
@@ -3566,7 +3582,7 @@ async function apiGA4StartLink(request: Request, env: Env): Promise<Response> {
   const nonceBytes = crypto.getRandomValues(new Uint8Array(16));
   const nonce = Array.from(nonceBytes).map((b) => b.toString(16).padStart(2, "0")).join("");
   const state = await signGA4State(
-    { slug: querySlug, nonce, ts: Math.floor(Date.now() / 1000) },
+    { slug, nonce, ts: Math.floor(Date.now() / 1000) },
     env.TOKEN_SIGNING_KEY,
   );
 

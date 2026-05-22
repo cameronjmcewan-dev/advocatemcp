@@ -1221,7 +1221,15 @@
       const r = await window.AMCP.authedFetch(path, { method: 'POST' });
       const j = await r.json();
       if (j && j.url) { window.location.href = j.url; return; }
-      throw new Error((j && (j.customer_message || j.error_code)) || 'Could not start');
+      // Error-field probe order matches the variety of shapes the
+      // worker's jsonErr / jsonOk responses use across endpoints.
+      // `j.error` is what jsonErr actually emits (worker portal.ts
+      // jsonErr → `{ error: code, message }`); customer_message and
+      // error_code were the legacy fields the original alert prose
+      // was written for. Without `j.error` in the chain, every
+      // server-side 4xx surfaced as the literal "Could not start".
+      const msg = (j && (j.customer_message || j.error_code || j.message || j.error)) || 'Could not start';
+      throw new Error(msg);
     } catch (err) {
       alert('Could not connect: ' + (err.message || err));
       btn.disabled = false;
