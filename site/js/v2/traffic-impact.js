@@ -1688,11 +1688,27 @@
     wireCrmConnectBtn('ti-crm-connect-hubspot', 'hubspot');
     wireCrmConnectBtn('ti-crm-connect-salesforce', 'salesforce');
 
-    // State C — mount charts + lazy-load geography. Threshold matches
-    // the render-side State B/C cutoff (MIN_DAILY_FOR_INSIGHT = 7); below
-    // that, render() returned the State B "gathering data" panel and the
-    // chart DOM doesn't exist for these mountChart* calls to attach to.
-    if (impact.ga4_connected && impact.daily && impact.daily.length >= 7) {
+    // State C — mount charts + lazy-load geography.
+    //
+    // Threshold MUST stay in lockstep with the render-side State B/C
+    // cutoff in `render()`. Pre-PR #244 that was `MIN_DAILY_FOR_INSIGHT
+    // (= 7)` and the comment here correctly noted that below 7 days
+    // render() returned the State B "gathering data" panel and the
+    // chart container DOMs didn't exist. PR #244 lowered render()'s
+    // gate to `daily.length >= 1` (so even sparse-data tenants see
+    // their real charts plus a calibration banner), but this
+    // afterMount gate was left at >= 7 — for any tenant with 1-6
+    // days the chart container DIVs rendered into the DOM but nothing
+    // ever called `echarts.init` on them. Net symptom: charts blacked
+    // out on every just-reconnected tenant whose inline backfill
+    // produced <7 rows, even though the page structure looked normal.
+    //
+    // Resync this gate with render()'s by mounting on any non-empty
+    // daily[]. The mount functions defensively bail when the chart
+    // container element isn't present (`if (!el) return null`), so
+    // there's no risk of mounting against an absent DOM — even if a
+    // future render-side change re-introduces a State B variant.
+    if (impact.ga4_connected && impact.daily && impact.daily.length >= 1) {
       pollEcharts(function () {
         bootMaroonTheme();
         var instTotal      = mountChartTotal(impact.daily, impact.bleed_at);
