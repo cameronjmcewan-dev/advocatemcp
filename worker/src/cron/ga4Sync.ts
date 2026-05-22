@@ -35,17 +35,21 @@ export async function runGA4SyncBatch(env: Env): Promise<void> {
   const now = new Date();
   const cutoff = new Date(now.getTime() - SYNC_INTERVAL_HOURS * 60 * 60 * 1000).toISOString();
 
-  // Find tenants overdue for sync. New connections (last_sync_at IS NULL) are
-  // covered by the inline OAuth-time backfill; we ONLY pick up tenants with a
-  // prior successful sync that's now stale. Capped at 50 per cron tick to
-  // stay under the worker CPU budget.
+  // Find tenants overdue for sync. Picks up BOTH new connections
+  // (last_sync_at IS NULL — inline OAuth-time backfill never ran, or
+  // ran and silently failed before stamping last_sync_at) AND
+  // previously-synced tenants whose data is stale. Without the NULL
+  // branch, a failed inline backfill leaves the tenant permanently
+  // unrowed — the cron skips them forever and `traffic_daily` stays
+  // empty. Bamboo Brace + Advocate both hit this in May 2026; the
+  // self-heal makes the cron the safety net for a missed backfill.
+  // Capped at 50 per cron tick to stay under the worker CPU budget.
   const stale = await env.DB
     .prepare(
       `SELECT slug, refresh_token_enc, property_id
          FROM ga4_connections
         WHERE property_id IS NOT NULL
-          AND last_sync_at IS NOT NULL
-          AND last_sync_at < ?
+          AND (last_sync_at IS NULL OR last_sync_at < ?)
           AND status != 'disconnected'
         LIMIT 50`,
     )
@@ -84,12 +88,47 @@ async function syncOneTenant(
       env.GA4_OAUTH_CLIENT_SECRET!,
     );
 
-    // Fetch the last 2 days. GA4 finalizes data within 24-48h, so re-syncing
-    // recent days lets us correct earlier under-counts.
-    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const dayBefore  = new Date(now.getTime() - 48 * 60 * 60 * 1000);
-    const startDate  = dayBefore.toISOString().slice(0, 10);
-    const endDate    = yesterday.toISOString().slice(0, 10);
+    // Adaptive lookback window. Two cases:
+    //
+    //  (a) Tenant has >= MIN_HEALTHY_ROWS days of existing data
+    //      → normal incremental sync: fetch the last 2 days. GA4
+    //        finalizes within 24-48h, so re-syncing recent days lets
+    //        us absorb the late-arriving counts.
+    //
+    //  (b) Tenant has fewer rows than that → treat as needing
+    //      backfill. Pull the same 540-day (~18 month) window the
+    //      inline OAuth-time backfill uses (portal.ts:4054). Covers
+    //      tenants whose original backfill failed silently and
+    //      tenants who reconnected without re-running it.
+    //
+    // 30 rows is the threshold because that's "obviously enough
+    // history that backfill clearly succeeded." Anything below could
+    // be either a genuinely-new property OR a broken backfill —
+    // re-pulling 540 days is harmless either way (idempotent UPSERT;
+    // GA4 returns whatever rows actually exist).
+    const MIN_HEALTHY_ROWS = 30;
+    const rowcountRes = await env.DB
+      .prepare("SELECT COUNT(*) AS c FROM traffic_daily WHERE slug = ?")
+      .bind(row.slug)
+      .first<{ c: number }>();
+    const existingRowcount = rowcountRes?.c ?? 0;
+    const needsBackfill = existingRowcount < MIN_HEALTHY_ROWS;
+
+    const lookbackDays = needsBackfill ? 540 : 2;
+    const endOfWindow   = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const startOfWindow = new Date(now.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
+    const startDate  = startOfWindow.toISOString().slice(0, 10);
+    const endDate    = endOfWindow.toISOString().slice(0, 10);
+
+    if (needsBackfill) {
+      console.log(JSON.stringify({
+        cron:               "ga4Sync",
+        event:              "self_heal_backfill",
+        slug:               row.slug,
+        existing_rowcount:  existingRowcount,
+        lookback_days:      lookbackDays,
+      }));
+    }
 
     const ga4Rows = await fetchDailyTraffic({
       propertyId: row.property_id,
