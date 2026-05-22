@@ -82,6 +82,15 @@ function crawlerName(ua: string): string | null {
   return AI_CRAWLERS.find((bot) => lower.includes(bot.toLowerCase())) ?? null;
 }
 
+// Hostnames where the Worker is dogfooded for AI-crawler interception
+// but human visitors (and a few discovery surfaces like /sitemap.xml +
+// /robots.txt) still defer to the canonical Pages-hosted marketing
+// site. Hoisted to module scope so both the non-crawler proxy fallback
+// (section 3 below) and the per-host /robots.txt + /sitemap.xml
+// dispatch (sections 2d/2e) share a single source of truth. (Apr 28
+// 2026.)
+const ADVOCATE_OWN_HOSTS = ["advocatemcp.com", "www.advocatemcp.com"];
+
 // ── Analytics logging ──────────────────────────────────────────────────────
 
 interface AnalyticsEvent {
@@ -387,6 +396,80 @@ export function buildWellKnownResponse(
       "Content-Type": "application/json",
       "Cache-Control": "public, max-age=3600",
       "Access-Control-Allow-Origin": "*",
+    },
+  });
+}
+
+// ── /robots.txt for custom-hostname tenants ────────────────────────────────
+//
+// AI search crawlers follow the discovery convention: fetch /robots.txt
+// first, then /sitemap.xml, then crawl the URLs listed. Custom-hostname
+// tenants (e.g. www.workmancopyco.com) have no Pages backing the way
+// advocatemcp.com does — without an explicit Worker handler, both files
+// 404 and the bot aborts discovery without indexing anything past the
+// homepage. (Observed May 21 2026 in Cloudflare's AI Crawl Control panel:
+// Claude-SearchBot 4 successful + 4 unsuccessful hits, the failures all
+// on www.workmancopyco.com/sitemap.xml.)
+//
+// This handler serves a permissive robots that points to the per-host
+// sitemap. advocatemcp.com itself is NOT routed through here — it keeps
+// its static site/robots.txt served via the Pages proxy fallback.
+//
+// Pure function (host -> Response): no env, no I/O, no KV. Easy to test,
+// fast at runtime.
+export function buildRobotsResponse(host: string): Response {
+  const body = [
+    `# robots.txt for ${host}`,
+    `# Served by AdvocateMCP. AI crawlers welcome — that's the product.`,
+    ``,
+    `User-agent: *`,
+    `Allow: /`,
+    ``,
+    `Sitemap: https://${host}/sitemap.xml`,
+    ``,
+  ].join("\n");
+  return new Response(body, {
+    headers: {
+      "Content-Type":  "text/plain; charset=utf-8",
+      "Cache-Control": "public, max-age=3600",
+      "Access-Control-Allow-Origin": "*",
+      "X-Powered-By":  "AdvocateMCP",
+    },
+  });
+}
+
+// ── /sitemap.xml for custom-hostname tenants ───────────────────────────────
+//
+// v1 lists the homepage plus the two existing AI-discovery surfaces
+// (/llms.txt and /.well-known/ai-agent.json) on the same host. The
+// businesses table (server/src/db/migrations/001_initial_schema.sql) has
+// only `website` + `referral_url` — no schema for multi-page customer
+// content — so a richer per-customer page list is a separate PR.
+//
+// Sitemap protocol requires every <loc> to be on the same host as the
+// sitemap itself; cross-host links would be a spec violation. Customers
+// whose actual content lives on a different host (apex vs. www) need
+// their own sitemap on that host too.
+export function buildSitemapResponse(host: string): Response {
+  const base = `https://${host}`;
+  const urls = [
+    { loc: `${base}/`,                          changefreq: "weekly", priority: "1.0" },
+    { loc: `${base}/llms.txt`,                  changefreq: "weekly", priority: "0.8" },
+    { loc: `${base}/.well-known/ai-agent.json`, changefreq: "weekly", priority: "0.7" },
+  ];
+  const body =
+    `<?xml version="1.0" encoding="UTF-8"?>\n` +
+    `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+    urls.map((u) =>
+      `  <url>\n    <loc>${u.loc}</loc>\n    <changefreq>${u.changefreq}</changefreq>\n    <priority>${u.priority}</priority>\n  </url>`
+    ).join("\n") +
+    `\n</urlset>\n`;
+  return new Response(body, {
+    headers: {
+      "Content-Type":  "application/xml; charset=utf-8",
+      "Cache-Control": "public, max-age=3600",
+      "Access-Control-Allow-Origin": "*",
+      "X-Powered-By":  "AdvocateMCP",
     },
   });
 }
@@ -1078,6 +1161,43 @@ export default Sentry.withSentry(
       return buildLlmsTxtResponse(slug, env, profile);
     }
 
+    // ── 2d. /robots.txt ───────────────────────────────────────────────────
+    // AI crawlers convention-fetch /robots.txt before deciding what to
+    // crawl. For custom-hostname tenants nothing currently serves this —
+    // they 404 and the bot aborts discovery (observed May 21 2026 on
+    // www.workmancopyco.com). Serve a permissive default that points at
+    // the per-host sitemap.
+    //
+    // advocatemcp.com itself is excluded: its static site/robots.txt
+    // (which Cloudflare's edge prepends a Managed-Content block to)
+    // continues to be served by the Pages-proxy fallback in section 3.
+    // Same dispatch band as 2b/2c — ungated, pre-AI-crawler-check.
+    if (url.pathname === "/robots.txt" && !ADVOCATE_OWN_HOSTS.includes(domain)) {
+      ctx.waitUntil(
+        Promise.resolve(
+          logEvent({ ...baseEvent, status: 200, referralUrl: null, taggedReferralUrl: null, latencyMs: Date.now() - startMs, error: null })
+        )
+      );
+      return buildRobotsResponse(domain);
+    }
+
+    // ── 2e. /sitemap.xml ──────────────────────────────────────────────────
+    // Same problem, same fix. Minimal v1 lists the homepage plus the two
+    // AI-discovery surfaces (/llms.txt and /.well-known/ai-agent.json) on
+    // the same host. The businesses table doesn't carry a multi-page
+    // content list, so a richer per-customer sitemap is a follow-up.
+    //
+    // advocatemcp.com itself is excluded (same rationale as 2d) — keeps
+    // its static site/sitemap.xml served by the Pages-proxy fallback.
+    if (url.pathname === "/sitemap.xml" && !ADVOCATE_OWN_HOSTS.includes(domain)) {
+      ctx.waitUntil(
+        Promise.resolve(
+          logEvent({ ...baseEvent, status: 200, referralUrl: null, taggedReferralUrl: null, latencyMs: Date.now() - startMs, error: null })
+        )
+      );
+      return buildSitemapResponse(domain);
+    }
+
     // ── 3. Non-crawler traffic ────────────────────────────────────────────
     // If the tenant has configured an origin_url, proxy the request there so
     // human visitors see the real website. Otherwise return an info response.
@@ -1090,8 +1210,9 @@ export default Sentry.withSentry(
         // to reach the actual Pages-hosted marketing site. We don't want
         // to clutter the tenant DB with a record for ourselves, so the
         // worker falls back to the canonical Pages URL when the request
-        // is for our own apex/www. (Apr 28 2026.)
-        const ADVOCATE_OWN_HOSTS = ["advocatemcp.com", "www.advocatemcp.com"];
+        // is for our own apex/www. (Apr 28 2026; constant hoisted to
+        // module scope so the /robots.txt + /sitemap.xml dispatch can
+        // share the same list.)
         const originUrl = tenant?.origin_url
           || (ADVOCATE_OWN_HOSTS.includes(domain) ? "https://advocatemcp-site.pages.dev" : null);
         if (originUrl) {
