@@ -225,7 +225,13 @@
       const r = await window.AMCP.authedFetch(path, { method: 'POST' });
       const j = await r.json();
       if (j && j.url) { window.location.href = j.url; return; }
-      throw new Error((j && (j.customer_message || j.error_code)) || 'Could not start');
+      // Field-probe order standardised across the dashboard:
+      // customer_message → error_code → message → error → literal fallback.
+      // PR #247 surfaced why this chain matters — when the backend returns
+      // {"error": "..."}, the previous (customer_message || error_code)
+      // chain dropped the actual message and the user saw a meaningless
+      // "Could not start" alert.
+      throw new Error((j && (j.customer_message || j.error_code || j.message || j.error)) || 'Could not start');
     } catch (err) {
       alert('Could not connect: ' + (err.message || err));
       btn.disabled = false;
