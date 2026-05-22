@@ -4249,25 +4249,37 @@ async function apiGSCStartLink(request: Request, env: Env): Promise<Response> {
   if (!guard.ok) return guard.resp;
   const ctx = guard.ctx;
 
+  // Slug resolution mirrors apiGA4StartLink (and every other GSC endpoint
+  // like apiGSCStatus, apiGSCSites, apiGSCSelectSite): take ?slug=<slug>
+  // when provided, fall back to the caller's primary business. The legacy
+  // strict-require here broke the TrafficImpact page's Connect button and
+  // the setup wizard's GSC Connect — both POST to this endpoint without
+  // a slug param, so the endpoint 400'd and the frontend surfaced a
+  // generic "Could not start GSC connection" alert that read as a
+  // platform outage when the actual problem was just this mismatched
+  // contract. (Same bug class as PR #247 fixed for GA4.)
   const reqUrl = new URL(request.url);
   const querySlug = reqUrl.searchParams.get("slug");
-  if (!querySlug) {
-    return withCors(jsonErr(400, "slug query param required"), request, { credentials: true });
-  }
 
-  // Same ownership check as handleGSCStartProtected.
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
     : await getUserBusinesses(env.DB, ctx.user_id);
-  const owns = businesses.some(b => b.slug === querySlug);
-  if (!owns) {
+  const biz = (querySlug ? businesses.find(b => b.slug === querySlug) : null) ?? businesses[0] ?? null;
+  if (!biz) {
+    return withCors(jsonErr(404, "no business found for this account"), request, { credentials: true });
+  }
+  if (querySlug && biz.slug !== querySlug) {
+    // Slug was explicitly provided but doesn't belong to caller's
+    // accessible set. Surface 403 so the frontend doesn't silently
+    // OAuth-link the wrong tenant.
     return withCors(jsonErr(403, "no access to this business"), request, { credentials: true });
   }
+  const slug = biz.slug;
 
   // Plan gate — Pro only. Matches handleGSCStartProtected.
   const planRow = await env.DB
     .prepare("SELECT plan FROM businesses WHERE slug = ?")
-    .bind(querySlug)
+    .bind(slug)
     .first<{ plan: string | null }>();
   const plan = planRow?.plan ?? "base";
   if (plan !== "pro" && plan !== "enterprise") {
@@ -4282,7 +4294,7 @@ async function apiGSCStartLink(request: Request, env: Env): Promise<Response> {
   const nonceBytes = crypto.getRandomValues(new Uint8Array(16));
   const nonce = Array.from(nonceBytes).map((b) => b.toString(16).padStart(2, "0")).join("");
   const state = await signState(
-    { slug: querySlug, nonce, ts: Math.floor(Date.now() / 1000) },
+    { slug, nonce, ts: Math.floor(Date.now() / 1000) },
     env.TOKEN_SIGNING_KEY,
     "gsc-state:v1:",
   );
@@ -5379,26 +5391,35 @@ async function apiCrmStartLink(request: Request, env: Env): Promise<Response> {
   const querySlug = reqUrl.searchParams.get("slug");
   const provider  = reqUrl.searchParams.get("provider") ?? "hubspot";
 
-  if (!querySlug) {
-    return withCors(jsonErr(400, "slug query param required"), request, { credentials: true });
-  }
-
+  // Provider whitelist runs first — cheaper rejection than a DB lookup
+  // when the caller asked for something we don't support yet.
   if (provider !== "hubspot" && provider !== "salesforce") {
     return withCors(jsonErr(400, "provider_not_supported_yet"), request, { credentials: true });
   }
 
+  // Slug resolution mirrors apiGA4StartLink (PR #247) — take ?slug=<slug>
+  // when provided, fall back to the caller's primary business. The legacy
+  // strict-require here broke the setup wizard's HubSpot + Salesforce
+  // Connect buttons: setupPage.js POSTs to this endpoint without a slug,
+  // so the endpoint 400'd and the frontend surfaced a generic "Could not
+  // start" alert that read as a platform outage when the actual problem
+  // was just this mismatched contract.
   const businesses = ctx.role === "admin"
     ? await getActiveBusinesses(env.DB)
     : await getUserBusinesses(env.DB, ctx.user_id);
-  const owns = businesses.some(b => b.slug === querySlug);
-  if (!owns) {
+  const biz = (querySlug ? businesses.find(b => b.slug === querySlug) : null) ?? businesses[0] ?? null;
+  if (!biz) {
+    return withCors(jsonErr(404, "no business found for this account"), request, { credentials: true });
+  }
+  if (querySlug && biz.slug !== querySlug) {
     return withCors(jsonErr(403, "no access to this business"), request, { credentials: true });
   }
+  const slug = biz.slug;
 
   // Pro plan gate
   const planRow = await env.DB
     .prepare("SELECT plan FROM businesses WHERE slug = ?")
-    .bind(querySlug)
+    .bind(slug)
     .first<{ plan: string | null }>();
   const plan = planRow?.plan ?? "base";
   if (plan !== "pro" && plan !== "enterprise") {
@@ -5413,7 +5434,7 @@ async function apiCrmStartLink(request: Request, env: Env): Promise<Response> {
     const nonceBytes = crypto.getRandomValues(new Uint8Array(16));
     const nonce = Array.from(nonceBytes).map((b) => b.toString(16).padStart(2, "0")).join("");
     const state = await signState(
-      { slug: querySlug, nonce, ts: Math.floor(Date.now() / 1000) },
+      { slug, nonce, ts: Math.floor(Date.now() / 1000) },
       env.TOKEN_SIGNING_KEY,
       "hubspot-state:v1:",
     );
@@ -5436,7 +5457,7 @@ async function apiCrmStartLink(request: Request, env: Env): Promise<Response> {
     const nonceBytes = crypto.getRandomValues(new Uint8Array(16));
     const nonce = Array.from(nonceBytes).map((b) => b.toString(16).padStart(2, "0")).join("");
     const state = await signState(
-      { slug: querySlug, nonce, ts: Math.floor(Date.now() / 1000) },
+      { slug, nonce, ts: Math.floor(Date.now() / 1000) },
       env.TOKEN_SIGNING_KEY,
       "salesforce-state:v1:",
     );
