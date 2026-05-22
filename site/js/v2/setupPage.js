@@ -225,7 +225,13 @@
       const r = await window.AMCP.authedFetch(path, { method: 'POST' });
       const j = await r.json();
       if (j && j.url) { window.location.href = j.url; return; }
-      throw new Error((j && (j.customer_message || j.error_code)) || 'Could not start');
+      // Field-probe order standardised across the dashboard:
+      // customer_message → error_code → message → error → literal fallback.
+      // PR #247 surfaced why this chain matters — when the backend returns
+      // {"error": "..."}, the previous (customer_message || error_code)
+      // chain dropped the actual message and the user saw a meaningless
+      // "Could not start" alert.
+      throw new Error((j && (j.customer_message || j.error_code || j.message || j.error)) || 'Could not start');
     } catch (err) {
       alert('Could not connect: ' + (err.message || err));
       btn.disabled = false;
@@ -263,7 +269,7 @@
         isValid:      (s) => !!s.siteUrl,
         rowLabel:     (s) => s.siteUrl || '',
         rowSubLabel:  (s) => s.permissionLevel || '',
-        emptyMessage: 'No verified sites on this Google account. Add and verify a site in Search Console first.',
+        emptyMessage: 'No verified sites visible on this Google account yet. Two common causes: (a) you connected a different Google account than the one you verified the site under — disconnect and reconnect with the right account; (b) you verified the site within the last few hours — Google Search Console takes up to 24 hours to surface newly-verified properties via its API. Come back later if so.',
         intro:        'Pick the site Advocate should pull data from. Selecting a site triggers an 18-month backfill — this can take 30 seconds.',
       });
     }

@@ -533,7 +533,7 @@
           const r = await af('/api/client/ga4/start-link', { method: 'POST' });
           const j = await r.json();
           if (j && j.url) { window.location.href = j.url; return; }
-          throw new Error(j && (j.customer_message || j.error_code) || 'Could not start GA4 connection');
+          throw new Error(j && (j.customer_message || j.error_code || j.message || j.error) || 'Could not start GA4 connection');
         } catch (err) {
           setMsg(String(err && err.message || err), 'error');
           connectBtn.disabled = false;
@@ -717,7 +717,7 @@
           const r = await af('/api/client/gsc/start-link', { method: 'POST' });
           const j = await r.json();
           if (j && j.url) { window.location.href = j.url; return; }
-          throw new Error(j && (j.customer_message || j.error_code) || 'Could not start GSC connection');
+          throw new Error(j && (j.customer_message || j.error_code || j.message || j.error) || 'Could not start GSC connection');
         } catch (err) {
           setMsg(String(err && err.message || err), 'error');
           connectBtn.disabled = false;
@@ -777,7 +777,7 @@
           isValid:      (s) => !!s.siteUrl,
           rowLabel:     (s) => s.siteUrl || '',
           rowSubLabel:  (s) => s.permissionLevel || '',
-          emptyMessage: 'No verified sites on this Google account. Add and verify a site in Search Console first.',
+          emptyMessage: 'No verified sites visible on this Google account yet. Two common causes: (a) you connected a different Google account than the one you verified the site under — disconnect and reconnect with the right account; (b) you verified the site within the last few hours — Google Search Console takes up to 24 hours to surface newly-verified properties via its API. Come back later if so.',
           intro:        'Pick the site Advocate should pull data from. Selecting a site triggers an 18-month backfill — this can take 30 seconds.',
         });
       });
@@ -837,7 +837,7 @@
       .then((r) => r.json().then((j) => ({ ok: r.ok, j })))
       .then(({ ok, j }) => {
         if (!ok) {
-          throw new Error((j && (j.customer_message || j.error_code)) || 'Could not load list');
+          throw new Error((j && (j.customer_message || j.error_code || j.message || j.error)) || 'Could not load list');
         }
         const items = (j && j[opts.listKey]) || [];
         if (items.length === 0) {
@@ -899,7 +899,7 @@
               });
               const j = await r.json();
               if (!r.ok || (j && j.error)) {
-                throw new Error((j && (j.customer_message || j.error_code || j.error)) || 'Selection failed');
+                throw new Error((j && (j.customer_message || j.error_code || j.message || j.error)) || 'Selection failed');
               }
               const days = (j && j.backfill && j.backfill.days_upserted) || 0;
               setPickerMsg(days > 0 ? `Selected — ${days} days backfilled.` : 'Selected.', 'success');
@@ -1022,7 +1022,7 @@
             const r = await af('/api/client/crm/start-link?provider=' + encodeURIComponent(provider), { method: 'POST' });
             const j = await r.json();
             if (j && j.url) { window.location.href = j.url; return; }
-            throw new Error((j && (j.customer_message || j.error_code)) || 'Could not start CRM connection');
+            throw new Error((j && (j.customer_message || j.error_code || j.message || j.error)) || 'Could not start CRM connection');
           } catch (err) {
             setMsg(String(err && err.message || err), 'error');
             connectBtn.disabled = false;
@@ -1267,7 +1267,7 @@
         isValid:      (s) => !!s.siteUrl,
         rowLabel:     (s) => s.siteUrl || '',
         rowSubLabel:  (s) => s.permissionLevel || '',
-        emptyMessage: 'No verified sites on this Google account. Add and verify a site in Search Console first.',
+        emptyMessage: 'No verified sites visible on this Google account yet. Two common causes: (a) you connected a different Google account than the one you verified the site under — disconnect and reconnect with the right account; (b) you verified the site within the last few hours — Google Search Console takes up to 24 hours to surface newly-verified properties via its API. Come back later if so.',
         intro:        'Pick the site Advocate should pull data from. Selecting a site triggers an 18-month backfill — this can take 30 seconds.',
       });
     }

@@ -1711,7 +1711,7 @@
           const r = await window.AMCP.authedFetch('/api/client/ga4/start-link', { method: 'POST' });
           const j = await r.json();
           if (j.url) { window.location.href = j.url; return; }
-          throw new Error(j.customer_message || j.error_code || 'Could not start GA4 connection');
+          throw new Error(j.customer_message || j.error_code || j.message || j.error || 'Could not start GA4 connection');
         } catch (err) {
           btn.disabled = false;
           btn.textContent = 'Connect Google Analytics →';
@@ -1767,7 +1767,7 @@
           var r = await window.AMCP.authedFetch('/api/client/gsc/start-link', { method: 'POST' });
           var j = await r.json();
           if (j.url) { window.location.href = j.url; return; }
-          throw new Error(j.customer_message || j.error_code || 'Could not start GSC connection');
+          throw new Error(j.customer_message || j.error_code || j.message || j.error || 'Could not start GSC connection');
         } catch (err) {
           gscConnectBtn.disabled = false;
           gscConnectBtn.textContent = 'Connect Search Console →';
@@ -1788,7 +1788,7 @@
           var r = await window.AMCP.authedFetch('/api/client/crm/start-link?provider=' + encodeURIComponent(provider), { method: 'POST' });
           var j = await r.json();
           if (j && j.url) { window.location.href = j.url; return; }
-          throw new Error((j && (j.customer_message || j.error_code)) || 'Could not start CRM connection');
+          throw new Error((j && (j.customer_message || j.error_code || j.message || j.error)) || 'Could not start CRM connection');
         } catch (err) {
           btn.disabled = false;
           btn.textContent = provider.charAt(0).toUpperCase() + provider.slice(1) + ' →';
@@ -2133,7 +2133,7 @@
       const r = await window.AMCP.authedFetch(path, { method: 'POST' });
       const j = await r.json();
       if (j && j.url) { window.location.href = j.url; return; }
-      throw new Error((j && (j.customer_message || j.error_code)) || 'Could not start');
+      throw new Error((j && (j.customer_message || j.error_code || j.message || j.error)) || 'Could not start');
     } catch (err) {
       alert('Could not connect: ' + (err.message || err));
       btn.disabled = false;
@@ -2175,7 +2175,7 @@
         isValid:      function (s) { return !!s.siteUrl; },
         rowLabel:     function (s) { return s.siteUrl || ''; },
         rowSubLabel:  function (s) { return s.permissionLevel || ''; },
-        emptyMessage: 'No verified sites on this Google account. Add and verify a site in Search Console first.',
+        emptyMessage: 'No verified sites visible on this Google account yet. Two common causes: (a) you connected a different Google account than the one you verified the site under — disconnect and reconnect with the right account; (b) you verified the site within the last few hours — Google Search Console takes up to 24 hours to surface newly-verified properties via its API. Come back later if so.',
         intro:        'Pick the site Advocate should pull data from. Selecting a site triggers an 18-month backfill — this can take 30 seconds.',
       });
     }
