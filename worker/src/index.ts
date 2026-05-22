@@ -391,6 +391,80 @@ export function buildWellKnownResponse(
   });
 }
 
+// ── /robots.txt for custom-hostname tenants ────────────────────────────────
+//
+// AI search crawlers follow the discovery convention: fetch /robots.txt
+// first, then /sitemap.xml, then crawl the URLs listed. Custom-hostname
+// tenants (e.g. www.workmancopyco.com) have no Pages backing the way
+// advocatemcp.com does — without an explicit Worker handler, both files
+// 404 and the bot aborts discovery without indexing anything past the
+// homepage. (Observed May 21 2026 in Cloudflare's AI Crawl Control panel:
+// Claude-SearchBot 4 successful + 4 unsuccessful hits, the failures all
+// on www.workmancopyco.com/sitemap.xml.)
+//
+// This handler serves a permissive robots that points to the per-host
+// sitemap. advocatemcp.com itself is NOT routed through here — it keeps
+// its static site/robots.txt served via the Pages proxy fallback.
+//
+// Pure function (host -> Response): no env, no I/O, no KV. Easy to test,
+// fast at runtime.
+export function buildRobotsResponse(host: string): Response {
+  const body = [
+    `# robots.txt for ${host}`,
+    `# Served by AdvocateMCP. AI crawlers welcome — that's the product.`,
+    ``,
+    `User-agent: *`,
+    `Allow: /`,
+    ``,
+    `Sitemap: https://${host}/sitemap.xml`,
+    ``,
+  ].join("\n");
+  return new Response(body, {
+    headers: {
+      "Content-Type":  "text/plain; charset=utf-8",
+      "Cache-Control": "public, max-age=3600",
+      "Access-Control-Allow-Origin": "*",
+      "X-Powered-By":  "AdvocateMCP",
+    },
+  });
+}
+
+// ── /sitemap.xml for custom-hostname tenants ───────────────────────────────
+//
+// v1 lists the homepage plus the two existing AI-discovery surfaces
+// (/llms.txt and /.well-known/ai-agent.json) on the same host. The
+// businesses table (server/src/db/migrations/001_initial_schema.sql) has
+// only `website` + `referral_url` — no schema for multi-page customer
+// content — so a richer per-customer page list is a separate PR.
+//
+// Sitemap protocol requires every <loc> to be on the same host as the
+// sitemap itself; cross-host links would be a spec violation. Customers
+// whose actual content lives on a different host (apex vs. www) need
+// their own sitemap on that host too.
+export function buildSitemapResponse(host: string): Response {
+  const base = `https://${host}`;
+  const urls = [
+    { loc: `${base}/`,                          changefreq: "weekly", priority: "1.0" },
+    { loc: `${base}/llms.txt`,                  changefreq: "weekly", priority: "0.8" },
+    { loc: `${base}/.well-known/ai-agent.json`, changefreq: "weekly", priority: "0.7" },
+  ];
+  const body =
+    `<?xml version="1.0" encoding="UTF-8"?>\n` +
+    `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+    urls.map((u) =>
+      `  <url>\n    <loc>${u.loc}</loc>\n    <changefreq>${u.changefreq}</changefreq>\n    <priority>${u.priority}</priority>\n  </url>`
+    ).join("\n") +
+    `\n</urlset>\n`;
+  return new Response(body, {
+    headers: {
+      "Content-Type":  "application/xml; charset=utf-8",
+      "Cache-Control": "public, max-age=3600",
+      "Access-Control-Allow-Origin": "*",
+      "X-Powered-By":  "AdvocateMCP",
+    },
+  });
+}
+
 // ── Main fetch handler ─────────────────────────────────────────────────────
 
 // Sentry-wrapped default export. `withSentry` takes a config-builder
