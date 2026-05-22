@@ -88,6 +88,24 @@
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
+  // ── Chart-mount gate ──────────────────────────────────────────────
+  // Single source of truth for "does this payload have data we can
+  // chart?". Used by render() to gate the State B vs State C branch,
+  // AND by afterMount() to decide whether to call `echarts.init` on the
+  // mounted chart containers. PR #244/#248 history: the two sides used
+  // to drift apart (render emitted containers for any daily.length > 0
+  // while afterMount required >= 7), which silently blacked out charts
+  // for newly-reconnected tenants. Both consumers MUST go through this
+  // helper so a future edit can't reintroduce the desync.
+  // Static-grep contract enforced by
+  // worker/src/trafficImpactGateContract.test.ts.
+  function hasChartableData(impact) {
+    return !!(impact
+      && impact.ga4_connected
+      && Array.isArray(impact.daily)
+      && impact.daily.length >= 1);
+  }
+
   // ── Click-source resolver (ported from clicks.js) ─────────────────
 
   function refBucketName(ref, ua) {
@@ -288,6 +306,92 @@
       '<span>' + label + '</span>' +
       '<span class="tabular" style="color:' + color + ';font-weight:500">' + fmtCount(sessions) + '</span>' +
       '</div>';
+  }
+
+  // ── Top-sources diagnostic ────────────────────────────────────────
+  // Aggregates the per-day `top_sources` arrays from the Traffic Impact
+  // payload (worker/src/lib/trafficImpactPayload.ts:96, populated by
+  // worker/src/cron/ga4Sync.ts top_sources_json) into a single
+  // source+medium summary. Surfaces the raw GA4 source/medium buckets
+  // that the AI-vs-Human classifier saw, so tenants and admins can
+  // self-diagnose whether a "0% AI" reading means:
+  //   - real-but-anonymised AI traffic (AI-tool in-app browsers strip
+  //     the Referer header, so the visit lands as (direct)/(none)),
+  //   - a classifier gap (a known AI source value the classifier
+  //     doesn't recognise),
+  //   - or genuinely no AI traffic yet.
+  //
+  // Pure functions; defensive against malformed `top_sources` shapes
+  // (cron once produced `top_sources: []` for stale rows — handled by
+  // the Array.isArray guard).
+  function aggregateTopSources(daily) {
+    var byKey = Object.create(null);
+    for (var i = 0; i < daily.length; i++) {
+      var rows = daily[i] && daily[i].top_sources;
+      if (!Array.isArray(rows)) continue;
+      for (var j = 0; j < rows.length; j++) {
+        var r = rows[j];
+        if (!r || !r.source) continue;
+        var key = String(r.source) + '|' + String(r.medium || '');
+        if (!byKey[key]) {
+          byKey[key] = { source: r.source, medium: r.medium || '', sessions: 0 };
+        }
+        byKey[key].sessions += Number(r.sessions || 0);
+      }
+    }
+    var arr = [];
+    for (var k in byKey) arr.push(byKey[k]);
+    arr.sort(function (a, b) { return b.sessions - a.sessions; });
+    return arr;
+  }
+
+  function renderTopSourcesCard(daily) {
+    if (!Array.isArray(daily) || daily.length === 0) return '';
+    var rows = aggregateTopSources(daily);
+    if (rows.length === 0) return '';
+    var total = 0;
+    for (var i = 0; i < rows.length; i++) total += rows[i].sessions;
+    if (total <= 0) return '';
+    var top = rows.slice(0, 12);
+
+    var bodyRows = top.map(function (r) {
+      var share = Math.round((r.sessions / total) * 100);
+      var src   = esc(r.source || '(unknown)');
+      var med   = esc(r.medium || '');
+      // (direct)/(none) and similar referrerless rows are the
+      // diagnostic signature for AI-webview referrer-stripping; mute
+      // their colour but DON'T claim they're AI — the educational note
+      // below explains the ambiguity.
+      var muted = (r.source === '(direct)' || r.medium === '(none)' || r.medium === '' || r.source === '(not set)');
+      var srcColor = muted ? 'color:var(--muted)' : '';
+      return '<tr>' +
+        '<td class="tabular" style="' + srcColor + '">' + src + '</td>' +
+        '<td class="tabular" style="' + srcColor + '">' + (med || '<span style="color:var(--muted)">—</span>') + '</td>' +
+        '<td class="tabular" style="text-align:right">' + fmtCount(r.sessions) + '</td>' +
+        '<td class="tabular" style="text-align:right;color:var(--muted)">' + share + '%</td>' +
+        '</tr>';
+    }).join('');
+
+    return [
+      '<details class="card-dash" style="padding:16px 20px;">',
+      '  <summary style="cursor:pointer;font-weight:500;font-size:14px;">Where your visitors came from <span style="color:var(--muted);font-weight:400">(raw GA4 source / medium &middot; ', fmtCount(total), ' sessions)</span></summary>',
+      '  <p style="margin:12px 0 4px;color:var(--muted);font-size:13px;line-height:1.5;">',
+      '    Some AI-tool in-app browsers (ChatGPT iOS, Claude mobile, Perplexity, etc.) strip the <code>Referer</code> header, so the visit lands as <code>(direct) / (none)</code>. If those rows are unusually large for your site, much of your "Human" bar in the AI vs Human chart is likely AI traffic that the classifier can\'t attribute. Compare against your own organic baseline to gut-check.',
+      '  </p>',
+      '  <table class="tbl" style="width:100%;margin-top:12px;font-size:13px;">',
+      '    <thead><tr>',
+      '      <th style="text-align:left">Source</th>',
+      '      <th style="text-align:left">Medium</th>',
+      '      <th style="text-align:right">Sessions</th>',
+      '      <th style="text-align:right">Share</th>',
+      '    </tr></thead>',
+      '    <tbody>', bodyRows, '</tbody>',
+      '  </table>',
+      (rows.length > top.length
+        ? '  <p style="margin:8px 0 0;color:var(--muted);font-size:12px;">Showing top ' + top.length + ' of ' + rows.length + ' source/medium combinations.</p>'
+        : ''),
+      '</details>',
+    ].join('');
   }
 
   // ── Conversion revenue banner ─────────────────────────────────────
@@ -1099,7 +1203,13 @@
     const errorBanner = renderGa4ErrorBanner(ga4St, propLabel);
 
     const MIN_DAILY_FOR_INSIGHT = 7;
-    if (daily.length === 0) {
+    // State B early-return: connectivity is already confirmed above
+    // (the `!connected` branch returned earlier), so `hasChartableData`
+    // here functionally checks "is impact.daily a non-empty array?".
+    // Using the shared helper instead of the bare `daily.length === 0`
+    // expression keeps render() and afterMount() pinned to the same
+    // predicate — see the hasChartableData declaration for context.
+    if (!hasChartableData(impact)) {
       // Zero-data State B has two flavors:
       //   - errored: show only the error banner + clicks section.
       //     The error message is its own troubleshoot copy — the
@@ -1250,6 +1360,7 @@
       ${renderLtvSection(ltv)}
       ${renderAuthoritySection(authority)}
       ${renderGeographyCard()}
+      ${renderTopSourcesCard(daily)}
 
       <details class="card-dash" style="padding:16px 20px;">
         <summary style="cursor:pointer; font-weight:500; font-size:14px;">Direct AI agent clicks (${fmtCount(clickCount)})</summary>
@@ -1708,7 +1819,7 @@
     // container element isn't present (`if (!el) return null`), so
     // there's no risk of mounting against an absent DOM — even if a
     // future render-side change re-introduces a State B variant.
-    if (impact.ga4_connected && impact.daily && impact.daily.length >= 1) {
+    if (hasChartableData(impact)) {
       pollEcharts(function () {
         bootMaroonTheme();
         var instTotal      = mountChartTotal(impact.daily, impact.bleed_at);
