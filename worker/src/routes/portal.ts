@@ -1189,7 +1189,7 @@ async function apiActivityDetail(request: Request, env: Env): Promise<Response> 
       businesses.map(async (biz) => {
         try {
           const res = await fetch(`${base}/analytics/${biz.slug}/activity`, {
-            headers: { Authorization: `Bearer ${biz.api_key}` },
+            headers: env.API_KEY ? { "X-API-Key": env.API_KEY } : {},
             // Cap each per-business fetch so one stalled tenant can't hold the
             // whole admin aggregate hostage (Worker subrequests have a 30s
             // ceiling; 5s × N in parallel keeps us well under it).
@@ -1326,7 +1326,7 @@ async function apiActivityDetail(request: Request, env: Env): Promise<Response> 
   const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
   try {
     const res = await fetch(`${base}/analytics/${biz.slug}/activity${rangeQS}`, {
-      headers: { Authorization: `Bearer ${biz.api_key}` },
+      headers: env.API_KEY ? { "X-API-Key": env.API_KEY } : {},
     });
     if (!res.ok) {
       return withCors(jsonErr(res.status, "Activity fetch failed"), request, { credentials: true });
@@ -1395,7 +1395,7 @@ async function apiClicks(request: Request, env: Env): Promise<Response> {
   const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
   try {
     const res = await fetch(`${base}/analytics/${biz.slug}/clicks${rangeQS}`, {
-      headers: { Authorization: `Bearer ${biz.api_key}` },
+      headers: env.API_KEY ? { "X-API-Key": env.API_KEY } : {},
     });
     if (!res.ok) {
       return withCors(jsonErr(res.status, "Clicks fetch failed"), request, { credentials: true });
@@ -1439,7 +1439,7 @@ async function fetchProfile(biz: Business, env: Env): Promise<ProfileOut | null>
   const base = env.API_BASE_URL ?? "https://advocate-production-2887.up.railway.app";
   try {
     const res = await fetch(`${base}/agents/${biz.slug}/profile`, {
-      headers: { Authorization: `Bearer ${biz.api_key}` },
+      headers: env.API_KEY ? { "X-API-Key": env.API_KEY } : {},
     });
     if (!res.ok) return null;
     return await res.json() as ProfileOut;
@@ -1638,7 +1638,7 @@ async function apiRevenueSummary(request: Request, env: Env): Promise<Response> 
   const locQuery = incomingLocId ? `?location_id=${encodeURIComponent(incomingLocId)}` : "";
   const url = `${base}/agents/${encodeURIComponent(biz.slug)}/revenue-summary${locQuery}`;
   const upstream = await fetch(url, {
-    headers: { Authorization: `Bearer ${biz.api_key}` },
+    headers: env.API_KEY ? { "X-API-Key": env.API_KEY } : {},
   });
   const upstreamBody = await upstream.text();
 
@@ -1944,7 +1944,7 @@ async function apiUpdateProfile(request: Request, env: Env): Promise<Response> {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${biz.api_key}`,
+        ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}),
       },
       body: JSON.stringify(payload),
     });
@@ -1979,16 +1979,16 @@ async function apiRadar(request: Request, env: Env): Promise<Response> {
   try {
     const [summaryRes, basketRes, lossesRes, authorityRes] = await Promise.all([
       fetch(`${base}/api/competitor-radar/${biz.slug}/summary`, {
-        headers: { Authorization: `Bearer ${biz.api_key}` },
+        headers: env.API_KEY ? { "X-API-Key": env.API_KEY } : {},
       }),
       fetch(`${base}/api/competitor-basket/${biz.slug}`, {
-        headers: { Authorization: `Bearer ${biz.api_key}` },
+        headers: env.API_KEY ? { "X-API-Key": env.API_KEY } : {},
       }),
       fetch(`${base}/api/competitor-radar/${biz.slug}/losses`, {
-        headers: { Authorization: `Bearer ${biz.api_key}` },
+        headers: env.API_KEY ? { "X-API-Key": env.API_KEY } : {},
       }),
       fetch(`${base}/api/competitor-radar/${biz.slug}/authority-report`, {
-        headers: { Authorization: `Bearer ${biz.api_key}` },
+        headers: env.API_KEY ? { "X-API-Key": env.API_KEY } : {},
       }),
     ]);
 
@@ -2032,7 +2032,7 @@ async function apiRadarShareOfVoice(request: Request, env: Env): Promise<Respons
   const url   = `${base}/api/competitor-radar/${encodeURIComponent(biz.slug)}/share-of-voice/weekly?weeks=${encodeURIComponent(weeks)}`;
 
   try {
-    const upstream = await fetch(url, { headers: { Authorization: `Bearer ${biz.api_key}` } });
+    const upstream = await fetch(url, { headers: env.API_KEY ? { "X-API-Key": env.API_KEY } : {} });
     const body     = await upstream.text();
     if (!upstream.ok) {
       // Pass through upstream status so 402 plan-gates surface to the
@@ -2084,7 +2084,7 @@ async function apiRadarBasketAdd(request: Request, env: Env): Promise<Response> 
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${biz.api_key}`,
+        ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}),
       },
       body: JSON.stringify({ query: qp }),
     });
@@ -2116,7 +2116,7 @@ async function apiRadarBasketDelete(request: Request, env: Env, basketId: string
   try {
     const res = await fetch(`${base}/api/competitor-basket/${biz.slug}/queries/${encodeURIComponent(basketId)}`, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${biz.api_key}` },
+      headers: env.API_KEY ? { "X-API-Key": env.API_KEY } : {},
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -2509,7 +2509,6 @@ async function apiPreviewVoice(request: Request, env: Env): Promise<Response> {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${biz.api_key}`,
         ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}),
       },
       body: JSON.stringify({ query, crawler: "PerplexityBot" }),
@@ -2600,7 +2599,6 @@ async function apiProfileScore(request: Request, env: Env): Promise<Response> {
       method: isGet ? "GET" : "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${biz.api_key}`,
         ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}),
       },
       ...(isGet ? {} : { body }),
@@ -2743,7 +2741,6 @@ async function apiAIRecommendations(request: Request, env: Env): Promise<Respons
       method: isGet ? "GET" : "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization:  `Bearer ${biz.api_key}`,
         ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}),
       },
       ...(isGet ? {} : { body }),
@@ -2805,7 +2802,6 @@ async function apiVerifyRating(request: Request, env: Env): Promise<Response> {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${biz.api_key}`,
         ...(env.API_KEY ? { "X-API-Key": env.API_KEY } : {}),
       },
       body,
@@ -3496,7 +3492,7 @@ async function fetchAnalytics(
   const qs = rangeQS ? `?${rangeQS}` : "";
   try {
     const res = await fetch(`${base}/analytics/${biz.slug}${qs}`, {
-      headers: { Authorization: `Bearer ${biz.api_key}` },
+      headers: env.API_KEY ? { "X-API-Key": env.API_KEY } : {},
     });
     if (!res.ok) return null;
     return res.json() as Promise<AnalyticsData>;
