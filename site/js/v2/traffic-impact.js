@@ -1346,7 +1346,7 @@
         <div class="card-head">
           <div>
             <h3>AI vs Human</h3>
-            <div class="sub">Same window, broken down by what brought the visit.</div>
+            <div class="sub">Same window, broken down by what brought the visit. Counts only sessions GA4 attributes to a known AI domain (Claude, ChatGPT, Perplexity, Gemini, Copilot, etc.). AI engines that cite you but route clicks through an in-app browser strip the referrer and land in &ldquo;(direct)/(none)&rdquo; instead &mdash; see <a href="/Mentions.html" style="color:var(--maroon)">Mentions</a> for raw bot-citation counts (one stage upstream of clicks).</div>
           </div>
         </div>
         <div id="chart-aivshuman" style="width:100%; height:320px;"></div>
