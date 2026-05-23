@@ -658,8 +658,16 @@
           </div>
         </div>`;
     } else if (!hasSite) {
+      // "Account" row surfaces the connected Google email so an admin
+      // can verify they OAuth'd with the same account that verified the
+      // site in Search Console. Null for tenants connected before the
+      // 0026 migration (skip the row entirely — falls back to old copy).
+      const accountRow = (s && s.google_account_email)
+        ? `<div class="set-row"><div class="l">Account</div><div class="r"><code style="font-size:12.5px">${esc(s.google_account_email)}</code></div></div>`
+        : '';
       body = `
         <div class="set-row"><div class="l">Status</div><div class="r"><span class="chip amber dot-chip"><span class="dot"></span>Connected · pick a site</span></div></div>
+        ${accountRow}
         <div class="set-row" style="border-bottom:0;padding-top:14px">
           <div class="l"></div>
           <div class="r">
@@ -669,8 +677,15 @@
           </div>
         </div>`;
     } else {
+      // Same "Account" row as the no-site variant above. Surfaces the
+      // connected Google email so an admin can verify which account is
+      // syncing data without leaving the dashboard.
+      const accountRow = (s && s.google_account_email)
+        ? `<div class="set-row"><div class="l">Account</div><div class="r"><code style="font-size:12.5px">${esc(s.google_account_email)}</code></div></div>`
+        : '';
       body = `
         <div class="set-row"><div class="l">Status</div><div class="r"><span class="chip sage dot-chip"><span class="dot"></span>Connected</span> ${errorPill}</div></div>
+        ${accountRow}
         <div class="set-row"><div class="l">Site</div><div class="r"><strong>${esc(s.site_url || '')}</strong></div></div>
         <div class="set-row"><div class="l">Last sync</div><div class="r">${esc(timeAgo(s.last_sync_at))}${s.last_sync_error ? ` <span style="color:var(--red);font-size:12.5px">· ${esc(String(s.last_sync_error).slice(0, 120))}</span>` : ''}</div></div>
         <div class="set-row" style="border-bottom:0;padding-top:14px">
