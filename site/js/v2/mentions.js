@@ -289,7 +289,7 @@
           <div class="chart-labels">${labels}</div>
         </div>
         <div class="card-dash">
-          <div class="card-head"><div><h3>By AI tool</h3><div class="sub">Share of mentions, ${rangeLabel(m).toLowerCase()}</div></div></div>
+          <div class="card-head"><div><h3>By AI tool</h3><div class="sub">Share of mentions, ${rangeLabel(m).toLowerCase()}. Counts server-side bot fetches from AI engines (ClaudeBot, GPTBot, PerplexityBot, etc.) &mdash; not human clicks. For visits driven by users who clicked through from an AI answer, see <a href="/TrafficImpact.html" style="color:var(--maroon)">Traffic Impact</a>'s AI-vs-Human chart (one stage downstream).</div></div></div>
           ${crawlerBars}
         </div>
       </div>

@@ -23,7 +23,18 @@ export const AI_DOMAINS = [
   "kagi.com",
 ] as const;
 
-export const AI_MEDIUMS = ["ai", "ai_overview"] as const;
+// AI_MEDIUMS matches GA4's `sessionMedium` field.
+//   - "ai" / "ai_overview" are Google's official AI-medium tags.
+//   - "crawler" is Advocate's own UTM-medium tag, emitted by utmTag()
+//     in worker/src/index.ts on every /track redirect from an AI bot
+//     (utm_source=ai&utm_medium=crawler&utm_content=<botType>). When a
+//     user clicks an AI-cited link that flows through /track, GA4
+//     records sessionMedium="crawler" — which is genuinely AI-driven
+//     traffic, so it belongs in the AI bucket alongside the official
+//     mediums. Without this entry the classifier leaked Advocate's
+//     own UTM-tagged AI clicks into "human", which was a real (small)
+//     attribution gap observed in the 2026-05-23 audit.
+export const AI_MEDIUMS = ["ai", "ai_overview", "crawler"] as const;
 
 export type TrafficClass = "ai" | "human";
 
