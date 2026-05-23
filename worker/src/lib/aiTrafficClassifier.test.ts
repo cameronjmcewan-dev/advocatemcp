@@ -50,6 +50,19 @@ describe("classifyTrafficSource", () => {
     expect(classifyTrafficSource("google", "ai_overview")).toBe("ai");
   });
 
+  it("classifies any source as ai when medium is 'crawler'", () => {
+    // Advocate's own utmTag() emits utm_medium=crawler for /track
+    // redirects from AI bots — those clicks ARE AI-driven and belong
+    // in the AI bucket. Pre-fix, the classifier missed them.
+    expect(classifyTrafficSource("ai", "crawler")).toBe("ai");
+  });
+
+  it("classifies (direct) source as ai when medium is 'crawler'", () => {
+    // Defensive: even if the utm_source got mangled or stripped, the
+    // utm_medium=crawler signal alone is enough to bucket as AI.
+    expect(classifyTrafficSource("(direct)", "crawler")).toBe("ai");
+  });
+
   it("classifies unknown source as ai when medium is 'ai'", () => {
     expect(classifyTrafficSource("some-random-site.com", "ai")).toBe("ai");
   });
