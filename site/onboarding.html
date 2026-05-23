@@ -2152,7 +2152,18 @@ function buildOnboardPayload() {
   if (lead_routing_json) profile.lead_routing_json = lead_routing_json;
   if (customer_quotes_json.length > 0) profile.customer_quotes_json = customer_quotes_json;
   if (ratings_json) profile.ratings_json = ratings_json;
-  if (differentiators_text) profile.differentiators_text = differentiators_text.slice(0, 1500);
+  if (differentiators_text) {
+    // Mirror across both keys. `differentiators_text` is the legacy
+    // key (kept for any Railway-side scoring that depends on it);
+    // `differentiator` matches the schema name the Business Profile
+    // editor template reads from. Writing both at signup means the
+    // editor pre-fills correctly without relying on the worker's
+    // merge-time legacy-key normalization (apiGetProfile). One
+    // belt + suspenders against schema drift.
+    const _trimmed = differentiators_text.slice(0, 1500);
+    profile.differentiators_text = _trimmed;
+    profile.differentiator        = _trimmed;
+  }
 
   // user_full_name is the personal name from Step 9 (#acct-name) — distinct
   // from `name` (the business name from Step 1 #biz-name). Pre-fix the
