@@ -147,7 +147,7 @@
 <\/script>`;
 
     const repRows = reputation.length === 0
-      ? `<tr><td colspan="4" style="padding:18px;color:var(--muted);font-size:13.5px;text-align:center">No identified agents yet. Agents surface here once they send an <code>x-agent-identity</code> header.</td></tr>`
+      ? `<tr><td colspan="4" style="padding:18px;color:var(--muted);font-size:13.5px;text-align:center">No identified AI tools yet. They show up here once they identify themselves to your listing.</td></tr>`
       : reputation
           .slice()
           .sort((a, b) => (b.request_count || 0) - (a.request_count || 0))
@@ -170,7 +170,7 @@
         </div>
 
         <div class="card-dash">
-          <div class="card-head"><div><h3>Connection</h3><div class="sub">How AI crawlers reach your agent</div></div></div>
+          <div class="card-head"><div><h3>Connection</h3><div class="sub">How AI search engines find your business listing</div></div></div>
           <div class="set-row"><div class="l">Domain</div><div class="r">${domain.hostname ? esc(domain.hostname) : '<span style="color:var(--muted)">Not connected yet</span>'}</div></div>
           <div class="set-row"><div class="l">Status</div><div class="r">${
             // Hosted tenants don't run a DNS step — re-label the pending
@@ -182,7 +182,7 @@
               return `<span class="chip">Inactive</span>`;
             })()
           }</div></div>
-          <div class="set-row"><div class="l">Last bot hit</div><div class="r">${esc(timeAgo(domain.last_bot_hit))}</div></div>
+          <div class="set-row"><div class="l">Last AI engine visit</div><div class="r">${esc(timeAgo(domain.last_bot_hit))}</div></div>
           ${
             // Hosted tenants get auto-provisioned subdomains. They don't
             // need (and can't usefully run) the DNS wizard. Show a
@@ -307,8 +307,8 @@
             </div>
           </div>
           <div class="set-row" style="align-items:flex-start">
-            <div class="l">Verified-revenue webhook
-              <div style="font-size:11.5px;color:var(--muted);margin-top:2px;font-weight:400;line-height:1.4">Optional. POST your bookings here so the dashboard shows verified actuals instead of estimates. Replaces the estimate when configured.</div>
+            <div class="l">Booking-system connection
+              <div style="font-size:11.5px;color:var(--muted);margin-top:2px;font-weight:400;line-height:1.4">Optional. Have your booking system send confirmed bookings to this URL so the dashboard shows verified dollar amounts instead of estimates. Replaces the estimate when set up.</div>
             </div>
             <div class="r" style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;min-width:340px">
               <input type="text" id="rev-webhook-url" readonly placeholder="Click 'Generate' to create your endpoint"
@@ -327,9 +327,9 @@
           </div>
           ${verifiedRevenue && verifiedRevenue.webhook_configured === true ? `
           <div class="set-row" style="border-bottom:0">
-            <div class="l">Webhook status</div>
+            <div class="l">Booking-system status</div>
             <div class="r">
-              <span class="chip sage dot-chip"><span class="dot"></span>Configured</span>
+              <span class="chip sage dot-chip"><span class="dot"></span>Connected</span>
               ${verifiedRevenue.total_events > 0
                 ? `<span style="font-size:12.5px;color:var(--muted);margin-left:10px">${verifiedRevenue.total_events} event${verifiedRevenue.total_events === 1 ? '' : 's'} received · ${verifiedRevenue.ai_events} attributed to AI</span>`
                 : `<span style="font-size:12.5px;color:var(--muted);margin-left:10px">Awaiting first event</span>`
@@ -339,8 +339,8 @@
           <div class="set-row" style="border-bottom:0">
             <div class="l">&nbsp;</div>
             <div class="r" style="font-size:11.5px;color:var(--muted);max-width:480px;line-height:1.55;font-style:italic">
-              Estimated revenue is a calculation from your supplied average ticket. Actuals may differ.
-              Configure the webhook for confirmed numbers. Not financial advice.
+              Estimated revenue is a calculation from your average ticket. Actuals may differ.
+              Connect your booking system for confirmed numbers. Not financial advice.
             </div>
           </div>`}
         </div>
@@ -348,7 +348,7 @@
 
       <div class="row">
         <div class="card-dash">
-          <div class="card-head"><div><h3>API &amp; webhooks</h3><div class="sub">Programmatic access for your own code</div></div></div>
+          <div class="card-head"><div><h3>API access</h3><div class="sub">For developers integrating with Advocate</div></div></div>
           <div class="set-row">
             <div class="l">API key</div>
             <div class="r">
@@ -358,7 +358,9 @@
             </div>
           </div>
           <div class="set-row">
-            <div class="l">Webhook URL</div>
+            <div class="l">Notification URL
+              <div style="font-size:11.5px;color:var(--muted);margin-top:2px;font-weight:400;line-height:1.4">Your server gets a POST here on key events (a new mention, a lead click, etc.). Leave blank if you're not building an integration.</div>
+            </div>
             <div class="r">
               <input type="url" id="webhook-url" class="key-input" value="${esc(d.webhook_url || '')}" placeholder="https://yoursite.com/api/advocate/webhook" style="min-width:240px">
               <button class="btn btn-ghost btn-sm" id="btn-save-webhook">Save</button>
@@ -368,7 +370,7 @@
         </div>
 
         <div class="card-dash">
-          <div class="card-head"><div><h3>Install / JSON-LD</h3><div class="sub">Paste this on your website so search engines + AI crawlers pick up your Advocate profile</div></div></div>
+          <div class="card-head"><div><h3>Install on your site</h3><div class="sub">Paste this on your website so search engines and AI tools pick up your Advocate listing</div></div></div>
           <pre class="install-snippet"><code>${esc(jsonLdSnippet)}</code></pre>
           <div style="display:flex;gap:8px;margin-top:8px">
             <button class="btn btn-ghost btn-sm" id="btn-copy-snippet">Copy snippet</button>
@@ -380,17 +382,16 @@
       <div class="row single">
         <div class="card-dash">
           <div class="card-head">
-            <div><h3>Connected agents</h3><div class="sub">MCP agents calling your tools — tier by reputation over the last 7 days</div></div>
+            <div><h3>Connected AI tools</h3><div class="sub">AI tools that have called your listing in the last 7 days — ranked by how often and how reliably</div></div>
             <a href="/A2APipeline.html" class="btn btn-ghost btn-sm">Full pipeline →</a>
           </div>
           <table class="tbl">
-            <thead><tr><th>Agent</th><th>Calls (7d)</th><th>Quality</th><th>Tier</th></tr></thead>
+            <thead><tr><th>AI tool</th><th>Calls (7d)</th><th>Quality</th><th>Tier</th></tr></thead>
             <tbody>${repRows}</tbody>
           </table>
           <p style="font-size:12.5px;color:var(--muted);margin-top:12px;line-height:1.55">
-            Tiers gate rate-limits: <strong>trusted</strong> agents (≥100 calls @ ≥0.5 quality over 7d) get 1000 req/min,
-            <strong>known</strong> agents get 250 req/min, unverified agents get 100 req/min.
-            Agents self-identify via the <code>x-agent-identity</code> header.
+            Tiers control how often each AI tool can call your listing: <strong>trusted</strong> tools (≥100 calls at ≥0.5 quality over 7d) can make up to 1,000 calls per minute, <strong>known</strong> tools 250 per minute, and unverified tools 100 per minute.
+            AI tools self-identify when they call your listing.
           </p>
         </div>
       </div>
@@ -635,14 +636,14 @@
           <div class="card-head">
             <div>
               <h3>Google Search Console <span class="chip maroon" style="margin-left:6px">Pro</span></h3>
-              <div class="sub">See how often Google shows AI Overviews for your queries — and whether they cite you.</div>
+              <div class="sub">See how often Google's AI Overview shows for your searches — and whether it links to your site.</div>
             </div>
           </div>
           <div class="set-row" style="border-bottom:0;padding:20px 0">
             <div class="l"></div>
             <div class="r" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
               <div style="font-size:13px;color:var(--ink-2);max-width:480px;line-height:1.5">
-                Connect Search Console to track AI Overview presence rate and cite rate — the best signal GSC gives for whether Google's AI answers are citing your site.
+                Connect Google Search Console (GSC) to track how often Google's AI Overview appears for your top searches — and how often it links to your site.
               </div>
               <a href="/Billing.html" class="btn btn-primary btn-sm">Upgrade to Pro →</a>
             </div>
@@ -720,7 +721,7 @@
         <div class="card-head">
           <div>
             <h3>Google Search Console</h3>
-            <div class="sub">Track AI Overview presence and cite rate for your top queries.</div>
+            <div class="sub">Track how often Google's AI Overview shows for your top searches — and links to your site.</div>
           </div>
         </div>
         ${body}
