@@ -1244,7 +1244,14 @@
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          let msg = data && data.error ? data.error : `HTTP ${res.status}`;
+          // 4-field error-chain probe matching the canonical pattern
+          // established in PR #251 (settings.js:1231). Reads whichever
+          // of customer_message / error_code / message / error the
+          // backend populated. Falls back to HTTP <status> only when
+          // none are present. Required after the worker-side fix
+          // (PR-1 of the 2026-05-23 batch) that now forwards Railway's
+          // actual error body instead of swallowing it.
+          let msg = (data && (data.customer_message || data.error_code || data.message || data.error)) || `HTTP ${res.status}`;
           if (data && data.details && data.details.fieldErrors) {
             const first = Object.keys(data.details.fieldErrors)[0];
             if (first) msg += ` — ${first}`;
