@@ -226,11 +226,11 @@
             <h3>Citation rating
               <span class="score-info-badge" data-score-info-toggle aria-label="How is this calculated?" tabindex="0">?</span>
             </h3>
-            <div class="sub">A predicted score for how citation-ready your business profile is when AI search engines build their answers. Higher = the rendered output an AI bot sees from your domain has all the structured signals citation systems look for.</div>
+            <div class="sub">A score for how complete and trustworthy your profile looks to AI search engines. Higher means more chance an AI tool picks you when someone asks a question you can answer.</div>
             <div class="score-info-panel" id="score-info-panel" hidden>
               <strong>How this is calculated.</strong>
-              <p>This is a <em>predicted</em> rating, not a count of real citations. We render the same HTML + JSON-LD that real AI bots receive when they crawl your site, then have a Claude judge score it against the rubrics those AI engines use internally. The per-engine breakdown shows how the rendered-for-Perplexity (etc.) variant scores — same content, different format optimized for each engine.</p>
-              <p>Real-world citation data — actual times Perplexity cited you in a real query — lives on the <a href="/CompetitorRadar.html">Competitor Radar</a> page. That runs a weekly poll against Perplexity's live API and tracks wins/losses. Different signal, complementary to this one.</p>
+              <p>This is a <em>predicted</em> rating, not a count of real mentions. We show your profile to a Claude judge in the same format an AI search engine sees it, and score how complete and trustworthy it looks. The breakdown by AI tool below shows how the version of your profile we tailor for each tool scores — same content, formatted differently for each engine.</p>
+              <p>Real-world data — actual times AI tools named you in answers — lives on the <a href="/CompetitorRadar.html">Competitor Radar</a> page. That runs a weekly test against the major AI tools and tracks how often you got named vs. competitors. Different signal, complementary to this one.</p>
             </div>
           </div>
           <div>
@@ -285,15 +285,15 @@
       <div class="score-summary">
         <div class="score-bigwheel">
           <div class="score-num">${score}<span class="score-num-max">/${max}</span></div>
-          <div class="score-num-label">${cite}% cite rate</div>
+          <div class="score-num-label">${cite}% predicted to be named</div>
           <div class="score-num-foot">predicted</div>
         </div>
         <div class="score-table-wrap">
           <table class="score-table">
-            <thead><tr><th>Per-engine rendering</th><th></th><th class="t">Score</th></tr></thead>
+            <thead><tr><th>By AI tool</th><th></th><th class="t">Score</th></tr></thead>
             <tbody>${variantRows}</tbody>
           </table>
-          <div class="score-table-foot">Each row = how citation-ready the rendered-for-that-engine HTML scores in the internal Claude-judge harness.</div>
+          <div class="score-table-foot">Each row = how complete your profile looks to that specific AI tool, scored by a Claude judge against the version of your page that tool actually sees.</div>
         </div>
       </div>
       <div class="score-improvements">
@@ -341,7 +341,7 @@
         <div class="score-real-signals-grid">
           <div class="score-real-cell">
             <div class="score-real-num">${fmt(botVisits)}</div>
-            <div class="score-real-lbl">AI bot visits</div>
+            <div class="score-real-lbl">AI search engine visits</div>
             <a class="score-real-link" href="/Mentions.html">Open Mentions →</a>
           </div>
           <div class="score-real-cell">
@@ -355,7 +355,7 @@
             <a class="score-real-link" href="/Mentions.html">Open Mentions →</a>
           </div>
         </div>
-        <div class="score-real-foot">These are <em>actual</em> events on your tenant — not predictions. The score above is a calibrated estimate; this is the ground truth. <a href="/CompetitorRadar.html">Live citation polls live on Competitor Radar →</a></div>
+        <div class="score-real-foot">These are <em>actual</em> visits to your site — not predictions. The score above is our best estimate; this is what really happened. <a href="/CompetitorRadar.html">Real-world AI mentions live on Competitor Radar →</a></div>
       `;
     } catch {
       slot.textContent = '';
@@ -553,7 +553,7 @@
         <div class="card-head">
           <div>
             <h3>Verified ratings</h3>
-            <div class="sub">Add the platforms you have a real listing on. AI search engines treat these as third-party verification — the single biggest lift to your citation rating (~+1 to +2 points per platform in our internal harness).</div>
+            <div class="sub">Add the review sites where you have a real listing. AI search engines treat these as third-party proof you exist and are trusted — the single biggest lift to your rating (~+1 to +2 points per platform in our scoring).</div>
           </div>
         </div>
         <form id="form-ratings" class="prof-form"${datasetSeed}>
@@ -717,7 +717,7 @@
                   <option value="Europe/Berlin"><option value="UTC">
                 </datalist>
               </label>
-              <label>Availability webhook URL (v2 calendar integration, reserved)
+              <label>Booking-system notification URL (advanced — reserved for calendar integration)
                 <input type="url" name="availability_webhook_url" value="${esc(p.availability_webhook_url || '')}" placeholder="https://">
               </label>
             </div>
