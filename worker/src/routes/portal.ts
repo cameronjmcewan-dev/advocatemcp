@@ -36,6 +36,7 @@ import {
   handleAuthPreflight,
 } from "./authApi";
 import { withCors, handleCorsPreflight } from "../lib/cors";
+import { plainifyRecommendationsPayload } from "../lib/insightPlainifier";
 import {
   handleBasicOnboard,
   handlePublicOnboard,
@@ -2836,8 +2837,32 @@ async function apiAIRecommendations(request: Request, env: Env): Promise<Respons
       ...(isGet ? {} : { body }),
     });
     const text = await r.text();
+
+    // Plainify each recommendation in the response BEFORE returning
+    // to the frontend. Railway's Claude emits jargon (foundingDate,
+    // customer_quotes_json, "citation score", "per-engine variants",
+    // etc.) that confuses non-technical business owners. The
+    // insightPlainifier module rewrites title/body/reason via a
+    // curated mapping table and redirects derived `related_field`
+    // values (foundingDate → years_in_business) so the action
+    // button lands on the actual editable input. See
+    // worker/src/lib/insightPlainifier.ts for the full mapping.
+    //
+    // Best-effort: parse failures, malformed payloads, or non-2xx
+    // upstream responses fall through with the original text body
+    // unchanged. We only mutate when we have a valid recommendations
+    // array.
+    let outText = text;
+    if (r.ok) {
+      try {
+        const parsed = JSON.parse(text) as unknown;
+        const rewritten = plainifyRecommendationsPayload(parsed);
+        outText = JSON.stringify(rewritten);
+      } catch { /* malformed JSON from Railway — fall through */ }
+    }
+
     return withCors(
-      new Response(text, {
+      new Response(outText, {
         status: r.status,
         headers: { "Content-Type": r.headers.get("content-type") ?? "application/json" },
       }),
