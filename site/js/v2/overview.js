@@ -316,13 +316,13 @@
     if (revSource === 'verified') {
       kpiHeadline = fmtMoneyCents(revAmount, revCurrency);
       kpiSub      = `from ${fmtCount(revCount)} AI-attributed bookings · this month`;
-      kpiPill     = '<span class="rev-pill rev-pill-verified" title="Confirmed via your booking-system webhook.">✓ Verified</span>';
+      kpiPill     = '<span class="rev-pill rev-pill-verified" title="Confirmed by your booking system.">✓ Verified</span>';
       kpiPlain    = 'Real dollars from AI-driven bookings, confirmed by your booking system.';
     } else if (revSource === 'estimated') {
       const aov = revenue && revenue.aov_cents;
       kpiHeadline = '~' + fmtMoneyCents(revAmount, revCurrency);
       kpiSub      = `from ${fmtCount(revCount)} AI-attributed bookings · this month`;
-      kpiPill     = `<span class="rev-pill rev-pill-estimated" title="Estimated using your average ticket of ${fmtMoneyCents(aov, revCurrency)}. Configure a revenue webhook in Settings for verified numbers.">Estimated</span>`;
+      kpiPill     = `<span class="rev-pill rev-pill-estimated" title="Estimated using your average ticket of ${fmtMoneyCents(aov, revCurrency)}. Connect your booking system in Settings for verified numbers.">Estimated</span>`;
       kpiPlain    = 'Estimated using your average ticket × AI-attributed bookings.';
     } else {
       // Unconfigured — booking count, no dollars, with CTA.
@@ -340,7 +340,7 @@
     return `
       <div class="kpis" data-tour="kpis">
         <div class="kpi">
-          <div class="head"><div class="k">AI-attributed revenue ${kpiPill} <span class="info" title="${revSource === 'verified' ? 'Confirmed via your booking-system webhook.' : revSource === 'estimated' ? 'Estimated based on your average ticket value.' : 'Bookings AI agents made on your behalf via MCP.'}">i</span></div></div>
+          <div class="head"><div class="k">AI-attributed revenue ${kpiPill} <span class="info" title="${revSource === 'verified' ? 'Confirmed by your booking system.' : revSource === 'estimated' ? 'Estimated based on your average ticket value.' : 'Bookings AI tools made on your behalf via the AI plugin protocol (MCP).'}">i</span></div></div>
           <div class="v tabular">${kpiHeadline}</div>
           <div class="d">${kpiSub}</div>
           <div class="plain">${kpiPlain}</div>
@@ -358,7 +358,7 @@
           <div class="plain">Visitors who came from an AI citation.</div>
         </div>
         <div class="kpi">
-          <div class="head"><div class="k">Citation rate <span class="info" title="% of tracked competitor queries AI named you in.">i</span></div></div>
+          <div class="head"><div class="k">Citation rate <span class="info" title="Out of every 100 times someone searches your category, how often AI named you.">i</span></div></div>
           <div class="v tabular">${citation}</div>
           <div class="d">Rolling weekly</div>
           <div class="plain">Out of every 100 category searches, how often you appeared.</div>
@@ -396,7 +396,7 @@
       .slice(0, 6);
     const total = rows.reduce((s, [, n]) => s + n, 0) || 1;
     const html = rows.length === 0
-      ? `<div style="padding:16px 0;color:var(--muted);font-size:13.5px">No crawler traffic yet.</div>`
+      ? `<div style="padding:16px 0;color:var(--muted);font-size:13.5px">No AI search engine traffic yet.</div>`
       : rows.map(([name, n]) => {
           const pct = Math.round((n / total) * 100);
           return `<div class="bot-row">
@@ -407,7 +407,7 @@
         }).join('');
     return `
       <div class="card-dash">
-        <div class="card-head"><div><h3>Which AI tool?</h3><div class="sub">Breakdown by crawler, last 30 days</div></div></div>
+        <div class="card-head"><div><h3>Which AI tool?</h3><div class="sub">Breakdown by AI search engine, last 30 days</div></div></div>
         ${html}
       </div>
     `;
@@ -416,7 +416,7 @@
   function renderMentionsTable({ metrics }) {
     const recent = (metrics && metrics.recent_queries) || [];
     const rowsHtml = recent.length === 0
-      ? `<tr><td colspan="4" style="padding:20px;color:var(--muted);font-size:13.5px;text-align:center">No mentions yet. AI crawlers will populate this table as they visit.</td></tr>`
+      ? `<tr><td colspan="4" style="padding:20px;color:var(--muted);font-size:13.5px;text-align:center">No mentions yet. This table fills in as AI search engines fetch your listing.</td></tr>`
       : recent.slice(0, 6).map(q => {
           const clicked = q.referral_clicked
             ? `<span class="st clicked">→ Clicked</span>`
@@ -471,12 +471,12 @@
     return `
       <div class="card-dash">
         <div class="card-head">
-          <div><h3>AI-attributed bookings</h3><div class="sub">When an AI agent reaches your business via MCP and books on a real customer's behalf — the closest thing to "AI sent me revenue" you can measure today.</div></div>
+          <div><h3>AI-attributed bookings</h3><div class="sub">When an AI tool reaches your business through the AI plugin protocol (MCP) and books on a real customer's behalf — the closest thing to "AI sent me revenue" you can measure today.</div></div>
           <a href="/A2APipeline.html" class="btn btn-ghost btn-sm">View full →</a>
         </div>
         <div class="rev-main">
           <div class="big tabular">${fmtCount(agentCalls)}</div>
-          <div class="sm">agent tool calls · ${fmtCount(reservations)} reservations · ${fmtCount(handoffs)} handoffs</div>
+          <div class="sm">AI tool requests · ${fmtCount(reservations)} reservations · ${fmtCount(handoffs)} handoffs</div>
         </div>
         <div class="bot-dots">
           <div class="bot-dot"><div class="l">Confirmed rate</div><div class="v">${confirmPct}%</div></div>
@@ -491,11 +491,11 @@
     const events = [];
     (activity && activity.reservations || []).forEach(r => events.push({ t: r.created_at, kind: 'reservation', label: `Reservation ${esc(r.status || 'new')}`, detail: r.service || '' }));
     (activity && activity.handoffs     || []).forEach(h => events.push({ t: h.created_at, kind: 'handoff',     label: `Handoff via ${esc(h.delivered_via || 'unknown')}`, detail: '' }));
-    (activity && activity.agent_requests || []).forEach(a => events.push({ t: a.created_at, kind: 'agent',    label: `Agent call · ${esc(a.tool_called || 'tool')}`, detail: esc(a.agent_id || '') }));
+    (activity && activity.agent_requests || []).forEach(a => events.push({ t: a.created_at, kind: 'agent',    label: `AI tool call · ${esc(a.tool_called || 'tool')}`, detail: esc(a.agent_id || '') }));
     events.sort((x, y) => new Date(y.t) - new Date(x.t));
     const shown = events.slice(0, 8);
     const html = shown.length === 0
-      ? `<div style="padding:16px 0;color:var(--muted);font-size:13.5px">Quiet so far. Activity appears as crawlers and agents arrive.</div>`
+      ? `<div style="padding:16px 0;color:var(--muted);font-size:13.5px">Quiet so far. Activity appears as AI tools arrive.</div>`
       : shown.map(e => {
           const dot = e.kind === 'reservation' ? 'var(--maroon)'
                     : e.kind === 'handoff'     ? 'var(--sage)'
@@ -508,7 +508,7 @@
     return `
       <div class="card-dash">
         <div class="card-head">
-          <div><h3>Activity feed</h3><div class="sub">Last 8 events across bots, agents, and reservations</div></div>
+          <div><h3>Activity feed</h3><div class="sub">Last 8 events across AI tools and reservations</div></div>
           <span class="chip sage dot-chip"><span class="dot"></span>Live</span>
         </div>
         ${html}
@@ -597,7 +597,7 @@
       <div class="ov-score-summary">
         <div class="ov-score-big">
           <div class="ov-score-num">${score}<span class="ov-score-max">/10</span></div>
-          <div class="ov-score-meta">${cite}% cite rate ${lastRun ? '· ' + timeAgo(lastRun.toISOString()) : ''}</div>
+          <div class="ov-score-meta">${cite}% predicted to be named ${lastRun ? '· ' + timeAgo(lastRun.toISOString()) : ''}</div>
           ${renderSparkline(history)}
         </div>
         <div class="ov-engine-list">${variantBars}</div>
@@ -656,7 +656,7 @@
                    title="Learn how this is calculated on Business Profile"
                    style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:999px;background:var(--paper-2);color:var(--ink-2);border:1px solid var(--line);font-size:11px;font-weight:600;text-decoration:none;line-height:1">?</a>
               </h3>
-              <div class="sub">A predicted score for how citation-ready your profile is when AI search engines build their answers. Calibrated against the per-engine rendering each bot receives. Real citations from live polls live on <a href="/CompetitorRadar.html" style="color:var(--maroon)">Competitor Radar</a>.</div>
+              <div class="sub">A score for how complete and trustworthy your profile looks to AI search engines. Calibrated against the version of your page each AI tool actually sees. Real-world mentions from weekly tests live on <a href="/CompetitorRadar.html" style="color:var(--maroon)">Competitor Radar</a>.</div>
             </div>
             <div>
               <button id="btn-run-overview-score" type="button" class="btn btn-primary btn-sm">Run citation check →</button>
@@ -692,7 +692,7 @@
         // appear here exactly so a customer who screenshots the
         // dashboard for their accountant sees the label preserved.
         (d.revenue && d.revenue.source === 'estimated')
-          ? `<div class="rev-disclaimer">Estimated revenue is computed from your supplied average ticket × AI-attributed booking count. Actuals may differ. Configure a verified-revenue webhook in Settings for confirmed numbers.</div>`
+          ? `<div class="rev-disclaimer">Estimated revenue is computed from your average ticket × AI-attributed booking count. Actuals may differ. Connect your booking system in Settings for confirmed numbers.</div>`
           : ''
       }
 
