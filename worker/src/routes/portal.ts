@@ -4866,9 +4866,15 @@ async function apiTrafficImpactGeography(request: Request, env: Env): Promise<Re
 
   const rows = result.results ?? [];
 
-  // Sort server-side so the client only has to render — top 10 by each metric.
-  const byAi    = [...rows].sort((a, b) => (b.ai    || 0) - (a.ai    || 0)).slice(0, 10);
-  const byHuman = [...rows].sort((a, b) => (b.human || 0) - (a.human || 0)).slice(0, 10);
+  // Sort server-side so the client only has to render — top 10 by each
+  // metric. Filter out rows where the metric is zero BEFORE the slice:
+  // without this, the AI column gets padded with cities that have 0
+  // ai_sessions but high human_sessions (Recife, Tel Aviv, etc. that
+  // appeared as international noise on the dashboard). Symmetric filter
+  // on the human side too — a city with zero non-AI traffic shouldn't
+  // appear in "FROM EVERYTHING ELSE" with a sessions: 0 row either.
+  const byAi    = [...rows].filter(r => (r.ai    || 0) > 0).sort((a, b) => (b.ai    || 0) - (a.ai    || 0)).slice(0, 10);
+  const byHuman = [...rows].filter(r => (r.human || 0) > 0).sort((a, b) => (b.human || 0) - (a.human || 0)).slice(0, 10);
 
   const toEntry = (r: { country: string | null; city: string | null; ai: number; human: number }) => ({
     country:  r.country ?? null,

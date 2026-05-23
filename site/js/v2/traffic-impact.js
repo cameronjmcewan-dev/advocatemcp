@@ -281,7 +281,7 @@
       '<section class="card-dash" id="geo-card">',
       '  <div class="card-head"><div>',
       '    <h3>Where they\'re coming from</h3>',
-      '    <div class="sub">Top countries &amp; cities for the selected window.</div>',
+      '    <div class="sub">Top countries &amp; cities for the selected window. AI-tool referrals depend on classifier coverage — some clicks (in-app browsers that strip the referrer) land in &ldquo;everything else.&rdquo; The source breakdown above shows the raw GA4 buckets.</div>',
       '  </div></div>',
       '  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;padding:16px">',
       '    <div>',
@@ -1861,12 +1861,20 @@
         ? window.AdvocateChrome.getRange() : '30d';
       var r = await window.AMCP.authedFetch('/api/client/traffic-impact/geography?range=' + encodeURIComponent(range));
       var j = await r.json();
-      aiEl.innerHTML = (!Array.isArray(j.ai) || j.ai.length === 0)
-        ? '<div style="color:var(--muted);font-size:13px">No AI traffic by location yet.</div>'
-        : j.ai.map(function (row) { return geoRow(row, 'ai'); }).join('');
-      huEl.innerHTML = (!Array.isArray(j.human) || j.human.length === 0)
+      // Defensive zero-filter (belt-and-suspenders for cached / pre-fix
+      // payloads). The worker-side filter is the source of truth — see
+      // apiTrafficImpactGeography in worker/src/routes/portal.ts — but
+      // an older payload from before the worker fix would still surface
+      // here without this client guard. Removing this safely once the
+      // worker fix has been deployed for one full cache TTL.
+      var aiRows = Array.isArray(j.ai)    ? j.ai.filter(function (row)    { return (row && (row.sessions || 0) > 0); }) : [];
+      var huRows = Array.isArray(j.human) ? j.human.filter(function (row) { return (row && (row.sessions || 0) > 0); }) : [];
+      aiEl.innerHTML = (aiRows.length === 0)
+        ? '<div style="color:var(--muted);font-size:13px;line-height:1.5">No AI-attributed traffic by location this window. The source/medium breakdown above explains common reasons (e.g. AI-tool in-app browsers stripping referrers).</div>'
+        : aiRows.map(function (row) { return geoRow(row, 'ai'); }).join('');
+      huEl.innerHTML = (huRows.length === 0)
         ? '<div style="color:var(--muted);font-size:13px">No data yet.</div>'
-        : j.human.map(function (row) { return geoRow(row, 'human'); }).join('');
+        : huRows.map(function (row) { return geoRow(row, 'human'); }).join('');
     } catch (_err) {
       if (aiEl) aiEl.innerHTML = '<div style="color:var(--muted);font-size:13px">Couldn\'t load — try refresh.</div>';
       if (huEl) huEl.innerHTML = '';
