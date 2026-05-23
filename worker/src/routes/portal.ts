@@ -2010,9 +2010,37 @@ async function apiUpdateProfile(request: Request, env: Env): Promise<Response> {
       },
       body: JSON.stringify(payload),
     });
-    const data = await res.json().catch(() => ({}));
+    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     if (!res.ok) {
-      return withCors(jsonErr(res.status, "Profile update failed"), request, { credentials: true });
+      // Forward Railway's actual error body. The legacy implementation
+      // swallowed the response and returned a literal "Profile update
+      // failed" with no error_code / message — the frontend had no way
+      // to surface the real reason (validation error, plan gate, etc.)
+      // and the user saw a generic message with no actionable info.
+      //
+      // Now we spread the upstream payload + set a user-facing `error`
+      // string from whatever Railway returned (probing the canonical
+      // field order: error → message → customer_message). The frontend's
+      // widened error-chain probe (PR #251 pattern, applied to
+      // site/js/v2/profile.js in the companion commit) reads any of
+      // these fields and shows the real reason.
+      const upstreamMsg =
+        (typeof data.error === "string"            ? data.error            : null)
+        ?? (typeof data.message === "string"        ? data.message          : null)
+        ?? (typeof data.customer_message === "string" ? data.customer_message : null)
+        ?? "Profile update failed";
+      // Construct the response inline (instead of via `jsonErr`) so we
+      // can include the structured upstream payload alongside the
+      // user-facing `error` string. Frontend probes the same fields and
+      // surfaces whichever is most informative.
+      return withCors(
+        new Response(JSON.stringify({ ...data, error: upstreamMsg }), {
+          status: res.status,
+          headers: { "Content-Type": "application/json" },
+        }),
+        request,
+        { credentials: true },
+      );
     }
     return withCors(jsonOk(data), request, { credentials: true });
   } catch (err) {
