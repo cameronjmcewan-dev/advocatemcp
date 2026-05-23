@@ -3652,7 +3652,16 @@ async function apiGA4StartLink(request: Request, env: Env): Promise<Response> {
     client_id:     env.GA4_OAUTH_CLIENT_ID,
     redirect_uri:  env.GA4_OAUTH_REDIRECT_URI,
     response_type: "code",
-    scope:         "https://www.googleapis.com/auth/analytics.readonly",
+    // openid+email adds Google's standard email-identity scope alongside
+    // the GA4 read scope. The OAuth callback consumes the resulting
+    // id_token to extract the connected Google account's email, which
+    // the dashboard surfaces on the GA4 card so admins can verify
+    // which account currently holds the refresh token at a glance.
+    // Mirrors the GSC equivalent shipped in PR #258
+    // (worker/src/routes/portal.ts apiGSCStartLink). See migration
+    // 0027_ga4_google_account_email.sql + handleGA4Callback for the
+    // capture path.
+    scope:         "openid email https://www.googleapis.com/auth/analytics.readonly",
     access_type:   "offline",
     prompt:        "consent",
     state,
@@ -3706,7 +3715,7 @@ async function apiGA4Status(request: Request, env: Env): Promise<Response> {
   }
 
   const row = await env.DB
-    .prepare("SELECT property_id, property_label, status, last_sync_at, last_sync_error, connected_at FROM ga4_connections WHERE slug = ? LIMIT 1")
+    .prepare("SELECT property_id, property_label, status, last_sync_at, last_sync_error, connected_at, google_account_email FROM ga4_connections WHERE slug = ? LIMIT 1")
     .bind(biz.slug)
     .first<{
       property_id: string | null;
@@ -3715,6 +3724,7 @@ async function apiGA4Status(request: Request, env: Env): Promise<Response> {
       last_sync_at: string | null;
       last_sync_error: string | null;
       connected_at: string;
+      google_account_email: string | null;
     }>();
 
   if (!row) {
@@ -3731,6 +3741,10 @@ async function apiGA4Status(request: Request, env: Env): Promise<Response> {
       last_sync_at: row.last_sync_at,
       last_sync_error: row.last_sync_error,
       connected_at: row.connected_at,
+      // Captured at OAuth callback time from Google's id_token (see
+      // handleGA4Callback). Null for tenants connected before
+      // migration 0027 landed; populated for any reconnect after.
+      google_account_email: row.google_account_email,
     }),
     request,
     { credentials: true },

@@ -472,8 +472,17 @@
           </div>
         </div>`;
     } else if (!hasProperty) {
+      // "Account" row surfaces the connected Google email so an admin
+      // can verify they OAuth'd with the same account that owns the GA4
+      // property. Null for tenants connected before the 0027 migration
+      // (skip the row entirely — falls back to old copy). Mirror of
+      // PR #258's GSC card pattern.
+      const accountRow = (s && s.google_account_email)
+        ? `<div class="set-row"><div class="l">Account</div><div class="r"><code style="font-size:12.5px">${esc(s.google_account_email)}</code></div></div>`
+        : '';
       body = `
         <div class="set-row"><div class="l">Status</div><div class="r"><span class="chip amber dot-chip"><span class="dot"></span>Connected · pick a property</span></div></div>
+        ${accountRow}
         <div class="set-row" style="border-bottom:0;padding-top:14px">
           <div class="l"></div>
           <div class="r">
@@ -483,8 +492,15 @@
           </div>
         </div>`;
     } else {
+      // Same "Account" row as the no-property variant above. Surfaces
+      // the connected Google email so an admin can verify which account
+      // is syncing data without leaving the dashboard.
+      const accountRow = (s && s.google_account_email)
+        ? `<div class="set-row"><div class="l">Account</div><div class="r"><code style="font-size:12.5px">${esc(s.google_account_email)}</code></div></div>`
+        : '';
       body = `
         <div class="set-row"><div class="l">Status</div><div class="r"><span class="chip sage dot-chip"><span class="dot"></span>Connected</span> ${errorPill}</div></div>
+        ${accountRow}
         <div class="set-row"><div class="l">Property</div><div class="r"><strong>${esc(s.property_label || 'GA4 property')}</strong> <span style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-left:6px">${esc(s.property_id || '')}</span></div></div>
         <div class="set-row"><div class="l">Last sync</div><div class="r">${esc(timeAgo(s.last_sync_at))}${s.last_sync_error ? ` <span style="color:var(--red);font-size:12.5px">· ${esc(String(s.last_sync_error).slice(0, 120))}</span>` : ''}</div></div>
         <div class="set-row" style="border-bottom:0;padding-top:14px">

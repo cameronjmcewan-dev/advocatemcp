@@ -73,6 +73,22 @@ describe("handleGA4Start", () => {
     expect(location).toContain("analytics.readonly");
     expect(location).toContain(encodeURIComponent(env.GA4_OAUTH_REDIRECT_URI!));
   });
+
+  it("3a. authorize URL requests openid+email scopes (powers GA4 card account-email display)", async () => {
+    // Mirror of PR #258's GSC test 3a. The GA4 card displays
+    // "Connected as <email>" using the email captured at callback
+    // time from the id_token. id_token is only issued when
+    // openid+email scopes are in the OAuth request. If someone
+    // strips these scopes in a future refactor, the card silently
+    // falls back to the slug-only "Connected" copy — same regression
+    // surface the GSC version protects against.
+    const req = new Request("https://customers.advocatemcp.com/oauth/ga4/start?slug=acme");
+    const env = makeEnv();
+    const res = await handleGA4Start(req, env);
+    const location = res.headers.get("Location") ?? "";
+    expect(location).toContain("openid");
+    expect(location).toContain("email");
+  });
 });
 
 // ── handleGA4Callback tests ───────────────────────────────────────────────────
@@ -240,5 +256,153 @@ describe("handleGA4Callback", () => {
     const loc = res.headers.get("Location") ?? "";
     expect(loc).toContain("ga4=error");
     expect(loc).toContain("reason=no_refresh_token");
+  });
+
+  // ── google_account_email capture (added 2026-05-23) ────────────────────────
+  // Mirror of PR #258's GSC id_token tests. The OAuth scope now
+  // includes `openid email`, so the token response carries an
+  // id_token whose JWT payload includes the connected Google account's
+  // email. handleGA4Callback decodes it (no signature check — token
+  // came directly from Google over TLS) and persists it to
+  // ga4_connections.google_account_email. The dashboard's GA4 card
+  // renders "Connected as <email>" when this column is populated.
+
+  /**
+   * Build a fake id_token (header.payload.signature) with the given
+   * payload object. Signature is intentionally garbage — we don't
+   * verify it in handleGA4Callback, only decode the payload.
+   */
+  function makeFakeIdToken(payload: Record<string, unknown>): string {
+    const header = "eyJhbGciOiJSUzI1NiJ9"; // {"alg":"RS256"} base64url
+    const payloadJson = JSON.stringify(payload);
+    // btoa→base64url: + → -, / → _, strip padding
+    const payloadB64 = btoa(payloadJson)
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+    return `${header}.${payloadB64}.fake-signature-not-verified`;
+  }
+
+  it("10. happy path with id_token: persists google_account_email", async () => {
+    const env = makeEnv();
+    const slug = "acme-widgets";
+    const expectedEmail = "owner@acme.example";
+
+    const validToken = await signGA4State(
+      { slug, nonce: "dddddddddddddddd", ts: Math.floor(Date.now() / 1000) },
+      env.TOKEN_SIGNING_KEY!,
+    );
+
+    const idToken = makeFakeIdToken({
+      email: expectedEmail,
+      email_verified: true,
+      sub: "1234567890",
+    });
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          refresh_token: "ya29.refresh-id-token-case",
+          access_token:  "ya29.access",
+          expires_in:    3600,
+          id_token:      idToken,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const req = new Request(
+      `https://customers.advocatemcp.com/oauth/ga4/callback?code=auth-code-id-token&state=${encodeURIComponent(validToken)}`,
+    );
+    const res = await handleGA4Callback(req, env);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location") ?? "").toContain("ga4=connected");
+
+    // DB write captured the email in the bind args.
+    expect(dbCalls.length).toBeGreaterThan(0);
+    const dbCall = dbCalls[0];
+    // INSERT signature: (slug, encrypted_token, google_account_email)
+    expect(dbCall.args[0]).toBe(slug);
+    expect(dbCall.args[2]).toBe(expectedEmail);
+  });
+
+  it("11. omitted id_token: row still writes, google_account_email = null", async () => {
+    // Tenants who connected before this scope change have refresh
+    // tokens that only granted analytics.readonly. If they hit the
+    // callback again somehow (shouldn't happen in normal flow but
+    // possible during deploy-rollout windows), the token endpoint
+    // omits id_token entirely. handleGA4Callback must still write
+    // the row — with email column = null — instead of crashing.
+    const env = makeEnv();
+    const slug = "legacy-tenant";
+
+    const validToken = await signGA4State(
+      { slug, nonce: "eeeeeeeeeeeeeeee", ts: Math.floor(Date.now() / 1000) },
+      env.TOKEN_SIGNING_KEY!,
+    );
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          refresh_token: "ya29.refresh-legacy",
+          access_token:  "ya29.access",
+          expires_in:    3600,
+          // No id_token field
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const req = new Request(
+      `https://customers.advocatemcp.com/oauth/ga4/callback?code=auth-code-legacy&state=${encodeURIComponent(validToken)}`,
+    );
+    const res = await handleGA4Callback(req, env);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location") ?? "").toContain("ga4=connected");
+
+    expect(dbCalls.length).toBeGreaterThan(0);
+    const dbCall = dbCalls[0];
+    expect(dbCall.args[0]).toBe(slug);
+    expect(dbCall.args[2]).toBeNull();
+  });
+
+  it("12. malformed id_token: row still writes, google_account_email = null", async () => {
+    // Defensive: a corrupted or non-JWT id_token must not break the
+    // OAuth flow. Best-effort decode falls through to null email.
+    const env = makeEnv();
+    const slug = "malformed-tenant";
+
+    const validToken = await signGA4State(
+      { slug, nonce: "ffffffffffffffff", ts: Math.floor(Date.now() / 1000) },
+      env.TOKEN_SIGNING_KEY!,
+    );
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          refresh_token: "ya29.refresh-malformed",
+          access_token:  "ya29.access",
+          expires_in:    3600,
+          // Not a valid JWT structure
+          id_token: "not.a.valid-jwt-payload-base64",
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    const req = new Request(
+      `https://customers.advocatemcp.com/oauth/ga4/callback?code=auth-code-malformed&state=${encodeURIComponent(validToken)}`,
+    );
+    const res = await handleGA4Callback(req, env);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location") ?? "").toContain("ga4=connected");
+
+    expect(dbCalls.length).toBeGreaterThan(0);
+    const dbCall = dbCalls[0];
+    expect(dbCall.args[0]).toBe(slug);
+    expect(dbCall.args[2]).toBeNull();
   });
 });
