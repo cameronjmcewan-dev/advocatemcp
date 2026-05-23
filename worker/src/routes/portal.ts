@@ -1556,9 +1556,35 @@ async function apiRecommendations(request: Request, env: Env): Promise<Response>
 }
 
 // ── GET /api/client/profile ────────────────────────────────────────────────
-// Proxy to Railway's GET /agents/:slug/profile so the Settings edit form can
-// pre-fill with the tenant's current values instead of empty defaults.
-// Session auth + slug scope-check via getUserBusinesses.
+// Powers the /BusinessProfile.html editor's "pre-fill every input"
+// behavior. Two-tier read:
+//   1. Railway GET /agents/:slug/profile — canonical source for AI-
+//      generated content (score deltas, recommendation rendering, etc.)
+//      and any fields Railway uniquely owns.
+//   2. TENANT_DATA KV — onboarded customer tenants land here at signup
+//      via worker/src/routes/onboard.ts. Wizard-collected fields
+//      (description, services, hours_json, pricing_tier, service_radius_miles,
+//      service_area_keywords, credentials_json, ratings_json,
+//      customer_quotes_json, lead_routing_json, differentiator/
+//      differentiators_text, ...) land in TENANT_DATA.profile but
+//      historically were not propagated to Railway, so the editor saw
+//      empty inputs even after a complete wizard run. Symptom that
+//      surfaced this bug: a Workman Copy Co user reported the
+//      Business Profile editor was asking for "all the same info" they
+//      already entered during onboarding.
+//
+// Merge rule
+// ----------
+// KV wins for any field with a non-empty value (string, number, array,
+// object). Railway wins for fields KV doesn't populate. This makes the
+// wizard the source of truth for what the user typed, without
+// overwriting Railway-only fields (AI rewrites, citation scoring) that
+// KV has no business knowing about.
+//
+// Legacy-key normalization: the wizard used to write `differentiators_text`
+// where the editor template reads `differentiator`. Mirror the value
+// across both keys during the merge so the editor surfaces it without
+// requiring a wizard rename + backfill of every existing tenant.
 
 async function apiGetProfile(request: Request, env: Env): Promise<Response> {
   const guard = await requireVerifiedSession(request, env);
@@ -1574,6 +1600,42 @@ async function apiGetProfile(request: Request, env: Env): Promise<Response> {
 
   const profile = await fetchProfile(biz, env);
   if (!profile) return withCors(jsonErr(502, "Profile unavailable"), request, { credentials: true });
+
+  // Merge TENANT_DATA KV's profile fields onto the Railway response.
+  // KV is the source of truth for wizard-collected fields. Non-empty
+  // values only — never overwrite a populated Railway field with an
+  // empty KV value. Best-effort: any KV lookup failure leaves the
+  // Railway response unchanged.
+  try {
+    // biz.domain is typed as string | undefined — only call getTenant
+    // when we actually have a domain string. Tenants without a domain
+    // recorded skip the merge entirely (Railway response unchanged).
+    const tenant = biz.domain ? await getTenant(env, biz.domain) : null;
+    const kvProfile = tenant?.profile;
+    if (kvProfile && typeof kvProfile === "object") {
+      const merged = profile as Record<string, unknown>;
+      for (const [k, v] of Object.entries(kvProfile)) {
+        if (v === null || v === undefined) continue;
+        if (typeof v === "string" && v.trim() === "") continue;
+        if (Array.isArray(v) && v.length === 0) continue;
+        // Don't trample a Railway-populated value with an empty KV
+        // value — already handled by the type checks above — but DO
+        // overwrite Railway with non-empty KV (user just typed it).
+        merged[k] = v;
+      }
+      // Legacy-key normalization for the differentiator field. The
+      // wizard's existing payload uses `differentiators_text` (the
+      // legacy name); the editor template at site/js/v2/profile.js
+      // reads `p.differentiator`. Mirror the value across both keys so
+      // every tenant — including those onboarded before this fix —
+      // surfaces correctly without a backfill.
+      const m = merged as Record<string, unknown>;
+      if ((!m.differentiator || m.differentiator === "") && typeof m.differentiators_text === "string" && m.differentiators_text.trim() !== "") {
+        m.differentiator = m.differentiators_text;
+      }
+    }
+  } catch { /* best-effort: any failure leaves Railway response unchanged */ }
+
   return withCors(jsonOk(profile), request, { credentials: true });
 }
 
