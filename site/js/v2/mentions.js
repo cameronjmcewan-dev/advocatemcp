@@ -289,19 +289,19 @@
           <div class="chart-labels">${labels}</div>
         </div>
         <div class="card-dash">
-          <div class="card-head"><div><h3>By AI tool</h3><div class="sub">Share of mentions, ${rangeLabel(m).toLowerCase()}. Counts server-side bot fetches from AI engines (ClaudeBot, GPTBot, PerplexityBot, etc.) &mdash; not human clicks. For visits driven by users who clicked through from an AI answer, see <a href="/TrafficImpact.html" style="color:var(--maroon)">Traffic Impact</a>'s AI-vs-Human chart (one stage downstream).</div></div></div>
+          <div class="card-head"><div><h3>By AI tool</h3><div class="sub">Share of mentions, ${rangeLabel(m).toLowerCase()}. Counts how often AI search engines (Claude, ChatGPT, Perplexity, etc.) fetched your page &mdash; not human clicks. For visits driven by users who clicked through from an AI answer, see <a href="/TrafficImpact.html" style="color:var(--maroon)">Traffic Impact</a>'s AI-vs-Human chart (one stage downstream).</div></div></div>
           ${crawlerBars}
         </div>
       </div>
 
       <div class="row">
         <div class="card-dash">
-          <div class="card-head"><div><h3>Why people are asking</h3><div class="sub">Breakdown by detected intent</div></div></div>
+          <div class="card-head"><div><h3>Why people are asking</h3><div class="sub">Breakdown by what the person was looking for</div></div></div>
           ${intentDonut}
         </div>
         <div class="card-dash">
-          <div class="card-head"><div><h3>About intent</h3><div class="sub">How we categorize each query</div></div></div>
-          <p style="font-size:13.5px;line-height:1.6;color:var(--ink-2);">Advocate's agent classifies every query before answering:</p>
+          <div class="card-head"><div><h3>About these question types</h3><div class="sub">How we sort each question into a group</div></div></div>
+          <p style="font-size:13.5px;line-height:1.6;color:var(--ink-2);">Every question that comes through Advocate gets sorted into one of these groups before we answer:</p>
           <ul style="font-size:13.5px;line-height:1.75;color:var(--ink-2);padding-left:18px;margin-top:8px;">
             <li><strong>Brand</strong> — named your business directly</li>
             <li><strong>Comparison</strong> — weighing you vs. a competitor</li>
