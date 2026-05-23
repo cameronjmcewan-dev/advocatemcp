@@ -280,8 +280,12 @@
     return [
       '<section class="card-dash" id="geo-card">',
       '  <div class="card-head"><div>',
-      '    <h3>Where they\'re coming from</h3>',
-      '    <div class="sub">Top countries &amp; cities for the selected window. AI-tool referrals depend on classifier coverage — some clicks (in-app browsers that strip the referrer) land in &ldquo;everything else.&rdquo; The source breakdown above shows the raw GA4 buckets.</div>',
+      // "Preview" pill on the H3 sets the expectation that the in-service-
+      // area highlighting (added 2026-05-23) is rough — fuzzy substring
+      // match against the tenant's free-text service_area_keywords. A
+      // future structured-service-area input + geocoding pass tightens it.
+      '    <h3>Where they\'re coming from <span class="chip" style="background:rgba(125,37,80,0.08);color:var(--maroon);border:1px solid rgba(125,37,80,0.25);font-size:11px;margin-left:8px;padding:2px 6px;border-radius:4px;vertical-align:middle">Preview</span></h3>',
+      '    <div class="sub">Top countries &amp; cities for the selected window. AI-tool referrals depend on classifier coverage — some clicks (in-app browsers that strip the referrer) land in &ldquo;everything else.&rdquo; The source breakdown above shows the raw GA4 buckets. Rows tagged &ldquo;in service area&rdquo; match the keywords you set in your business profile (rough substring match — false positives + negatives both possible).</div>',
       '  </div></div>',
       '  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;padding:16px">',
       '    <div>',
@@ -297,13 +301,38 @@
     ].join('');
   }
 
-  function geoRow(row, side) {
+  // Lowercase-substring match of city/country against a comma-separated
+  // service-area keyword list. v0 — false positives + negatives both
+  // possible (e.g. "Domestic" matches nothing useful; a customer who
+  // serves Salt Lake City but didn't list "Salt Lake" doesn't get
+  // their row flagged). Documented inline via the "Preview" pill on
+  // the card header.
+  function rowInServiceArea(row, keywords) {
+    if (!keywords) return false;
+    var hay = ((row.city || '') + ' ' + (row.country || '')).toLowerCase();
+    if (!hay.trim()) return false;
+    var tokens = String(keywords).toLowerCase().split(',')
+      .map(function (t) { return t.trim(); })
+      .filter(function (t) { return t.length >= 2; });
+    for (var i = 0; i < tokens.length; i++) {
+      if (hay.indexOf(tokens[i]) !== -1) return true;
+    }
+    return false;
+  }
+
+  function geoRow(row, side, inServiceArea) {
     var label   = row.city ? (esc(row.city) + ', ' + esc(row.country || '')) : (esc(row.country) || '(unknown)');
     var sessions = row.sessions || 0;
     var color   = side === 'ai' ? 'var(--maroon)' : '#a39b8e';
+    // "in service area" badge — small, muted, only when matched.
+    // Skipping in-row visual emphasis (no accent border, no fill) so
+    // unmatched rows don't read as "wrong" or "noise."
+    var badge = inServiceArea
+      ? ' <span class="chip" style="background:rgba(20,140,90,0.10);color:#107a4a;border:1px solid rgba(20,140,90,0.25);font-size:10.5px;margin-left:6px;padding:1px 6px;border-radius:3px">in service area</span>'
+      : '';
     return '<div style="display:flex;justify-content:space-between;align-items:center;' +
       'padding:6px 8px;border-bottom:1px solid var(--line);font-size:13px">' +
-      '<span>' + label + '</span>' +
+      '<span>' + label + badge + '</span>' +
       '<span class="tabular" style="color:' + color + ';font-weight:500">' + fmtCount(sessions) + '</span>' +
       '</div>';
   }
@@ -1869,12 +1898,17 @@
       // worker fix has been deployed for one full cache TTL.
       var aiRows = Array.isArray(j.ai)    ? j.ai.filter(function (row)    { return (row && (row.sessions || 0) > 0); }) : [];
       var huRows = Array.isArray(j.human) ? j.human.filter(function (row) { return (row && (row.sessions || 0) > 0); }) : [];
+      // Service-area keywords flow through from the worker (read from
+      // TENANT_DATA.profile.service_area_keywords). Null if the tenant
+      // never set them — rowInServiceArea then returns false for all
+      // rows and no badge renders (graceful fallback to pre-fix UX).
+      var saKeywords = j.service_area_keywords || null;
       aiEl.innerHTML = (aiRows.length === 0)
         ? '<div style="color:var(--muted);font-size:13px;line-height:1.5">No AI-attributed traffic by location this window. The source/medium breakdown above explains common reasons (e.g. AI-tool in-app browsers stripping referrers).</div>'
-        : aiRows.map(function (row) { return geoRow(row, 'ai'); }).join('');
+        : aiRows.map(function (row) { return geoRow(row, 'ai', rowInServiceArea(row, saKeywords)); }).join('');
       huEl.innerHTML = (huRows.length === 0)
         ? '<div style="color:var(--muted);font-size:13px">No data yet.</div>'
-        : huRows.map(function (row) { return geoRow(row, 'human'); }).join('');
+        : huRows.map(function (row) { return geoRow(row, 'human', rowInServiceArea(row, saKeywords)); }).join('');
     } catch (_err) {
       if (aiEl) aiEl.innerHTML = '<div style="color:var(--muted);font-size:13px">Couldn\'t load — try refresh.</div>';
       if (huEl) huEl.innerHTML = '';

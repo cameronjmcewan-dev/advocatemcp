@@ -60,4 +60,30 @@ describe("apiTrafficImpactGeography: filter zero-session rows before sort/slice"
     // accidentally removes the filter, this catches it.
     expect(body).not.toMatch(/\[\.\.\.rows\]\s*\.sort\(/);
   });
+
+  // ── service_area_keywords passthrough (added 2026-05-23) ───────────────────
+  // The response includes the tenant's service_area_keywords so the
+  // frontend can render an "in service area" badge on rows that match
+  // (v0 fuzzy substring matching). Mirror of the KV-read pattern
+  // introduced for apiGetProfile in PR #256. If a future refactor
+  // drops the field, the badge silently disappears and the v0
+  // service-area-highlight feature regresses to a no-op.
+
+  it("response shape includes service_area_keywords", () => {
+    const body = fnMatch![0];
+    expect(body).toMatch(/service_area_keywords/);
+  });
+
+  it("reads service_area_keywords via getTenant(env, biz.domain)", () => {
+    const body = fnMatch![0];
+    expect(body).toMatch(/getTenant\s*\(\s*env\s*,\s*biz\.domain\s*\)/);
+  });
+
+  it("KV read is wrapped in try/catch (best-effort, never breaks the response)", () => {
+    const body = fnMatch![0];
+    // Function body should contain at least one try/catch — the
+    // service_area_keywords lookup must not 500 the response when KV
+    // misses or contains malformed data.
+    expect(body).toMatch(/}\s*catch\s*[\{\(]/);
+  });
 });

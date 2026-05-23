@@ -4978,7 +4978,36 @@ async function apiTrafficImpactGeography(request: Request, env: Env): Promise<Re
   const aiEntries    = byAi.map(r    => ({ ...toEntry(r),    sessions: r.ai    || 0 }));
   const humanEntries = byHuman.map(r => ({ ...toEntry(r),    sessions: r.human || 0 }));
 
-  return withCors(jsonOk({ ai: aiEntries, human: humanEntries }), request, { credentials: true });
+  // Read the tenant's service-area keywords from TENANT_DATA KV so the
+  // frontend can highlight "in service area" rows. Best-effort: a KV
+  // miss or malformed value just returns null and the frontend renders
+  // all rows un-annotated (the pre-fix state). Mirrors the pattern in
+  // apiGetProfile from PR #256.
+  //
+  // service_radius_miles is intentionally NOT surfaced because mapping
+  // a (city, country) pair to a distance requires geocoding — which
+  // we'd need a new dependency for. The text-based service_area_
+  // keywords is what we can do without new infra. Documented as v0
+  // ("Preview" badge on the card) to set expectations.
+  let serviceAreaKeywords: string | null = null;
+  try {
+    const tenant = biz.domain ? await getTenant(env, biz.domain) : null;
+    const kv = tenant?.profile;
+    if (kv && typeof kv === "object" && typeof (kv as Record<string, unknown>).service_area_keywords === "string") {
+      const raw = ((kv as Record<string, unknown>).service_area_keywords as string).trim();
+      if (raw !== "") serviceAreaKeywords = raw;
+    }
+  } catch { /* best-effort — KV miss leaves keywords null */ }
+
+  return withCors(
+    jsonOk({
+      ai: aiEntries,
+      human: humanEntries,
+      service_area_keywords: serviceAreaKeywords,
+    }),
+    request,
+    { credentials: true },
+  );
 }
 
 // ── GET /api/client/traffic-impact/conversions ────────────────────────────
