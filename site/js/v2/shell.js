@@ -212,7 +212,6 @@
       const url = new URL(location.href);
       const asSlug  = url.searchParams.get('as');
       const isAdmin = !!(me && me.role === 'admin');
-      const impersonating = isAdmin && asSlug ? asSlug : null;
 
       // Pre-resolve the current tenant from accessible_businesses so the
       // sidebar block + avatar plan badge can render the real business
@@ -222,7 +221,26 @@
       // carries everything needed inside accessible_businesses[i] —
       // {slug, name, plan, domain} — so no extra round-trip.
       const _accessibleList = (me && Array.isArray(me.accessible_businesses)) ? me.accessible_businesses : [];
-      const _currentSlug = impersonating || (_accessibleList[0] && _accessibleList[0].slug) || null;
+
+      // Impersonation only fires when an admin views a tenant they do NOT
+      // already have direct access to via accessible_businesses. An admin
+      // who also owns the tenant (e.g. Cameron viewing Advocate's
+      // dashboard via ?as=advocate) isn't actually impersonating — they're
+      // just navigating into their own account, so no banner. Without this
+      // ownership check, the previous logic mounted a confusing banner
+      // that read "Impersonating <wrong tenant name> (advocate)" because
+      // accessible_businesses[0] was a different tenant in the same admin's
+      // list. Discovered via the "Open Pricing →" recommendation flow:
+      // recommendation hrefs ship with ?as=<own-slug>, the page reload
+      // tagged the admin as impersonating-self, and the banner used the
+      // wrong fallback name.
+      const _ownsAsSlug = asSlug ? _accessibleList.some((b) => b.slug === asSlug) : false;
+      const impersonating = isAdmin && asSlug && !_ownsAsSlug ? asSlug : null;
+
+      const _currentSlug = (asSlug && _ownsAsSlug) ? asSlug
+                          : impersonating
+                          ? impersonating
+                          : (_accessibleList[0] && _accessibleList[0].slug) || null;
       const _currentBiz = _accessibleList.find((b) => b.slug === _currentSlug) || _accessibleList[0] || null;
 
       window.AMCP_DATA = {
