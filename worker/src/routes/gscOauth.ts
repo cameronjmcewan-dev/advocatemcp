@@ -58,7 +58,16 @@ export async function handleGSCStart(request: Request, env: Env): Promise<Respon
   authorizeUrl.searchParams.set("client_id",     env.GSC_OAUTH_CLIENT_ID     ?? "");
   authorizeUrl.searchParams.set("redirect_uri",  env.GSC_OAUTH_REDIRECT_URI  ?? "");
   authorizeUrl.searchParams.set("response_type", "code");
-  authorizeUrl.searchParams.set("scope",         "https://www.googleapis.com/auth/webmasters.readonly");
+  // openid+email adds Google's standard email-identity scope alongside
+  // the GSC read scope. handleGSCCallback consumes the resulting
+  // id_token to extract the connected Google account's email and
+  // persist it on the gsc_connections row. The dashboard surfaces it
+  // on the GSC card ("Connected as <email>") so admins can verify
+  // which account currently holds the refresh token at a glance.
+  // Mirror of the change in apiGSCStartLink (worker/src/routes/
+  // portal.ts) — the new POST-based start endpoint that newer
+  // dashboard JS uses; both paths must request the same scopes.
+  authorizeUrl.searchParams.set("scope",         "openid email https://www.googleapis.com/auth/webmasters.readonly");
   authorizeUrl.searchParams.set("access_type",   "offline");
   authorizeUrl.searchParams.set("prompt",        "consent");
   authorizeUrl.searchParams.set("state",         state);
@@ -120,6 +129,13 @@ export async function handleGSCCallback(request: Request, env: Env): Promise<Res
     refresh_token?: string;
     access_token?: string;
     expires_in?: number;
+    // Granted when the OAuth scope includes `openid email`. Carries the
+    // connected Google account's email in its JWT payload. Optional
+    // because tenants who completed OAuth before scope was widened
+    // (migration 0026) still have a refresh token that only grants the
+    // webmasters scope — their id_token field is undefined and the
+    // email field stays null until they reconnect.
+    id_token?: string;
   };
 
   if (!tokenJson.refresh_token) {
@@ -140,12 +156,41 @@ export async function handleGSCCallback(request: Request, env: Env): Promise<Res
     env.GA4_TOKEN_ENCRYPTION_KEY ?? "",
   );
 
-  // Upsert: if the tenant re-connects GSC, replace the old row
+  // Decode the connected Google account's email from id_token. The
+  // JWT signature is NOT verified here — the token came directly from
+  // Google's /token endpoint over TLS, so the trust boundary is the
+  // TLS connection, not the signature. Email is UI metadata only (not
+  // security-bearing). If a future hardening pass wants verified
+  // decoding, swap to jwtVerify(id_token, GOOGLE_JWKS).
+  //
+  // Best-effort: missing id_token, malformed payload, non-string
+  // email all fall through with googleEmail=null. The row still gets
+  // written; the GSC card just doesn't surface an email for that
+  // tenant until they reconnect.
+  let googleEmail: string | null = null;
+  if (tokenJson.id_token) {
+    try {
+      const parts = tokenJson.id_token.split(".");
+      if (parts.length === 3) {
+        // base64url → base64 (RFC 7515 §2)
+        const payloadJson = atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"));
+        const payload = JSON.parse(payloadJson) as { email?: string };
+        if (typeof payload.email === "string" && payload.email.includes("@")) {
+          googleEmail = payload.email.toLowerCase();
+        }
+      }
+    } catch { /* malformed id_token — leave googleEmail null */ }
+  }
+
+  // Upsert: if the tenant re-connects GSC, replace the old row.
+  // google_account_email is captured at OAuth time (see above); for
+  // tenants connected before migration 0026 the column is null and
+  // the GSC card falls back to its old "Connected" copy.
   await env.DB
     .prepare(
-      "INSERT OR REPLACE INTO gsc_connections (slug, refresh_token_enc, status, connected_at) VALUES (?, ?, 'connected', datetime('now'))",
+      "INSERT OR REPLACE INTO gsc_connections (slug, refresh_token_enc, status, connected_at, google_account_email) VALUES (?, ?, 'connected', datetime('now'), ?)",
     )
-    .bind(slug, encryptedToken)
+    .bind(slug, encryptedToken, googleEmail)
     .run();
 
   return redirect302(`${SETTINGS_URL}?gsc=connected`);

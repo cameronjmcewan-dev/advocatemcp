@@ -4365,7 +4365,18 @@ async function apiGSCStartLink(request: Request, env: Env): Promise<Response> {
     client_id:     env.GSC_OAUTH_CLIENT_ID,
     redirect_uri:  env.GSC_OAUTH_REDIRECT_URI,
     response_type: "code",
-    scope:         "https://www.googleapis.com/auth/webmasters.readonly",
+    // openid+email adds Google's standard email-identity scope alongside
+    // the GSC read scope. The OAuth callback consumes the resulting
+    // id_token to extract the connected Google account's email, which
+    // the dashboard surfaces on the GSC card ("Connected as <email>")
+    // so admins can verify which account currently holds the refresh
+    // token at a glance. One extra consent checkbox ("See your primary
+    // Google Account email address") on the OAuth screen is the
+    // friction; the diagnostic surface is worth it. See
+    // worker/migrations/0026_gsc_google_account_email.sql and
+    // handleGSCCallback in worker/src/routes/gscOauth.ts for the
+    // capture path.
+    scope:         "openid email https://www.googleapis.com/auth/webmasters.readonly",
     access_type:   "offline",
     prompt:        "consent",
     state,
@@ -4393,7 +4404,7 @@ async function apiGSCStatus(request: Request, env: Env): Promise<Response> {
   }
 
   const row = await env.DB
-    .prepare("SELECT site_url, status, last_sync_at, last_sync_error, connected_at FROM gsc_connections WHERE slug = ? LIMIT 1")
+    .prepare("SELECT site_url, status, last_sync_at, last_sync_error, connected_at, google_account_email FROM gsc_connections WHERE slug = ? LIMIT 1")
     .bind(biz.slug)
     .first<{
       site_url: string | null;
@@ -4401,6 +4412,7 @@ async function apiGSCStatus(request: Request, env: Env): Promise<Response> {
       last_sync_at: string | null;
       last_sync_error: string | null;
       connected_at: string;
+      google_account_email: string | null;
     }>();
 
   if (!row) {
@@ -4416,6 +4428,10 @@ async function apiGSCStatus(request: Request, env: Env): Promise<Response> {
       last_sync_at: row.last_sync_at,
       last_sync_error: row.last_sync_error,
       connected_at: row.connected_at,
+      // Captured at OAuth callback time from Google's id_token (see
+      // handleGSCCallback). Null for tenants connected before
+      // migration 0026 landed; populated for any reconnect after.
+      google_account_email: row.google_account_email,
     }),
     request,
     { credentials: true },
