@@ -363,14 +363,26 @@
   }
 
   /* Pretty label for an internal profile field name. Used in the
-   * "Open <field>" CTA inside score improvements. */
+   * "Open <field>" CTA inside score improvements. Mirrors the FIELD_LABELS
+   * map in worker/src/lib/insightPlainifier.ts — keep both in sync so the
+   * plain-English copy and the CTA button text agree. New entries:
+   * `years_in_business` was added when the worker started redirecting
+   * `foundingDate` insights to point at `years_in_business` (PR-2 of the
+   * 2026-05-23 batch).
+   */
   function prettyField(f) {
     const map = {
-      ratings_json:         "Verified ratings",
-      customer_quotes_json: "Customer quotes",
-      credentials_json:     "Credentials",
-      differentiator:       "Positioning",
-      pricing_json_v2:      "Pricing",
+      ratings_json:         "Star ratings",
+      customer_quotes_json: "Customer reviews",
+      credentials_json:     "Licenses & credentials",
+      differentiator:       "What makes you different",
+      differentiators_text: "What makes you different",
+      pricing_json_v2:      "Pricing details",
+      years_in_business:    "Years in business",
+      top_services:         "Top services",
+      service_radius_miles: "Service radius",
+      service_area_keywords: "Service-area keywords",
+      hours_json:           "Business hours",
       _internal:            "Settings",
     };
     return map[f] || f;
