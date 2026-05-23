@@ -16,7 +16,7 @@
     "better-sqlite3": "^12.8.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
-    "express": "^4.21.2",
+    "express": "^4.22.2",
     "node-cron": "^3.0.3",
     "p-limit": "^5.0.0",
     "zod": "^3.23.8"
