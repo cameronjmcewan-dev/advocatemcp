@@ -578,6 +578,22 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
     <p class="field-error">Please describe your services</p>
   </div>
 
+  <!--
+    Top services — 1-3 standouts AI engines should lead with when
+    citing your business. Schema key: profile.top_services.
+    Optional; if blank the Business Profile editor lets the customer
+    fill it in post-signup. Added 2026-05-23 to close the
+    onboarding-to-Business-Profile redundancy gap surfaced in PR #256
+    (those fields were editor-only; now collected upfront).
+  -->
+  <div class="field" id="f-top-services">
+    <label for="biz-top-services">
+      Top services — 1 to 3 standouts
+      <span class="hint">Optional. The ones AI should lead with when citing you. Comma-separated.</span>
+    </label>
+    <input id="biz-top-services" type="text" placeholder="e.g. Same-day maintenance dispatch, 24/7 leasing, owner reporting" />
+  </div>
+
   <div class="field" id="f-pricing">
     <label for="biz-pricing">Pricing range</label>
     <select id="biz-pricing">
@@ -589,6 +605,19 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
       <option value="project_based">Project-based / varies</option>
     </select>
     <p class="field-error">Please select a pricing range</p>
+  </div>
+
+  <!--
+    Pricing free-form — short paragraph customer can use to clarify
+    pricing nuance the dropdown doesn't capture (e.g. "$40-$250 per
+    job, depends on scope"). Schema key: profile.pricing. Optional.
+  -->
+  <div class="field" id="f-pricing-freeform">
+    <label for="biz-pricing-freeform">
+      Pricing notes
+      <span class="hint">Optional. Anything the dropdown misses — typical-order range, hourly rate, packages.</span>
+    </label>
+    <input id="biz-pricing-freeform" type="text" maxlength="200" placeholder="e.g. $40–$250 typical order; quotes free" />
   </div>
 
   <div class="field">
@@ -605,6 +634,18 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
       <span class="hint">This is what AI will say about you — what sets you apart?</span>
     </label>
     <textarea id="biz-diff" rows="2" placeholder="e.g. We're the only property manager in South Austin that offers same-day maintenance dispatch and real-time owner dashboards."></textarea>
+  </div>
+
+  <!--
+    Years in business — soft trust signal AI engines weight modestly.
+    Schema key: profile.years_in_business. Optional; 0 = "skip".
+  -->
+  <div class="field" id="f-years-in-business">
+    <label for="biz-years">
+      Years in business
+      <span class="hint">Optional. AI engines weigh longevity modestly. Leave 0 to skip.</span>
+    </label>
+    <input id="biz-years" type="number" min="0" max="200" step="1" value="0" />
   </div>
 
   <div class="nav-row">
@@ -1054,8 +1095,11 @@ textarea{resize:vertical;min-height:80px;line-height:1.6}
       </div>
       <div class="review-grid">
         <div class="rv full"><span class="rv-label">Services</span><span class="rv-val" id="rv-services">—</span></div>
+        <div class="rv full"><span class="rv-label">Top services</span><span class="rv-val" id="rv-top-services">—</span></div>
         <div class="rv"><span class="rv-label">Pricing range</span><span class="rv-val" id="rv-pricing">—</span></div>
+        <div class="rv"><span class="rv-label">Pricing notes</span><span class="rv-val" id="rv-pricing-freeform">—</span></div>
         <div class="rv"><span class="rv-label">Free consultation</span><span class="rv-val" id="rv-consult">—</span></div>
+        <div class="rv"><span class="rv-label">Years in business</span><span class="rv-val" id="rv-years">—</span></div>
         <div class="rv full"><span class="rv-label">Unique value</span><span class="rv-val" id="rv-diff">—</span></div>
       </div>
     </div>
@@ -1719,12 +1763,15 @@ function saveDraft() {
       certifications: getCertifications(),
       savedAt: Date.now(),
     };
-    // Save all input/select/textarea values
+    // Save all input/select/textarea values. New fields appended at
+    // the end so draft format stays additive (older drafts missing
+    // these fields restore cleanly, just with the new fields blank).
     const ids = ['biz-name','biz-industry','biz-city','biz-state','biz-timezone','biz-website',
                  'biz-description','biz-services','biz-pricing','biz-diff',
                  'biz-star-rating','biz-review-count','biz-review-platform',
                  'biz-customer','biz-lead-dest','biz-response','biz-radius',
-                 'acct-email','acct-name'];
+                 'acct-email','acct-name',
+                 'biz-top-services','biz-pricing-freeform','biz-years'];
     ids.forEach(id => { draft.fields[id] = v(id); });
     localStorage.setItem(EFFECTIVE_DRAFT_KEY, JSON.stringify(draft));
   } catch { /* localStorage may be unavailable */ }
@@ -1871,7 +1918,10 @@ function populateReview() {
   const descRaw = (v('biz-description') || '').trim();
   setText('rv-description', descRaw ? (descRaw.length > 180 ? descRaw.slice(0, 180) + '…' : descRaw) : '—');
   setText('rv-services', v('biz-services') || '—');
+  setText('rv-top-services', v('biz-top-services') || '—');
   setText('rv-pricing',  PRICING_LABELS[v('biz-pricing')] || '—');
+  setText('rv-pricing-freeform', v('biz-pricing-freeform') || '—');
+  setText('rv-years', (parseInt(v('biz-years'), 10) > 0) ? v('biz-years') : '—');
   setText('rv-consult',  state.consultation ? 'Yes' : 'No');
   setText('rv-diff',     v('biz-diff') || '—');
 
@@ -2011,6 +2061,12 @@ function buildOnboardPayload() {
   const services_text = v('biz-services').trim();
   const pricing_tier_raw = v('biz-pricing');
   const differentiators_text = v('biz-diff').trim();
+  // Step 2 additions (2026-05-23) — close onboarding-to-Business-
+  // Profile redundancy gap from PR #256. All three are optional; the
+  // Business Profile editor remains the place to refine them.
+  const top_services_text   = v('biz-top-services').trim();
+  const pricing_free_form   = v('biz-pricing-freeform').trim();
+  const years_in_business_raw = v('biz-years').trim();
   const starRatingRaw = v('biz-star-rating').trim();
   const reviewCountRaw = v('biz-review-count').trim();
   const review_platform = v('biz-review-platform');
@@ -2163,6 +2219,25 @@ function buildOnboardPayload() {
     const _trimmed = differentiators_text.slice(0, 1500);
     profile.differentiators_text = _trimmed;
     profile.differentiator        = _trimmed;
+  }
+
+  // Step 2 additions (2026-05-23 — same diff). All optional.
+  // Schema keys match TenantRecord.profile.* in
+  // worker/src/routes/onboard.ts. The Business Profile editor reads
+  // these directly; capturing them at signup means the editor opens
+  // with values pre-filled instead of asking the customer to repeat
+  // themselves (the PR #256 redundancy gap).
+  if (top_services_text) {
+    profile.top_services = top_services_text.slice(0, 500);
+  }
+  if (pricing_free_form) {
+    profile.pricing = pricing_free_form.slice(0, 200);
+  }
+  if (years_in_business_raw) {
+    const yrs = parseInt(years_in_business_raw, 10);
+    if (Number.isFinite(yrs) && yrs > 0 && yrs <= 200) {
+      profile.years_in_business = yrs;
+    }
   }
 
   // user_full_name is the personal name from Step 9 (#acct-name) — distinct
@@ -2353,12 +2428,18 @@ function showSuccess() {
 
 function startOver() {
   clearDraft();
+  // Include the Step 2 additions (2026-05-23) so "Start over" wipes
+  // them too. biz-years is a number field with default 0 — reset it
+  // separately below.
   ['biz-name','biz-city','biz-state','biz-website','biz-description','biz-services',
    'biz-diff','biz-star-rating','biz-review-count',
-   'biz-customer','biz-lead-dest','acct-email','acct-name','acct-password'].forEach(id => {
+   'biz-customer','biz-lead-dest','acct-email','acct-name','acct-password',
+   'biz-top-services','biz-pricing-freeform'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  const yrsEl = document.getElementById('biz-years');
+  if (yrsEl) yrsEl.value = '0';
   ['biz-industry','biz-pricing','biz-review-platform','biz-response','biz-radius','biz-timezone'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.selectedIndex = 0;
