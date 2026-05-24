@@ -225,12 +225,12 @@
             } else if (out.body && out.body.error === 'stripe_portal_failed') {
               msg = 'Stripe rejected the request: ' + ((out.body.details && out.body.details.error && out.body.details.error.message) || 'configure the Customer Portal in your Stripe dashboard');
             }
-            alert(msg); // simple UX; could swap for a toast later
+            window.AMCP.toast.error("Couldn't open billing portal", { detail: msg });
             btn.disabled = false;
             btn.textContent = originalText;
           })
           .catch(function (err) {
-            alert('Network error: ' + (err && err.message ? err.message : err));
+            window.AMCP.toast.error('Network error', { detail: (err && err.message ? err.message : String(err)) });
             btn.disabled = false;
             btn.textContent = originalText;
           });
