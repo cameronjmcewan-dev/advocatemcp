@@ -580,7 +580,11 @@
     const disconnectBtn = document.getElementById('btn-ga4-disconnect');
     if (disconnectBtn) {
       disconnectBtn.addEventListener('click', async () => {
-        if (!window.confirm('Disconnect Google Analytics? Imported daily traffic stays in your account; new data will stop syncing until you reconnect.')) return;
+        if (!(await window.AMCP.toast.confirm('Disconnect Google Analytics?', {
+          detail: 'Imported daily traffic stays in your account; new data will stop syncing until you reconnect.',
+          confirmLabel: 'Disconnect',
+          danger: true,
+        }))) return;
         disconnectBtn.disabled = true;
         setMsg('Disconnecting…');
         try {
@@ -779,7 +783,11 @@
     const disconnectBtn = document.getElementById('btn-gsc-disconnect');
     if (disconnectBtn) {
       disconnectBtn.addEventListener('click', async () => {
-        if (!window.confirm('Disconnect Google Search Console? Imported data stays in your account; new syncs will stop until you reconnect.')) return;
+        if (!(await window.AMCP.toast.confirm('Disconnect Google Search Console?', {
+          detail: 'Imported data stays in your account; new syncs will stop until you reconnect.',
+          confirmLabel: 'Disconnect',
+          danger: true,
+        }))) return;
         disconnectBtn.disabled = true;
         setMsg('Disconnecting…');
         try {
@@ -1064,7 +1072,11 @@
       const disconnectBtn = document.getElementById(btnId + '-disconnect');
       if (disconnectBtn) {
         disconnectBtn.addEventListener('click', async () => {
-          if (!window.confirm('Disconnect ' + labelTitle + '? Imported LTV data stays in your account; new syncs will stop until you reconnect.')) return;
+          if (!(await window.AMCP.toast.confirm('Disconnect ' + labelTitle + '?', {
+            detail: 'Imported lifetime value (LTV) data stays in your account; new syncs will stop until you reconnect.',
+            confirmLabel: 'Disconnect',
+            danger: true,
+          }))) return;
           disconnectBtn.disabled = true;
           setMsg('Disconnecting…');
           try {
@@ -1213,7 +1225,11 @@
     const disconnectBtn = document.getElementById('btn-authority-disconnect');
     if (disconnectBtn && af) {
       disconnectBtn.addEventListener('click', async () => {
-        if (!window.confirm('Disconnect the Authority Kit? Your historical mention data is kept. Future syncs stop until you reconnect.')) return;
+        if (!(await window.AMCP.toast.confirm('Disconnect the Authority Kit?', {
+          detail: 'Your historical mention data is kept. Future syncs stop until you reconnect.',
+          confirmLabel: 'Disconnect',
+          danger: true,
+        }))) return;
         disconnectBtn.disabled = true;
         setMsg('Disconnecting…');
         try {
@@ -1322,7 +1338,11 @@
   }
 
   async function confirmDisconnect(path, name, btn) {
-    if (!window.confirm(`Disconnect ${name}? Your imported data stays in your account; new syncs will stop until you reconnect.`)) return;
+    if (!(await window.AMCP.toast.confirm(`Disconnect ${name}?`, {
+      detail: 'Your imported data stays in your account; new syncs will stop until you reconnect.',
+      confirmLabel: 'Disconnect',
+      danger: true,
+    }))) return;
     btn.disabled = true;
     try {
       await window.AMCP.authedFetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
@@ -1557,7 +1577,11 @@
     const rotBtn = document.getElementById('btn-rotate-key');
     if (rotBtn) {
       rotBtn.addEventListener('click', async () => {
-        if (!confirm('Rotate your API key? Your current key stops working immediately.')) return;
+        if (!(await window.AMCP.toast.confirm('Rotate your API key?', {
+          detail: 'Your current key stops working immediately.',
+          confirmLabel: 'Rotate',
+          danger: true,
+        }))) return;
         rotBtn.disabled = true; rotBtn.textContent = 'Rotating…';
         setStatus('', '');
         try {
@@ -1702,7 +1726,11 @@
       genBtn.addEventListener('click', async () => {
         const isRotate = genBtn.textContent.includes('Rotate');
         const confirmed = isRotate
-          ? confirm('Rotate the webhook secret? Your booking system will stop signing successfully until you update it with the new secret.')
+          ? await window.AMCP.toast.confirm('Rotate the booking-system secret?', {
+              detail: 'Your booking system will stop signing successfully until you update it with the new secret.',
+              confirmLabel: 'Rotate',
+              danger: true,
+            })
           : true;
         if (!confirmed) return;
         genBtn.disabled = true;
@@ -1908,7 +1936,11 @@
           return;
         }
         if (act === 'remove') {
-          if (!confirm('Remove this team member? They\'ll lose access immediately.')) return;
+          if (!(await window.AMCP.toast.confirm('Remove this team member?', {
+            detail: "They'll lose access immediately.",
+            confirmLabel: 'Remove',
+            danger: true,
+          }))) return;
           try {
             const res = await af('/api/client/team/' + encodeURIComponent(id), { method: 'DELETE' });
             if (res.status === 409) {
@@ -1935,7 +1967,11 @@
         const id = sel.getAttribute('data-user-id');
         const role = sel.value;
         if (role === 'owner') {
-          if (!confirm('Transfer ownership? You\'ll become an editor and they\'ll have full control over billing and team.')) {
+          if (!(await window.AMCP.toast.confirm('Transfer ownership?', {
+            detail: "You'll become an editor and they'll have full control over billing and team.",
+            confirmLabel: 'Transfer ownership',
+            danger: true,
+          }))) {
             sel.value = (cachedTeam.members.find(m => m.user_id === id) || {}).role || 'viewer';
             return;
           }
@@ -2145,7 +2181,10 @@
           return;
         }
         if (act === 'promote') {
-          if (!confirm('Make this the primary location? AI agents will default to this location\'s details when no specific city is mentioned.')) return;
+          if (!(await window.AMCP.toast.confirm('Make this the primary location?', {
+            detail: "AI tools will default to this location's details when no specific city is mentioned.",
+            confirmLabel: 'Make primary',
+          }))) return;
           try {
             const res = await af('/api/client/locations/' + encodeURIComponent(id) + '/promote', { method: 'POST' });
             if (!res.ok) throw new Error('promote failed');
@@ -2155,7 +2194,11 @@
           return;
         }
         if (act === 'delete') {
-          if (!confirm('Delete this location? This cannot be undone.')) return;
+          if (!(await window.AMCP.toast.confirm('Delete this location?', {
+            detail: 'This cannot be undone.',
+            confirmLabel: 'Delete',
+            danger: true,
+          }))) return;
           try {
             const res = await af('/api/client/locations/' + encodeURIComponent(id), { method: 'DELETE' });
             if (res.status === 409) {

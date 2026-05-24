@@ -581,10 +581,14 @@
     const keys = checklistKeys();
     const dnsPending = keys.indexOf('dns_configured') !== -1
       && !isStepDone(_snapshot, 'dns_configured');
-    const msg = dnsPending
-      ? 'Skip the tour? Your DNS is not wired up yet, so the Get Started panel will stay until DNS is configured. Other steps will be marked complete.\n\nContinue?'
-      : 'Skip the Get Started panel? You can restart it any time from Settings → Tutorial.';
-    if (!window.confirm(msg)) return;
+    const question = dnsPending ? 'Skip the tour?' : 'Skip the Get Started panel?';
+    const detail = dnsPending
+      ? 'Your DNS is not wired up yet, so the Get Started panel will stay until DNS is configured. Other steps will be marked complete.'
+      : 'You can restart it any time from Settings → Tutorial.';
+    if (!(await window.AMCP.toast.confirm(question, {
+      detail,
+      confirmLabel: 'Skip',
+    }))) return;
 
     const skipBtn = _container && _container.querySelector('#gs-skip');
     if (skipBtn) { skipBtn.disabled = true; skipBtn.textContent = 'Skipping…'; }

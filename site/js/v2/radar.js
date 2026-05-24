@@ -346,7 +346,10 @@
         if (!delBtn) return;
         const id = delBtn.getAttribute('data-id');
         if (!id) return;
-        if (!confirm('Remove this query from the basket?')) return;
+        if (!(await window.AMCP.toast.confirm('Remove this search from your tracked list?', {
+          confirmLabel: 'Remove',
+          danger: true,
+        }))) return;
         delBtn.disabled = true;
         try {
           const res = await af(

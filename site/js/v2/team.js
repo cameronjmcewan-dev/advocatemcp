@@ -273,7 +273,11 @@
       }
 
       if (act === 'remove') {
-        if (!confirm("Remove this team member? They'll lose access immediately.")) return;
+        if (!(await window.AMCP.toast.confirm('Remove this team member?', {
+          detail: "They'll lose access immediately.",
+          confirmLabel: 'Remove',
+          danger: true,
+        }))) return;
         try {
           const res = await af('/api/client/team/' + encodeURIComponent(id), { method: 'DELETE' });
           if (res.status === 409) {
@@ -303,7 +307,11 @@
       const id   = sel.getAttribute('data-user-id');
       const role = sel.value;
       if (role === 'owner') {
-        if (!confirm("Transfer ownership? You'll become an editor and they'll have full control over billing and team.")) {
+        if (!(await window.AMCP.toast.confirm('Transfer ownership?', {
+          detail: "You'll become an editor and they'll have full control over billing and team.",
+          confirmLabel: 'Transfer ownership',
+          danger: true,
+        }))) {
           sel.value = (cachedTeam.members.find(m => m.user_id === id) || {}).role || 'viewer';
           return;
         }
