@@ -343,8 +343,14 @@
 
       // If the banner wasn't mountable earlier because we didn't know
       // the business name yet, try again now that metrics are in.
+      // Pass null for `name` rather than business_name — the latter
+      // falls back to accessible_businesses[0].name when the
+      // impersonated slug isn't in the access list, which produces a
+      // confusing "Impersonating <own-tenant-name> (<impersonated-slug>)"
+      // banner. Plain "Impersonating <slug>" is clearer until we have
+      // the impersonated tenant's real name to display.
       if (window.AMCP_DATA.impersonating && !document.getElementById('amcp-impersonation-banner')) {
-        mountImpersonationBanner(window.AMCP_DATA.impersonating, window.AMCP_DATA.business_name);
+        mountImpersonationBanner(window.AMCP_DATA.impersonating, null);
       }
 
       // Beta banner — surfaced when the worker reports beta cohort data
@@ -392,7 +398,9 @@
 
     if (window.__ADVOCATE_PREVIEW) mountPreviewBanner();
     if (window.AMCP_DATA && window.AMCP_DATA.impersonating) {
-      mountImpersonationBanner(window.AMCP_DATA.impersonating, window.AMCP_DATA.business_name);
+      // See note at the post-data remount site — pass null, not
+      // business_name, to avoid the wrong-tenant-name fallback.
+      mountImpersonationBanner(window.AMCP_DATA.impersonating, null);
     }
     if (typeof opts.afterMount === 'function') opts.afterMount(data);
   }
