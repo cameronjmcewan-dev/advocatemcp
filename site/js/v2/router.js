@@ -151,7 +151,12 @@
 
     const banner = document.getElementById('amcp-impersonation-banner');
     if (shouldShowBanner && !banner && typeof window.AMCP_SHELL_MOUNT_BANNER === 'function') {
-      window.AMCP_SHELL_MOUNT_BANNER(asSlug, window.AMCP_DATA.business_name);
+      // Pass null, not business_name — business_name falls back to the
+      // user's OWN tenant when the impersonated slug isn't in their
+      // access list, producing "Impersonating <own-tenant> (<slug>)"
+      // text that conflates two different tenants. Banner shows plain
+      // "Impersonating <slug>" instead. (Companion to shell.js fix.)
+      window.AMCP_SHELL_MOUNT_BANNER(asSlug, null);
     } else if (!shouldShowBanner && banner) {
       banner.remove();
       // Undo the padding-top shift shell.js added on mount.
