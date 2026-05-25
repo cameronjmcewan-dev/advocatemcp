@@ -120,50 +120,51 @@
   function updateImpersonationBanner(url) {
     const asSlug = url.searchParams.get('as');
     const isAdmin = window.AMCP_DATA && window.AMCP_DATA.user_role === 'admin';
+    const ownedList = (window.AMCP_DATA && Array.isArray(window.AMCP_DATA.accessible_businesses))
+      ? window.AMCP_DATA.accessible_businesses : [];
+    // Mirror the boot-time gate in shell.js (search `_ownsAsSlug`). Admins
+    // navigate own tenants via ?as= too (every /app.html?as=<slug> redirect
+    // after creating a business uses this pattern), so the URL param alone
+    // doesn't mean "impersonating". Without this check, every SPA nav
+    // re-mounts the banner via the old code path, undoing shell.js's
+    // boot-time suppression — and the banner's padding-top shift also
+    // breaks deep-link scroll-to-section behavior.
+    const _ownsAsSlug = asSlug ? ownedList.some((b) => b.slug === asSlug) : false;
+    const shouldShowBanner = !!(isAdmin && asSlug && !_ownsAsSlug);
+
+    window.AMCP_DATA.impersonating = shouldShowBanner ? asSlug : null;
+
+    // Keep the sidebar's business_name/plan in sync with the current tenant
+    // context. Prefer the ?as= slug match (whether impersonating or viewing
+    // own tenant). Fall back to list[0] only when there's no ?as= at all —
+    // mid-impersonation of a non-owned tenant, leave the prior values so
+    // /api/client/metrics can land the real impersonated name without a
+    // momentary "Advocate" flash.
+    const slugMatch = asSlug ? ownedList.find((b) => b.slug === asSlug) : null;
+    if (slugMatch) {
+      window.AMCP_DATA.business_name = slugMatch.name || window.AMCP_DATA.business_name || null;
+      window.AMCP_DATA.plan          = slugMatch.plan || window.AMCP_DATA.plan || null;
+    } else if (!asSlug && ownedList[0]) {
+      window.AMCP_DATA.business_name = ownedList[0].name || null;
+      window.AMCP_DATA.plan          = ownedList[0].plan || null;
+    }
+
     const banner = document.getElementById('amcp-impersonation-banner');
-    if (isAdmin && asSlug) {
-      window.AMCP_DATA.impersonating = asSlug;
-      // Re-derive business_name + plan from accessible_businesses so the
-      // sidebar block + any other AMCP_DATA consumer reflects the
-      // impersonated tenant. Falls back to existing values if the slug
-      // isn't in the admin's own access list (admin-impersonating-
-      // non-owned tenant — those values land later via /api/client/metrics).
-      const list = (window.AMCP_DATA && Array.isArray(window.AMCP_DATA.accessible_businesses))
-        ? window.AMCP_DATA.accessible_businesses : [];
-      const match = list.find((b) => b.slug === asSlug);
-      if (match) {
-        window.AMCP_DATA.business_name = match.name || window.AMCP_DATA.business_name || null;
-        window.AMCP_DATA.plan          = match.plan || window.AMCP_DATA.plan || null;
-      }
-      if (!banner && typeof window.AMCP_SHELL_MOUNT_BANNER === 'function') {
-        window.AMCP_SHELL_MOUNT_BANNER(asSlug, window.AMCP_DATA.business_name);
-      }
-    } else {
-      window.AMCP_DATA.impersonating = null;
-      // Restore business_name/plan to the operator's own first tenant
-      // so the sidebar reflects the un-impersonated identity.
-      const list = (window.AMCP_DATA && Array.isArray(window.AMCP_DATA.accessible_businesses))
-        ? window.AMCP_DATA.accessible_businesses : [];
-      if (list[0]) {
-        window.AMCP_DATA.business_name = list[0].name || null;
-        window.AMCP_DATA.plan          = list[0].plan || null;
-      }
-      if (banner) {
-        banner.remove();
-        // Undo the padding-top shift shell.js added on mount.
-        document.querySelectorAll('.app, .sidebar, .main').forEach(el => {
-          const p = parseFloat(getComputedStyle(el).paddingTop);
-          if (p >= 32) el.style.paddingTop = (p - 32) + 'px';
-        });
-        // If a beta banner was sitting at top:32px (because the
-        // impersonation banner used to be above it), slide it up to
-        // top:0 now that nothing sits above it. Without this, the
-        // beta banner would float with a 32px empty gap above it.
-        // (Apr 28 2026 audit fix.)
-        const beta = document.getElementById('amcp-beta-banner');
-        if (beta && beta.style.top === '32px') {
-          beta.style.top = '0px';
-        }
+    if (shouldShowBanner && !banner && typeof window.AMCP_SHELL_MOUNT_BANNER === 'function') {
+      window.AMCP_SHELL_MOUNT_BANNER(asSlug, window.AMCP_DATA.business_name);
+    } else if (!shouldShowBanner && banner) {
+      banner.remove();
+      // Undo the padding-top shift shell.js added on mount.
+      document.querySelectorAll('.app, .sidebar, .main').forEach(el => {
+        const p = parseFloat(getComputedStyle(el).paddingTop);
+        if (p >= 32) el.style.paddingTop = (p - 32) + 'px';
+      });
+      // If a beta banner was sitting at top:32px (because the
+      // impersonation banner used to be above it), slide it up to
+      // top:0 now that nothing sits above it. (Apr 28 2026 audit fix.)
+      const beta = document.getElementById('amcp-beta-banner');
+      if (beta && beta.style.top === '32px') {
+        beta.style.top = '0px';
       }
     }
     // Repaint the sidebar's biz block so it reflects the new identity
