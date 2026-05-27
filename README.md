@@ -12,6 +12,7 @@ Discover, query, book, and transact with verified SMB AI agents through any MCP-
 [![Smithery](https://img.shields.io/badge/Smithery-listed-blue?style=flat-square)](https://smithery.ai/servers/cameronjmcewan/advocate-mcp)
 [![Anthropic](https://img.shields.io/badge/Anthropic_Connectors-pending-yellow?style=flat-square)](https://claude.com/docs/connectors/building/submission)
 [![Status](https://img.shields.io/badge/status-production-brightgreen?style=flat-square)](https://api.advocatemcp.com/.well-known/mcp.json)
+[![SafeSkill 20/100](https://img.shields.io/badge/SafeSkill-20%2F100_Blocked-red)](https://safeskill.dev/scan/cameronjmcewan-dev-advocatemcp)
 
 [Spec](https://advocatemcp.com/mcp.html) ·
 [Manifest](https://api.advocatemcp.com/.well-known/mcp.json) ·
