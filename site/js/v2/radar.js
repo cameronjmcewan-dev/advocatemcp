@@ -112,19 +112,19 @@
           <ul style="list-style:none;padding:0;margin:16px 0;display:grid;gap:12px;">
             <li style="display:flex;align-items:flex-start;gap:12px;font-size:14.5px;line-height:1.55;color:var(--ink-2)">
               <span style="width:22px;height:22px;border-radius:6px;background:var(--maroon-tint);color:var(--maroon);display:grid;place-items:center;flex-shrink:0;font-size:13px">✓</span>
-              <span><strong>Weekly polls</strong> — every relevant query, tested across Perplexity, ChatGPT, Claude, and Gemini.</span>
+              <span><strong>Weekly AI search tests</strong> — every relevant search, tested across Perplexity, ChatGPT, Claude, and Gemini.</span>
             </li>
             <li style="display:flex;align-items:flex-start;gap:12px;font-size:14.5px;line-height:1.55;color:var(--ink-2)">
               <span style="width:22px;height:22px;border-radius:6px;background:var(--maroon-tint);color:var(--maroon);display:grid;place-items:center;flex-shrink:0;font-size:13px">✓</span>
-              <span><strong>Share of Model</strong> — what percentage of AI answers named you this week vs. each competitor.</span>
+              <span><strong>How often AI named you</strong> — share of AI answers that picked you this week vs. each competitor.</span>
             </li>
             <li style="display:flex;align-items:flex-start;gap:12px;font-size:14.5px;line-height:1.55;color:var(--ink-2)">
               <span style="width:22px;height:22px;border-radius:6px;background:var(--maroon-tint);color:var(--maroon);display:grid;place-items:center;flex-shrink:0;font-size:13px">✓</span>
-              <span><strong>Loss tracking</strong> — when AI picked someone else, we log which competitor domains got cited and at what rank, so you can see who's beating you week over week.</span>
+              <span><strong>Who's beating you</strong> — when AI picked someone else, we log which competitor sites got named and at what rank, so you can see who's beating you week over week.</span>
             </li>
             <li style="display:flex;align-items:flex-start;gap:12px;font-size:14.5px;line-height:1.55;color:var(--ink-2)">
               <span style="width:22px;height:22px;border-radius:6px;background:var(--maroon-tint);color:var(--maroon);display:grid;place-items:center;flex-shrink:0;font-size:13px">✓</span>
-              <span><strong>Keyword authority gaps</strong> — the single change most likely to tip next week's answers toward you.</span>
+              <span><strong>Topics where competitors are winning</strong> — the single change most likely to tip next week's answers toward you.</span>
             </li>
             <li style="display:flex;align-items:flex-start;gap:12px;font-size:14.5px;line-height:1.55;color:var(--ink-2)">
               <span style="width:22px;height:22px;border-radius:6px;background:var(--maroon-tint);color:var(--maroon);display:grid;place-items:center;flex-shrink:0;font-size:13px">✓</span>
@@ -170,7 +170,7 @@
     const rate = fmtPct(s.citation_rate);
 
     const byBotBars = (s.by_bot || []).length === 0
-      ? `<div style="padding:16px 0;color:var(--muted);font-size:13.5px">No per-bot breakdown yet — first weekly poll is still running.</div>`
+      ? `<div style="padding:16px 0;color:var(--muted);font-size:13.5px">No per-AI-tool breakdown yet — first weekly test is still running.</div>`
       : `<div data-radar-bots-bars style="width:100%;height:240px;margin-top:8px"></div>`;
 
     const basketRows = basket.length === 0
@@ -208,10 +208,10 @@
       </div>
 
       <div class="kpis">
-        <div class="kpi"><div class="head"><div class="k">Citation rate</div></div><div class="v tabular">${rate}</div><div class="d">This week's average</div></div>
-        <div class="kpi"><div class="head"><div class="k">Wins</div></div><div class="v tabular">${fmtCount(s.wins_this_week)}</div><div class="d">Queries where AI named you</div></div>
-        <div class="kpi"><div class="head"><div class="k">Total polls</div></div><div class="v tabular">${fmtCount(s.polls_this_week)}</div><div class="d">Queries tested this week</div></div>
-        <div class="kpi"><div class="head"><div class="k">Tracked queries</div></div><div class="v tabular">${fmtCount(basket.length)}</div><div class="d">In your basket</div></div>
+        <div class="kpi"><div class="head"><div class="k">Citation rate</div></div><div class="v tabular">${rate}</div><div class="d">How often AI named you this week</div></div>
+        <div class="kpi"><div class="head"><div class="k">Wins</div></div><div class="v tabular">${fmtCount(s.wins_this_week)}</div><div class="d">Searches where AI named you</div></div>
+        <div class="kpi"><div class="head"><div class="k">Total AI search tests</div></div><div class="v tabular">${fmtCount(s.polls_this_week)}</div><div class="d">Searches tested this week</div></div>
+        <div class="kpi"><div class="head"><div class="k">Tracked searches</div></div><div class="v tabular">${fmtCount(basket.length)}</div><div class="d">In your basket</div></div>
       </div>
 
       <div class="row">
@@ -220,15 +220,15 @@
           ${byBotBars}
         </div>
         <div class="card-dash">
-          <div class="card-head"><div><h3>Next move</h3><div class="sub">Authority gap we'd close first</div></div></div>
-          ${tipHtml || `<p style="color:var(--muted);font-size:13.5px">No authority gaps surfaced yet. Check back after next week's poll.</p>`}
+          <div class="card-head"><div><h3>Next move</h3><div class="sub">Topic where competitors are winning most</div></div></div>
+          ${tipHtml || `<p style="color:var(--muted);font-size:13.5px">No topic gaps surfaced yet. Check back after next week's test.</p>`}
         </div>
       </div>
 
       <div class="row single">
         <div class="card-dash">
           <div class="card-head">
-            <div><h3>Share of voice — weekly trend</h3><div class="sub">% of polls where AI cited your domain, last 12 weeks</div></div>
+            <div><h3>How often AI named you — weekly trend</h3><div class="sub">Share of AI search tests where AI named your site, last 12 weeks</div></div>
           </div>
           <div data-radar-sov-trend style="width:100%;height:280px;margin-top:8px"></div>
         </div>
@@ -236,7 +236,7 @@
 
       <div class="row single">
         <div class="card-dash">
-          <div class="card-head"><div><h3>Query basket</h3><div class="sub">The phrasings we poll weekly — edit any time</div></div></div>
+          <div class="card-head"><div><h3>Tracked searches</h3><div class="sub">The searches we test against AI weekly — edit any time</div></div></div>
           <table class="tbl" id="radar-basket-tbl">
             <thead><tr><th>Query</th><th style="width:90px">Win rate</th><th style="width:100px">Tests this week</th><th style="width:60px">Trend</th><th style="width:40px"></th></tr></thead>
             <tbody>${basketRows}</tbody>
@@ -320,7 +320,7 @@
             setStatus('Add failed: ' + (body.error || `HTTP ${res.status}`), 'error');
             return;
           }
-          setStatus('Added — first poll runs Mon/Wed/Fri at 04:00 UTC', 'ok');
+          setStatus('Added — first AI search test runs Mon/Wed/Fri at 04:00 UTC', 'ok');
           input.value = '';
           // Reload page so the new row + win-rate columns hydrate
           // from /api/client/radar. Cheap because the SPA router

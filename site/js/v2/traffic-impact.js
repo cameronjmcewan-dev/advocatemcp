@@ -234,14 +234,17 @@
       '  </div></div>',
       '  <div class="kpis" style="grid-template-columns:1fr 1fr 1fr">',
       '    <div class="kpi"><div class="head"><div class="k">Engagement rate</div></div>',
-      '      <div class="v tabular">' + pct(m.engagement) + '</div></div>',
+      '      <div class="v tabular">' + pct(m.engagement) + '</div>',
+      '      <div class="d">Share of visits where someone interacted with the page</div></div>',
       '    <div class="kpi"><div class="head"><div class="k">Avg session duration</div></div>',
-      '      <div class="v tabular">' + formatDuration(m.duration) + '</div></div>',
+      '      <div class="v tabular">' + formatDuration(m.duration) + '</div>',
+      '      <div class="d">How long an average visit lasted</div></div>',
       '    <div class="kpi"><div class="head"><div class="k">Bounce rate</div></div>',
-      '      <div class="v tabular">' + pct(m.bounce) + '</div></div>',
+      '      <div class="v tabular">' + pct(m.bounce) + '</div>',
+      '      <div class="d">Share of visits where someone left without interacting</div></div>',
       '  </div>',
       '  <p style="margin:8px 20px 16px;font-size:11.5px;color:var(--muted)">',
-      '    Engagement metrics are tenant-wide. GA4 doesn\'t expose per-source-class engagement separately.',
+      '    These numbers cover every visit. Google Analytics can\'t split engagement by AI vs Human source.',
       '  </p>',
       '</section>',
     ].join('');
@@ -269,7 +272,7 @@
       '    </div>',
       '  </div>',
       '  <p style="margin:0 20px 16px;font-size:11.5px;color:var(--muted)">',
-      '    New/returning split is tenant-wide; GA4 doesn\'t break this down by source class.',
+      '    This split covers every visit. Google Analytics can\'t break new-vs-returning down by AI vs Human source.',
       '  </p>',
       '</section>',
     ].join('');
@@ -285,7 +288,7 @@
       // match against the tenant's free-text service_area_keywords. A
       // future structured-service-area input + geocoding pass tightens it.
       '    <h3>Where they\'re coming from <span class="chip" style="background:rgba(125,37,80,0.08);color:var(--maroon);border:1px solid rgba(125,37,80,0.25);font-size:11px;margin-left:8px;padding:2px 6px;border-radius:4px;vertical-align:middle">Preview</span></h3>',
-      '    <div class="sub">Top countries &amp; cities for the selected window. AI-tool referrals depend on classifier coverage — some clicks (in-app browsers that strip the referrer) land in &ldquo;everything else.&rdquo; The source breakdown above shows the raw GA4 buckets. Rows tagged &ldquo;in service area&rdquo; match the keywords you set in your business profile (rough substring match — false positives + negatives both possible).</div>',
+      '    <div class="sub">Top countries &amp; cities for the selected window. Some AI-tool clicks (especially from AI apps on phones) don\'t carry source info, so they land in &ldquo;everything else.&rdquo; The source breakdown above shows the raw Google Analytics sources. Rows tagged &ldquo;in service area&rdquo; match the keywords you set in your business profile &mdash; rough substring match, so false positives and negatives are both possible.</div>',
       '  </div></div>',
       '  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;padding:16px">',
       '    <div>',
@@ -403,9 +406,9 @@
 
     return [
       '<details class="card-dash" style="padding:16px 20px;">',
-      '  <summary style="cursor:pointer;font-weight:500;font-size:14px;">Where your visitors came from <span style="color:var(--muted);font-weight:400">(raw GA4 source / medium &middot; ', fmtCount(total), ' sessions)</span></summary>',
+      '  <summary style="cursor:pointer;font-weight:500;font-size:14px;">Where your visitors came from <span style="color:var(--muted);font-weight:400">(raw Google Analytics sources &middot; ', fmtCount(total), ' sessions)</span></summary>',
       '  <p style="margin:12px 0 4px;color:var(--muted);font-size:13px;line-height:1.5;">',
-      '    Some AI-tool in-app browsers (ChatGPT iOS, Claude mobile, Perplexity, etc.) strip the <code>Referer</code> header, so the visit lands as <code>(direct) / (none)</code>. If those rows are unusually large for your site, much of your "Human" bar in the AI vs Human chart is likely AI traffic that the classifier can\'t attribute. Compare against your own organic baseline to gut-check.',
+      '    Some AI-tool apps (ChatGPT on iOS, Claude on mobile, Perplexity, etc.) don\'t pass source info when someone clicks through, so the visit lands as <code>(direct) / (none)</code>. If those rows are unusually large for your site, much of your "Human" bar in the AI vs Human chart is likely AI traffic we can\'t link to a specific source. Compare against your own typical baseline to gut-check.',
       '  </p>',
       '  <table class="tbl" style="width:100%;margin-top:12px;font-size:13px;">',
       '    <thead><tr>',
@@ -530,7 +533,7 @@
         '      <div style="display:inline-block;font-size:11px;font-weight:600;color:var(--maroon);background:var(--maroon-tint);padding:3px 10px;border-radius:999px;letter-spacing:0.05em;margin-bottom:8px">PRO</div>',
         '      <div style="font-size:14px;font-weight:500;color:var(--ink)">See exactly how much revenue AI search drove to your site</div>',
         '      <div style="font-size:13px;color:var(--ink-2);margin-top:6px;max-width:560px;line-height:1.5">',
-        '        Pro tenants get verified per-event revenue attribution split AI vs Human. Connect your GA4 key events and Advocate calculates the dollars per source.',
+        '        On the Pro plan, we track real revenue per booking and split it AI vs Human. Connect your Google Analytics 4 (GA4) key events and we\'ll calculate the dollars from each source.',
         '      </div>',
         '    </div>',
         '    <a href="/Billing.html" class="btn btn-primary btn-sm">Upgrade to Pro →</a>',
@@ -584,7 +587,7 @@
     if (verifiedConfiguredEmpty && ga4Banner) {
       ga4Banner += [
         '<div style="margin-top:-8px;margin-bottom:16px;padding:12px 16px;border-left:2px solid var(--sage,#4a7a3e);background:var(--paper);font-size:13px;color:var(--ink-2);">',
-        '  &#10003; Verified-revenue webhook is configured. Once your booking system POSTs an event, you\'ll see verified dollar amounts here in addition to the estimate above.',
+        '  &#10003; Verified-revenue connection is configured. Once your booking system sends an event, you\'ll see verified dollar amounts here in addition to the estimate above.',
         '</div>',
       ].join('');
     }
@@ -619,7 +622,7 @@
       '  <div class="card-head">',
       '    <div>',
       '      <h3>Recent verified revenue events</h3>',
-      '      <div class="sub">Latest webhook deliveries from your booking system, with attribution.</div>',
+      '      <div class="sub">Latest events from your booking system, with the source we matched them to.</div>',
       '    </div>',
       '  </div>',
       '  <table class="tbl" style="width:100%;font-size:13.5px">',
@@ -722,7 +725,7 @@
         '      <div style="display:inline-block;font-size:11px;font-weight:600;color:var(--maroon);background:var(--maroon-tint);padding:3px 10px;border-radius:999px;letter-spacing:0.05em;margin-bottom:8px">PRO</div>',
         '      <div style="font-size:14px;font-weight:500;color:var(--ink)">Detect Google AI Overview presence</div>',
         '      <div style="font-size:13px;color:var(--ink-2);margin-top:6px;max-width:560px;line-height:1.5">',
-        '        Pro tenants can connect Google Search Console to see how often AI Overviews show for your top queries — and whether they\'re citing your site.',
+        '        On the Pro plan, connect Google Search Console (GSC) to see how often Google\'s AI Overview appears for your top searches &mdash; and whether it links to your site.',
         '      </div>',
         '    </div>',
         '    <a href="/Billing.html" class="btn btn-primary btn-sm">Upgrade to Pro →</a>',
@@ -739,7 +742,7 @@
         '    <div>',
         '      <div style="font-size:14px; font-weight:500; color:var(--ink);">Detect Google AI Overview presence</div>',
         '      <div style="font-size:13px; color:var(--ink-2); margin-top:6px; max-width:540px; line-height:1.5">',
-        '        Connect Google Search Console to see how often AI Overviews show for your top queries — and whether they\'re citing your site.',
+        '        Connect Google Search Console (GSC) to see how often Google\'s AI Overview appears for your top searches &mdash; and whether it links to your site.',
         '      </div>',
         '    </div>',
         '    <button class="btn btn-primary btn-sm" id="ti-gsc-connect">Connect Search Console →</button>',
@@ -768,12 +771,12 @@
       '  <div class="card-head">',
       '    <div>',
       '      <h3>Google AI Overview presence</h3>',
-      '      <div class="sub">How often Google shows an AI Overview when someone searches for queries you rank for — and how often that Overview cites you.</div>',
+      '      <div class="sub">How often Google shows an AI Overview when someone searches for terms you show up for &mdash; and how often that Overview links to your site.</div>',
       '    </div>',
       '  </div>',
       '  <div class="kpis" style="grid-template-columns: 1fr 1fr 1fr; padding-bottom: 16px;">',
       '    <div class="kpi"><div class="head"><div class="k">Impressions w/ AI Overview</div></div><div class="v tabular">' + pct(gsc.ai_overview_pct) + '</div><div class="d">' + fmtCount(gsc.ai_overview_impressions) + ' of ' + fmtCount(gsc.total_impressions) + '</div></div>',
-      '    <div class="kpi"><div class="head"><div class="k">AI Overview cite rate</div></div><div class="v tabular">' + pct(gsc.cite_rate) + '</div><div class="d">Clicks per AI Overview impression</div></div>',
+      '    <div class="kpi"><div class="head"><div class="k">Clicks from AI Overview</div></div><div class="v tabular">' + pct(gsc.cite_rate) + '</div><div class="d">Share of AI Overview shows that sent a click to your site</div></div>',
       '    <div class="kpi"><div class="head"><div class="k">Total Google clicks</div></div><div class="v tabular">' + fmtCount(gsc.total_clicks) + '</div><div class="d">From organic search</div></div>',
       '  </div>',
       '  <div id="gsc-ai-chart" style="width:100%; height: 240px"></div>',
@@ -795,9 +798,9 @@
         '  <div style="display:flex; justify-content:space-between; align-items:center; gap:24px; flex-wrap:wrap;">',
         '    <div>',
         '      <div style="display:inline-block; font-size:11px; font-weight:600; color:var(--maroon); background:var(--maroon-tint); padding:3px 10px; border-radius:999px; letter-spacing:0.05em; margin-bottom:8px">PRO</div>',
-        '      <div style="font-size:14px; font-weight:500; color:var(--ink)">See LTV per acquisition source from your HubSpot or Salesforce</div>',
+        '      <div style="font-size:14px; font-weight:500; color:var(--ink)">See lifetime value per acquisition source from your HubSpot or Salesforce CRM</div>',
         '      <div style="font-size:13px; color:var(--ink-2); margin-top:6px; max-width:560px; line-height:1.5">',
-        '        Pro tenants connect their CRM and Advocate computes average lifetime value per AI-acquired vs unknown-source customer cohorts.',
+        '        On the Pro plan, connect your CRM (HubSpot or Salesforce) and we\'ll show the average lifetime value of customers acquired through AI search vs unknown sources.',
         '      </div>',
         '    </div>',
         '    <a href="/Billing.html" class="btn btn-primary btn-sm">Upgrade to Pro →</a>',
@@ -812,9 +815,9 @@
         '<section class="card-dash" style="border: 1px dashed var(--line); padding: 24px;">',
         '  <div style="display:flex; justify-content:space-between; align-items:center; gap:24px; flex-wrap:wrap;">',
         '    <div>',
-        '      <div style="font-size:14px; font-weight:500; color:var(--ink);">Track customer LTV by acquisition source</div>',
+        '      <div style="font-size:14px; font-weight:500; color:var(--ink);">Track customer lifetime value (LTV) by acquisition source</div>',
         '      <div style="font-size:13px; color:var(--ink-2); margin-top:6px; max-width:540px; line-height:1.5">',
-        '        Connect HubSpot or Salesforce so Advocate can show how much lifetime value AI-acquired customers generate vs unknown sources. Aggregate roll-ups only — your contact data stays in your CRM.',
+        '        Connect HubSpot or Salesforce so we can show how much lifetime value AI-acquired customers generate vs unknown sources. We only see totals &mdash; your individual contact data stays in your CRM.',
         '      </div>',
         '    </div>',
         '    <div style="display:flex; gap:8px;">',
@@ -837,7 +840,7 @@
         '<section class="card-dash">',
         '  <div class="card-head">',
         '    <div>',
-        '      <h3>Customer LTV by acquisition source</h3>',
+        '      <h3>Customer lifetime value (LTV) by acquisition source</h3>',
         '      <div class="sub">Connected to ' + esc(provider) + ' CRM. No contacts created in the last 90 days yet.</div>',
         '    </div>',
         '  </div>',
@@ -858,8 +861,8 @@
       '<section class="card-dash">',
       '  <div class="card-head">',
       '    <div>',
-      '      <h3>Customer LTV by acquisition source</h3>',
-      '      <div class="sub">Average customer lifetime value split by first-touch attribution from your ' + esc(provider) + ' CRM. Contacts created in the last 90 days.</div>',
+      '      <h3>Customer lifetime value (LTV) by acquisition source</h3>',
+      '      <div class="sub">Average customer lifetime value, split by the source we first matched each contact to in your ' + esc(provider) + ' CRM. Shows contacts created in the last 90 days.</div>',
       '    </div>',
       '  </div>',
       '  <div class="kpis" style="grid-template-columns: 1fr 1fr;">',
@@ -876,7 +879,7 @@
       '  </div>',
       trendHtml,
       '  <div style="margin-top: 16px; padding: 12px 16px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line);">',
-      '    Attribution method: 24h time-window match against /r/&lt;token&gt; redirect clicks. “Source unknown” rows are leads we couldn’t match to an AI click — never assumed Human. Add UTM threading from your checkout to your CRM contact for deterministic attribution (future feature).',
+      '    How we link a sale to a source: we match each new contact in your CRM to AI-driven clicks from the previous 24 hours. “Source unknown” rows are leads we couldn’t match to an AI click — we never guess Human. Adding source-tracking codes (UTM tags) from your checkout to your CRM lets us be more precise (coming soon).',
       '  </div>',
       '</section>',
     ].join('');
@@ -1375,7 +1378,7 @@
         <div class="card-head">
           <div>
             <h3>AI vs Human</h3>
-            <div class="sub">Same window, broken down by what brought the visit. Counts only sessions GA4 attributes to a known AI domain (Claude, ChatGPT, Perplexity, Gemini, Copilot, etc.). AI engines that cite you but route clicks through an in-app browser strip the referrer and land in &ldquo;(direct)/(none)&rdquo; instead &mdash; see <a href="/Mentions.html" style="color:var(--maroon)">Mentions</a> for raw bot-citation counts (one stage upstream of clicks).</div>
+            <div class="sub">Same window, broken down by what brought the visit. Counts only visits Google Analytics attributes to a known AI source (Claude, ChatGPT, Perplexity, Gemini, Copilot, etc.). AI engines that cite you but send clicks through their own app strip the source info and land in &ldquo;(direct)/(none)&rdquo; instead &mdash; see <a href="/Mentions.html" style="color:var(--maroon)">Mentions</a> for the raw count of how often AI engines fetched your page (one stage upstream).</div>
           </div>
         </div>
         <div id="chart-aivshuman" style="width:100%; height:320px;"></div>
