@@ -237,7 +237,7 @@
         const email   = (document.getElementById('invite-email') || {}).value || '';
         const roleSel = (document.getElementById('invite-role')  || {}).value || 'viewer';
         if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-          alert('Enter a valid email.');
+          window.AMCP.toast.error('Enter a valid email');
           return;
         }
         btn.disabled = true; btn.textContent = 'Sending…';
@@ -249,41 +249,51 @@
           });
           if (res.status === 402) {
             const j = await res.json().catch(() => ({}));
-            alert(j.message || "You've hit your plan's team-member cap. Upgrade to add more.");
+            window.AMCP.toast.error("You've hit your plan's team-member cap", {
+              detail: j.message || 'Upgrade to add more.',
+              actions: [{ label: 'See plans →', kind: 'primary', onClick: () => { window.location.href = '/Billing.html'; } }],
+            });
             btn.disabled = false; btn.textContent = 'Send invite';
             return;
           }
           if (res.status === 409) {
-            alert('That person is already on your team.');
+            window.AMCP.toast.info('Already on your team', { detail: 'That person is already a team member.' });
             btn.disabled = false; btn.textContent = 'Send invite';
             return;
           }
           if (!res.ok) throw new Error('failed');
           inviting = false;
           await loadTeam();
-          alert("Invite sent — they'll receive an email with a magic link.");
+          window.AMCP.toast.success('Invite sent', { detail: "They'll receive an email with a magic link." });
         } catch (_) {
           btn.disabled = false; btn.textContent = 'Send invite';
-          alert('Could not send invite.');
+          window.AMCP.toast.error("Couldn't send invite", { detail: 'Try again in a moment.' });
         }
         return;
       }
 
       if (act === 'remove') {
-        if (!confirm("Remove this team member? They'll lose access immediately.")) return;
+        if (!(await window.AMCP.toast.confirm('Remove this team member?', {
+          detail: "They'll lose access immediately.",
+          confirmLabel: 'Remove',
+          danger: true,
+        }))) return;
         try {
           const res = await af('/api/client/team/' + encodeURIComponent(id), { method: 'DELETE' });
           if (res.status === 409) {
             const j = await res.json().catch(() => ({}));
-            alert(j.error === 'cannot_remove_owner'
-              ? 'Demote this owner to editor or viewer first, then remove.'
-              : 'Cannot remove yourself.');
+            window.AMCP.toast.error("Can't remove this member", {
+              detail: j.error === 'cannot_remove_owner'
+                ? 'Demote this owner to editor or viewer first, then remove.'
+                : "You can't remove yourself.",
+            });
             return;
           }
           if (!res.ok) throw new Error('failed');
           await loadTeam();
+          window.AMCP.toast.success('Team member removed');
         } catch (_) {
-          alert('Could not remove.');
+          window.AMCP.toast.error("Couldn't remove", { detail: 'Try again in a moment.' });
         }
         return;
       }
@@ -297,7 +307,11 @@
       const id   = sel.getAttribute('data-user-id');
       const role = sel.value;
       if (role === 'owner') {
-        if (!confirm("Transfer ownership? You'll become an editor and they'll have full control over billing and team.")) {
+        if (!(await window.AMCP.toast.confirm('Transfer ownership?', {
+          detail: "You'll become an editor and they'll have full control over billing and team.",
+          confirmLabel: 'Transfer ownership',
+          danger: true,
+        }))) {
           sel.value = (cachedTeam.members.find(m => m.user_id === id) || {}).role || 'viewer';
           return;
         }
@@ -311,8 +325,9 @@
         if (!res.ok) throw new Error('failed');
         editingRoleFor = null;
         await loadTeam();
+        window.AMCP.toast.success('Role updated');
       } catch (_) {
-        alert('Could not change role.');
+        window.AMCP.toast.error("Couldn't change role", { detail: 'Try again in a moment.' });
       }
     });
 

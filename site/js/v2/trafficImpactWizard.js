@@ -219,8 +219,8 @@
         window.AMCP_TI_WIZARD_ACTIONS.openPicker(integrationId, btn, stepBody);
         return;
       }
-      // Fallback: alert + scroll-to legacy.
-      window.alert('Picker module not loaded — refresh and try again.');
+      // Fallback: toast + scroll-to legacy.
+      window.AMCP.toast.error('Picker module not loaded', { detail: 'Refresh the page and try again.' });
       return;
     }
 

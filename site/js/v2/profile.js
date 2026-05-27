@@ -1050,14 +1050,18 @@
    * Behaviour: we pick the top 3 reviews (by Google's order, which is
    * relevance), convert to our quote shape, and append as new entries.
    * Empty trailing rows in the card stay where they are. */
-  function offerQuoteImport(quotes) {
+  async function offerQuoteImport(quotes) {
     if (!Array.isArray(quotes) || quotes.length === 0) return;
     const list = document.getElementById('quotes-list');
     if (!list) return;
     const sources = ["direct", "google", "yelp", "facebook", "bbb"];
     const top = quotes.slice(0, 3);
-    const ok = window.confirm(
-      `Import the top ${top.length} review${top.length === 1 ? "" : "s"} from Google as customer quotes? You can edit or remove them after import.`,
+    const ok = await window.AMCP.toast.confirm(
+      `Import the top ${top.length} review${top.length === 1 ? "" : "s"} from Google?`,
+      {
+        detail: 'They become customer quotes — you can edit or remove them after import.',
+        confirmLabel: 'Import',
+      },
     );
     if (!ok) return;
     let i = list.querySelectorAll('[data-quote-idx]').length;

@@ -1744,7 +1744,7 @@
         } catch (err) {
           btn.disabled = false;
           btn.textContent = 'Connect Google Analytics →';
-          alert('Could not connect: ' + (err.message || err));
+          window.AMCP.toast.error("Couldn't connect", { detail: String(err.message || err) });
         }
       });
     }
@@ -1800,7 +1800,7 @@
         } catch (err) {
           gscConnectBtn.disabled = false;
           gscConnectBtn.textContent = 'Connect Search Console →';
-          alert('Could not connect: ' + (err.message || err));
+          window.AMCP.toast.error("Couldn't connect", { detail: String(err.message || err) });
         }
       });
     }
@@ -1821,7 +1821,7 @@
         } catch (err) {
           btn.disabled = false;
           btn.textContent = provider.charAt(0).toUpperCase() + provider.slice(1) + ' →';
-          alert('Could not connect: ' + (err.message || err));
+          window.AMCP.toast.error("Couldn't connect", { detail: String(err.message || err) });
         }
       });
     }
@@ -2177,7 +2177,7 @@
       if (j && j.url) { window.location.href = j.url; return; }
       throw new Error((j && (j.customer_message || j.error_code || j.message || j.error)) || 'Could not start');
     } catch (err) {
-      alert('Could not connect: ' + (err.message || err));
+      window.AMCP.toast.error("Couldn't connect", { detail: String(err.message || err) });
       btn.disabled = false;
       btn.textContent = original;
     }
@@ -2189,7 +2189,7 @@
     // added the mountTarget option so the picker renders into the wizard's
     // .cc-wizard-step-body div without clobbering the wizard's nav buttons.
     if (typeof window.runInlinePicker !== 'function') {
-      alert('Picker module not loaded — refresh and try again.');
+      window.AMCP.toast.error('Picker module not loaded', { detail: 'Refresh the page and try again.' });
       return;
     }
     if (integrationId === 'ga4') {

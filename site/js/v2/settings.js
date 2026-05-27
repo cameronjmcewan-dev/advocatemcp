@@ -580,7 +580,11 @@
     const disconnectBtn = document.getElementById('btn-ga4-disconnect');
     if (disconnectBtn) {
       disconnectBtn.addEventListener('click', async () => {
-        if (!window.confirm('Disconnect Google Analytics? Imported daily traffic stays in your account; new data will stop syncing until you reconnect.')) return;
+        if (!(await window.AMCP.toast.confirm('Disconnect Google Analytics?', {
+          detail: 'Imported daily traffic stays in your account; new data will stop syncing until you reconnect.',
+          confirmLabel: 'Disconnect',
+          danger: true,
+        }))) return;
         disconnectBtn.disabled = true;
         setMsg('Disconnecting…');
         try {
@@ -779,7 +783,11 @@
     const disconnectBtn = document.getElementById('btn-gsc-disconnect');
     if (disconnectBtn) {
       disconnectBtn.addEventListener('click', async () => {
-        if (!window.confirm('Disconnect Google Search Console? Imported data stays in your account; new syncs will stop until you reconnect.')) return;
+        if (!(await window.AMCP.toast.confirm('Disconnect Google Search Console?', {
+          detail: 'Imported data stays in your account; new syncs will stop until you reconnect.',
+          confirmLabel: 'Disconnect',
+          danger: true,
+        }))) return;
         disconnectBtn.disabled = true;
         setMsg('Disconnecting…');
         try {
@@ -1064,7 +1072,11 @@
       const disconnectBtn = document.getElementById(btnId + '-disconnect');
       if (disconnectBtn) {
         disconnectBtn.addEventListener('click', async () => {
-          if (!window.confirm('Disconnect ' + labelTitle + '? Imported LTV data stays in your account; new syncs will stop until you reconnect.')) return;
+          if (!(await window.AMCP.toast.confirm('Disconnect ' + labelTitle + '?', {
+            detail: 'Imported lifetime value (LTV) data stays in your account; new syncs will stop until you reconnect.',
+            confirmLabel: 'Disconnect',
+            danger: true,
+          }))) return;
           disconnectBtn.disabled = true;
           setMsg('Disconnecting…');
           try {
@@ -1213,7 +1225,11 @@
     const disconnectBtn = document.getElementById('btn-authority-disconnect');
     if (disconnectBtn && af) {
       disconnectBtn.addEventListener('click', async () => {
-        if (!window.confirm('Disconnect the Authority Kit? Your historical mention data is kept. Future syncs stop until you reconnect.')) return;
+        if (!(await window.AMCP.toast.confirm('Disconnect the Authority Kit?', {
+          detail: 'Your historical mention data is kept. Future syncs stop until you reconnect.',
+          confirmLabel: 'Disconnect',
+          danger: true,
+        }))) return;
         disconnectBtn.disabled = true;
         setMsg('Disconnecting…');
         try {
@@ -1240,10 +1256,10 @@
    * Hoisted to module scope so handleHubAction below (also module-scoped)
    * can call them. */
 
-  // TODO(phase-1.5): hub helpers use alert() for errors while legacy
-  // wireGa4Card/wireGscCard use inline status-msg spans. Phase 1.5
-  // removes the legacy cards and we can normalise on a status-msg span
-  // inside the connector card row.
+  // Hub helpers use AMCP.toast for non-blocking error surfaces.
+  // Legacy wireGa4Card/wireGscCard still use inline status-msg spans
+  // for field-level feedback; the toast layer is for cross-page
+  // confirmation messages.
   async function startGoogleOauth(path, btn) {
     const original = btn.textContent;
     btn.disabled = true;
@@ -1262,7 +1278,7 @@
       const msg = (j && (j.customer_message || j.error_code || j.message || j.error)) || 'Could not start';
       throw new Error(msg);
     } catch (err) {
-      alert('Could not connect: ' + (err.message || err));
+      window.AMCP.toast.error("Couldn't connect", { detail: String(err.message || err) });
       btn.disabled = false;
       btn.textContent = original;
     }
@@ -1315,20 +1331,24 @@
       btn.textContent = 'Synced ✓';
       setTimeout(() => window.location.reload(), 1500);
     } catch (err) {
-      alert('Sync failed: ' + (err.message || err));
+      window.AMCP.toast.error('Sync failed', { detail: String(err.message || err) });
       btn.disabled = false;
       btn.textContent = original;
     }
   }
 
   async function confirmDisconnect(path, name, btn) {
-    if (!window.confirm(`Disconnect ${name}? Your imported data stays in your account; new syncs will stop until you reconnect.`)) return;
+    if (!(await window.AMCP.toast.confirm(`Disconnect ${name}?`, {
+      detail: 'Your imported data stays in your account; new syncs will stop until you reconnect.',
+      confirmLabel: 'Disconnect',
+      danger: true,
+    }))) return;
     btn.disabled = true;
     try {
       await window.AMCP.authedFetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       setTimeout(() => window.location.reload(), 1000);
     } catch (err) {
-      alert('Could not disconnect: ' + (err.message || err));
+      window.AMCP.toast.error("Couldn't disconnect", { detail: String(err.message || err) });
       btn.disabled = false;
     }
   }
@@ -1557,13 +1577,17 @@
     const rotBtn = document.getElementById('btn-rotate-key');
     if (rotBtn) {
       rotBtn.addEventListener('click', async () => {
-        if (!confirm('Rotate your API key? Your current key stops working immediately.')) return;
+        if (!(await window.AMCP.toast.confirm('Rotate your API key?', {
+          detail: 'Your current key stops working immediately.',
+          confirmLabel: 'Rotate',
+          danger: true,
+        }))) return;
         rotBtn.disabled = true; rotBtn.textContent = 'Rotating…';
         setStatus('', '');
         try {
           if (preview) {
             await new Promise(r => setTimeout(r, 500));
-            alert('New key generated (preview — not persisted).');
+            window.AMCP.toast.info('New key generated', { detail: 'Preview mode — not persisted.' });
             setStatus('Key rotated (preview only)', 'success');
             return;
           }
@@ -1702,7 +1726,11 @@
       genBtn.addEventListener('click', async () => {
         const isRotate = genBtn.textContent.includes('Rotate');
         const confirmed = isRotate
-          ? confirm('Rotate the webhook secret? Your booking system will stop signing successfully until you update it with the new secret.')
+          ? await window.AMCP.toast.confirm('Rotate the booking-system secret?', {
+              detail: 'Your booking system will stop signing successfully until you update it with the new secret.',
+              confirmLabel: 'Rotate',
+              danger: true,
+            })
           : true;
         if (!confirmed) return;
         genBtn.disabled = true;
@@ -1876,7 +1904,7 @@
           const email = (document.getElementById('invite-email') || {}).value || '';
           const roleSel = (document.getElementById('invite-role') || {}).value || 'viewer';
           if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-            alert('Enter a valid email.');
+            window.AMCP.toast.error('Enter a valid email');
             return;
           }
           btn.disabled = true; btn.textContent = 'Sending…';
@@ -1888,36 +1916,46 @@
             });
             if (res.status === 402) {
               const j = await res.json().catch(() => ({}));
-              alert(j.message || 'You\'ve hit your plan\'s team-member cap. Upgrade to add more.');
+              window.AMCP.toast.error("You've hit your plan's team-member cap", {
+                detail: j.message || 'Upgrade to add more.',
+                actions: [{ label: 'See plans →', kind: 'primary', onClick: () => { window.location.href = '/Billing.html'; } }],
+              });
               btn.disabled = false; btn.textContent = 'Send invite';
               return;
             }
             if (res.status === 409) {
-              alert('That person is already on your team.');
+              window.AMCP.toast.info('Already on your team', { detail: 'That person is already a team member.' });
               btn.disabled = false; btn.textContent = 'Send invite';
               return;
             }
             if (!res.ok) throw new Error('failed');
             inviting = false;
             await loadTeam();
-            alert('Invite sent — they\'ll receive an email with a magic link.');
-          } catch (_) { btn.disabled = false; btn.textContent = 'Send invite'; alert('Could not send invite.'); }
+            window.AMCP.toast.success('Invite sent', { detail: "They'll receive an email with a magic link." });
+          } catch (_) { btn.disabled = false; btn.textContent = 'Send invite'; window.AMCP.toast.error("Couldn't send invite", { detail: 'Try again in a moment.' }); }
           return;
         }
         if (act === 'remove') {
-          if (!confirm('Remove this team member? They\'ll lose access immediately.')) return;
+          if (!(await window.AMCP.toast.confirm('Remove this team member?', {
+            detail: "They'll lose access immediately.",
+            confirmLabel: 'Remove',
+            danger: true,
+          }))) return;
           try {
             const res = await af('/api/client/team/' + encodeURIComponent(id), { method: 'DELETE' });
             if (res.status === 409) {
               const j = await res.json().catch(() => ({}));
-              alert(j.error === 'cannot_remove_owner'
-                ? 'Demote this owner to editor or viewer first, then remove.'
-                : 'Cannot remove yourself.');
+              window.AMCP.toast.error("Can't remove this member", {
+                detail: j.error === 'cannot_remove_owner'
+                  ? 'Demote this owner to editor or viewer first, then remove.'
+                  : "You can't remove yourself.",
+              });
               return;
             }
             if (!res.ok) throw new Error('failed');
             await loadTeam();
-          } catch (_) { alert('Could not remove.'); }
+            window.AMCP.toast.success('Team member removed');
+          } catch (_) { window.AMCP.toast.error("Couldn't remove", { detail: 'Try again in a moment.' }); }
           return;
         }
       });
@@ -1929,7 +1967,11 @@
         const id = sel.getAttribute('data-user-id');
         const role = sel.value;
         if (role === 'owner') {
-          if (!confirm('Transfer ownership? You\'ll become an editor and they\'ll have full control over billing and team.')) {
+          if (!(await window.AMCP.toast.confirm('Transfer ownership?', {
+            detail: "You'll become an editor and they'll have full control over billing and team.",
+            confirmLabel: 'Transfer ownership',
+            danger: true,
+          }))) {
             sel.value = (cachedTeam.members.find(m => m.user_id === id) || {}).role || 'viewer';
             return;
           }
@@ -1943,7 +1985,8 @@
           if (!res.ok) throw new Error('failed');
           editingRoleFor = null;
           await loadTeam();
-        } catch (_) { alert('Could not change role.'); }
+          window.AMCP.toast.success('Role updated');
+        } catch (_) { window.AMCP.toast.error("Couldn't change role", { detail: 'Try again in a moment.' }); }
       });
 
       if (inviteBtn) {
@@ -2089,7 +2132,7 @@
           if (!row) return;
           const fields = readForm(row);
           if (!fields.name || !fields.city || !fields.state) {
-            alert('Name, city, and state are required.');
+            window.AMCP.toast.error('Missing fields', { detail: 'Name, city, and state are required.' });
             return;
           }
           btn.disabled = true; btn.textContent = 'Saving…';
@@ -2102,7 +2145,8 @@
             if (!res.ok) throw new Error('save failed');
             editingId = null;
             await loadLocations();
-          } catch (_) { btn.disabled = false; btn.textContent = 'Save'; alert('Save failed.'); }
+            window.AMCP.toast.success('Location saved');
+          } catch (_) { btn.disabled = false; btn.textContent = 'Save'; window.AMCP.toast.error("Couldn't save", { detail: 'Try again in a moment.' }); }
           return;
         }
         if (act === 'save-new') {
@@ -2110,7 +2154,7 @@
           if (!row) return;
           const fields = readForm(row);
           if (!fields.name || !fields.city || !fields.state) {
-            alert('Name, city, and state are required.');
+            window.AMCP.toast.error('Missing fields', { detail: 'Name, city, and state are required.' });
             return;
           }
           btn.disabled = true; btn.textContent = 'Adding…';
@@ -2122,33 +2166,49 @@
             });
             if (res.status === 402) {
               const j = await res.json().catch(() => ({}));
-              alert(j.message || 'You\'ve hit your plan\'s location cap. Upgrade to add more.');
+              window.AMCP.toast.error("You've hit your plan's location cap", {
+                detail: j.message || 'Upgrade to add more locations.',
+                actions: [{ label: 'See plans →', kind: 'primary', onClick: () => { window.location.href = '/Billing.html'; } }],
+              });
               btn.disabled = false; btn.textContent = 'Add location';
               return;
             }
             if (!res.ok) throw new Error('add failed');
             adding = false;
             await loadLocations();
-          } catch (_) { btn.disabled = false; btn.textContent = 'Add location'; alert('Add failed.'); }
+            window.AMCP.toast.success('Location added');
+          } catch (_) { btn.disabled = false; btn.textContent = 'Add location'; window.AMCP.toast.error("Couldn't add location", { detail: 'Try again in a moment.' }); }
           return;
         }
         if (act === 'promote') {
-          if (!confirm('Make this the primary location? AI agents will default to this location\'s details when no specific city is mentioned.')) return;
+          if (!(await window.AMCP.toast.confirm('Make this the primary location?', {
+            detail: "AI tools will default to this location's details when no specific city is mentioned.",
+            confirmLabel: 'Make primary',
+          }))) return;
           try {
             const res = await af('/api/client/locations/' + encodeURIComponent(id) + '/promote', { method: 'POST' });
             if (!res.ok) throw new Error('promote failed');
             await loadLocations();
-          } catch (_) { alert('Could not promote. Try again.'); }
+            window.AMCP.toast.success('Primary location updated');
+          } catch (_) { window.AMCP.toast.error("Couldn't promote", { detail: 'Try again in a moment.' }); }
           return;
         }
         if (act === 'delete') {
-          if (!confirm('Delete this location? This cannot be undone.')) return;
+          if (!(await window.AMCP.toast.confirm('Delete this location?', {
+            detail: 'This cannot be undone.',
+            confirmLabel: 'Delete',
+            danger: true,
+          }))) return;
           try {
             const res = await af('/api/client/locations/' + encodeURIComponent(id), { method: 'DELETE' });
-            if (res.status === 409) { alert('Cannot delete the primary location. Promote another location to primary first.'); return; }
+            if (res.status === 409) {
+              window.AMCP.toast.error("Can't delete primary location", { detail: 'Promote another location to primary first.' });
+              return;
+            }
             if (!res.ok) throw new Error('delete failed');
             await loadLocations();
-          } catch (_) { alert('Delete failed.'); }
+            window.AMCP.toast.success('Location deleted');
+          } catch (_) { window.AMCP.toast.error("Couldn't delete", { detail: 'Try again in a moment.' }); }
           return;
         }
       });

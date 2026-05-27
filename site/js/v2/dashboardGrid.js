@@ -378,7 +378,7 @@
   /** PDF export — html2pdf.js renders the grid into a clean letter-
    *  landscape PDF. Brief 300ms wait so ECharts animations settle. */
   function exportPdf() {
-    if (!window.html2pdf) { window.alert('PDF library still loading.'); return; }
+    if (!window.html2pdf) { window.AMCP.toast.info('PDF library still loading', { detail: 'Try again in a moment.' }); return; }
     setTimeout(() => {
       const node = document.getElementById('dashboard-card-grid');
       if (!node) return;
