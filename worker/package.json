@@ -26,5 +26,12 @@
     "undici": "^6.21.2",
     "esbuild": "^0.25.0",
     "postcss": "^8.5.10"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp",
+      "workerd"
+    ]
   }
 }
