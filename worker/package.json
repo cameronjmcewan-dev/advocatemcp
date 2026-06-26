@@ -1,6 +1,7 @@
 {
   "name": "advocatemcp-worker",
   "version": "1.0.0",
+  "packageManager": "npm@10.9.2",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",

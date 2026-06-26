@@ -1,6 +1,7 @@
 {
   "name": "advocatemcp-server",
   "version": "1.0.0",
+  "packageManager": "npm@10.9.2",
   "description": "AdvocateMCP — AI search crawler interception and business agent platform",
   "type": "module",
   "scripts": {
