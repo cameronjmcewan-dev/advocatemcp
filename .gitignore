@@ -30,6 +30,14 @@ worker/node_modules/
 # Worktrees
 .worktrees/
 
+# pnpm artifacts — this repo is npm-native (committed package-lock.json + `npm ci`
+# in CI). Ignore stray local pnpm files so a local `pnpm install` can never be
+# committed or mislead. pnpm 11 renamed the build-script allowlist to `allowBuilds`
+# (in pnpm-workspace.yaml), which is why the old package.json `pnpm.onlyBuiltDependencies`
+# fix silently stopped working — see the npm-native pin in worker/ + server/ package.json.
+pnpm-lock.yaml
+pnpm-workspace.yaml
+
 # Logs
 *.log
 .obsidian/
