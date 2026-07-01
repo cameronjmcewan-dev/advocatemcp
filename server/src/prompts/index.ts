@@ -7,11 +7,15 @@ import { googleBlock } from "./google.js";
 import { trainingBlock } from "./training.js";
 
 // Source of truth for canonical bot identifiers. Mirrors
-// worker/src/index.ts AI_CRAWLERS — the two lists MUST stay in lockstep.
-// Real-time user agents (Perplexity-User, ChatGPT-User) are the ones that
-// fetch during live AI conversations, so dispatching them to the matching
-// per-bot prompt block is what makes AdvocateMCP's structured answer
+// worker/src/index.ts AI_CRAWLERS and the apex-router-worker repo's
+// src/crawlers.ts::AI_CRAWLERS — the three lists MUST stay in lockstep.
+// Real-time user agents (Perplexity-User, ChatGPT-User, Claude-User) are the
+// ones that fetch during live AI conversations, so dispatching them to the
+// matching per-bot prompt block is what makes AdvocateMCP's structured answer
 // show up in the answer panel instead of scraped HTML.
+// Bingbot is deliberately absent from all three lists: it is a traditional
+// search indexer, and serving it an agent envelope would be UA cloaking on
+// the engine that grounds ChatGPT local results — an exclusion, not a gap.
 export const CANONICALS = [
   "PerplexityBot",
   "Perplexity-User",
@@ -19,6 +23,8 @@ export const CANONICALS = [
   "ChatGPT-User",
   "OAI-SearchBot",
   "ClaudeBot",
+  "Claude-User",
+  "Claude-SearchBot",
   "Google-Extended",
   "Googlebot",
   "GoogleOther",
@@ -52,9 +58,11 @@ export function getBotPromptBlock(
 
   // Dispatch per canonical bot identity. Each arm returns a bot-specific emphasis block
   // merged into the system prompt by the agent route. Real-time user agents
-  // (Perplexity-User, ChatGPT-User) share the prompt block of their batch
-  // counterpart on the theory that the same AI should get the same shaping
-  // whether it's indexing or answering a live user.
+  // (Perplexity-User, ChatGPT-User, Claude-User) share the prompt block of
+  // their batch counterpart on the theory that the same AI should get the same
+  // shaping whether it's indexing or answering a live user. Claude-SearchBot
+  // follows the OAI-SearchBot precedent: search crawlers map to their family
+  // block, not the training block.
   switch (canonical) {
     case "PerplexityBot":
     case "Perplexity-User":
@@ -64,6 +72,8 @@ export function getBotPromptBlock(
     case "OAI-SearchBot":
       return openaiBlock;
     case "ClaudeBot":
+    case "Claude-User":
+    case "Claude-SearchBot":
       return claudeBlock;
     case "Google-Extended":
     case "Googlebot":

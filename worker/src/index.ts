@@ -41,7 +41,9 @@ export type { Env };
 
 // ── AI crawler User-Agent detection ────────────────────────────────────────
 
-// Keep this list in lockstep with `server/src/prompts/index.ts::CANONICALS`.
+// Keep this list in lockstep with `server/src/prompts/index.ts::CANONICALS`
+// and with `src/crawlers.ts::AI_CRAWLERS` in the apex-router-worker repo —
+// the three lists MUST stay aligned.
 //
 // Two classes of crawler live here on purpose:
 //
@@ -56,6 +58,11 @@ export type { Env };
 //      this list means our worker serves scraped HTML to Perplexity/
 //      ChatGPT when they're answering a live query — the exact failure
 //      mode observed on the first paying tenant's domain before adding Perplexity-User.
+//
+// Bingbot is EXCLUDED deliberately: it is a traditional search indexer, and
+// serving it an agent envelope instead of the human-visible content would be
+// UA cloaking on the engine that grounds ChatGPT local results. Bingbot takes
+// the same non-crawler path as human visitors — an exclusion, not a gap.
 const AI_CRAWLERS = [
   "PerplexityBot",
   "Perplexity-User",
@@ -63,6 +70,8 @@ const AI_CRAWLERS = [
   "ChatGPT-User",
   "OAI-SearchBot",
   "ClaudeBot",
+  "Claude-User",
+  "Claude-SearchBot",
   "Google-Extended",
   "Googlebot",
   "GoogleOther",
@@ -72,12 +81,12 @@ const AI_CRAWLERS = [
   "meta-externalagent",
 ] as const;
 
-function isAiCrawler(ua: string): boolean {
+export function isAiCrawler(ua: string): boolean {
   const lower = ua.toLowerCase();
   return AI_CRAWLERS.some((bot) => lower.includes(bot.toLowerCase()));
 }
 
-function crawlerName(ua: string): string | null {
+export function crawlerName(ua: string): string | null {
   const lower = ua.toLowerCase();
   return AI_CRAWLERS.find((bot) => lower.includes(bot.toLowerCase())) ?? null;
 }
