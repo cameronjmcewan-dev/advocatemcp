@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getBotPromptBlock } from "./index.js";
+import { CANONICALS, getBotPromptBlock } from "./index.js";
 
 describe("getBotPromptBlock dispatch", () => {
   it("returns default block for null", () => {
@@ -82,6 +82,22 @@ describe("getBotPromptBlock dispatch", () => {
   it("dispatches ClaudeBot to claude module", () => {
     expect(getBotPromptBlock("ClaudeBot").name).toBe("claude");
   });
+  it("dispatches Claude-User to claude module (real-time live-query agent)", () => {
+    expect(getBotPromptBlock("Claude-User").name).toBe("claude");
+    expect(
+      getBotPromptBlock(
+        "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; Claude-User/1.0; +Claude-User@anthropic.com"
+      ).name
+    ).toBe("claude");
+  });
+  it("dispatches Claude-SearchBot to claude module (search retrieval agent)", () => {
+    expect(getBotPromptBlock("Claude-SearchBot").name).toBe("claude");
+    expect(
+      getBotPromptBlock(
+        "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; Claude-SearchBot/1.0; +Claude-SearchBot@anthropic.com"
+      ).name
+    ).toBe("claude");
+  });
 
   it("dispatches Googlebot to google module", () => {
     expect(getBotPromptBlock("Googlebot").name).toBe("google");
@@ -110,5 +126,28 @@ describe("getBotPromptBlock dispatch", () => {
     // "chatgpt-user" does not contain "gptbot" — but guard the behavior.
     const b = getBotPromptBlock("Mozilla/5.0 ChatGPT-User/1.0");
     expect(b.name).toBe("openai");
+  });
+
+  it("pins CANONICALS to the lockstep list shared with the worker and apex router", () => {
+    // Exact-list characterization: any add/remove/rename here must land in
+    // worker/src/index.ts AI_CRAWLERS and the apex-router-worker repo's
+    // src/crawlers.ts in the same change.
+    expect([...CANONICALS]).toEqual([
+      "PerplexityBot",
+      "Perplexity-User",
+      "GPTBot",
+      "ChatGPT-User",
+      "OAI-SearchBot",
+      "ClaudeBot",
+      "Claude-User",
+      "Claude-SearchBot",
+      "Google-Extended",
+      "Googlebot",
+      "GoogleOther",
+      "Applebot-Extended",
+      "anthropic-ai",
+      "cohere-ai",
+      "meta-externalagent",
+    ]);
   });
 });
