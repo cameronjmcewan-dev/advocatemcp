@@ -318,8 +318,14 @@ export async function handleBasicOnboard(
   request: Request,
   env: Env,
 ): Promise<Response> {
-  if (!requireAdmin(request, env)) {
-    return jsonErr(401, "unauthorized", "Authentication required — provide X-Admin-Secret header");
+  // Admin-session gate. The onboard wizard authenticates with the portal
+  // session cookie (getSessionFromRequest), never a client-embedded secret.
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx) {
+    return jsonErr(401, "unauthorized", "Authentication required — sign in as an admin");
+  }
+  if (ctx.role !== "admin") {
+    return jsonErr(403, "forbidden", "Admin access required");
   }
 
   const ct = request.headers.get("Content-Type") ?? "";

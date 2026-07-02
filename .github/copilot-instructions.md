@@ -125,7 +125,7 @@ Server source files:
 - Pricing display on marketing site shows $49/$149 instead of real $100/$250
 - Post-Stripe completion page (`site/onboarding/complete.html`) — lost in a Pages deploy, needs rebuild
 - Stripe webhook only handles `checkout.session.completed` — missing subscription lifecycle events
-- Admin secret `N7r4Kq2vX9mP3tLs8Yw6Bc1Hd5Zj0FaQ` exposed in client-side JS at `worker/src/routes/onboardPage.ts`
+- Admin secret was exposed in client-side JS at `worker/src/routes/onboardPage.ts` — value removed from the served HTML and endpoint switched to admin-session auth (`fix/onboard-admin-secret-exposure`); rotate `ADMIN_SECRET` out of band
 - DNS custom hostname routing for custom domains (returns 522 for crawler traffic)
 
 ---
