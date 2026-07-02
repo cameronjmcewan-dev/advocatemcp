@@ -704,3 +704,21 @@ Backend was already correct (`/api/client/metrics` accepts `range=7d|30d|90d|365
 
 Extract a shared `site/assets/dashboard-range.js` module that owns the picker UI + global state + event broadcast, mirroring the location-selector pattern. Each page would then `import { onRangeChange }` instead of duplicating the 12-line `addEventListener('amcp:date-range-changed', ...)` block. Cosmetic refactor, not blocking.
 
+
+## ADMIN_SECRET credential exposure — resolved end-to-end (2026-07-01)
+
+The value of the `ADMIN_SECRET` env var was embedded in client-served JavaScript on
+`GET /onboard` (`worker/src/routes/onboardPage.ts:901`), and was also present in git
+history (commit `cf06bc3`) and in one doc file.
+
+PR #279 (merged + deployed 2026-07-01) removed the client-side embed, moved `GET /onboard`
+and `POST /api/onboard/basic` behind admin-session auth (302-to-`/login` verified live
+post-deploy), and scrubbed the doc copy.
+
+The operator rotated `ADMIN_SECRET` via `wrangler secret put` on 2026-07-01. The old value
+is now invalid everywhere — including anywhere it appears in git history — so the
+historical exposure is dead, not merely hidden.
+
+**Operator note:** any tooling that sends the `X-Admin-Secret` header or an admin
+`Authorization: Bearer` token (scripts, runbook curl commands, CI, cron/sync callers) must
+be updated to the new `ADMIN_SECRET` value; requests carrying the old value will be rejected.
