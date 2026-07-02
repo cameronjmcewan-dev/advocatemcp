@@ -6,6 +6,7 @@
 // var(--text), var(--green), etc. See sharedLayout.ts for the full palette.
 
 import type { Env } from "../types";
+import { getSessionFromRequest } from "./authApi";
 import {
   BASE_TOKENS_CSS,
   BASE_LAYOUT_CSS,
@@ -14,7 +15,19 @@ import {
   themeToggleScript,
 } from "./sharedLayout";
 
-export async function handleOnboardPage(_request: Request, _env: Env): Promise<Response> {
+export async function handleOnboardPage(request: Request, env: Env): Promise<Response> {
+  // Operator-only wizard: this page drives admin-gated tenant creation and
+  // paid Railway registration, so it is served only to an authenticated admin
+  // session. Its API calls ride the portal session cookie (see apiFetch in
+  // PAGE_HTML) — the served HTML never embeds a credential.
+  const ctx = await getSessionFromRequest(request, env);
+  if (!ctx || ctx.role !== "admin") {
+    return new Response(null, {
+      status: 302,
+      headers: { Location: "/login", "Cache-Control": "no-store" },
+    });
+  }
+
   return new Response(PAGE_HTML, {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
@@ -898,7 +911,10 @@ function apiFetch(path, opts){
   opts = opts || {};
   opts.headers = opts.headers || {};
   opts.headers['Content-Type'] = 'application/json';
-  opts.headers['X-Admin-Secret'] = 'N7r4Kq2vX9mP3tLs8Yw6Bc1Hd5Zj0FaQ';
+  // Same-origin admin session cookie is the credential — no secret is
+  // embedded in this page. The onboard endpoints validate the session
+  // server-side (admin role required).
+  opts.credentials = 'include';
   return fetch(API_BASE + path, opts);
 }
 
